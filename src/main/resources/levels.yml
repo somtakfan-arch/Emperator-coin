@@ -1,0 +1,180 @@
+# ========================================
+# Меч Императора — Уровни
+# Можно добавлять новые уровни без перекомпиляции!
+# ========================================
+# Типы квестов:
+#   MOB_KILLS       — убийства враждебных мобов
+#   PLAYER_KILLS    — убийства игроков
+#   BEDS_DESTROYED  — уничтожение чужих кроватей
+#   DIAMONDS_MINED  — добыча алмазной руды (алмаз + алмазная руда)
+#   DISTANCE_WALKED — пройденное расстояние (в метрах)
+#   DAMAGE_DEALT    — суммарный нанесённый урон (в половинах сердца)
+# ========================================
+
+levels:
+  # ——————————————————
+  # Начальный уровень: выдаётся игроку без условий
+  # ——————————————————
+  1:
+    name: "<gray>Клинок Новичка</gray>"
+    lore-title: "<dark_gray>Путь только начинается...</dark_gray>"
+    requirements: {}
+    enchants:
+      sharpness: 3
+      unbreaking: 2
+    unbreakable: false
+
+  # ——————————————————
+  # Убей 50 мобов
+  # ——————————————————
+  2:
+    name: "<white>Клинок Воина</white>"
+    lore-title: "<gray>Первая кровь пролита.</gray>"
+    requirements:
+      MOB_KILLS: 50
+    enchants:
+      sharpness: 4
+      unbreaking: 2
+      knockback: 1
+    unbreakable: false
+
+  # ——————————————————
+  # Убей 10 игроков
+  # ——————————————————
+  3:
+    name: "<yellow>Клинок Охотника</yellow>"
+    lore-title: "<gray>Враги бегут от тебя.</gray>"
+    requirements:
+      PLAYER_KILLS: 10
+    enchants:
+      sharpness: 5
+      unbreaking: 3
+      knockback: 1
+      fire_aspect: 1
+    unbreakable: false
+
+  # ——————————————————
+  # Уничтожь 10 кроватей — ключевая фишка BedSMP
+  # ——————————————————
+  4:
+    name: "<gold>Клинок Рейдера</gold>"
+    lore-title: "<gray>Ни одна кровать не в безопасности.</gray>"
+    requirements:
+      BEDS_DESTROYED: 10
+    enchants:
+      sharpness: 6
+      unbreaking: 3
+      knockback: 2
+      fire_aspect: 1
+    unbreakable: false
+
+  # ——————————————————
+  # Комбо: мобы + игроки
+  # ——————————————————
+  5:
+    name: "<red>Клинок Полководца</red>"
+    lore-title: "<gray>Армии склоняются перед тобой.</gray>"
+    requirements:
+      MOB_KILLS: 300
+      PLAYER_KILLS: 30
+    enchants:
+      sharpness: 7
+      unbreaking: 3
+      knockback: 2
+      fire_aspect: 2
+    unbreakable: false
+
+  # ——————————————————
+  # Добыча алмазов — путешествие вглубь
+  # ——————————————————
+  6:
+    name: "<aqua>Клинок Искателя</aqua>"
+    lore-title: "<gray>Глубины земли покорены.</gray>"
+    requirements:
+      DIAMONDS_MINED: 100
+      BEDS_DESTROYED: 25
+    enchants:
+      sharpness: 7
+      unbreaking: 3
+      knockback: 2
+      fire_aspect: 2
+      looting: 1
+    unbreakable: false
+
+  # ——————————————————
+  # Большой путь — расстояние
+  # ——————————————————
+  7:
+    name: "<light_purple>Клинок Странника</light_purple>"
+    lore-title: "<gray>Ты обошёл весь мир.</gray>"
+    requirements:
+      DISTANCE_WALKED: 10000
+      PLAYER_KILLS: 75
+    enchants:
+      sharpness: 8
+      unbreaking: 3
+      knockback: 2
+      fire_aspect: 2
+      looting: 2
+    unbreakable: false
+
+  # ——————————————————
+  # Разрушитель кроватей + суммарный урон
+  # ——————————————————
+  8:
+    name: "<gradient:#ff4444:#ff8800>Клинок Завоевателя</gradient>"
+    lore-title: "<gray>Трепещите перед завоевателем.</gray>"
+    requirements:
+      BEDS_DESTROYED: 75
+      DAMAGE_DEALT: 50000
+      PLAYER_KILLS: 150
+    enchants:
+      sharpness: 8
+      unbreaking: 3
+      knockback: 2
+      fire_aspect: 2
+      looting: 3
+    unbreakable: true
+
+  # ——————————————————
+  # Предпоследний: элита
+  # ——————————————————
+  9:
+    name: "<gradient:#ffd700:#ff8c00>Меч Легенды</gradient>"
+    lore-title: "<gold>Имя твоё войдёт в историю BedSMP.</gold>"
+    requirements:
+      PLAYER_KILLS: 300
+      BEDS_DESTROYED: 150
+      MOB_KILLS: 2000
+      DIAMONDS_MINED: 500
+    enchants:
+      sharpness: 9
+      unbreaking: 3
+      knockback: 2
+      fire_aspect: 2
+      looting: 3
+      sweeping_edge: 3
+    unbreakable: true
+
+  # ——————————————————
+  # Вершина — Меч Императора
+  # ——————————————————
+  10:
+    name: "<gradient:#ff0000:#ffd700:#ff0000>⚔ МЕЧ ИМПЕРАТОРА ⚔</gradient>"
+    lore-title: "<gradient:#ffd700:#ffffff>Оружие самого Императора BedSMP.</gradient>"
+    requirements:
+      PLAYER_KILLS: 500
+      BEDS_DESTROYED: 300
+      MOB_KILLS: 5000
+      DIAMONDS_MINED: 1000
+      DISTANCE_WALKED: 100000
+      DAMAGE_DEALT: 500000
+    enchants:
+      sharpness: 10
+      unbreaking: 3
+      knockback: 2
+      fire_aspect: 2
+      looting: 3
+      sweeping_edge: 3
+      mending: 1
+    unbreakable: true

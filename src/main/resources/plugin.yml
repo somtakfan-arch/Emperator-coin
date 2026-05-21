@@ -1,0 +1,22 @@
+name: EmperorSword
+version: ${project.version}
+main: pro.bedsmp.emperorsword.EmperorSwordPlugin
+api-version: '1.21'
+description: Меч Императора — прогрессивное оружие для BedSMP
+authors: [Emperatorrr]
+website: bedsmp.pro
+
+commands:
+  es:
+    description: Команды Меча Императора
+    aliases: [emperorsword]
+    usage: /es <give|setlevel|info|reload>
+    permission: emperorsword.use
+
+permissions:
+  emperorsword.admin:
+    description: Административные команды Меча Императора
+    default: op
+  emperorsword.use:
+    description: Использование базовых команд Меча Императора
+    default: true
