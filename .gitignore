@@ -1,2 +1,7 @@
 *.agdai
 MAlonzo/**
+
+# Gradle
+.gradle/
+build/
+out/
