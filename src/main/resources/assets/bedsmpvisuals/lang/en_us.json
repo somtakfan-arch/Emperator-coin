@@ -1,0 +1,47 @@
+{
+  "config.bedsmpvisuals.title": "BedSMP VISUALS — Settings",
+  "config.bedsmpvisuals.cat.pulse": "Core (Pulse)",
+  "config.bedsmpvisuals.cat.bedsmp": "BedSMP",
+  "config.bedsmpvisuals.cat.extra": "Extra Features",
+  "config.bedsmpvisuals.cat.theme": "Theme & Scale",
+  "config.bedsmpvisuals.cat.about": "About",
+
+  "config.bedsmpvisuals.hitparticles.enabled": "Hit Particles",
+  "config.bedsmpvisuals.hitparticles.count": "Particle Count",
+  "config.bedsmpvisuals.hitparticles.lifetime": "Lifetime (ticks)",
+  "config.bedsmpvisuals.targethud.enabled": "Target HUD",
+  "config.bedsmpvisuals.targethud.lockticks": "Target Lock (ticks)",
+  "config.bedsmpvisuals.damagenumbers.enabled": "Damage Numbers",
+  "config.bedsmpvisuals.criteffects.enabled": "Critical Effects",
+  "config.bedsmpvisuals.trajectory.enabled": "Trajectory Prediction",
+  "config.bedsmpvisuals.trajectory.warning": "⚠ May be prohibited by server rules — check with admins",
+  "config.bedsmpvisuals.trajectory.ticks": "Prediction Length (ticks)",
+
+  "config.bedsmpvisuals.bedstatus.enabled": "Bed Status",
+  "config.bedsmpvisuals.bedhighlight.enabled": "Bed Highlight",
+  "config.bedsmpvisuals.bedhighlight.warning": "⚠ May be prohibited by server rules (5.7, 5.10) — check with admins",
+  "config.bedsmpvisuals.combattimer.enabled": "Combat Timer",
+  "config.bedsmpvisuals.totemcounter.enabled": "Totem Counter",
+  "config.bedsmpvisuals.killfeed.enabled": "Kill Feed",
+  "config.bedsmpvisuals.lowhpvignette.enabled": "Low HP Vignette",
+  "config.bedsmpvisuals.lowhpvignette.threshold": "Target HP Threshold",
+
+  "config.bedsmpvisuals.cps.enabled": "CPS Counter",
+  "config.bedsmpvisuals.combo.enabled": "Combo Counter",
+  "config.bedsmpvisuals.reach.enabled": "Reach Display",
+  "config.bedsmpvisuals.armor.enabled": "Armor & Durability",
+  "config.bedsmpvisuals.pingfps.enabled": "Ping & FPS",
+  "config.bedsmpvisuals.coords.enabled": "Coordinates",
+  "config.bedsmpvisuals.watermark.enabled": "Watermark",
+  "config.bedsmpvisuals.sessionstats.enabled": "Session Stats",
+
+  "config.bedsmpvisuals.global.scale": "Global Scale",
+  "config.bedsmpvisuals.global.opacity": "Global Opacity",
+
+  "config.bedsmpvisuals.about.text": "BedSMP VISUALS v1.0.0 by Emperatorrr\nServer: BedSMP | Discord: discord.gg/D5JEqtup\nAll features are visual-only, no cheats.\nControversial features are off by default.",
+
+  "key.bedsmpvisuals.open_menu": "Open Settings Menu",
+  "key.bedsmpvisuals.quick_toggle": "Quick Toggle HUD",
+  "key.bedsmpvisuals.cycle_bed_status": "Cycle Bed Status",
+  "key.categories.bedsmpvisuals": "BedSMP VISUALS"
+}

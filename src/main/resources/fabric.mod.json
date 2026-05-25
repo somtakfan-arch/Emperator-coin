@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "id": "bedsmpvisuals",
+  "version": "${version}",
+  "name": "BedSMP VISUALS",
+  "description": "Визуальный PvP-мод для сервера BedSMP. Только клиентские визуальные эффекты, без читов.",
+  "authors": ["Emperatorrr"],
+  "contact": { "homepage": "https://discord.gg/D5JEqtup" },
+  "license": "MIT",
+  "icon": "assets/bedsmpvisuals/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": ["pro.bedsmp.visuals.BedSMPVisualsClient"],
+    "modmenu": ["pro.bedsmp.visuals.config.ModMenuIntegration"]
+  },
+  "mixins": ["bedsmpvisuals.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.18.1",
+    "minecraft": "~1.21.11",
+    "java": ">=21",
+    "fabric-api": "*"
+  },
+  "suggests": {
+    "modmenu": "*",
+    "cloth-config": "*"
+  }
+}

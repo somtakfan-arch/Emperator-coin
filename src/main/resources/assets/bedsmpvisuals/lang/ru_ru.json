@@ -1,0 +1,47 @@
+{
+  "config.bedsmpvisuals.title": "BedSMP VISUALS — Настройки",
+  "config.bedsmpvisuals.cat.pulse": "Основные (Pulse)",
+  "config.bedsmpvisuals.cat.bedsmp": "BedSMP",
+  "config.bedsmpvisuals.cat.extra": "Доп. функции",
+  "config.bedsmpvisuals.cat.theme": "Тема и масштаб",
+  "config.bedsmpvisuals.cat.about": "О моде",
+
+  "config.bedsmpvisuals.hitparticles.enabled": "Партиклы попадания",
+  "config.bedsmpvisuals.hitparticles.count": "Количество партиклов",
+  "config.bedsmpvisuals.hitparticles.lifetime": "Время жизни (тики)",
+  "config.bedsmpvisuals.targethud.enabled": "Панель цели",
+  "config.bedsmpvisuals.targethud.lockticks": "Удержание цели (тики)",
+  "config.bedsmpvisuals.damagenumbers.enabled": "Цифры урона",
+  "config.bedsmpvisuals.criteffects.enabled": "Эффекты критов",
+  "config.bedsmpvisuals.trajectory.enabled": "Предсказание траектории",
+  "config.bedsmpvisuals.trajectory.warning": "⚠ Может быть запрещено правилами сервера — уточните у администрации",
+  "config.bedsmpvisuals.trajectory.ticks": "Длина просчёта (тики)",
+
+  "config.bedsmpvisuals.bedstatus.enabled": "Статус кроватей",
+  "config.bedsmpvisuals.bedhighlight.enabled": "Подсветка кроватей",
+  "config.bedsmpvisuals.bedhighlight.warning": "⚠ Может быть запрещено правилами сервера (5.7, 5.10) — уточните у администрации",
+  "config.bedsmpvisuals.combattimer.enabled": "Таймер боя",
+  "config.bedsmpvisuals.totemcounter.enabled": "Счётчик тотемов",
+  "config.bedsmpvisuals.killfeed.enabled": "Лента убийств",
+  "config.bedsmpvisuals.lowhpvignette.enabled": "Вигнет низкого HP",
+  "config.bedsmpvisuals.lowhpvignette.threshold": "Порог HP цели (%)",
+
+  "config.bedsmpvisuals.cps.enabled": "Счётчик CPS",
+  "config.bedsmpvisuals.combo.enabled": "Счётчик комбо",
+  "config.bedsmpvisuals.reach.enabled": "Дистанция удара",
+  "config.bedsmpvisuals.armor.enabled": "Броня и прочность",
+  "config.bedsmpvisuals.pingfps.enabled": "Пинг и FPS",
+  "config.bedsmpvisuals.coords.enabled": "Координаты",
+  "config.bedsmpvisuals.watermark.enabled": "Логотип (водяной знак)",
+  "config.bedsmpvisuals.sessionstats.enabled": "Статистика сессии",
+
+  "config.bedsmpvisuals.global.scale": "Глобальный масштаб",
+  "config.bedsmpvisuals.global.opacity": "Глобальная прозрачность",
+
+  "config.bedsmpvisuals.about.text": "BedSMP VISUALS v1.0.0 by Emperatorrr\nСервер: BedSMP | Discord: discord.gg/D5JEqtup\nВсе функции — только визуальные, без читов.\nСпорные функции выключены по умолчанию.",
+
+  "key.bedsmpvisuals.open_menu": "Открыть меню настроек",
+  "key.bedsmpvisuals.quick_toggle": "Быстрое переключение HUD",
+  "key.bedsmpvisuals.cycle_bed_status": "Сменить статус кровати",
+  "key.categories.bedsmpvisuals": "BedSMP VISUALS"
+}

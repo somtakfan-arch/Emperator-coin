@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "package": "pro.bedsmp.visuals.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "ClientPlayerInteractionMixin",
+    "ClientPlayerEntityMixin",
+    "GameRendererMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
