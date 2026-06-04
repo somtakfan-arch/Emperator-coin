@@ -68,11 +68,14 @@ public class DamageNumbersLayer {
 
             if (alpha <= 0f) continue;
 
+            // Пропускаем не-крит с нулевым уроном (урон неизвестен на клиенте)
+            if (!num.isCrit() && num.damage() <= 0f) continue;
+
             int color = num.isCrit() ? cfg.damageNumbers.critColor : cfg.damageNumbers.color;
             color = ColorUtils.withAlpha(color, alpha * cfg.globalOpacity);
 
             String text = num.isCrit()
-                    ? String.format("%.1f!", num.damage())
+                    ? (num.damage() > 0f ? String.format("%.1f CRIT!", num.damage()) : "CRIT!")
                     : String.format("%.1f", num.damage());
 
             float scale = num.isCrit() ? cfg.damageNumbers.fontSize * 1.3f : cfg.damageNumbers.fontSize;

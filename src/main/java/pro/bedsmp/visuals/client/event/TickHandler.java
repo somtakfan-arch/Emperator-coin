@@ -12,14 +12,18 @@ import pro.bedsmp.visuals.client.state.CombatState;
 import pro.bedsmp.visuals.client.state.KillFeedState;
 import pro.bedsmp.visuals.client.state.TargetTracker;
 
-/** Клиентский тик: таймеры, очистка устаревших данных. */
+import java.util.ArrayDeque;
+
+/** Клиентский тик: таймеры, CPS, очистка устаревших данных. */
 @Environment(EnvType.CLIENT)
 public class TickHandler {
 
-    // CPS-счётчики: тики кликов за последнюю секунду
-    public static final int[] leftClickTicks = new int[20];
-    public static final int[] rightClickTicks = new int[20];
-    private static int tickIndex = 0;
+    // CPS: метки тиков, в которые были клики (храним последние ~секунды = 20 тиков)
+    private static final ArrayDeque<Long> leftClickTimes = new ArrayDeque<>();
+    private static final ArrayDeque<Long> rightClickTimes = new ArrayDeque<>();
+
+    private static boolean prevLmb = false;
+    private static boolean prevRmb = false;
 
     public static int cpsLeft = 0;
     public static int cpsRight = 0;
@@ -28,13 +32,13 @@ public class TickHandler {
         ClientTickEvents.END_CLIENT_TICK.register(TickHandler::onTick);
     }
 
-    private static void onTick(Minecraft client) {
-        if (client.level == null || client.player == null) return;
+    private static void onTick(Minecraft mc) {
+        if (mc.level == null || mc.player == null) return;
 
         var cfg = BedSMPVisualsClient.CONFIG;
         if (cfg == null) return;
 
-        long tick = client.level.getGameTime();
+        long tick = mc.level.getGameTime();
 
         // Обновление таймера боя
         CombatState combat = CombatState.get();
@@ -63,29 +67,32 @@ public class TickHandler {
         // Тик партиклов
         HitParticleRenderer.get().tick();
 
-        // CPS: сдвиг скользящего окна
-        int slotIndex = (int)(tick % 20);
-        leftClickTicks[slotIndex] = 0;
-        rightClickTicks[slotIndex] = 0;
-        cpsLeft = sumArray(leftClickTicks);
-        cpsRight = sumArray(rightClickTicks);
+        // CPS через KeyMapping — edge detection нажатий кнопок мыши
+        if (mc.isWindowActive()) {
+            boolean lmb = mc.options.keyAttack.isDown();
+            boolean rmb = mc.options.keyUse.isDown();
+            if (lmb && !prevLmb) registerLeftClick();
+            if (rmb && !prevRmb) registerRightClick();
+            prevLmb = lmb;
+            prevRmb = rmb;
+        }
+
+        // Удалить метки старше 20 тиков и обновить отображаемые значения
+        while (!leftClickTimes.isEmpty() && tick - leftClickTimes.peekFirst() >= 20) leftClickTimes.pollFirst();
+        while (!rightClickTimes.isEmpty() && tick - rightClickTimes.peekFirst() >= 20) rightClickTimes.pollFirst();
+        cpsLeft = leftClickTimes.size();
+        cpsRight = rightClickTimes.size();
     }
 
     public static void registerLeftClick() {
-        if (Minecraft.getInstance().level == null) return;
-        long tick = Minecraft.getInstance().level.getGameTime();
-        leftClickTicks[(int)(tick % 20)]++;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return;
+        leftClickTimes.addLast(mc.level.getGameTime());
     }
 
     public static void registerRightClick() {
-        if (Minecraft.getInstance().level == null) return;
-        long tick = Minecraft.getInstance().level.getGameTime();
-        rightClickTicks[(int)(tick % 20)]++;
-    }
-
-    private static int sumArray(int[] arr) {
-        int s = 0;
-        for (int v : arr) s += v;
-        return s;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.level == null) return;
+        rightClickTimes.addLast(mc.level.getGameTime());
     }
 }

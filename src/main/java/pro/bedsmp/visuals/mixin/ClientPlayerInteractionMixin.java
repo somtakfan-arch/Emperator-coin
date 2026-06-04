@@ -12,7 +12,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import pro.bedsmp.visuals.client.event.CombatEventHandler;
 import pro.bedsmp.visuals.client.hud.ReachLayer;
-import pro.bedsmp.visuals.client.event.TickHandler;
 
 /**
  * Перехватывает атаку игрока по сущности.
@@ -26,20 +25,14 @@ public class ClientPlayerInteractionMixin {
             at = @At("HEAD")
     )
     private void bedsmpvisuals$onAttack(Player player, Entity target, CallbackInfo ci) {
-        try {
-            if (!(target instanceof LivingEntity living)) return;
-            if (!(player instanceof LocalPlayer localPlayer)) return;
+        if (!(target instanceof LivingEntity living)) return;
+        if (!(player instanceof LocalPlayer localPlayer)) return;
 
-            float reach = (float) player.distanceTo(target);
-            ReachLayer.recordReach(reach);
+        float reach = (float) player.distanceTo(target);
+        ReachLayer.recordReach(reach);
 
-            boolean isCrit = isCriticalHit(localPlayer);
-            pro.bedsmp.visuals.client.event.CombatEventHandler.onHitEntity(living, 0f, isCrit);
-
-            pro.bedsmp.visuals.client.event.TickHandler.registerLeftClick();
-        } catch (Exception e) {
-            pro.bedsmp.visuals.BedSMPVisualsClient.LOGGER.error("Attack handler error: {}", e.getMessage());
-        }
+        boolean isCrit = isCriticalHit(localPlayer);
+        CombatEventHandler.onHitEntity(living, 0f, isCrit);
     }
 
     private boolean isCriticalHit(LocalPlayer player) {

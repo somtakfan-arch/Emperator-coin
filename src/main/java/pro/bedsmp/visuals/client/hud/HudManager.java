@@ -6,6 +6,8 @@ import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.minecraft.resources.Identifier;
 
+import pro.bedsmp.visuals.client.particle.HitParticleRenderer;
+
 /**
  * Регистрирует все HUD-элементы через HudElementRegistry (Fabric API 1.21.11).
  * Каждый элемент — отдельный Identifier, цепочкой после MISC_OVERLAYS.
@@ -64,5 +66,9 @@ public class HudManager {
         // Вигнет поверх всего
         HudElementRegistry.attachElementAfter(id("armor_hud"), id("low_hp_vignette"),
                 (gfx, tc) -> LowHpVignetteLayer.render(gfx, tc));
+
+        // Эффект попадания (угловые скобки вокруг прицела) — поверх вигнета
+        HudElementRegistry.attachElementAfter(id("low_hp_vignette"), id("hit_particles"),
+                (gfx, tc) -> HitParticleRenderer.get().renderHud(gfx, tc));
     }
 }

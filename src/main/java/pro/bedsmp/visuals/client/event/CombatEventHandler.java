@@ -10,6 +10,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.EntityHitResult;
 
 import pro.bedsmp.visuals.BedSMPVisualsClient;
+import pro.bedsmp.visuals.client.hud.DamageNumbersLayer;
 import pro.bedsmp.visuals.client.particle.HitParticleRenderer;
 import pro.bedsmp.visuals.client.state.CombatState;
 import pro.bedsmp.visuals.client.state.KillFeedState;
@@ -64,6 +65,11 @@ public class CombatEventHandler {
         // Спавн партиклов
         if (cfg.hitParticles.enabled) {
             HitParticleRenderer.get().spawnHit(target, damage, isCrit);
+        }
+
+        // Числа урона / crit-индикатор
+        if (cfg.damageNumbers.enabled) {
+            DamageNumbersLayer.addDamage(damage, isCrit);
         }
 
         // Звуки

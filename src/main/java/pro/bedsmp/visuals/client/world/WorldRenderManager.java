@@ -22,26 +22,22 @@ public class WorldRenderManager {
             Minecraft mc = Minecraft.getInstance();
             if (mc.level == null || mc.player == null) return;
 
-            try {
-                if (cfg.hitParticles.enabled) {
-                    float partialTick = mc.getDeltaTracker().getGameTimeDeltaPartialTick(false);
-                    HitParticleRenderer.get().render(
-                            context.matrices(),
-                            consumers,
-                            partialTick,
-                            mc.gameRenderer.getMainCamera().position()
-                    );
-                }
+            if (cfg.hitParticles.enabled) {
+                float partialTick = mc.getDeltaTracker().getGameTimeDeltaPartialTick(false);
+                HitParticleRenderer.get().render(
+                        context.matrices(),
+                        consumers,
+                        partialTick,
+                        mc.gameRenderer.getMainCamera().position()
+                );
+            }
 
-                if (cfg.trajectory.enabled) {
-                    TrajectoryRenderer.render(context);
-                }
+            if (cfg.trajectory.enabled) {
+                TrajectoryRenderer.render(context);
+            }
 
-                if (cfg.bedHighlight.enabled) {
-                    BedHighlightRenderer.render(context);
-                }
-            } catch (Exception e) {
-                BedSMPVisualsClient.LOGGER.error("WorldRender error: {}", e.getMessage());
+            if (cfg.bedHighlight.enabled) {
+                BedHighlightRenderer.render(context);
             }
         });
     }
