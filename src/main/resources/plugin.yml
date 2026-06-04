@@ -1,0 +1,6 @@
+name: BedRtp
+version: 1.0
+main: pro.bedsmp.bedrtp.BedRtp
+api-version: '1.21'
+description: Телепортирует игрока в случайное безопасное место при первом входе и после смерти без кровати/якоря.
+author: BedSMP

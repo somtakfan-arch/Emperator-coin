@@ -1,0 +1,14 @@
+# BedRtp Configuration
+# Мир для телепортации
+world: world
+
+# Центр зоны телепортации
+center-x: 0
+center-z: 0
+
+# Радиус (в блоках)
+min-radius: 500
+max-radius: 5000
+
+# Максимальное количество попыток найти безопасное место
+max-tries: 30
