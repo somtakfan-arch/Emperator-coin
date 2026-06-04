@@ -20,28 +20,32 @@ public class SoundCueManager {
     }
 
     public static void onHit(boolean isCrit) {
-        var cfg = BedSMPVisualsClient.CONFIG;
-        if (cfg == null || !cfg.hitSoundCues.enabled) return;
+        try {
+            var cfg = BedSMPVisualsClient.CONFIG;
+            if (cfg == null || !cfg.hitSoundCues.enabled) return;
 
-        Minecraft mc = Minecraft.getInstance();
-        if (mc.player == null || mc.level == null) return;
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player == null || mc.level == null) return;
 
-        float vol = cfg.hitSoundCues.volume;
+            float vol = cfg.hitSoundCues.volume;
 
-        if (isCrit && cfg.hitSoundCues.critSound) {
-            mc.level.playLocalSound(
-                    mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                    SoundEvents.PLAYER_ATTACK_CRIT,
-                    SoundSource.PLAYERS,
-                    vol, 1.2f, false
-            );
-        } else {
-            mc.level.playLocalSound(
-                    mc.player.getX(), mc.player.getY(), mc.player.getZ(),
-                    SoundEvents.PLAYER_ATTACK_STRONG,
-                    SoundSource.PLAYERS,
-                    vol * 0.5f, 1.0f, false
-            );
+            if (isCrit && cfg.hitSoundCues.critSound) {
+                mc.level.playLocalSound(
+                        mc.player.getX(), mc.player.getY(), mc.player.getZ(),
+                        SoundEvents.PLAYER_ATTACK_CRIT,
+                        SoundSource.PLAYERS,
+                        vol, 1.2f, false
+                );
+            } else {
+                mc.level.playLocalSound(
+                        mc.player.getX(), mc.player.getY(), mc.player.getZ(),
+                        SoundEvents.PLAYER_ATTACK_STRONG,
+                        SoundSource.PLAYERS,
+                        vol * 0.5f, 1.0f, false
+                );
+            }
+        } catch (Exception e) {
+            pro.bedsmp.visuals.BedSMPVisualsClient.LOGGER.error("SoundCue onHit error: {}", e.getMessage());
         }
     }
 

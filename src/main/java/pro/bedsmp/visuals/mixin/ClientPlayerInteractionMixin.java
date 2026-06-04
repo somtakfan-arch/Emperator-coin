@@ -26,16 +26,20 @@ public class ClientPlayerInteractionMixin {
             at = @At("HEAD")
     )
     private void bedsmpvisuals$onAttack(Player player, Entity target, CallbackInfo ci) {
-        if (!(target instanceof LivingEntity living)) return;
-        if (!(player instanceof LocalPlayer localPlayer)) return;
+        try {
+            if (!(target instanceof LivingEntity living)) return;
+            if (!(player instanceof LocalPlayer localPlayer)) return;
 
-        float reach = (float) player.distanceTo(target);
-        ReachLayer.recordReach(reach);
+            float reach = (float) player.distanceTo(target);
+            ReachLayer.recordReach(reach);
 
-        boolean isCrit = isCriticalHit(localPlayer);
-        CombatEventHandler.onHitEntity(living, 0f, isCrit);
+            boolean isCrit = isCriticalHit(localPlayer);
+            pro.bedsmp.visuals.client.event.CombatEventHandler.onHitEntity(living, 0f, isCrit);
 
-        TickHandler.registerLeftClick();
+            pro.bedsmp.visuals.client.event.TickHandler.registerLeftClick();
+        } catch (Exception e) {
+            pro.bedsmp.visuals.BedSMPVisualsClient.LOGGER.error("Attack handler error: {}", e.getMessage());
+        }
     }
 
     private boolean isCriticalHit(LocalPlayer player) {

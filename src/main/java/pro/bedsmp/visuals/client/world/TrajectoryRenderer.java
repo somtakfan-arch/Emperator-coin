@@ -7,7 +7,6 @@ import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BowItem;
@@ -15,7 +14,6 @@ import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Matrix4f;
 
 import pro.bedsmp.visuals.BedSMPVisualsClient;
 import pro.bedsmp.visuals.client.util.ColorUtils;
@@ -89,7 +87,7 @@ public class TrajectoryRenderer {
                     )
             );
 
-            Matrix4f mat = poseStack.last().pose();
+            var pose = poseStack.last();
 
             if (i % 2 == 0) {
                 float px = (float)(prev.x - cameraPos.x);
@@ -99,8 +97,8 @@ public class TrajectoryRenderer {
                 float ny = (float)(next.y - cameraPos.y);
                 float nz = (float)(next.z - cameraPos.z);
 
-                consumer.addVertex(mat, px, py, pz).setColor(r, g, b, a).setNormal(0, 1, 0);
-                consumer.addVertex(mat, nx, ny, nz).setColor(r, g, b, a).setNormal(0, 1, 0);
+                consumer.addVertex(pose, px, py, pz).setColor(r, g, b, a).setNormal(pose, 0, 1, 0);
+                consumer.addVertex(pose, nx, ny, nz).setColor(r, g, b, a).setNormal(pose, 0, 1, 0);
             }
 
             if (hitResult.getType() != net.minecraft.world.phys.HitResult.Type.MISS) {
@@ -115,10 +113,10 @@ public class TrajectoryRenderer {
                     int lg = ColorUtils.green(mc2);
                     int lb = ColorUtils.blue(mc2);
                     float s = 0.1f;
-                    consumer.addVertex(mat, lx - s, ly, lz).setColor(lr, lg, lb, la).setNormal(1, 0, 0);
-                    consumer.addVertex(mat, lx + s, ly, lz).setColor(lr, lg, lb, la).setNormal(1, 0, 0);
-                    consumer.addVertex(mat, lx, ly, lz - s).setColor(lr, lg, lb, la).setNormal(0, 0, 1);
-                    consumer.addVertex(mat, lx, ly, lz + s).setColor(lr, lg, lb, la).setNormal(0, 0, 1);
+                    consumer.addVertex(pose, lx - s, ly, lz).setColor(lr, lg, lb, la).setNormal(pose, 1, 0, 0);
+                    consumer.addVertex(pose, lx + s, ly, lz).setColor(lr, lg, lb, la).setNormal(pose, 1, 0, 0);
+                    consumer.addVertex(pose, lx, ly, lz - s).setColor(lr, lg, lb, la).setNormal(pose, 0, 0, 1);
+                    consumer.addVertex(pose, lx, ly, lz + s).setColor(lr, lg, lb, la).setNormal(pose, 0, 0, 1);
                 }
                 break;
             }

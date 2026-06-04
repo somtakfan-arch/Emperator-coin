@@ -7,7 +7,6 @@ import net.fabricmc.api.Environment;
 import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderContext;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
@@ -15,7 +14,6 @@ import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Matrix4f;
 
 import pro.bedsmp.visuals.BedSMPVisualsClient;
 import pro.bedsmp.visuals.client.util.ColorUtils;
@@ -77,27 +75,27 @@ public class BedHighlightRenderer {
                                  float x2, float y2, float z2,
                                  int r, int g, int b, int a) {
         VertexConsumer consumer = consumers.getBuffer(RenderTypes.LINES);
-        Matrix4f mat = poseStack.last().pose();
+        var pose = poseStack.last();
 
-        addLine(consumer, mat, x1, y1, z1, x2, y1, z1, r, g, b, a);
-        addLine(consumer, mat, x2, y1, z1, x2, y1, z2, r, g, b, a);
-        addLine(consumer, mat, x2, y1, z2, x1, y1, z2, r, g, b, a);
-        addLine(consumer, mat, x1, y1, z2, x1, y1, z1, r, g, b, a);
-        addLine(consumer, mat, x1, y2, z1, x2, y2, z1, r, g, b, a);
-        addLine(consumer, mat, x2, y2, z1, x2, y2, z2, r, g, b, a);
-        addLine(consumer, mat, x2, y2, z2, x1, y2, z2, r, g, b, a);
-        addLine(consumer, mat, x1, y2, z2, x1, y2, z1, r, g, b, a);
-        addLine(consumer, mat, x1, y1, z1, x1, y2, z1, r, g, b, a);
-        addLine(consumer, mat, x2, y1, z1, x2, y2, z1, r, g, b, a);
-        addLine(consumer, mat, x2, y1, z2, x2, y2, z2, r, g, b, a);
-        addLine(consumer, mat, x1, y1, z2, x1, y2, z2, r, g, b, a);
+        addLine(consumer, pose, x1, y1, z1, x2, y1, z1, r, g, b, a);
+        addLine(consumer, pose, x2, y1, z1, x2, y1, z2, r, g, b, a);
+        addLine(consumer, pose, x2, y1, z2, x1, y1, z2, r, g, b, a);
+        addLine(consumer, pose, x1, y1, z2, x1, y1, z1, r, g, b, a);
+        addLine(consumer, pose, x1, y2, z1, x2, y2, z1, r, g, b, a);
+        addLine(consumer, pose, x2, y2, z1, x2, y2, z2, r, g, b, a);
+        addLine(consumer, pose, x2, y2, z2, x1, y2, z2, r, g, b, a);
+        addLine(consumer, pose, x1, y2, z2, x1, y2, z1, r, g, b, a);
+        addLine(consumer, pose, x1, y1, z1, x1, y2, z1, r, g, b, a);
+        addLine(consumer, pose, x2, y1, z1, x2, y2, z1, r, g, b, a);
+        addLine(consumer, pose, x2, y1, z2, x2, y2, z2, r, g, b, a);
+        addLine(consumer, pose, x1, y1, z2, x1, y2, z2, r, g, b, a);
     }
 
-    private static void addLine(VertexConsumer consumer, Matrix4f mat,
+    private static void addLine(VertexConsumer consumer, PoseStack.Pose pose,
                                  float x1, float y1, float z1,
                                  float x2, float y2, float z2,
                                  int r, int g, int b, int a) {
-        consumer.addVertex(mat, x1, y1, z1).setColor(r, g, b, a).setNormal(1, 0, 0);
-        consumer.addVertex(mat, x2, y2, z2).setColor(r, g, b, a).setNormal(1, 0, 0);
+        consumer.addVertex(pose, x1, y1, z1).setColor(r, g, b, a).setNormal(pose, 1, 0, 0);
+        consumer.addVertex(pose, x2, y2, z2).setColor(r, g, b, a).setNormal(pose, 1, 0, 0);
     }
 }

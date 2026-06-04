@@ -5,11 +5,9 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.rendertype.RenderType;
 import net.minecraft.client.renderer.rendertype.RenderTypes;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
-import org.joml.Matrix4f;
 
 import pro.bedsmp.visuals.BedSMPVisualsClient;
 import pro.bedsmp.visuals.client.util.ColorUtils;
@@ -70,30 +68,33 @@ public class HitParticleRenderer {
     public void render(PoseStack poseStack, MultiBufferSource consumers,
                        float partialTick, Vec3 cameraPos) {
         if (particles.isEmpty()) return;
+        try {
+            VertexConsumer consumer = consumers.getBuffer(RenderTypes.LINES);
+            var pose = poseStack.last();
 
-        VertexConsumer consumer = consumers.getBuffer(RenderTypes.LINES);
+            for (HitParticle p : particles) {
+                float alpha = p.alpha();
+                if (alpha <= 0f) continue;
 
-        for (HitParticle p : particles) {
-            float alpha = p.alpha();
-            if (alpha <= 0f) continue;
+                int color = ColorUtils.withAlpha(p.color, alpha);
+                int a = ColorUtils.alpha(color);
+                int r = ColorUtils.red(color);
+                int g = ColorUtils.green(color);
+                int b = ColorUtils.blue(color);
 
-            int color = ColorUtils.withAlpha(p.color, alpha);
-            int a = ColorUtils.alpha(color);
-            int r = ColorUtils.red(color);
-            int g = ColorUtils.green(color);
-            int b = ColorUtils.blue(color);
+                float rx = (float)(p.x - cameraPos.x);
+                float ry = (float)(p.y - cameraPos.y);
+                float rz = (float)(p.z - cameraPos.z);
 
-            float rx = (float)(p.x - cameraPos.x);
-            float ry = (float)(p.y - cameraPos.y);
-            float rz = (float)(p.z - cameraPos.z);
+                float hs = p.size * 0.05f;
 
-            Matrix4f mat = poseStack.last().pose();
-            float hs = p.size * 0.05f;
-
-            consumer.addVertex(mat, rx - hs, ry, rz).setColor(r, g, b, a).setNormal(1, 0, 0);
-            consumer.addVertex(mat, rx + hs, ry, rz).setColor(r, g, b, a).setNormal(1, 0, 0);
-            consumer.addVertex(mat, rx, ry - hs, rz).setColor(r, g, b, a).setNormal(0, 1, 0);
-            consumer.addVertex(mat, rx, ry + hs, rz).setColor(r, g, b, a).setNormal(0, 1, 0);
+                consumer.addVertex(pose, rx - hs, ry, rz).setColor(r, g, b, a).setNormal(pose, 1, 0, 0);
+                consumer.addVertex(pose, rx + hs, ry, rz).setColor(r, g, b, a).setNormal(pose, 1, 0, 0);
+                consumer.addVertex(pose, rx, ry - hs, rz).setColor(r, g, b, a).setNormal(pose, 0, 1, 0);
+                consumer.addVertex(pose, rx, ry + hs, rz).setColor(r, g, b, a).setNormal(pose, 0, 1, 0);
+            }
+        } catch (Exception e) {
+            pro.bedsmp.visuals.BedSMPVisualsClient.LOGGER.error("Particle render error: {}", e.getMessage());
         }
     }
 
