@@ -57,7 +57,7 @@ public class HitParticleRenderer {
         // no-op: эффект отображается через renderHud()
     }
 
-    /** HUD-рендер: угловые скобки вокруг прицела при попадании. */
+    /** HUD-рендер: FPS-стиль хит-маркер (4 расходящихся черты). */
     public void renderHud(GuiGraphics gfx, DeltaTracker tc) {
         var cfg = BedSMPVisualsClient.CONFIG;
         if (cfg == null || !cfg.hitParticles.enabled || !cfg.hudVisible) return;
@@ -73,32 +73,32 @@ public class HitParticleRenderer {
 
         for (HitFlash flash : flashes) {
             float age = tick - flash.spawnTick();
-            float progress = Math.min(1f, age / (float) cfg.hitParticles.lifetime);
-            float alpha = (1f - progress) * cfg.globalOpacity;
+            int lifetime = Math.max(1, cfg.hitParticles.lifetime);
+            float progress = Math.min(1f, age / (float) lifetime);
+            // Плавное появление (0-20%) и угасание (20-100%)
+            float alpha = progress < 0.2f
+                    ? (progress / 0.2f)
+                    : (1f - (progress - 0.2f) / 0.8f);
+            alpha *= cfg.globalOpacity;
             if (alpha <= 0.02f) continue;
 
-            int baseColor = flash.isCrit() ? cfg.critEffects.particleColor : cfg.hitParticles.color;
+            int baseColor = flash.isCrit() ? 0xFFFF8800 : 0xFFFFFFFF;
             int color = ColorUtils.withAlpha(baseColor, alpha);
 
-            int startR = flash.isCrit() ? 6 : 4;
-            int endR   = flash.isCrit() ? 22 : 16;
-            int r = (int) (startR + (endR - startR) * progress);
-            int bLen = Math.max(3, r / 3);
-            int t = Math.max(1, 2 - (int) (progress * 1.5f));
+            int startGap = flash.isCrit() ? 7 : 5;
+            int endGap   = flash.isCrit() ? 20 : 16;
+            int gap = (int)(startGap + (endGap - startGap) * progress);
+            int len = flash.isCrit() ? 9 : 7;
+            int thick = 2;
 
-            // Угловые скобки: 4 угла × 2 линии каждый
-            // Верхний левый
-            gfx.fill(cx - r,          cy - r,          cx - r + bLen, cy - r + t,    color);
-            gfx.fill(cx - r,          cy - r,          cx - r + t,    cy - r + bLen, color);
-            // Верхний правый
-            gfx.fill(cx + r - bLen,   cy - r,          cx + r,        cy - r + t,    color);
-            gfx.fill(cx + r - t,      cy - r,          cx + r,        cy - r + bLen, color);
-            // Нижний левый
-            gfx.fill(cx - r,          cy + r - t,      cx - r + bLen, cy + r,        color);
-            gfx.fill(cx - r,          cy + r - bLen,   cx - r + t,    cy + r,        color);
-            // Нижний правый
-            gfx.fill(cx + r - bLen,   cy + r - t,      cx + r,        cy + r,        color);
-            gfx.fill(cx + r - t,      cy + r - bLen,   cx + r,        cy + r,        color);
+            // Верхняя черта
+            gfx.fill(cx - 1,        cy - gap - len, cx + 1 + thick, cy - gap,        color);
+            // Нижняя черта
+            gfx.fill(cx - 1,        cy + gap,       cx + 1 + thick, cy + gap + len,  color);
+            // Левая черта
+            gfx.fill(cx - gap - len, cy - 1,        cx - gap,       cy + 1 + thick,  color);
+            // Правая черта
+            gfx.fill(cx + gap,       cy - 1,        cx + gap + len, cy + 1 + thick,  color);
         }
     }
 

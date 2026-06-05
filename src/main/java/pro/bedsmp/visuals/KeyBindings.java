@@ -10,12 +10,14 @@ import net.minecraft.resources.Identifier;
 import org.lwjgl.glfw.GLFW;
 
 import pro.bedsmp.visuals.config.ConfigScreen;
+import pro.bedsmp.visuals.screen.HudEditorScreen;
 
 @Environment(EnvType.CLIENT)
 public class KeyBindings {
 
     public static KeyMapping openMenu;
     public static KeyMapping quickToggle;
+    public static KeyMapping openHudEditor;
     public static KeyMapping cycleBedStatus;
 
     private static final KeyMapping.Category CATEGORY =
@@ -34,6 +36,12 @@ public class KeyBindings {
                 CATEGORY
         ));
 
+        openHudEditor = KeyBindingHelper.registerKeyBinding(new KeyMapping(
+                "key.bedsmpvisuals.open_hud_editor",
+                GLFW.GLFW_KEY_H,
+                CATEGORY
+        ));
+
         cycleBedStatus = KeyBindingHelper.registerKeyBinding(new KeyMapping(
                 "key.bedsmpvisuals.cycle_bed_status",
                 GLFW.GLFW_KEY_UNKNOWN,
@@ -46,6 +54,9 @@ public class KeyBindings {
             }
             if (quickToggle.consumeClick()) {
                 handleQuickToggle(client);
+            }
+            if (openHudEditor.consumeClick()) {
+                client.setScreen(new HudEditorScreen());
             }
         });
     }

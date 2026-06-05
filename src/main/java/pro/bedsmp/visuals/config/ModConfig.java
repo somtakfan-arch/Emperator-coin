@@ -58,6 +58,44 @@ public class ModConfig {
     public MacePvP macePvp = new MacePvP();
     public CrystalPvP crystalPvp = new CrystalPvP();
 
+    // ── Фаза 5: 35 новых функций ──────────────────────────────────────────────
+
+    public AttackCooldown   attackCooldown   = new AttackCooldown();
+    public SpeedDisplay     speedDisplay     = new SpeedDisplay();
+    public FallDamagePreview fallDamagePreview = new FallDamagePreview();
+    public WTapIndicator    wTapIndicator    = new WTapIndicator();
+    public KillStreak       killStreak       = new KillStreak();
+    public AbsorptionDisplay absorptionDisplay = new AbsorptionDisplay();
+    public FoodDisplay      foodDisplay      = new FoodDisplay();
+    public PotionTimers     potionTimers     = new PotionTimers();
+    public ArmorDurability  armorDurability  = new ArmorDurability();
+    public ItemDurability   itemDurability   = new ItemDurability();
+    public ExpDisplay       expDisplay       = new ExpDisplay();
+    public FreezeTimer      freezeTimer      = new FreezeTimer();
+    public ChunkInfo        chunkInfo        = new ChunkInfo();
+    public DayTime          dayTime          = new DayTime();
+    public NearbyPlayers    nearbyPlayers    = new NearbyPlayers();
+    public RealClock        realClock        = new RealClock();
+    public LightLevel       lightLevel       = new LightLevel();
+    public CompassDisplay   compassDisplay   = new CompassDisplay();
+    public SwimDepth        swimDepth        = new SwimDepth();
+    public Playtime         playtime         = new Playtime();
+    public DamageSummary    damageSummary    = new DamageSummary();
+    public GappleCount      gappleCount      = new GappleCount();
+    public TotemStatus      totemStatus      = new TotemStatus();
+    public InventoryCount   inventoryCount   = new InventoryCount();
+    public StrafingDisplay  strafingDisplay  = new StrafingDisplay();
+    public VelocityDisplay  velocityDisplay  = new VelocityDisplay();
+    public PearlCooldown    pearlCooldown    = new PearlCooldown();
+    public ArrowCount       arrowCount       = new ArrowCount();
+    public TpsDisplay       tpsDisplay       = new TpsDisplay();
+    public SessionKD        sessionKD        = new SessionKD();
+    public ShieldStatus     shieldStatus     = new ShieldStatus();
+    public SprintStatus     sprintStatus     = new SprintStatus();
+    public CustomCrosshair  customCrosshair  = new CustomCrosshair();
+    public HitFlash         hitFlash         = new HitFlash();
+    public BorderGlow       borderGlow       = new BorderGlow();
+
     // ─────────────────────────────────────────────────────────────────────────
 
     public static class HitParticles {
@@ -313,7 +351,254 @@ public class ModConfig {
         public int offsetX = 0;
         public int offsetY = -50;
         public int scanRadius = 10;
-        public boolean showPlacementCount = false; // выкл. по умолч. — сканирует блоки
+        public boolean showPlacementCount = false;
         public int placementRadius = 4;
+    }
+
+    // ── Фаза 5: Новые конфиги ─────────────────────────────────────────────────
+
+    public static class AttackCooldown {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_CENTER;
+        public int offsetX = 0;
+        public int offsetY = -28;
+    }
+
+    public static class SpeedDisplay {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_CENTER;
+        public int offsetX = 0;
+        public int offsetY = -42;
+    }
+
+    public static class FallDamagePreview {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.CENTER;
+        public int offsetX = 0;
+        public int offsetY = 60;
+    }
+
+    public static class WTapIndicator {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_CENTER;
+        public int offsetX = 0;
+        public int offsetY = -55;
+    }
+
+    public static class KillStreak {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_CENTER;
+        public int offsetX = 0;
+        public int offsetY = 30;
+    }
+
+    public static class AbsorptionDisplay {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_CENTER;
+        public int offsetX = 0;
+        public int offsetY = 95;
+    }
+
+    public static class FoodDisplay {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_CENTER;
+        public int offsetX = 0;
+        public int offsetY = 110;
+    }
+
+    public static class PotionTimers {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_LEFT;
+        public int offsetX = 5;
+        public int offsetY = 80;
+    }
+
+    public static class ArmorDurability {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_LEFT;
+        public int offsetX = 5;
+        public int offsetY = -40;
+    }
+
+    public static class ItemDurability {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_CENTER;
+        public int offsetX = 0;
+        public int offsetY = -60;
+    }
+
+    public static class ExpDisplay {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_CENTER;
+        public int offsetX = 0;
+        public int offsetY = -50;
+    }
+
+    public static class FreezeTimer {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.CENTER;
+        public int offsetX = 0;
+        public int offsetY = 80;
+    }
+
+    public static class ChunkInfo {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_RIGHT;
+        public int offsetX = -5;
+        public int offsetY = -80;
+    }
+
+    public static class DayTime {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_RIGHT;
+        public int offsetX = -5;
+        public int offsetY = 80;
+    }
+
+    public static class NearbyPlayers {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_LEFT;
+        public int offsetX = 5;
+        public int offsetY = 120;
+        public int radius = 64;
+    }
+
+    public static class RealClock {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_RIGHT;
+        public int offsetX = -5;
+        public int offsetY = 95;
+    }
+
+    public static class LightLevel {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_LEFT;
+        public int offsetX = 5;
+        public int offsetY = 135;
+    }
+
+    public static class CompassDisplay {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_CENTER;
+        public int offsetX = 0;
+        public int offsetY = 125;
+    }
+
+    public static class SwimDepth {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.CENTER;
+        public int offsetX = 0;
+        public int offsetY = 95;
+    }
+
+    public static class Playtime {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_RIGHT;
+        public int offsetX = -5;
+        public int offsetY = -100;
+    }
+
+    public static class DamageSummary {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_RIGHT;
+        public int offsetX = -5;
+        public int offsetY = -115;
+    }
+
+    public static class GappleCount {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_RIGHT;
+        public int offsetX = -5;
+        public int offsetY = -130;
+    }
+
+    public static class TotemStatus {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_CENTER;
+        public int offsetX = 0;
+        public int offsetY = 55;
+    }
+
+    public static class InventoryCount {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_LEFT;
+        public int offsetX = 5;
+        public int offsetY = -60;
+    }
+
+    public static class StrafingDisplay {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_CENTER;
+        public int offsetX = 0;
+        public int offsetY = -80;
+    }
+
+    public static class VelocityDisplay {
+        public boolean enabled = false;
+        public HudAnchor anchor = HudAnchor.BOTTOM_LEFT;
+        public int offsetX = 5;
+        public int offsetY = -75;
+    }
+
+    public static class PearlCooldown {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_CENTER;
+        public int offsetX = 0;
+        public int offsetY = -70;
+    }
+
+    public static class ArrowCount {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_CENTER;
+        public int offsetX = 0;
+        public int offsetY = -70;
+    }
+
+    public static class TpsDisplay {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_RIGHT;
+        public int offsetX = -5;
+        public int offsetY = 110;
+    }
+
+    public static class SessionKD {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_RIGHT;
+        public int offsetX = -5;
+        public int offsetY = -60;
+    }
+
+    public static class ShieldStatus {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_CENTER;
+        public int offsetX = 0;
+        public int offsetY = -75;
+    }
+
+    public static class SprintStatus {
+        public boolean enabled = false;
+        public HudAnchor anchor = HudAnchor.BOTTOM_CENTER;
+        public int offsetX = 0;
+        public int offsetY = -90;
+    }
+
+    public static class CustomCrosshair {
+        public boolean enabled = false;
+        public String style = "GAP";  // CROSS, DOT, CIRCLE, GAP
+        public int gap = 4;
+        public int size = 6;
+        public int thickness = 1;
+        public int color = 0xFFFFFFFF;
+        public boolean dynamicExpand = true;
+    }
+
+    public static class HitFlash {
+        public boolean enabled = true;
+        public int flashColor = 0xFFFF2222;
+    }
+
+    public static class BorderGlow {
+        public boolean enabled = false;
+        public int color = 0xFFFF2222;
     }
 }

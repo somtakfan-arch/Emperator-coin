@@ -11,6 +11,9 @@ import net.minecraft.world.phys.EntityHitResult;
 
 import pro.bedsmp.visuals.BedSMPVisualsClient;
 import pro.bedsmp.visuals.client.hud.DamageNumbersLayer;
+import pro.bedsmp.visuals.client.hud.DamageSummaryLayer;
+import pro.bedsmp.visuals.client.hud.HitFlashLayer;
+import pro.bedsmp.visuals.client.hud.KillStreakLayer;
 import pro.bedsmp.visuals.client.particle.HitParticleRenderer;
 import pro.bedsmp.visuals.client.state.CombatState;
 import pro.bedsmp.visuals.client.state.KillFeedState;
@@ -72,6 +75,16 @@ public class CombatEventHandler {
             DamageNumbersLayer.addDamage(damage, isCrit);
         }
 
+        // Вспышка экрана при попадании
+        if (cfg.hitFlash.enabled) {
+            HitFlashLayer.onHit(isCrit);
+        }
+
+        // Счётчик урона за сессию
+        if (cfg.damageSummary.enabled) {
+            DamageSummaryLayer.recordDealt(damage);
+        }
+
         // Звуки
         if (cfg.hitSoundCues.enabled) {
             SoundCueManager.onHit(isCrit);
@@ -116,6 +129,7 @@ public class CombatEventHandler {
         // Проверяем, убил ли наш игрок
         if (mc.player != null && killerName.equals(mc.player.getName().getString())) {
             cfg.sessionStats.kills++;
+            KillStreakLayer.onKill();
             if (cfg.hitSoundCues.enabled && cfg.hitSoundCues.killSound) {
                 SoundCueManager.onKill();
             }

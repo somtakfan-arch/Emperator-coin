@@ -7,6 +7,8 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.LivingEntity;
 
 import pro.bedsmp.visuals.BedSMPVisualsClient;
+import pro.bedsmp.visuals.client.hud.TpsDisplayLayer;
+import pro.bedsmp.visuals.client.hud.WTapIndicatorLayer;
 import pro.bedsmp.visuals.client.particle.HitParticleRenderer;
 import pro.bedsmp.visuals.client.state.CombatState;
 import pro.bedsmp.visuals.client.state.KillFeedState;
@@ -66,6 +68,10 @@ public class TickHandler {
 
         // Тик партиклов
         HitParticleRenderer.get().tick();
+
+        // Вспомогательные тики новых слоёв
+        WTapIndicatorLayer.tick(mc);
+        TpsDisplayLayer.onTick(mc);
 
         // CPS через KeyMapping — edge detection нажатий кнопок мыши
         if (mc.isWindowActive()) {
