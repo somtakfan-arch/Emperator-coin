@@ -7,6 +7,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.minecraft.resources.Identifier;
 
 import pro.bedsmp.visuals.client.particle.HitParticleRenderer;
+import pro.bedsmp.visuals.client.world.TrajectoryRenderer;
 
 /**
  * Регистрирует все HUD-элементы через HudElementRegistry (Fabric API 1.21.11).
@@ -70,5 +71,17 @@ public class HudManager {
         // Эффект попадания (угловые скобки вокруг прицела) — поверх вигнета
         HudElementRegistry.attachElementAfter(id("low_hp_vignette"), id("hit_particles"),
                 (gfx, tc) -> HitParticleRenderer.get().renderHud(gfx, tc));
+
+        // Траектория снаряда (2D проекция, без world-space GL)
+        HudElementRegistry.attachElementAfter(id("hit_particles"), id("trajectory"),
+                (gfx, tc) -> TrajectoryRenderer.renderHud(gfx, tc));
+
+        // Булава — индикатор падения и урона смэша
+        HudElementRegistry.attachElementAfter(id("trajectory"), id("mace_pvp"),
+                (gfx, tc) -> MacePvPLayer.render(gfx, tc));
+
+        // Кристалл ПвП — счётчик кристаллов и мест для установки
+        HudElementRegistry.attachElementAfter(id("mace_pvp"), id("crystal_pvp"),
+                (gfx, tc) -> CrystalPvPLayer.render(gfx, tc));
     }
 }

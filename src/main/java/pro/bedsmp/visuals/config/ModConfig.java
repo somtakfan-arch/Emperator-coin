@@ -53,6 +53,11 @@ public class ModConfig {
     public SessionStats sessionStats = new SessionStats();
     public QuickTogglePanel quickTogglePanel = new QuickTogglePanel();
 
+    // ── Фаза 4: Булава и кристалл ────────────────────────────────────────────
+
+    public MacePvP macePvp = new MacePvP();
+    public CrystalPvP crystalPvp = new CrystalPvP();
+
     // ─────────────────────────────────────────────────────────────────────────
 
     public static class HitParticles {
@@ -292,5 +297,23 @@ public class ModConfig {
 
     public static class QuickTogglePanel {
         public boolean enabled = true;
+    }
+
+    public static class MacePvP {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.CENTER;
+        public int offsetX = 0;
+        public int offsetY = 40;
+        public float minFallHeight = 1.5f;
+    }
+
+    public static class CrystalPvP {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.CENTER;
+        public int offsetX = 0;
+        public int offsetY = -50;
+        public int scanRadius = 10;
+        public boolean showPlacementCount = false; // выкл. по умолч. — сканирует блоки
+        public int placementRadius = 4;
     }
 }

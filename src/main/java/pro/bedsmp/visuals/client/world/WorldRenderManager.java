@@ -6,13 +6,14 @@ import net.fabricmc.fabric.api.client.rendering.v1.world.WorldRenderEvents;
 import net.minecraft.client.Minecraft;
 
 import pro.bedsmp.visuals.BedSMPVisualsClient;
-import pro.bedsmp.visuals.client.particle.HitParticleRenderer;
 
 @Environment(EnvType.CLIENT)
 public class WorldRenderManager {
 
     public static void register() {
-        WorldRenderEvents.END_MAIN.register(context -> {
+        // BedHighlight — ESP-подобная функция, выключена по умолчанию.
+        // Trajectory перенесена в HUD-рендер (2D проекция) во избежание GL-краша.
+        WorldRenderEvents.AFTER_ENTITIES.register(context -> {
             var cfg = BedSMPVisualsClient.CONFIG;
             if (cfg == null) return;
 
@@ -21,20 +22,6 @@ public class WorldRenderManager {
 
             Minecraft mc = Minecraft.getInstance();
             if (mc.level == null || mc.player == null) return;
-
-            if (cfg.hitParticles.enabled) {
-                float partialTick = mc.getDeltaTracker().getGameTimeDeltaPartialTick(false);
-                HitParticleRenderer.get().render(
-                        context.matrices(),
-                        consumers,
-                        partialTick,
-                        mc.gameRenderer.getMainCamera().position()
-                );
-            }
-
-            if (cfg.trajectory.enabled) {
-                TrajectoryRenderer.render(context);
-            }
 
             if (cfg.bedHighlight.enabled) {
                 BedHighlightRenderer.render(context);
