@@ -7,6 +7,12 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.LivingEntity;
 
 import pro.bedsmp.visuals.BedSMPVisualsClient;
+import pro.bedsmp.visuals.client.hud.AntiAfkLayer;
+import pro.bedsmp.visuals.client.hud.HealingRateLayer;
+import pro.bedsmp.visuals.client.hud.MaceChainLayer;
+import pro.bedsmp.visuals.client.hud.MaxFallLayer;
+import pro.bedsmp.visuals.client.hud.MovementDistanceLayer;
+import pro.bedsmp.visuals.client.hud.SneakLayer;
 import pro.bedsmp.visuals.client.hud.TpsDisplayLayer;
 import pro.bedsmp.visuals.client.hud.WTapIndicatorLayer;
 import pro.bedsmp.visuals.client.particle.HitParticleRenderer;
@@ -72,6 +78,16 @@ public class TickHandler {
         // Вспомогательные тики новых слоёв
         WTapIndicatorLayer.tick(mc);
         TpsDisplayLayer.onTick(mc);
+        SneakLayer.tick(mc);
+        AntiAfkLayer.tick(mc);
+        MovementDistanceLayer.tick(mc);
+        MaceChainLayer.tick(mc);
+        HealingRateLayer.tick(mc);
+
+        // Рекорд максимального падения
+        if (mc.player != null && mc.player.onGround() && mc.player.fallDistance > 0) {
+            MaxFallLayer.recordFall((float)mc.player.fallDistance);
+        }
 
         // CPS через KeyMapping — edge detection нажатий кнопок мыши
         if (mc.isWindowActive()) {

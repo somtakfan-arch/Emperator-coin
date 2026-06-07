@@ -156,5 +156,68 @@ public class HudManager {
                 (gfx, tc) -> HitFlashLayer.render(gfx, tc));
         HudElementRegistry.attachElementAfter(id("hit_flash"), id("border_glow"),
                 (gfx, tc) -> BorderGlowLayer.render(gfx, tc));
+
+        // ── Фаза 6: 31 новый слой ─────────────────────────────────────────────
+
+        HudElementRegistry.attachElementAfter(id("border_glow"), id("mace_hit_effect"),
+                (gfx, tc) -> MaceHitEffectLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("mace_hit_effect"), id("combat_log"),
+                (gfx, tc) -> CombatLogLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("combat_log"), id("dps"),
+                (gfx, tc) -> DpsLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("dps"), id("iframes"),
+                (gfx, tc) -> IFramesLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("iframes"), id("death_coords"),
+                (gfx, tc) -> DeathCoordsLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("death_coords"), id("elytra_stats"),
+                (gfx, tc) -> ElytraStatsLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("elytra_stats"), id("sneak_indicator"),
+                (gfx, tc) -> SneakLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("sneak_indicator"), id("weather_display"),
+                (gfx, tc) -> WeatherLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("weather_display"), id("dimension_display"),
+                (gfx, tc) -> DimensionLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("dimension_display"), id("hotbar_names"),
+                (gfx, tc) -> HotbarNamesLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("hotbar_names"), id("anti_afk"),
+                (gfx, tc) -> AntiAfkLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("anti_afk"), id("fishing_indicator"),
+                (gfx, tc) -> FishingLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("fishing_indicator"), id("fov_display"),
+                (gfx, tc) -> FovLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("fov_display"), id("dph"),
+                (gfx, tc) -> DphLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("dph"), id("mace_chain"),
+                (gfx, tc) -> MaceChainLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("mace_chain"), id("weapon_damage"),
+                (gfx, tc) -> WeaponDamageLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("weapon_damage"), id("fire_timer"),
+                (gfx, tc) -> FireTimerLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("fire_timer"), id("enchant_info"),
+                (gfx, tc) -> EnchantInfoLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("enchant_info"), id("spawn_distance"),
+                (gfx, tc) -> SpawnDistanceLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("spawn_distance"), id("kill_timer"),
+                (gfx, tc) -> KillTimerLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("kill_timer"), id("max_fall"),
+                (gfx, tc) -> MaxFallLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("max_fall"), id("entity_count"),
+                (gfx, tc) -> EntityCountLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("entity_count"), id("movement_distance"),
+                (gfx, tc) -> MovementDistanceLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("movement_distance"), id("saturation_display"),
+                (gfx, tc) -> SaturationDisplayLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("saturation_display"), id("perspective_indicator"),
+                (gfx, tc) -> PerspectiveLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("perspective_indicator"), id("gamemode_display"),
+                (gfx, tc) -> GamemodeLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("gamemode_display"), id("biome_display"),
+                (gfx, tc) -> BiomeLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("biome_display"), id("hurt_time"),
+                (gfx, tc) -> HurtTimeLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("hurt_time"), id("jump_boost"),
+                (gfx, tc) -> JumpBoostLayer.render(gfx, tc));
+        HudElementRegistry.attachElementAfter(id("jump_boost"), id("healing_rate"),
+                (gfx, tc) -> HealingRateLayer.render(gfx, tc));
     }
 }

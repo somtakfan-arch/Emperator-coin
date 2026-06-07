@@ -96,6 +96,39 @@ public class ModConfig {
     public HitFlash         hitFlash         = new HitFlash();
     public BorderGlow       borderGlow       = new BorderGlow();
 
+    // ── Фаза 6: 31 новая функция ──────────────────────────────────────────────
+
+    public MaceHitEffect    maceHitEffect    = new MaceHitEffect();
+    public CombatLog        combatLog        = new CombatLog();
+    public Dps              dps              = new Dps();
+    public IFrames          iFrames          = new IFrames();
+    public DeathCoords      deathCoords      = new DeathCoords();
+    public ElytraStats      elytraStats      = new ElytraStats();
+    public SneakIndicator   sneakIndicator   = new SneakIndicator();
+    public WeatherDisplay   weatherDisplay   = new WeatherDisplay();
+    public DimensionDisplay dimensionDisplay = new DimensionDisplay();
+    public HotbarNames      hotbarNames      = new HotbarNames();
+    public AntiAfk          antiAfk          = new AntiAfk();
+    public FishingIndicator fishingIndicator = new FishingIndicator();
+    public FovDisplay       fovDisplay       = new FovDisplay();
+    public Dph              dph              = new Dph();
+    public MaceChain        maceChain        = new MaceChain();
+    public WeaponDamage     weaponDamage     = new WeaponDamage();
+    public FireTimer        fireTimer        = new FireTimer();
+    public EnchantInfo      enchantInfo      = new EnchantInfo();
+    public SpawnDistance    spawnDistance    = new SpawnDistance();
+    public KillTimer        killTimer        = new KillTimer();
+    public MaxFall          maxFall          = new MaxFall();
+    public EntityCount      entityCount      = new EntityCount();
+    public MovementDistance movementDistance = new MovementDistance();
+    public SaturationDisplay saturationDisplay = new SaturationDisplay();
+    public PerspectiveIndicator perspectiveIndicator = new PerspectiveIndicator();
+    public GamemodeDisplay  gamemodeDisplay  = new GamemodeDisplay();
+    public BiomeDisplay     biomeDisplay     = new BiomeDisplay();
+    public HurtTimeDisplay  hurtTimeDisplay  = new HurtTimeDisplay();
+    public JumpBoostDisplay jumpBoostDisplay = new JumpBoostDisplay();
+    public HealingRateDisplay healingRateDisplay = new HealingRateDisplay();
+
     // ─────────────────────────────────────────────────────────────────────────
 
     public static class HitParticles {
@@ -600,5 +633,209 @@ public class ModConfig {
     public static class BorderGlow {
         public boolean enabled = false;
         public int color = 0xFFFF2222;
+    }
+
+    // ── Фаза 6: Новые классы конфигурации ────────────────────────────────────
+
+    public static class MaceHitEffect {
+        public boolean enabled = true;
+    }
+
+    public static class CombatLog {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_RIGHT;
+        public int offsetX = -5;
+        public int offsetY = 130;
+    }
+
+    public static class Dps {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_RIGHT;
+        public int offsetX = -5;
+        public int offsetY = 150;
+    }
+
+    public static class IFrames {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_CENTER;
+        public int offsetX = 0;
+        public int offsetY = 50;
+    }
+
+    public static class DeathCoords {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_LEFT;
+        public int offsetX = 5;
+        public int offsetY = -90;
+    }
+
+    public static class ElytraStats {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_CENTER;
+        public int offsetX = 0;
+        public int offsetY = -55;
+    }
+
+    public static class SneakIndicator {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_CENTER;
+        public int offsetX = 0;
+        public int offsetY = -95;
+    }
+
+    public static class WeatherDisplay {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_LEFT;
+        public int offsetX = 5;
+        public int offsetY = 70;
+    }
+
+    public static class DimensionDisplay {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_LEFT;
+        public int offsetX = 5;
+        public int offsetY = 85;
+    }
+
+    public static class HotbarNames {
+        public boolean enabled = false;
+    }
+
+    public static class AntiAfk {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_RIGHT;
+        public int offsetX = -5;
+        public int offsetY = -80;
+    }
+
+    public static class FishingIndicator {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_CENTER;
+        public int offsetX = 0;
+        public int offsetY = -85;
+    }
+
+    public static class FovDisplay {
+        public boolean enabled = false;
+        public HudAnchor anchor = HudAnchor.BOTTOM_LEFT;
+        public int offsetX = 5;
+        public int offsetY = -90;
+    }
+
+    public static class Dph {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_RIGHT;
+        public int offsetX = -5;
+        public int offsetY = 165;
+    }
+
+    public static class MaceChain {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_CENTER;
+        public int offsetX = 0;
+        public int offsetY = -110;
+    }
+
+    public static class WeaponDamage {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_LEFT;
+        public int offsetX = 5;
+        public int offsetY = -75;
+    }
+
+    public static class FireTimer {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_CENTER;
+        public int offsetX = 0;
+        public int offsetY = -100;
+    }
+
+    public static class EnchantInfo {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_LEFT;
+        public int offsetX = 5;
+        public int offsetY = -105;
+    }
+
+    public static class SpawnDistance {
+        public boolean enabled = false;
+        public HudAnchor anchor = HudAnchor.BOTTOM_LEFT;
+        public int offsetX = 5;
+        public int offsetY = -120;
+    }
+
+    public static class KillTimer {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_RIGHT;
+        public int offsetX = -5;
+        public int offsetY = -95;
+    }
+
+    public static class MaxFall {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_RIGHT;
+        public int offsetX = -5;
+        public int offsetY = -110;
+    }
+
+    public static class EntityCount {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_LEFT;
+        public int offsetX = 5;
+        public int offsetY = 100;
+        public double radius = 64;
+    }
+
+    public static class MovementDistance {
+        public boolean enabled = false;
+        public HudAnchor anchor = HudAnchor.BOTTOM_LEFT;
+        public int offsetX = 5;
+        public int offsetY = -135;
+    }
+
+    public static class SaturationDisplay {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_RIGHT;
+        public int offsetX = -5;
+        public int offsetY = -125;
+    }
+
+    public static class PerspectiveIndicator {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_CENTER;
+        public int offsetX = 0;
+        public int offsetY = 5;
+    }
+
+    public static class GamemodeDisplay {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_LEFT;
+        public int offsetX = 5;
+        public int offsetY = 115;
+    }
+
+    public static class BiomeDisplay {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.TOP_LEFT;
+        public int offsetX = 5;
+        public int offsetY = 130;
+    }
+
+    public static class HurtTimeDisplay {
+        public boolean enabled = true;
+    }
+
+    public static class JumpBoostDisplay {
+        public boolean enabled = true;
+        public HudAnchor anchor = HudAnchor.BOTTOM_CENTER;
+        public int offsetX = 0;
+        public int offsetY = -115;
+    }
+
+    public static class HealingRateDisplay {
+        public boolean enabled = false;
+        public HudAnchor anchor = HudAnchor.BOTTOM_RIGHT;
+        public int offsetX = -5;
+        public int offsetY = -140;
     }
 }

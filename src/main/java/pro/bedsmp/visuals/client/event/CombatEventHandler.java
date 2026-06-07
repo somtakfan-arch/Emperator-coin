@@ -10,10 +10,17 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.EntityHitResult;
 
 import pro.bedsmp.visuals.BedSMPVisualsClient;
+import pro.bedsmp.visuals.client.hud.CombatLogLayer;
 import pro.bedsmp.visuals.client.hud.DamageNumbersLayer;
 import pro.bedsmp.visuals.client.hud.DamageSummaryLayer;
+import pro.bedsmp.visuals.client.hud.DphLayer;
+import pro.bedsmp.visuals.client.hud.DpsLayer;
 import pro.bedsmp.visuals.client.hud.HitFlashLayer;
 import pro.bedsmp.visuals.client.hud.KillStreakLayer;
+import pro.bedsmp.visuals.client.hud.KillTimerLayer;
+import pro.bedsmp.visuals.client.hud.MaceChainLayer;
+import pro.bedsmp.visuals.client.hud.MaceHitEffectLayer;
+import net.minecraft.world.item.Items;
 import pro.bedsmp.visuals.client.particle.HitParticleRenderer;
 import pro.bedsmp.visuals.client.state.CombatState;
 import pro.bedsmp.visuals.client.state.KillFeedState;
@@ -85,6 +92,18 @@ public class CombatEventHandler {
             DamageSummaryLayer.recordDealt(damage);
         }
 
+        // DPS / DPH / Combat log
+        DpsLayer.recordHit(damage);
+        DphLayer.recordHit(damage);
+        CombatLogLayer.addHit(damage, isCrit);
+
+        // Эпичная волна булавы
+        boolean holdingMace = mc.player.getMainHandItem().is(Items.MACE);
+        if (cfg.maceHitEffect.enabled && holdingMace) {
+            MaceHitEffectLayer.onMaceHit();
+            MaceChainLayer.onMaceHit();
+        }
+
         // Звуки
         if (cfg.hitSoundCues.enabled) {
             SoundCueManager.onHit(isCrit);
@@ -130,6 +149,7 @@ public class CombatEventHandler {
         if (mc.player != null && killerName.equals(mc.player.getName().getString())) {
             cfg.sessionStats.kills++;
             KillStreakLayer.onKill();
+            KillTimerLayer.onKill();
             if (cfg.hitSoundCues.enabled && cfg.hitSoundCues.killSound) {
                 SoundCueManager.onKill();
             }
