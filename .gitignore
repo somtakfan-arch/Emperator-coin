@@ -1,2 +1,9 @@
 *.agdai
 MAlonzo/**
+
+target/
+*.class
+.idea/
+*.iml
+.vscode/
+.DS_Store

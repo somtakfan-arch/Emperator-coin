@@ -1,0 +1,16 @@
+name: BedBots
+version: 1.0.0
+main: pro.bedsmp.bedbots.BedBots
+api-version: '1.21'
+author: Emperatorrr
+description: AI-боты для BedSMP — ходят по миру и общаются в чате (Citizens + Groq).
+depend: [Citizens]
+commands:
+  bedbots:
+    description: Управление ботами BedSMP
+    usage: /bedbots <reload|respawn|remove>
+    permission: bedbots.admin
+permissions:
+  bedbots.admin:
+    description: Доступ к командам BedBots
+    default: op
