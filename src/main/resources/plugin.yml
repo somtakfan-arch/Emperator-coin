@@ -1,0 +1,20 @@
+name: BedAHBots
+version: 1.0.0
+main: me.bedsmp.bedahbots.BedAHBotsPlugin
+api-version: "1.21"
+description: "AI auction bots for BedSMP — auto-list, buy cheap, and resell on /ah"
+authors: [BedSMP]
+
+depend: [AuctionHouse, Vault]
+softdepend: [Essentials]
+
+commands:
+  ahbots:
+    description: Manage BedAHBots
+    usage: /ahbots <status|seed|buy|resell|reload|clearstock>
+    permission: ahbots.admin
+
+permissions:
+  ahbots.admin:
+    description: Full access to /ahbots commands
+    default: op

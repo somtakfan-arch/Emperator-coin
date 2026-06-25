@@ -1,0 +1,50 @@
+bots:
+  prefix: "&8[&bБот&8] &f"
+  names:
+    - "Торгаш"
+    - "Барыга"
+    - "Купец"
+    - "Скупщик"
+    - "Меняла"
+    - "Делец"
+
+pricing:
+  worth-file: "plugins/Essentials/worth.yml"
+  min-price: 1.0
+  round-to: 0.01
+
+listing:
+  enabled: true
+  interval-seconds: 90
+  per-cycle: 2
+  max-bot-listings: 40
+  listing-hours: 12
+  amount-min: 1
+  amount-max: 16
+  normal-mult-min: 0.90
+  normal-mult-max: 1.35
+  overprice-chance: 0.12
+  overprice-mult-min: 1.60
+  overprice-mult-max: 2.30
+  whitelist: []
+  blacklist:
+    - "BEDROCK"
+    - "COMMAND_BLOCK"
+    - "BARRIER"
+    - "SPAWNER"
+    - "DEBUG_STICK"
+
+buying:
+  enabled: true
+  interval-seconds: 60
+  per-cycle: 3
+  buy-threshold: 1.05
+  buy-from-bots: false
+  pay-sellers: true
+
+reselling:
+  enabled: true
+  interval-seconds: 120
+  per-cycle: 4
+  markup-min: 1.20
+  markup-max: 1.55
