@@ -87,6 +87,9 @@ public final class ResellingTask {
         String displayName = botManager.displayName(botName);
 
         NoteForger.forge(botUUID, displayName, item, price, listingHours, log);
+        log.info("[Reselling] " + botName + " перепродаёт " + item.getAmount() + "x " + mat.name()
+                + " за " + String.format("%.2f", price)
+                + " (наценка x" + String.format("%.2f", markup) + ")");
     }
 
     private double roundPrice(double price) {

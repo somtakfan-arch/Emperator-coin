@@ -117,6 +117,8 @@ public final class ListingTask {
 
         ItemStack item = new ItemStack(mat, amount);
         NoteForger.forge(botUUID, displayName, item, price, listingHours, log);
+        log.info("[Listing] " + botName + " выставил " + amount + "x " + mat.name()
+                + " за " + String.format("%.2f", price));
     }
 
     private double pickMultiplier() {

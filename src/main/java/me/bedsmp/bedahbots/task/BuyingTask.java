@@ -141,6 +141,12 @@ public final class BuyingTask {
         NoteForger.deleteNote(live, log);
 
         stock.addItem(item);
+
+        String sellerLabel = sellerIsBot ? live.getPlayerName() + " (бот)" : live.getPlayerName();
+        log.info("[Buying] Скупил " + item.getAmount() + "x " + item.getType().name()
+                + " за " + String.format("%.2f", price)
+                + " у " + sellerLabel
+                + (paySellers && !sellerIsBot ? " (оплачено)" : ""));
         return true;
     }
 }
