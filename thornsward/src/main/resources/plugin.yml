@@ -11,8 +11,16 @@ commands:
     usage: "/<command> give [игрок]"
     permission: bedsmp.thornsward.give
     permission-message: "§cУ вас нет прав на эту команду."
+  crystallersword:
+    description: Выдать Меч Кристаллера
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.crystallersword.give
+    permission-message: "§cУ вас нет прав на эту команду."
 
 permissions:
   bedsmp.thornsward.give:
     description: Позволяет выдавать Оберег Терновника
+    default: op
+  bedsmp.crystallersword.give:
+    description: Позволяет выдавать Меч Кристаллера
     default: op
