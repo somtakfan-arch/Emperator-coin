@@ -4,15 +4,21 @@ import me.bedsmp.bedahbots.command.AhBotsCommand;
 import me.bedsmp.bedahbots.task.BuyingTask;
 import me.bedsmp.bedahbots.task.ListingTask;
 import me.bedsmp.bedahbots.task.ResellingTask;
+import me.elaineqheart.auctionHouse.data.ram.AuctionHouseStorage;
+import me.elaineqheart.auctionHouse.data.ram.ItemNote;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.scheduler.BukkitTask;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public final class BedAHBotsPlugin extends JavaPlugin {
 
     private BotManager botManager;
     private WorthLoader worthLoader;
     private BotStock stock;
+    private EnchantApplier enchantApplier;
 
     // Task objects (created once, config updated on reload) — package-visible for command class
     public ListingTask listingTask;
@@ -28,13 +34,14 @@ public final class BedAHBotsPlugin extends JavaPlugin {
     public void onEnable() {
         saveDefaultConfig();
 
-        botManager  = new BotManager();
-        worthLoader = new WorthLoader(this);
-        stock       = new BotStock(this);
+        botManager     = new BotManager();
+        worthLoader    = new WorthLoader(this);
+        stock          = new BotStock(this);
+        enchantApplier = new EnchantApplier();
 
         stock.init();
 
-        listingTask   = new ListingTask(this, botManager, worthLoader);
+        listingTask   = new ListingTask(this, botManager, worthLoader, enchantApplier);
         buyingTask    = new BuyingTask(this, botManager, worthLoader, stock);
         resellingTask = new ResellingTask(this, botManager, worthLoader, stock);
 
@@ -70,6 +77,9 @@ public final class BedAHBotsPlugin extends JavaPlugin {
 
         worthLoader.setPath(cfg.getString("pricing.worth-file", "plugins/Essentials/worth.yml"));
         worthLoader.reload();
+        worthLoader.loadExtraWorth(cfg);
+
+        enchantApplier.reloadConfig(cfg);
 
         listingTask.reloadConfig(cfg);
         buyingTask.reloadConfig(cfg);
@@ -83,6 +93,20 @@ public final class BedAHBotsPlugin extends JavaPlugin {
         if (scheduledListing  != null) { scheduledListing.cancel();  scheduledListing  = null; }
         if (scheduledBuying   != null) { scheduledBuying.cancel();   scheduledBuying   = null; }
         if (scheduledReselling != null) { scheduledReselling.cancel(); scheduledReselling = null; }
+    }
+
+    /** Deletes every currently active AH lot owned by a bot. Returns the number removed. */
+    public int clearBotListings() {
+        List<ItemNote> toDelete = new ArrayList<>();
+        for (ItemNote note : AuctionHouseStorage.getAll()) {
+            if (botManager.isBotUUID(note.getPlayerUUID())) {
+                toDelete.add(note);
+            }
+        }
+        for (ItemNote note : toDelete) {
+            NoteForger.deleteNote(note, getLogger());
+        }
+        return toDelete.size();
     }
 
     private void scheduleTimers(FileConfiguration cfg) {

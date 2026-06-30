@@ -12,6 +12,130 @@ pricing:
   worth-file: "plugins/Essentials/worth.yml"
   min-price: 1.0
   round-to: 0.01
+  # Fallback prices for items not listed in worth.yml (mostly PvP gear).
+  # worth.yml always takes priority if a material appears in both places.
+  extra-worth:
+    # --- Swords ---
+    WOODEN_SWORD: 2
+    STONE_SWORD: 4
+    GOLDEN_SWORD: 6
+    IRON_SWORD: 12
+    DIAMOND_SWORD: 40
+    NETHERITE_SWORD: 120
+    # --- Axes ---
+    WOODEN_AXE: 2
+    STONE_AXE: 4
+    GOLDEN_AXE: 6
+    IRON_AXE: 12
+    DIAMOND_AXE: 40
+    NETHERITE_AXE: 120
+    # --- Pickaxes ---
+    WOODEN_PICKAXE: 2
+    STONE_PICKAXE: 4
+    GOLDEN_PICKAXE: 6
+    IRON_PICKAXE: 12
+    DIAMOND_PICKAXE: 40
+    NETHERITE_PICKAXE: 120
+    # --- Shovels ---
+    WOODEN_SHOVEL: 1
+    STONE_SHOVEL: 2
+    GOLDEN_SHOVEL: 3
+    IRON_SHOVEL: 6
+    DIAMOND_SHOVEL: 20
+    NETHERITE_SHOVEL: 60
+    # --- Hoes ---
+    WOODEN_HOE: 1
+    STONE_HOE: 2
+    GOLDEN_HOE: 3
+    IRON_HOE: 6
+    DIAMOND_HOE: 20
+    NETHERITE_HOE: 60
+    # --- Ranged / special weapons ---
+    MACE: 150
+    BOW: 10
+    CROSSBOW: 14
+    TRIDENT: 60
+    SHIELD: 8
+    ARROW: 0.2
+    SPECTRAL_ARROW: 0.5
+    WIND_CHARGE: 1
+    BREEZE_ROD: 30
+    # --- Leather armor ---
+    LEATHER_HELMET: 3
+    LEATHER_CHESTPLATE: 5
+    LEATHER_LEGGINGS: 4
+    LEATHER_BOOTS: 3
+    # --- Chainmail armor ---
+    CHAINMAIL_HELMET: 8
+    CHAINMAIL_CHESTPLATE: 14
+    CHAINMAIL_LEGGINGS: 12
+    CHAINMAIL_BOOTS: 8
+    # --- Iron armor ---
+    IRON_HELMET: 10
+    IRON_CHESTPLATE: 18
+    IRON_LEGGINGS: 16
+    IRON_BOOTS: 10
+    # --- Golden armor ---
+    GOLDEN_HELMET: 6
+    GOLDEN_CHESTPLATE: 10
+    GOLDEN_LEGGINGS: 9
+    GOLDEN_BOOTS: 6
+    # --- Diamond armor ---
+    DIAMOND_HELMET: 35
+    DIAMOND_CHESTPLATE: 55
+    DIAMOND_LEGGINGS: 50
+    DIAMOND_BOOTS: 35
+    # --- Netherite armor ---
+    NETHERITE_HELMET: 100
+    NETHERITE_CHESTPLATE: 160
+    NETHERITE_LEGGINGS: 150
+    NETHERITE_BOOTS: 100
+    # --- Misc armor ---
+    TURTLE_HELMET: 15
+    ELYTRA: 200
+    # --- Valuables / resources ---
+    TOTEM_OF_UNDYING: 250
+    ENDER_PEARL: 8
+    ENDER_EYE: 16
+    BLAZE_ROD: 10
+    BLAZE_POWDER: 5
+    NETHER_STAR: 500
+    NETHERITE_INGOT: 90
+    NETHERITE_SCRAP: 40
+    DIAMOND: 12
+    EMERALD: 6
+    GOLD_INGOT: 3
+    IRON_INGOT: 1.5
+    AMETHYST_SHARD: 2
+    GOLDEN_APPLE: 20
+    ENCHANTED_GOLDEN_APPLE: 300
+    EXPERIENCE_BOTTLE: 4
+    FIREWORK_ROCKET: 1
+    SADDLE: 5
+    NAME_TAG: 6
+    LEAD: 2
+    RESPAWN_ANCHOR: 25
+    GLOWSTONE: 1
+    SHULKER_SHELL: 30
+    SHULKER_BOX: 60
+    SPYGLASS: 8
+    RECOVERY_COMPASS: 40
+    GOAT_HORN: 10
+    HEART_OF_THE_SEA: 80
+    NAUTILUS_SHELL: 12
+    CONDUIT: 150
+    BEACON: 400
+    DRAGON_EGG: 1000
+    DRAGON_HEAD: 300
+    WITHER_SKELETON_SKULL: 60
+    OBSIDIAN: 2
+    CRYING_OBSIDIAN: 4
+    ANCIENT_DEBRIS: 30
+    DIAMOND_BLOCK: 100
+    EMERALD_BLOCK: 50
+    GOLD_BLOCK: 25
+    IRON_BLOCK: 12
+    NETHERITE_BLOCK: 800
 
 listing:
   enabled: true
@@ -48,3 +172,16 @@ reselling:
   per-cycle: 4
   markup-min: 1.20
   markup-max: 1.55
+
+# Randomized enchants on freshly listed bot items (Timer A only).
+# Validity is checked via Bukkit's own Enchantment#canEnchantItem, so e.g.
+# Density can only ever land on a Mace, never on a sword.
+enchant:
+  enabled: true
+  item-chance: 0.35       # chance a freshly listed item gets enchants at all
+  max-count: 3            # max distinct enchants per item
+  allow-curses: false
+  allow-overlevel: true    # allow levels above vanilla max for extra variety
+  overlevel-chance: 0.15
+  overlevel-max-bonus: 2
+  price-per-level-mult: 0.15

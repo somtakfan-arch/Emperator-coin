@@ -11,7 +11,7 @@ softdepend: [Essentials]
 commands:
   ahbots:
     description: Manage BedAHBots
-    usage: /ahbots <status|seed|buy|resell|reload|clearstock>
+    usage: /ahbots <status|seed|buy|resell|reload|clearstock|clearlistings>
     permission: ahbots.admin
 
 permissions:

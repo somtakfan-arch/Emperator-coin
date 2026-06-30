@@ -47,9 +47,10 @@ public final class AhBotsCommand implements CommandExecutor, TabCompleter {
             case "seed"       -> cmdSeed(sender);
             case "buy"        -> cmdBuy(sender);
             case "resell"     -> cmdResell(sender);
-            case "reload"     -> cmdReload(sender);
-            case "clearstock" -> cmdClearStock(sender);
-            default           -> sendUsage(sender);
+            case "reload"        -> cmdReload(sender);
+            case "clearstock"    -> cmdClearStock(sender);
+            case "clearlistings" -> cmdClearListings(sender);
+            default              -> sendUsage(sender);
         }
         return true;
     }
@@ -96,15 +97,20 @@ public final class AhBotsCommand implements CommandExecutor, TabCompleter {
         s.sendMessage(ChatColor.YELLOW + "Склад очищен. Удалено предметов: " + size);
     }
 
+    private void cmdClearListings(CommandSender s) {
+        int count = plugin.clearBotListings();
+        s.sendMessage(ChatColor.YELLOW + "Удалено активных лотов ботов: " + count);
+    }
+
     private void sendUsage(CommandSender s) {
-        s.sendMessage(ChatColor.YELLOW + "Использование: /ahbots <status|seed|buy|resell|reload|clearstock>");
+        s.sendMessage(ChatColor.YELLOW + "Использование: /ahbots <status|seed|buy|resell|reload|clearstock|clearlistings>");
     }
 
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command cmd,
                                       @NotNull String alias, @NotNull String[] args) {
         if (args.length == 1) {
-            return List.of("status", "seed", "buy", "resell", "reload", "clearstock");
+            return List.of("status", "seed", "buy", "resell", "reload", "clearstock", "clearlistings");
         }
         return List.of();
     }

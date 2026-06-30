@@ -1,6 +1,7 @@
 package me.bedsmp.bedahbots.task;
 
 import me.bedsmp.bedahbots.BotManager;
+import me.bedsmp.bedahbots.EnchantApplier;
 import me.bedsmp.bedahbots.NoteForger;
 import me.bedsmp.bedahbots.WorthLoader;
 import org.bukkit.Material;
@@ -17,6 +18,7 @@ public final class ListingTask {
     private final JavaPlugin plugin;
     private final BotManager botManager;
     private final WorthLoader worth;
+    private final EnchantApplier enchant;
     private final Logger log;
     private final Random rng = new Random();
 
@@ -35,10 +37,11 @@ public final class ListingTask {
     private Set<Material> whitelist;
     private Set<Material> blacklist;
 
-    public ListingTask(JavaPlugin plugin, BotManager botManager, WorthLoader worth) {
+    public ListingTask(JavaPlugin plugin, BotManager botManager, WorthLoader worth, EnchantApplier enchant) {
         this.plugin = plugin;
         this.botManager = botManager;
         this.worth = worth;
+        this.enchant = enchant;
         this.log = plugin.getLogger();
         this.whitelist = new HashSet<>();
         this.blacklist = new HashSet<>();
@@ -108,16 +111,20 @@ public final class ListingTask {
 
         double worthPerUnit = worth.getWorth(mat);
         double multiplier = pickMultiplier();
-        double price = roundPrice(worthPerUnit * amount * multiplier);
+
+        ItemStack item = new ItemStack(mat, amount);
+        double enchantMult = enchant.apply(item);
+
+        double price = roundPrice(worthPerUnit * amount * multiplier * enchantMult);
         price = Math.max(price, minPrice);
 
         String botName = botManager.randomName();
         UUID botUUID = botManager.uuidFor(botName);
         String displayName = botManager.displayName(botName);
 
-        ItemStack item = new ItemStack(mat, amount);
         NoteForger.forge(botUUID, displayName, item, price, listingHours, log);
         log.info("[Listing] " + botName + " выставил " + amount + "x " + mat.name()
+                + (enchantMult > 1.0 ? " (с чарами)" : "")
                 + " за " + String.format("%.2f", price));
     }
 
