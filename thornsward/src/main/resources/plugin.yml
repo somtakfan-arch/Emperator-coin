@@ -1,0 +1,18 @@
+name: ThornsWard
+version: '${project.version}'
+main: com.bedsmp.thornsward.ThornsWardPlugin
+api-version: '1.21'
+author: BedSMP
+description: Оберег Терновника — гасит урон и отбрасывание от Шипов (Thorns) любого уровня.
+
+commands:
+  thornsward:
+    description: Выдать Оберег Терновника
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.thornsward.give
+    permission-message: "§cУ вас нет прав на эту команду."
+
+permissions:
+  bedsmp.thornsward.give:
+    description: Позволяет выдавать Оберег Терновника
+    default: op
