@@ -15,6 +15,8 @@ pricing:
   # Fallback prices for items not listed in worth.yml (mostly PvP gear).
   # worth.yml always takes priority if a material appears in both places.
   extra-worth:
+    # --- Books ---
+    ENCHANTED_BOOK: 5
     # --- Swords ---
     WOODEN_SWORD: 2
     STONE_SWORD: 4
@@ -150,6 +152,12 @@ listing:
   overprice-chance: 0.12
   overprice-mult-min: 1.60
   overprice-mult-max: 2.30
+  # Chance a listing is drawn from the enchantable-gear pool (weapons/tools/armor)
+  # instead of plain resources. Combined with enchant.item-chance below being forced
+  # to "always try" for gear, most listings end up enchanted items.
+  gear-chance: 0.80
+  # Chance a listing is an Enchanted Book (with random stored enchants) instead of an item.
+  book-chance: 0.15
   whitelist: []
   blacklist:
     - "BEDROCK"

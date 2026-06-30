@@ -34,6 +34,8 @@ public final class ListingTask {
     private double overpriceMultMax;
     private double minPrice;
     private double roundTo;
+    private double gearChance;
+    private double bookChance;
     private Set<Material> whitelist;
     private Set<Material> blacklist;
 
@@ -60,6 +62,8 @@ public final class ListingTask {
         overpriceMultMax = cfg.getDouble("listing.overprice-mult-max", 2.30);
         minPrice = cfg.getDouble("pricing.min-price", 1.0);
         roundTo  = cfg.getDouble("pricing.round-to", 0.01);
+        gearChance = cfg.getDouble("listing.gear-chance", 0.80);
+        bookChance = cfg.getDouble("listing.book-chance", 0.15);
         whitelist = parseMaterials(cfg.getStringList("listing.whitelist"));
         blacklist = parseMaterials(cfg.getStringList("listing.blacklist"));
     }
@@ -82,10 +86,13 @@ public final class ListingTask {
         List<Material> candidates = buildCandidates();
         if (candidates.isEmpty()) return;
 
+        List<Material> gearCandidates = candidates.stream().filter(this::isGearMaterial).toList();
+        List<Material> resourceCandidates = candidates.stream().filter(m -> !isGearMaterial(m)).toList();
+
         int toCreate = Math.min(perCycle, slots);
         for (int i = 0; i < toCreate; i++) {
             try {
-                createOneListing(candidates);
+                createOneListing(candidates, gearCandidates, resourceCandidates);
             } catch (Exception e) {
                 log.warning("ListingTask: failed to create listing — " + e.getMessage());
             }
@@ -103,8 +110,39 @@ public final class ListingTask {
         return result;
     }
 
-    private void createOneListing(List<Material> candidates) throws Exception {
-        Material mat = candidates.get(rng.nextInt(candidates.size()));
+    /** Weapons/tools/armor that vanilla enchantments can actually land on. */
+    private boolean isGearMaterial(Material m) {
+        String n = m.name();
+        if (n.endsWith("_SWORD") || n.endsWith("_AXE") || n.endsWith("_PICKAXE")
+                || n.endsWith("_SHOVEL") || n.endsWith("_HOE")
+                || n.endsWith("_HELMET") || n.endsWith("_CHESTPLATE")
+                || n.endsWith("_LEGGINGS") || n.endsWith("_BOOTS")) {
+            return true;
+        }
+        return switch (m) {
+            case BOW, CROSSBOW, TRIDENT, SHIELD, MACE, ELYTRA,
+                    FISHING_ROD, FLINT_AND_STEEL, SHEARS,
+                    CARROT_ON_A_STICK, WARPED_FUNGUS_ON_A_STICK -> true;
+            default -> false;
+        };
+    }
+
+    private void createOneListing(List<Material> candidates, List<Material> gearCandidates,
+                                  List<Material> resourceCandidates) throws Exception {
+        if (rng.nextDouble() < bookChance) {
+            createBookListing();
+            return;
+        }
+
+        boolean wantGear = rng.nextDouble() < gearChance;
+        List<Material> pool = candidates;
+        if (wantGear && !gearCandidates.isEmpty()) {
+            pool = gearCandidates;
+        } else if (!wantGear && !resourceCandidates.isEmpty()) {
+            pool = resourceCandidates;
+        }
+
+        Material mat = pool.get(rng.nextInt(pool.size()));
         int amount = amountMin + (amountMax > amountMin ? rng.nextInt(amountMax - amountMin + 1) : 0);
         amount = Math.min(amount, mat.getMaxStackSize());
         if (amount < 1) amount = 1;
@@ -113,7 +151,7 @@ public final class ListingTask {
         double multiplier = pickMultiplier();
 
         ItemStack item = new ItemStack(mat, amount);
-        double enchantMult = enchant.apply(item);
+        double enchantMult = enchant.apply(item, wantGear);
 
         double price = roundPrice(worthPerUnit * amount * multiplier * enchantMult);
         price = Math.max(price, minPrice);
@@ -126,6 +164,25 @@ public final class ListingTask {
         log.info("[Listing] " + botName + " выставил " + amount + "x " + mat.name()
                 + (enchantMult > 1.0 ? " (с чарами)" : "")
                 + " за " + String.format("%.2f", price));
+    }
+
+    private void createBookListing() throws Exception {
+        double baseWorth = worth.getWorth(Material.ENCHANTED_BOOK);
+        if (baseWorth <= 0) baseWorth = 5.0;
+
+        ItemStack book = new ItemStack(Material.ENCHANTED_BOOK, 1);
+        double enchantMult = enchant.applyToBook(book);
+        if (enchantMult <= 1.0) return; // didn't land any enchant — don't sell a blank book
+
+        double price = roundPrice(baseWorth * enchantMult);
+        price = Math.max(price, minPrice);
+
+        String botName = botManager.randomName();
+        UUID botUUID = botManager.uuidFor(botName);
+        String displayName = botManager.displayName(botName);
+
+        NoteForger.forge(botUUID, displayName, book, price, listingHours, log);
+        log.info("[Listing] " + botName + " выставил зачарованную книгу за " + String.format("%.2f", price));
     }
 
     private double pickMultiplier() {
