@@ -1,2 +1,8 @@
 *.agdai
 MAlonzo/**
+
+# Maven / Java
+target/
+*.class
+.idea/
+*.iml

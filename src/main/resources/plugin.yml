@@ -1,0 +1,21 @@
+name: UnbreakableStand
+version: '1.0.0'
+main: com.bedsmp.unbreakablestand.UnbreakableStandPlugin
+api-version: '1.21'
+author: bedsmp
+description: Неломаемая стойка и ножницы-ломалка для её уничтожения.
+
+commands:
+  unbreakablestand:
+    description: Выдаёт неломаемую стойку.
+    usage: /<command> [кол-во]
+    permission: bedsmp.stand.give
+  standbreaker:
+    description: Выдаёт одноразовые ножницы-ломалку для неломаемой стойки.
+    usage: /<command> [кол-во]
+    permission: bedsmp.stand.give
+
+permissions:
+  bedsmp.stand.give:
+    description: Позволяет выдавать неломаемую стойку и ножницы-ломалку.
+    default: op
