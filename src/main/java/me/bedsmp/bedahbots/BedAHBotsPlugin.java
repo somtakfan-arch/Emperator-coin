@@ -19,6 +19,7 @@ public final class BedAHBotsPlugin extends JavaPlugin {
     private WorthLoader worthLoader;
     private BotStock stock;
     private EnchantApplier enchantApplier;
+    private MetaEnchantCache metaEnchantCache;
     private ChatRequestListener chatRequestListener;
 
     // Task objects (created once, config updated on reload) — package-visible for command class
@@ -38,11 +39,12 @@ public final class BedAHBotsPlugin extends JavaPlugin {
         botManager     = new BotManager();
         worthLoader    = new WorthLoader(this);
         stock          = new BotStock(this);
-        enchantApplier = new EnchantApplier();
+        enchantApplier   = new EnchantApplier();
+        metaEnchantCache = new MetaEnchantCache(this);
 
         stock.init();
 
-        listingTask          = new ListingTask(this, botManager, worthLoader, enchantApplier);
+        listingTask          = new ListingTask(this, botManager, worthLoader, enchantApplier, metaEnchantCache);
         buyingTask           = new BuyingTask(this, botManager, worthLoader, stock);
         resellingTask        = new ResellingTask(this, botManager, worthLoader, stock);
         chatRequestListener  = new ChatRequestListener(this, botManager, worthLoader);
@@ -83,6 +85,8 @@ public final class BedAHBotsPlugin extends JavaPlugin {
         worthLoader.loadExtraWorth(cfg);
 
         enchantApplier.reloadConfig(cfg);
+        metaEnchantCache.reloadConfig(cfg);
+        metaEnchantCache.triggerRefresh();
         chatRequestListener.reloadConfig(cfg);
 
         listingTask.reloadConfig(cfg);

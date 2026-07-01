@@ -14,8 +14,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 /** Sends an item request to the xAI Grok API and parses the structured JSON response. */
 public final class GrokParser {
@@ -151,5 +154,92 @@ public final class GrokParser {
         }
 
         return new ParseResult(material, amount, enchants);
+    }
+
+    private static final String META_PROMPT = """
+            You are a Minecraft 1.21 PvP and survival expert. For each item I give you, return the 2-3 best enchantments with optimal levels that top players actually use in competitive play.
+            Return ONLY raw JSON — no markdown, no code blocks, no explanation.
+            Format: {"MATERIAL_NAME": [{"id": "ENCHANT_ID", "level": N}, ...], ...}
+            Use exact Bukkit API enum names (UPPERCASE_UNDERSCORES). Only include enchants valid for the item type.
+            Key meta picks:
+            NETHERITE_SWORD/DIAMOND_SWORD → SHARPNESS 5, UNBREAKING 3, MENDING 1
+            MACE → DENSITY 5, BREACH 4, WIND_BURST 1
+            BOW → POWER 5, INFINITY 1, FLAME 1
+            CROSSBOW → MULTISHOT 1, QUICK_CHARGE 3, UNBREAKING 3
+            TRIDENT → LOYALTY 3, IMPALING 5, MENDING 1
+            NETHERITE_PICKAXE/DIAMOND_PICKAXE → EFFICIENCY 5, UNBREAKING 3, MENDING 1
+            NETHERITE_AXE/DIAMOND_AXE → EFFICIENCY 5, SHARPNESS 5, MENDING 1
+            NETHERITE_HELMET/DIAMOND_HELMET → PROTECTION 4, UNBREAKING 3, RESPIRATION 3
+            NETHERITE_CHESTPLATE/DIAMOND_CHESTPLATE → PROTECTION 4, UNBREAKING 3, MENDING 1
+            NETHERITE_LEGGINGS/DIAMOND_LEGGINGS → PROTECTION 4, UNBREAKING 3, SWIFT_SNEAK 3
+            NETHERITE_BOOTS/DIAMOND_BOOTS → PROTECTION 4, FEATHER_FALLING 4, DEPTH_STRIDER 3
+            ELYTRA → UNBREAKING 3, MENDING 1
+            SHIELD → UNBREAKING 3, MENDING 1
+            FISHING_ROD → LURE 3, LUCK_OF_THE_SEA 3, MENDING 1
+            """;
+
+    /**
+     * Queries Groq for the best enchants for each material in the list.
+     * Blocks the calling thread — must be called from an async context.
+     */
+    public Map<Material, List<EnchantPick>> fetchMetaEnchants(List<Material> materials) throws Exception {
+        String matList = materials.stream().map(Material::name).collect(Collectors.joining(", "));
+
+        JsonObject body = new JsonObject();
+        body.addProperty("model", model);
+        body.addProperty("max_tokens", 2000);
+
+        JsonArray messages = new JsonArray();
+        JsonObject sys = new JsonObject();
+        sys.addProperty("role", "system");
+        sys.addProperty("content", META_PROMPT);
+        JsonObject usr = new JsonObject();
+        usr.addProperty("role", "user");
+        usr.addProperty("content", matList);
+        messages.add(sys);
+        messages.add(usr);
+        body.add("messages", messages);
+
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(apiUrl))
+                .header("Authorization", "Bearer " + apiKey)
+                .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(30))
+                .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(body)))
+                .build();
+
+        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+        if (resp.statusCode() != 200) {
+            throw new Exception("HTTP " + resp.statusCode() + ": " + resp.body().substring(0, Math.min(300, resp.body().length())));
+        }
+
+        JsonObject root = JsonParser.parseString(resp.body()).getAsJsonObject();
+        String content = root.getAsJsonArray("choices")
+                .get(0).getAsJsonObject()
+                .getAsJsonObject("message")
+                .get("content").getAsString().trim();
+
+        if (content.startsWith("```")) {
+            content = content.replaceAll("(?s)```[\\w]*\\n?", "").trim();
+        }
+
+        Map<Material, List<EnchantPick>> result = new HashMap<>();
+        JsonObject parsed = JsonParser.parseString(content).getAsJsonObject();
+        for (String key : parsed.keySet()) {
+            Material mat = Material.matchMaterial(key.toUpperCase());
+            if (mat == null) continue;
+            List<EnchantPick> picks = new ArrayList<>();
+            for (var el : parsed.getAsJsonArray(key)) {
+                JsonObject eo = el.getAsJsonObject();
+                String eid = eo.get("id").getAsString().toUpperCase();
+                @SuppressWarnings("deprecation")
+                Enchantment ench = Enchantment.getByName(eid);
+                if (ench == null) continue;
+                int level = eo.has("level") ? Math.max(1, eo.get("level").getAsInt()) : 1;
+                picks.add(new EnchantPick(ench, level));
+            }
+            if (!picks.isEmpty()) result.put(mat, picks);
+        }
+        return result;
     }
 }

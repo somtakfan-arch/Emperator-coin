@@ -1,5 +1,5 @@
 bots:
-  prefix: "&8[&bБот&8] &f"
+  prefix: ""
   names:
     - "domikkk"
     - "Xyeplet"
@@ -59,8 +59,6 @@ pricing:
     TRIDENT: 60
     SHIELD: 8
     ARROW: 0.2
-    SPECTRAL_ARROW: 0.5
-    WIND_CHARGE: 1
     BREEZE_ROD: 30
     # --- Leather armor ---
     LEATHER_HELMET: 3
@@ -112,23 +110,13 @@ pricing:
     GOLDEN_APPLE: 20
     ENCHANTED_GOLDEN_APPLE: 300
     EXPERIENCE_BOTTLE: 4
-    FIREWORK_ROCKET: 1
     SADDLE: 5
     NAME_TAG: 6
-    LEAD: 2
     RESPAWN_ANCHOR: 25
     GLOWSTONE: 1
     SHULKER_SHELL: 30
     SHULKER_BOX: 60
-    SPYGLASS: 8
-    RECOVERY_COMPASS: 40
-    GOAT_HORN: 10
-    HEART_OF_THE_SEA: 80
-    NAUTILUS_SHELL: 12
-    CONDUIT: 150
     BEACON: 400
-    DRAGON_EGG: 1000
-    DRAGON_HEAD: 300
     WITHER_SKELETON_SKULL: 60
     OBSIDIAN: 2
     CRYING_OBSIDIAN: 4
@@ -154,6 +142,7 @@ listing:
   overprice-mult-max: 2.30
   gear-chance: 0.80
   book-chance: 0.15
+  meta-enchant-chance: 0.50
   whitelist: []
   blacklist:
     - "BEDROCK"
@@ -189,10 +178,8 @@ enchant:
 
 # Chat-triggered listings: игрок пишет в чат, бот сразу выставляет предмет.
 chat-requests:
-  enabled: false              # поставь true после вставки ключа
-  # --- Groq (БЕСПЛАТНО, без карты) ---
-  # Ключ: console.groq.com → API Keys → Create API Key
-  api-key: ""
+  enabled: true
+  api-key: ""   # вставь свой ключ с console.groq.com
   model: "llama-3.3-70b-versatile"
   api-url: "https://api.groq.com/openai/v1/chat/completions"
   # --- xAI Grok (платно, ~$0.30/1M токенов) ---

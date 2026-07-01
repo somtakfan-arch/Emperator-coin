@@ -2,11 +2,14 @@ package me.bedsmp.bedahbots.task;
 
 import me.bedsmp.bedahbots.BotManager;
 import me.bedsmp.bedahbots.EnchantApplier;
+import me.bedsmp.bedahbots.GrokParser.EnchantPick;
+import me.bedsmp.bedahbots.MetaEnchantCache;
 import me.bedsmp.bedahbots.NoteForger;
 import me.bedsmp.bedahbots.WorthLoader;
 import org.bukkit.Material;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.util.*;
@@ -19,6 +22,7 @@ public final class ListingTask {
     private final BotManager botManager;
     private final WorthLoader worth;
     private final EnchantApplier enchant;
+    private final MetaEnchantCache metaCache;
     private final Logger log;
     private final Random rng = new Random();
 
@@ -36,14 +40,17 @@ public final class ListingTask {
     private double roundTo;
     private double gearChance;
     private double bookChance;
+    private double metaEnchantChance;
     private Set<Material> whitelist;
     private Set<Material> blacklist;
 
-    public ListingTask(JavaPlugin plugin, BotManager botManager, WorthLoader worth, EnchantApplier enchant) {
+    public ListingTask(JavaPlugin plugin, BotManager botManager, WorthLoader worth,
+                       EnchantApplier enchant, MetaEnchantCache metaCache) {
         this.plugin = plugin;
         this.botManager = botManager;
         this.worth = worth;
         this.enchant = enchant;
+        this.metaCache = metaCache;
         this.log = plugin.getLogger();
         this.whitelist = new HashSet<>();
         this.blacklist = new HashSet<>();
@@ -62,8 +69,9 @@ public final class ListingTask {
         overpriceMultMax = cfg.getDouble("listing.overprice-mult-max", 2.30);
         minPrice = cfg.getDouble("pricing.min-price", 1.0);
         roundTo  = cfg.getDouble("pricing.round-to", 0.01);
-        gearChance = cfg.getDouble("listing.gear-chance", 0.80);
-        bookChance = cfg.getDouble("listing.book-chance", 0.15);
+        gearChance       = cfg.getDouble("listing.gear-chance", 0.80);
+        bookChance       = cfg.getDouble("listing.book-chance", 0.15);
+        metaEnchantChance = cfg.getDouble("listing.meta-enchant-chance", 0.50);
         whitelist = parseMaterials(cfg.getStringList("listing.whitelist"));
         blacklist = parseMaterials(cfg.getStringList("listing.blacklist"));
     }
@@ -151,7 +159,14 @@ public final class ListingTask {
         double multiplier = pickMultiplier();
 
         ItemStack item = new ItemStack(mat, amount);
-        double enchantMult = enchant.apply(item, wantGear);
+        double enchantMult;
+        boolean usedMeta = false;
+        if (wantGear && metaCache.has(mat) && rng.nextDouble() < metaEnchantChance) {
+            enchantMult = applyMetaEnchants(item, metaCache.getFor(mat));
+            usedMeta = enchantMult > 1.0;
+        } else {
+            enchantMult = enchant.apply(item, wantGear);
+        }
 
         double price = roundPrice(worthPerUnit * amount * multiplier * enchantMult);
         price = Math.max(price, minPrice);
@@ -162,8 +177,25 @@ public final class ListingTask {
 
         NoteForger.forge(botUUID, displayName, item, price, listingHours, log);
         log.info("[Listing] " + botName + " выставил " + amount + "x " + mat.name()
-                + (enchantMult > 1.0 ? " (с чарами)" : "")
+                + (usedMeta ? " (мета-чары)" : enchantMult > 1.0 ? " (с чарами)" : "")
                 + " за " + String.format("%.2f", price));
+    }
+
+    private double applyMetaEnchants(ItemStack item, List<EnchantPick> picks) {
+        ItemMeta meta = item.getItemMeta();
+        if (meta == null) return 1.0;
+        double mult = 1.0;
+        boolean any = false;
+        for (EnchantPick pick : picks) {
+            boolean overLevel = pick.level() > pick.enchantment().getMaxLevel();
+            if (meta.addEnchant(pick.enchantment(), pick.level(), overLevel)) {
+                mult += pick.level() * 0.15;
+                any = true;
+            }
+        }
+        if (!any) return 1.0;
+        item.setItemMeta(meta);
+        return mult;
     }
 
     private void createBookListing() throws Exception {
