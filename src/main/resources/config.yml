@@ -199,12 +199,19 @@ enchant:
 # Powered by xAI Grok — set your API key at https://console.x.ai/
 chat-requests:
   enabled: false              # change to true after setting your API key
-  grok-api-key: ""            # paste your xAI API key here (starts with "xai-")
-  grok-model: "grok-3-mini"  # grok-3-mini is fast and cheap for this task
+  # --- Groq (БЕСПЛАТНО, без карты) ---
+  # Ключ: console.groq.com → API Keys → Create API Key
+  api-key: ""
+  model: "llama-3.3-70b-versatile"
+  api-url: "https://api.groq.com/openai/v1/chat/completions"
+  # --- xAI Grok (платно, ~$0.30/1M токенов) ---
+  # api-key: "xai-..."
+  # model: "grok-3-mini"
+  # api-url: "https://api.x.ai/v1/chat/completions"
   triggers:
     - "пж выстави"
     - "бот выстави"
     - "выстави"
-  cooldown-seconds: 30        # per-player request cooldown to prevent spam
-  price-markup: 1.2           # bot lists the item at 120% of the base worth
-  unknown-base-price: 10.0    # base price when the item isn't in worth.yml
+  cooldown-seconds: 30        # кулдаун на игрока в секундах
+  price-markup: 1.2           # 120% от base worth
+  unknown-base-price: 10.0    # если предмет нет в worth.yml

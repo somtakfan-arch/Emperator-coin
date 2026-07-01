@@ -67,11 +67,13 @@ public final class GrokParser {
     private final HttpClient http;
     private final String apiKey;
     private final String model;
+    private final String apiUrl;
     private final Logger log;
 
-    public GrokParser(String apiKey, String model, Logger log) {
+    public GrokParser(String apiKey, String model, String apiUrl, Logger log) {
         this.apiKey = apiKey;
         this.model = model;
+        this.apiUrl = apiUrl;
         this.log = log;
         this.http = HttpClient.newBuilder()
                 .proxy(ProxySelector.getDefault())
@@ -100,7 +102,7 @@ public final class GrokParser {
         body.add("messages", messages);
 
         HttpRequest req = HttpRequest.newBuilder()
-                .uri(URI.create("https://api.x.ai/v1/chat/completions"))
+                .uri(URI.create(apiUrl))
                 .header("Authorization", "Bearer " + apiKey)
                 .header("Content-Type", "application/json")
                 .timeout(Duration.ofSeconds(20))

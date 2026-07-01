@@ -58,9 +58,11 @@ public final class ChatRequestListener implements Listener {
         triggers = cfg.getStringList("chat-requests.triggers");
         if (triggers.isEmpty()) triggers = List.of("пж выстави", "выстави");
 
-        String apiKey = cfg.getString("chat-requests.grok-api-key", "");
-        String model  = cfg.getString("chat-requests.grok-model", "grok-3-mini");
-        parser = apiKey.isBlank() ? null : new GrokParser(apiKey, model, log);
+        String apiKey = cfg.getString("chat-requests.api-key", "");
+        String model  = cfg.getString("chat-requests.model", "llama-3.3-70b-versatile");
+        String apiUrl = cfg.getString("chat-requests.api-url",
+                "https://api.groq.com/openai/v1/chat/completions");
+        parser = apiKey.isBlank() ? null : new GrokParser(apiKey, model, apiUrl, log);
 
         listingHours     = cfg.getLong("listing.listing-hours", 12);
         minPrice         = cfg.getDouble("pricing.min-price", 1.0);
