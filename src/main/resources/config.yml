@@ -193,3 +193,18 @@ enchant:
   overlevel-chance: 0.15
   overlevel-max-bonus: 2
   price-per-level-mult: 0.15
+
+# Chat-triggered listings: players type a trigger phrase in chat and a bot
+# immediately lists the requested item with the requested enchants.
+# Powered by xAI Grok — set your API key at https://console.x.ai/
+chat-requests:
+  enabled: false              # change to true after setting your API key
+  grok-api-key: ""            # paste your xAI API key here (starts with "xai-")
+  grok-model: "grok-3-mini"  # grok-3-mini is fast and cheap for this task
+  triggers:
+    - "пж выстави"
+    - "бот выстави"
+    - "выстави"
+  cooldown-seconds: 30        # per-player request cooldown to prevent spam
+  price-markup: 1.2           # bot lists the item at 120% of the base worth
+  unknown-base-price: 10.0    # base price when the item isn't in worth.yml
