@@ -1,12 +1,12 @@
 bots:
   prefix: "&8[&bБот&8] &f"
   names:
-    - "Торгаш"
-    - "Барыга"
-    - "Купец"
-    - "Скупщик"
-    - "Меняла"
-    - "Делец"
+    - "domikkk"
+    - "Xyeplet"
+    - "Checkban"
+    - "Adminasss"
+    - "Svaaars"
+    - "Ckruub"
 
 pricing:
   worth-file: "plugins/Essentials/worth.yml"
@@ -141,22 +141,18 @@ pricing:
 
 listing:
   enabled: true
-  interval-seconds: 90
-  per-cycle: 2
-  max-bot-listings: 40
-  listing-hours: 12
+  interval-seconds: 45
+  per-cycle: 5
+  max-bot-listings: 1000000000
+  listing-hours: 120
   amount-min: 1
-  amount-max: 16
+  amount-max: 64
   normal-mult-min: 0.90
   normal-mult-max: 1.35
   overprice-chance: 0.12
   overprice-mult-min: 1.60
   overprice-mult-max: 2.30
-  # Chance a listing is drawn from the enchantable-gear pool (weapons/tools/armor)
-  # instead of plain resources. Combined with enchant.item-chance below being forced
-  # to "always try" for gear, most listings end up enchanted items.
   gear-chance: 0.80
-  # Chance a listing is an Enchanted Book (with random stored enchants) instead of an item.
   book-chance: 0.15
   whitelist: []
   blacklist:
@@ -181,24 +177,19 @@ reselling:
   markup-min: 1.20
   markup-max: 1.55
 
-# Randomized enchants on freshly listed bot items (Timer A only).
-# Validity is checked via Bukkit's own Enchantment#canEnchantItem, so e.g.
-# Density can only ever land on a Mace, never on a sword.
 enchant:
   enabled: true
-  item-chance: 0.35       # chance a freshly listed item gets enchants at all
-  max-count: 3            # max distinct enchants per item
+  item-chance: 0.85
+  max-count: 3
   allow-curses: false
-  allow-overlevel: true    # allow levels above vanilla max for extra variety
+  allow-overlevel: true
   overlevel-chance: 0.15
   overlevel-max-bonus: 2
   price-per-level-mult: 0.15
 
-# Chat-triggered listings: players type a trigger phrase in chat and a bot
-# immediately lists the requested item with the requested enchants.
-# Powered by xAI Grok — set your API key at https://console.x.ai/
+# Chat-triggered listings: игрок пишет в чат, бот сразу выставляет предмет.
 chat-requests:
-  enabled: false              # change to true after setting your API key
+  enabled: false              # поставь true после вставки ключа
   # --- Groq (БЕСПЛАТНО, без карты) ---
   # Ключ: console.groq.com → API Keys → Create API Key
   api-key: ""
@@ -212,6 +203,6 @@ chat-requests:
     - "пж выстави"
     - "бот выстави"
     - "выстави"
-  cooldown-seconds: 30        # кулдаун на игрока в секундах
-  price-markup: 1.2           # 120% от base worth
-  unknown-base-price: 10.0    # если предмет нет в worth.yml
+  cooldown-seconds: 30
+  price-markup: 1.2
+  unknown-base-price: 10.0
