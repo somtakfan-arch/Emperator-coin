@@ -59,6 +59,9 @@ pricing:
     TRIDENT: 60
     SHIELD: 8
     ARROW: 0.2
+    SPECTRAL_ARROW: 0.5
+    WIND_CHARGE: 1
+    FIREWORK_ROCKET: 1
     BREEZE_ROD: 30
     # --- Leather armor ---
     LEATHER_HELMET: 3
