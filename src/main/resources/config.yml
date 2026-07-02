@@ -23,37 +23,45 @@ pricing:
     GOLDEN_SWORD: 6
     IRON_SWORD: 12
     DIAMOND_SWORD: 40
-    NETHERITE_SWORD: 120
+    NETHERITE_SWORD: 200
     # --- Axes ---
     WOODEN_AXE: 2
     STONE_AXE: 4
     GOLDEN_AXE: 6
     IRON_AXE: 12
     DIAMOND_AXE: 40
-    NETHERITE_AXE: 120
+    NETHERITE_AXE: 200
     # --- Pickaxes ---
     WOODEN_PICKAXE: 2
     STONE_PICKAXE: 4
     GOLDEN_PICKAXE: 6
     IRON_PICKAXE: 12
     DIAMOND_PICKAXE: 40
-    NETHERITE_PICKAXE: 120
+    NETHERITE_PICKAXE: 200
     # --- Shovels ---
     WOODEN_SHOVEL: 1
     STONE_SHOVEL: 2
     GOLDEN_SHOVEL: 3
     IRON_SHOVEL: 6
     DIAMOND_SHOVEL: 20
-    NETHERITE_SHOVEL: 60
+    NETHERITE_SHOVEL: 170
     # --- Hoes ---
     WOODEN_HOE: 1
     STONE_HOE: 2
     GOLDEN_HOE: 3
     IRON_HOE: 6
     DIAMOND_HOE: 20
-    NETHERITE_HOE: 60
+    NETHERITE_HOE: 170
+    # --- Spears (1.21.11) ---
+    WOODEN_SPEAR: 3
+    STONE_SPEAR: 5
+    COPPER_SPEAR: 10
+    IRON_SPEAR: 15
+    GOLDEN_SPEAR: 8
+    DIAMOND_SPEAR: 55
+    NETHERITE_SPEAR: 140
     # --- Ranged / special weapons ---
-    MACE: 150
+    MACE: 220
     BOW: 10
     CROSSBOW: 14
     TRIDENT: 60
@@ -97,7 +105,7 @@ pricing:
     TURTLE_HELMET: 15
     ELYTRA: 200
     # --- Valuables / resources ---
-    TOTEM_OF_UNDYING: 250
+    TOTEM_OF_UNDYING: 350
     ENDER_PEARL: 8
     ENDER_EYE: 16
     BLAZE_ROD: 10

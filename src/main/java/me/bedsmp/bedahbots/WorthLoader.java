@@ -15,6 +15,7 @@ public class WorthLoader {
     private final Map<Material, Double> worth = new HashMap<>();
     private final Map<Material, Double> extraWorth = new HashMap<>();
     private String worthFilePath;
+    private GrokPriceCache grokPrices;
 
     public WorthLoader(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -22,6 +23,10 @@ public class WorthLoader {
 
     public void setPath(String path) {
         this.worthFilePath = path;
+    }
+
+    public void setGrokPriceCache(GrokPriceCache cache) {
+        this.grokPrices = cache;
     }
 
     public void reload() {
@@ -68,12 +73,18 @@ public class WorthLoader {
         plugin.getLogger().info("Loaded " + extraWorth.size() + " extra-worth entries from config.yml");
     }
 
-    /** Price per 1 unit, or -1 if unknown. worth.yml takes priority, extra-worth is the fallback. */
+    /** Price per 1 unit, or -1 if unknown. Priority: worth.yml → Grok cache → extra-worth config. */
     public double getWorth(Material mat) {
         Double w = worth.get(mat);
         if (w != null) return w;
+        if (grokPrices != null && grokPrices.has(mat)) return grokPrices.getPrice(mat);
         Double ew = extraWorth.get(mat);
         return ew != null ? ew : -1.0;
+    }
+
+    /** Materials from the extra-worth config section (used to feed Grok price requests). */
+    public List<Material> extraWorthMaterials() {
+        return new ArrayList<>(extraWorth.keySet());
     }
 
     /** All materials that have a known worth value (worth.yml ∪ extra-worth). */

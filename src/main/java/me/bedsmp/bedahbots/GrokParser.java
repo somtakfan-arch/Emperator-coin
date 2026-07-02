@@ -167,6 +167,8 @@ public final class GrokParser {
             BOW → POWER 5, INFINITY 1, FLAME 1
             CROSSBOW → MULTISHOT 1, QUICK_CHARGE 3, UNBREAKING 3
             TRIDENT → LOYALTY 3, IMPALING 5, MENDING 1
+            NETHERITE_SPEAR/DIAMOND_SPEAR → SHARPNESS 5, LUNGE 3, MENDING 1
+            IRON_SPEAR → SHARPNESS 4, UNBREAKING 3, MENDING 1
             NETHERITE_PICKAXE/DIAMOND_PICKAXE → EFFICIENCY 5, UNBREAKING 3, MENDING 1
             NETHERITE_AXE/DIAMOND_AXE → EFFICIENCY 5, SHARPNESS 5, MENDING 1
             NETHERITE_HELMET/DIAMOND_HELMET → PROTECTION 4, UNBREAKING 3, RESPIRATION 3
@@ -176,6 +178,25 @@ public final class GrokParser {
             ELYTRA → UNBREAKING 3, MENDING 1
             SHIELD → UNBREAKING 3, MENDING 1
             FISHING_ROD → LURE 3, LUCK_OF_THE_SEA 3, MENDING 1
+            """;
+
+    private static final String PRICE_PROMPT = """
+            You are a Minecraft SMP economy expert. Base currency prices on this server:
+            IRON_INGOT=1.5, GOLD_INGOT=3, DIAMOND=12, EMERALD=6,
+            NETHERITE_INGOT=90, NETHERITE_SCRAP=40, BLAZE_ROD=10, ARROW=0.2.
+
+            For each Minecraft Material name I give you, return a fair market price as a number.
+            Pricing rules:
+            - Crafted gear: total material cost × 1.5-2.5 (higher multiplier for PvP/rare items)
+            - Netherite gear: diamond equivalent + 90 (ingot) + ~50 (template) → 140+ base
+            - Diamond swords/axes: ~50, diamond armor: 40-60 per piece
+            - Mace (needs heavy core from vault): very rare, 200-300
+            - Elytra: extremely rare, 300-500
+            - Totem of Undying: critical survival item, 300+
+            - Spears: new PvP weapons, price same tier as equivalent swords
+            - Common resources (arrows, glowstone, fireworks): keep prices under 2
+            Return ONLY raw JSON: {"MATERIAL_NAME": price_as_number, ...}
+            No explanation, no markdown.
             """;
 
     /**
@@ -239,6 +260,64 @@ public final class GrokParser {
                 picks.add(new EnchantPick(ench, level));
             }
             if (!picks.isEmpty()) result.put(mat, picks);
+        }
+        return result;
+    }
+
+    /**
+     * Queries Groq for market prices of the given materials.
+     * Blocks the calling thread — must be called from an async context.
+     */
+    public Map<Material, Double> fetchItemPrices(List<Material> materials) throws Exception {
+        String matList = materials.stream().map(Material::name).collect(Collectors.joining(", "));
+
+        JsonObject body = new JsonObject();
+        body.addProperty("model", model);
+        body.addProperty("max_tokens", 2000);
+
+        JsonArray messages = new JsonArray();
+        JsonObject sys = new JsonObject();
+        sys.addProperty("role", "system");
+        sys.addProperty("content", PRICE_PROMPT);
+        JsonObject usr = new JsonObject();
+        usr.addProperty("role", "user");
+        usr.addProperty("content", matList);
+        messages.add(sys);
+        messages.add(usr);
+        body.add("messages", messages);
+
+        HttpRequest req = HttpRequest.newBuilder()
+                .uri(URI.create(apiUrl))
+                .header("Authorization", "Bearer " + apiKey)
+                .header("Content-Type", "application/json")
+                .timeout(Duration.ofSeconds(30))
+                .POST(HttpRequest.BodyPublishers.ofString(GSON.toJson(body)))
+                .build();
+
+        HttpResponse<String> resp = http.send(req, HttpResponse.BodyHandlers.ofString());
+        if (resp.statusCode() != 200) {
+            throw new Exception("HTTP " + resp.statusCode() + ": " + resp.body().substring(0, Math.min(300, resp.body().length())));
+        }
+
+        JsonObject root = JsonParser.parseString(resp.body()).getAsJsonObject();
+        String content = root.getAsJsonArray("choices")
+                .get(0).getAsJsonObject()
+                .getAsJsonObject("message")
+                .get("content").getAsString().trim();
+
+        if (content.startsWith("```")) {
+            content = content.replaceAll("(?s)```[\\w]*\\n?", "").trim();
+        }
+
+        Map<Material, Double> result = new HashMap<>();
+        JsonObject parsed = JsonParser.parseString(content).getAsJsonObject();
+        for (String key : parsed.keySet()) {
+            Material mat = Material.matchMaterial(key.toUpperCase());
+            if (mat == null) continue;
+            try {
+                double price = parsed.get(key).getAsDouble();
+                if (price > 0) result.put(mat, price);
+            } catch (Exception ignored) {}
         }
         return result;
     }

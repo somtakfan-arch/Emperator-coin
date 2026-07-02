@@ -24,6 +24,7 @@ public final class MetaEnchantCache {
             Material.NETHERITE_PICKAXE, Material.DIAMOND_PICKAXE, Material.IRON_PICKAXE,
             Material.NETHERITE_SHOVEL, Material.DIAMOND_SHOVEL,
             Material.NETHERITE_HOE,   Material.DIAMOND_HOE,
+            Material.NETHERITE_SPEAR, Material.DIAMOND_SPEAR, Material.IRON_SPEAR,
             Material.MACE, Material.BOW, Material.CROSSBOW, Material.TRIDENT,
             Material.SHIELD, Material.ELYTRA, Material.FISHING_ROD,
             Material.NETHERITE_HELMET,     Material.NETHERITE_CHESTPLATE,

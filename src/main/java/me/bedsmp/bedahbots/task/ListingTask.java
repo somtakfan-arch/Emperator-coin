@@ -122,7 +122,7 @@ public final class ListingTask {
     private boolean isGearMaterial(Material m) {
         String n = m.name();
         if (n.endsWith("_SWORD") || n.endsWith("_AXE") || n.endsWith("_PICKAXE")
-                || n.endsWith("_SHOVEL") || n.endsWith("_HOE")
+                || n.endsWith("_SHOVEL") || n.endsWith("_HOE") || n.endsWith("_SPEAR")
                 || n.endsWith("_HELMET") || n.endsWith("_CHESTPLATE")
                 || n.endsWith("_LEGGINGS") || n.endsWith("_BOOTS")) {
             return true;

@@ -20,6 +20,7 @@ public final class BedAHBotsPlugin extends JavaPlugin {
     private BotStock stock;
     private EnchantApplier enchantApplier;
     private MetaEnchantCache metaEnchantCache;
+    private GrokPriceCache grokPriceCache;
     private ChatRequestListener chatRequestListener;
 
     // Task objects (created once, config updated on reload) — package-visible for command class
@@ -41,6 +42,8 @@ public final class BedAHBotsPlugin extends JavaPlugin {
         stock          = new BotStock(this);
         enchantApplier   = new EnchantApplier();
         metaEnchantCache = new MetaEnchantCache(this);
+        grokPriceCache   = new GrokPriceCache(this);
+        worthLoader.setGrokPriceCache(grokPriceCache);
 
         stock.init();
 
@@ -87,6 +90,8 @@ public final class BedAHBotsPlugin extends JavaPlugin {
         enchantApplier.reloadConfig(cfg);
         metaEnchantCache.reloadConfig(cfg);
         metaEnchantCache.triggerRefresh();
+        grokPriceCache.reloadConfig(cfg);
+        grokPriceCache.triggerRefresh(worthLoader.extraWorthMaterials());
         chatRequestListener.reloadConfig(cfg);
 
         listingTask.reloadConfig(cfg);
@@ -111,6 +116,15 @@ public final class BedAHBotsPlugin extends JavaPlugin {
                 toDelete.add(note);
             }
         }
+        for (ItemNote note : toDelete) {
+            NoteForger.deleteNote(note, getLogger());
+        }
+        return toDelete.size();
+    }
+
+    /** Deletes ALL currently active AH lots regardless of owner. Returns the number removed. */
+    public int clearAllListings() {
+        List<ItemNote> toDelete = new ArrayList<>(AuctionHouseStorage.getAll());
         for (ItemNote note : toDelete) {
             NoteForger.deleteNote(note, getLogger());
         }
