@@ -162,8 +162,8 @@ public final class NoteForger {
     public static void deleteNote(ItemNote note, Logger log) {
         try {
             ItemNoteStorage.deleteNote(note);
-        } catch (Exception e) {
-            log.warning("deleteNote() failed: " + e.getMessage());
+        } catch (Throwable t) {
+            log.warning("deleteNote() failed: " + t);
         }
     }
 }

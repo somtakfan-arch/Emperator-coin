@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 public final class BedAHBotsPlugin extends JavaPlugin {
 
@@ -121,24 +122,49 @@ public final class BedAHBotsPlugin extends JavaPlugin {
     /** Deletes every currently active AH lot owned by a bot. Returns the number removed. */
     public int clearBotListings() {
         List<ItemNote> toDelete = new ArrayList<>();
-        for (ItemNote note : AuctionHouseStorage.getAll()) {
-            if (botManager.isBotUUID(note.getPlayerUUID())) {
-                toDelete.add(note);
+        try {
+            for (ItemNote note : AuctionHouseStorage.getAll()) {
+                try {
+                    UUID uuid = note.getPlayerUUID();
+                    if (uuid != null && botManager.isBotUUID(uuid)) toDelete.add(note);
+                } catch (Throwable t) {
+                    getLogger().warning("clearBotListings: skip note — " + t.getMessage());
+                }
+            }
+        } catch (Throwable t) {
+            getLogger().warning("clearBotListings: getAll() failed — " + t.getMessage());
+        }
+        int removed = 0;
+        for (ItemNote note : toDelete) {
+            try {
+                NoteForger.deleteNote(note, getLogger());
+                removed++;
+            } catch (Throwable t) {
+                getLogger().warning("clearBotListings: deleteNote failed — " + t.getMessage());
             }
         }
-        for (ItemNote note : toDelete) {
-            NoteForger.deleteNote(note, getLogger());
-        }
-        return toDelete.size();
+        return removed;
     }
 
     /** Deletes ALL currently active AH lots regardless of owner. Returns the number removed. */
     public int clearAllListings() {
-        List<ItemNote> toDelete = new ArrayList<>(AuctionHouseStorage.getAll());
-        for (ItemNote note : toDelete) {
-            NoteForger.deleteNote(note, getLogger());
+        List<ItemNote> toDelete;
+        try {
+            toDelete = new ArrayList<>(AuctionHouseStorage.getAll());
+        } catch (Throwable t) {
+            getLogger().warning("clearAllListings: getAll() failed — " + t.getMessage());
+            return 0;
         }
-        return toDelete.size();
+        int removed = 0;
+        for (ItemNote note : toDelete) {
+            try {
+                NoteForger.deleteNote(note, getLogger());
+                removed++;
+            } catch (Throwable t) {
+                getLogger().warning("clearAllListings: deleteNote failed — " + t.getMessage());
+            }
+        }
+        return removed;
     }
 
     private void scheduleTimers(FileConfiguration cfg) {
