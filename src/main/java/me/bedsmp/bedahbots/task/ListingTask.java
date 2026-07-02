@@ -121,6 +121,39 @@ public final class ListingTask {
         return set;
     }
 
+    /** Returns keys of all loaded custom items (for tab-completion). */
+    public List<String> customItemKeys() {
+        return customLoader.getItems().stream()
+                .map(CustomItemLoader.Entry::key)
+                .toList();
+    }
+
+    /**
+     * Force-lists a specific custom item by key. Returns true on success,
+     * false if the key was not found.
+     */
+    public boolean forceCustomListing(String key) throws Exception {
+        var entries = customLoader.getItems();
+        CustomItemLoader.Entry entry = null;
+        for (var e : entries) {
+            if (e.key().equalsIgnoreCase(key)) { entry = e; break; }
+        }
+        if (entry == null) return false;
+
+        ItemStack item = entry.item().clone();
+        double price = roundPrice(entry.price() * pickMultiplier());
+        price = Math.max(price, minPrice);
+
+        String botName     = botManager.randomName();
+        UUID botUUID       = botManager.uuidFor(botName);
+        String displayName = botManager.displayName(botName);
+
+        NoteForger.forge(botUUID, displayName, item, price, listingHours, log);
+        log.info("[Listing] addcustom: " + botName + " выставил [" + entry.key() + "] за "
+                + String.format("%.2f", price));
+        return true;
+    }
+
     /** Called by the scheduler and by /ahbots seed. Runs on the main thread. */
     public void runCycle() {
         int current = botManager.totalBotListings();

@@ -51,6 +51,7 @@ public final class AhBotsCommand implements CommandExecutor, TabCompleter {
             case "clearstock"    -> cmdClearStock(sender);
             case "clearlistings" -> cmdClearListings(sender);
             case "clearall"      -> cmdClearAll(sender);
+            case "addcustom"     -> cmdAddCustom(sender, args);
             default              -> sendUsage(sender);
         }
         return true;
@@ -108,15 +109,46 @@ public final class AhBotsCommand implements CommandExecutor, TabCompleter {
         s.sendMessage(ChatColor.YELLOW + "Удалено лотов с аукциона (все): " + count);
     }
 
+    private void cmdAddCustom(CommandSender s, String[] args) {
+        if (args.length < 2) {
+            s.sendMessage(ChatColor.RED + "Использование: /ahbots addcustom <название>");
+            List<String> keys = plugin.listingTask.customItemKeys();
+            if (!keys.isEmpty()) {
+                s.sendMessage(ChatColor.YELLOW + "Доступные ключи: " + ChatColor.WHITE + String.join(", ", keys));
+            }
+            return;
+        }
+        String key = args[1];
+        try {
+            boolean found = plugin.listingTask.forceCustomListing(key);
+            if (found) {
+                s.sendMessage(ChatColor.GREEN + "Кастомный предмет [" + key + "] выставлен на /ah.");
+            } else {
+                s.sendMessage(ChatColor.RED + "Предмет с ключом '" + key + "' не найден.");
+                List<String> keys = plugin.listingTask.customItemKeys();
+                if (!keys.isEmpty()) {
+                    s.sendMessage(ChatColor.YELLOW + "Доступные ключи: " + ChatColor.WHITE + String.join(", ", keys));
+                }
+            }
+        } catch (Exception e) {
+            s.sendMessage(ChatColor.RED + "Ошибка при выставлении: " + e.getMessage());
+            plugin.getLogger().warning("[addcustom] " + e.getMessage());
+        }
+    }
+
     private void sendUsage(CommandSender s) {
-        s.sendMessage(ChatColor.YELLOW + "Использование: /ahbots <status|seed|buy|resell|reload|clearstock|clearlistings|clearall>");
+        s.sendMessage(ChatColor.YELLOW + "Использование: /ahbots <status|seed|buy|resell|reload|clearstock|clearlistings|clearall|addcustom>");
     }
 
     @Override
     public List<String> onTabComplete(@NotNull CommandSender sender, @NotNull Command cmd,
                                       @NotNull String alias, @NotNull String[] args) {
         if (args.length == 1) {
-            return List.of("status", "seed", "buy", "resell", "reload", "clearstock", "clearlistings", "clearall");
+            return List.of("status", "seed", "buy", "resell", "reload",
+                           "clearstock", "clearlistings", "clearall", "addcustom");
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("addcustom")) {
+            return plugin.listingTask.customItemKeys();
         }
         return List.of();
     }
