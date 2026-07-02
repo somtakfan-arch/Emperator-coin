@@ -181,30 +181,28 @@ public final class GrokParser {
             """;
 
     private static final String PRICE_PROMPT = """
-            You are a Minecraft SMP economy expert setting AUCTION HOUSE listing prices (NOT /sell prices).
-            These are prices players pay to BUY items — they must be significantly higher than sell values.
+            You are a Minecraft SMP economy expert. Players on this server have ~10,000,000 coins each.
+            Set AUCTION HOUSE base prices (before any markup) that feel meaningful in a 10M economy.
 
-            Base /sell prices on this server for reference:
-            IRON_INGOT=1.5, GOLD_INGOT=3, DIAMOND=12, EMERALD=6,
-            NETHERITE_INGOT=90, NETHERITE_SCRAP=40, BLAZE_ROD=10, ARROW=0.2.
+            Reference prices (approximate /sell values on this server):
+            IRON_INGOT≈1500, GOLD_INGOT≈3000, DIAMOND≈12000, NETHERITE_INGOT≈90000.
 
-            Auction house prices should reflect real player demand and rarity:
-            - ENCHANTED_BOOK: 150-500 depending on enchantment rarity (treat as high-demand)
-            - Enchanted gear: base material cost × 5-10
-            - Netherite gear: 300-600 (netherite ingot=90 + diamond base + template cost)
-            - Diamond gear: 150-300
-            - Iron gear: 50-120
-            - MACE: 500+ (heavy core from vault trial is extremely rare)
-            - ELYTRA: 800+
-            - TOTEM_OF_UNDYING: 500+
-            - NETHER_STAR: 1000+
-            - BEACON: 800+
-            - Common consumables (ARROW, FIREWORK_ROCKET, GLOWSTONE): 2-5
+            Target price ranges for base (pre-markup) auction prices:
+            - ENCHANTED_BOOK: 10000-50000
+            - Iron gear (sword/axe/pickaxe): 6000-10000
+            - Diamond gear: 40000-70000
+            - Netherite gear: 120000-200000
+            - MACE (rare vault drop): 250000-400000
+            - ELYTRA: 500000-800000
+            - TOTEM_OF_UNDYING: 400000-600000
+            - NETHER_STAR: 800000-1200000
+            - BEACON: 1000000-1500000
+            - ARROW/FIREWORK_ROCKET/GLOWSTONE: 100-500
             - Spears: same tier as equivalent swords
-            - Minimum price for any item: 50
+            - Minimum: 500
 
             Return ONLY raw JSON: {"MATERIAL_NAME": price_as_number, ...}
-            No explanation, no markdown, no extra fields.
+            No explanation, no markdown.
             """;
 
     /**
