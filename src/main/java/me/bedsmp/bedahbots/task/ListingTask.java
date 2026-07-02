@@ -7,10 +7,14 @@ import me.bedsmp.bedahbots.MetaEnchantCache;
 import me.bedsmp.bedahbots.NoteForger;
 import me.bedsmp.bedahbots.WorthLoader;
 import org.bukkit.Material;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
+import org.bukkit.inventory.meta.PotionMeta;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.potion.PotionType;
 
 import java.util.*;
 import java.util.logging.Logger;
@@ -40,9 +44,13 @@ public final class ListingTask {
     private double roundTo;
     private double gearChance;
     private double bookChance;
+    private double potionChance;
     private double metaEnchantChance;
     private Set<Material> whitelist;
     private Set<Material> blacklist;
+    private final List<PotionCfg> potionPool = new ArrayList<>();
+
+    private record PotionCfg(PotionType type, Material form, double price) {}
 
     public ListingTask(JavaPlugin plugin, BotManager botManager, WorthLoader worth,
                        EnchantApplier enchant, MetaEnchantCache metaCache) {
@@ -69,11 +77,32 @@ public final class ListingTask {
         overpriceMultMax = cfg.getDouble("listing.overprice-mult-max", 2.30);
         minPrice = cfg.getDouble("pricing.min-price", 1.0);
         roundTo  = cfg.getDouble("pricing.round-to", 0.01);
-        gearChance       = cfg.getDouble("listing.gear-chance", 0.80);
-        bookChance       = cfg.getDouble("listing.book-chance", 0.15);
+        gearChance        = cfg.getDouble("listing.gear-chance", 0.80);
+        bookChance        = cfg.getDouble("listing.book-chance", 0.15);
+        potionChance      = cfg.getDouble("listing.potion-chance", 0.0);
         metaEnchantChance = cfg.getDouble("listing.meta-enchant-chance", 0.50);
         whitelist = parseMaterials(cfg.getStringList("listing.whitelist"));
         blacklist = parseMaterials(cfg.getStringList("listing.blacklist"));
+
+        potionPool.clear();
+        if (cfg.getBoolean("pvp-potions.enabled", false)) {
+            for (Map<?, ?> rawEntry : cfg.getMapList("pvp-potions.types")) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> entry = (Map<String, Object>) rawEntry;
+                String typeName = String.valueOf(entry.getOrDefault("potion-type", "")).toUpperCase();
+                String form     = String.valueOf(entry.getOrDefault("form", "splash")).toLowerCase();
+                double price    = Double.parseDouble(String.valueOf(entry.getOrDefault("price", "1000")));
+                PotionType pt   = Registry.POTION.get(NamespacedKey.minecraft(typeName.toLowerCase()));
+                if (pt == null) { log.warning("ListingTask: неизвестный тип зелья '" + typeName + "'"); continue; }
+                Material mat = switch (form) {
+                    case "lingering" -> Material.LINGERING_POTION;
+                    case "drinkable" -> Material.POTION;
+                    default          -> Material.SPLASH_POTION;
+                };
+                potionPool.add(new PotionCfg(pt, mat, price));
+            }
+            log.info("ListingTask: загружено " + potionPool.size() + " типов зелий.");
+        }
     }
 
     private Set<Material> parseMaterials(List<String> names) {
@@ -137,6 +166,10 @@ public final class ListingTask {
 
     private void createOneListing(List<Material> candidates, List<Material> gearCandidates,
                                   List<Material> resourceCandidates) throws Exception {
+        if (!potionPool.isEmpty() && rng.nextDouble() < potionChance) {
+            createPotionListing();
+            return;
+        }
         if (rng.nextDouble() < bookChance) {
             createBookListing();
             return;
@@ -215,6 +248,26 @@ public final class ListingTask {
 
         NoteForger.forge(botUUID, displayName, book, price, listingHours, log);
         log.info("[Listing] " + botName + " выставил зачарованную книгу за " + String.format("%.2f", price));
+    }
+
+    private void createPotionListing() throws Exception {
+        PotionCfg pc = potionPool.get(rng.nextInt(potionPool.size()));
+        ItemStack item = new ItemStack(pc.form(), 1);
+        PotionMeta meta = (PotionMeta) item.getItemMeta();
+        if (meta == null) return;
+        meta.setBasePotionType(pc.type());
+        item.setItemMeta(meta);
+
+        double price = roundPrice(pc.price() * pickMultiplier());
+        price = Math.max(price, minPrice);
+
+        String botName    = botManager.randomName();
+        UUID botUUID      = botManager.uuidFor(botName);
+        String displayName = botManager.displayName(botName);
+
+        NoteForger.forge(botUUID, displayName, item, price, listingHours, log);
+        log.info("[Listing] " + botName + " выставил " + pc.form().name()
+                + " [" + pc.type().getKey().getKey() + "] за " + String.format("%.2f", price));
     }
 
     private double pickMultiplier() {

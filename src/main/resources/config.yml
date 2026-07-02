@@ -139,6 +139,9 @@ pricing:
     GOLD_BLOCK: 25000
     IRON_BLOCK: 12000
     NETHERITE_BLOCK: 800000
+    # --- Crystal PvP ---
+    END_CRYSTAL: 50000
+    CHORUS_FRUIT: 1500
 
 listing:
   enabled: true
@@ -155,6 +158,7 @@ listing:
   overprice-mult-max: 4.0
   gear-chance: 0.80
   book-chance: 0.15
+  potion-chance: 0.08
   meta-enchant-chance: 0.50
   whitelist: []
   blacklist:
@@ -206,3 +210,69 @@ chat-requests:
   cooldown-seconds: 30
   price-markup: 1.2
   unknown-base-price: 10.0
+
+# Зелья PvP — бот выставляет их согласно potion-chance в listing.
+pvp-potions:
+  enabled: true
+  types:
+    # ── DPot PvP ──────────────────────────────────────────────
+    - potion-type: "STRONG_HARMING"      # Зелье вреда II (сплэш)
+      form: splash
+      price: 3000
+    - potion-type: "HARMING"             # Зелье вреда I (сплэш)
+      form: splash
+      price: 1500
+    - potion-type: "STRONG_HEALING"      # Зелье лечения II (сплэш)
+      form: splash
+      price: 5000
+    - potion-type: "HEALING"             # Зелье лечения I (сплэш)
+      form: splash
+      price: 2500
+    - potion-type: "STRONG_STRENGTH"     # Зелье силы II (сплэш)
+      form: splash
+      price: 4000
+    - potion-type: "STRENGTH"            # Зелье силы I (питьё)
+      form: drinkable
+      price: 2500
+    - potion-type: "STRONG_SWIFTNESS"    # Зелье скорости II (питьё)
+      form: drinkable
+      price: 2500
+    - potion-type: "WEAKNESS"            # Зелье слабости (сплэш)
+      form: splash
+      price: 2000
+    - potion-type: "STRONG_SLOWNESS"     # Зелье замедления IV (сплэш)
+      form: splash
+      price: 3000
+    - potion-type: "STRONG_POISON"       # Зелье яда II (сплэш)
+      form: splash
+      price: 2000
+    - potion-type: "STRONG_REGENERATION" # Зелье регенерации II (питьё)
+      form: drinkable
+      price: 4000
+    # ── Общие боевые ──────────────────────────────────────────
+    - potion-type: "FIRE_RESISTANCE"     # Огнеупорность (питьё)
+      form: drinkable
+      price: 2000
+    - potion-type: "LONG_FIRE_RESISTANCE" # Огнеупорность+ (питьё)
+      form: drinkable
+      price: 3000
+    - potion-type: "INVISIBILITY"        # Невидимость (питьё)
+      form: drinkable
+      price: 3000
+    - potion-type: "SLOW_FALLING"        # Мягкое падение (питьё)
+      form: drinkable
+      price: 1500
+    - potion-type: "STRONG_TURTLE_MASTER" # Панцирь мастер II (питьё)
+      form: drinkable
+      price: 5000
+    # ── Crystal PvP ───────────────────────────────────────────
+    - potion-type: "STRONG_HARMING"      # Дымящееся зелье вреда II
+      form: lingering
+      price: 7000
+    - potion-type: "STRONG_POISON"       # Дымящееся зелье яда II
+      form: lingering
+      price: 4000
+    # ── 1.21 ──────────────────────────────────────────────────
+    - potion-type: "WIND_CHARGED"        # Зелье заряда ветра (сплэш)
+      form: splash
+      price: 6000
