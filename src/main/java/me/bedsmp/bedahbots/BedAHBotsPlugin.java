@@ -13,9 +13,7 @@ import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.Material;
 
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 
 public final class BedAHBotsPlugin extends JavaPlugin {
@@ -112,10 +110,9 @@ public final class BedAHBotsPlugin extends JavaPlugin {
         double grokThreshold = cfg.getDouble("pricing.grok-override-below", 100.0);
         worthLoader.setGrokOverrideBelow(grokThreshold);
         grokPriceCache.reloadConfig(cfg);
-        // Feed Grok: all extra-worth items + any worth.yml items priced below the threshold
-        Set<Material> toPrice = new LinkedHashSet<>(worthLoader.extraWorthMaterials());
-        toPrice.addAll(worthLoader.cheapWorthMaterials(grokThreshold));
-        grokPriceCache.triggerRefresh(new ArrayList<>(toPrice));
+        // Feed Grok: only worth.yml items priced below threshold (extra-worth already has config prices)
+        List<Material> toPrice = worthLoader.cheapWorthMaterials(grokThreshold);
+        grokPriceCache.triggerRefresh(toPrice);
         chatRequestListener.reloadConfig(cfg);
 
         listingTask.reloadConfig(cfg);

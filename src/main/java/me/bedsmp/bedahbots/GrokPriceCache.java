@@ -4,6 +4,7 @@ import org.bukkit.Material;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.plugin.java.JavaPlugin;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -40,15 +41,22 @@ public final class GrokPriceCache {
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> refresh(copy));
     }
 
+    private static final int BATCH_SIZE = 30;
+
     private void refresh(List<Material> materials) {
-        try {
-            log.info("[GrokPrices] Запрашиваю рыночные цены у Groq...");
-            Map<Material, Double> result = parser.fetchItemPrices(materials);
-            cache.putAll(result);
-            log.info("[GrokPrices] Готово — цены для " + result.size() + " предметов.");
-        } catch (Exception e) {
-            log.warning("[GrokPrices] Не удалось получить цены: " + e.getMessage());
+        int total = 0;
+        for (int i = 0; i < materials.size(); i += BATCH_SIZE) {
+            List<Material> batch = materials.subList(i, Math.min(i + BATCH_SIZE, materials.size()));
+            try {
+                log.info("[GrokPrices] Запрашиваю цены (" + (i + 1) + "-" + (i + batch.size()) + " из " + materials.size() + ")...");
+                Map<Material, Double> result = parser.fetchItemPrices(new ArrayList<>(batch));
+                cache.putAll(result);
+                total += result.size();
+            } catch (Exception e) {
+                log.warning("[GrokPrices] Батч " + (i / BATCH_SIZE + 1) + " не удался: " + e.getMessage());
+            }
         }
+        log.info("[GrokPrices] Готово — цены для " + total + " предметов.");
     }
 
     public double getPrice(Material mat) {
