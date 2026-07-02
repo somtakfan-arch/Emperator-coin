@@ -12,6 +12,8 @@ pricing:
   worth-file: "plugins/Essentials/worth.yml"
   min-price: 1.0
   round-to: 0.01
+  # Если цена предмета в worth.yml ниже этого порога — Groq предложит свою цену вместо неё
+  grok-override-below: 100.0
   # Fallback prices for items not listed in worth.yml (mostly PvP gear).
   # worth.yml always takes priority if a material appears in both places.
   extra-worth:

@@ -16,6 +16,7 @@ public class WorthLoader {
     private final Map<Material, Double> extraWorth = new HashMap<>();
     private String worthFilePath;
     private GrokPriceCache grokPrices;
+    private double grokOverrideBelow = 100.0;
 
     public WorthLoader(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -27,6 +28,10 @@ public class WorthLoader {
 
     public void setGrokPriceCache(GrokPriceCache cache) {
         this.grokPrices = cache;
+    }
+
+    public void setGrokOverrideBelow(double threshold) {
+        this.grokOverrideBelow = threshold;
     }
 
     public void reload() {
@@ -73,18 +78,32 @@ public class WorthLoader {
         plugin.getLogger().info("Loaded " + extraWorth.size() + " extra-worth entries from config.yml");
     }
 
-    /** Price per 1 unit, or -1 if unknown. Priority: worth.yml → Grok cache → extra-worth config. */
+    /**
+     * Price per 1 unit, or -1 if unknown.
+     * If worth.yml price is below grok-override-below threshold, Grok price takes priority.
+     * Priority: worth.yml (if >= threshold) → Grok cache → worth.yml (if < threshold) → extra-worth config.
+     */
     public double getWorth(Material mat) {
         Double w = worth.get(mat);
-        if (w != null) return w;
-        if (grokPrices != null && grokPrices.has(mat)) return grokPrices.getPrice(mat);
+        if (w != null && w >= grokOverrideBelow) return w;   // worth.yml price is fine — use it
+        if (grokPrices != null && grokPrices.has(mat)) return grokPrices.getPrice(mat);  // Grok override
+        if (w != null) return w;                              // worth.yml even if cheap (Grok had nothing)
         Double ew = extraWorth.get(mat);
         return ew != null ? ew : -1.0;
     }
 
-    /** Materials from the extra-worth config section (used to feed Grok price requests). */
+    /** Materials from the extra-worth config section. */
     public List<Material> extraWorthMaterials() {
         return new ArrayList<>(extraWorth.keySet());
+    }
+
+    /** Materials whose worth.yml price is below the threshold — candidates for Grok override. */
+    public List<Material> cheapWorthMaterials(double threshold) {
+        List<Material> result = new ArrayList<>();
+        for (var entry : worth.entrySet()) {
+            if (entry.getValue() < threshold) result.add(entry.getKey());
+        }
+        return result;
     }
 
     /** All materials that have a known worth value (worth.yml ∪ extra-worth). */

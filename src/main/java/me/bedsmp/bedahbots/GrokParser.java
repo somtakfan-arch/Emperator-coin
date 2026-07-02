@@ -181,22 +181,30 @@ public final class GrokParser {
             """;
 
     private static final String PRICE_PROMPT = """
-            You are a Minecraft SMP economy expert. Base currency prices on this server:
+            You are a Minecraft SMP economy expert setting AUCTION HOUSE listing prices (NOT /sell prices).
+            These are prices players pay to BUY items — they must be significantly higher than sell values.
+
+            Base /sell prices on this server for reference:
             IRON_INGOT=1.5, GOLD_INGOT=3, DIAMOND=12, EMERALD=6,
             NETHERITE_INGOT=90, NETHERITE_SCRAP=40, BLAZE_ROD=10, ARROW=0.2.
 
-            For each Minecraft Material name I give you, return a fair market price as a number.
-            Pricing rules:
-            - Crafted gear: total material cost × 1.5-2.5 (higher multiplier for PvP/rare items)
-            - Netherite gear: diamond equivalent + 90 (ingot) + ~50 (template) → 140+ base
-            - Diamond swords/axes: ~50, diamond armor: 40-60 per piece
-            - Mace (needs heavy core from vault): very rare, 200-300
-            - Elytra: extremely rare, 300-500
-            - Totem of Undying: critical survival item, 300+
-            - Spears: new PvP weapons, price same tier as equivalent swords
-            - Common resources (arrows, glowstone, fireworks): keep prices under 2
+            Auction house prices should reflect real player demand and rarity:
+            - ENCHANTED_BOOK: 150-500 depending on enchantment rarity (treat as high-demand)
+            - Enchanted gear: base material cost × 5-10
+            - Netherite gear: 300-600 (netherite ingot=90 + diamond base + template cost)
+            - Diamond gear: 150-300
+            - Iron gear: 50-120
+            - MACE: 500+ (heavy core from vault trial is extremely rare)
+            - ELYTRA: 800+
+            - TOTEM_OF_UNDYING: 500+
+            - NETHER_STAR: 1000+
+            - BEACON: 800+
+            - Common consumables (ARROW, FIREWORK_ROCKET, GLOWSTONE): 2-5
+            - Spears: same tier as equivalent swords
+            - Minimum price for any item: 50
+
             Return ONLY raw JSON: {"MATERIAL_NAME": price_as_number, ...}
-            No explanation, no markdown.
+            No explanation, no markdown, no extra fields.
             """;
 
     /**
