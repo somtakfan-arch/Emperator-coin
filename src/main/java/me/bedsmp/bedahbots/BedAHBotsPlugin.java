@@ -40,6 +40,19 @@ public final class BedAHBotsPlugin extends JavaPlugin {
 
     @Override
     public void onEnable() {
+        try {
+            Class.forName("me.elaineqheart.auctionHouse.data.ram.AuctionHouseStorage");
+        } catch (ClassNotFoundException e) {
+            getLogger().severe("═══════════════════════════════════════════════");
+            getLogger().severe("  AuctionHouse не найден или не загрузился!");
+            getLogger().severe("  Убедись что AuctionHouse.jar установлен и");
+            getLogger().severe("  отображается зелёным в /plugins.");
+            getLogger().severe("  BedAHBots отключается.");
+            getLogger().severe("═══════════════════════════════════════════════");
+            getServer().getPluginManager().disablePlugin(this);
+            return;
+        }
+
         saveDefaultConfig();
 
         botManager     = new BotManager();
