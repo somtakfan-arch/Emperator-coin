@@ -146,11 +146,11 @@ listing:
   listing-hours: 120
   amount-min: 1
   amount-max: 64
-  normal-mult-min: 1.10
-  normal-mult-max: 1.60
-  overprice-chance: 0.12
-  overprice-mult-min: 1.80
-  overprice-mult-max: 2.50
+  normal-mult-min: 5.0
+  normal-mult-max: 10.0
+  overprice-chance: 0.20
+  overprice-mult-min: 10.0
+  overprice-mult-max: 15.0
   gear-chance: 0.80
   book-chance: 0.15
   meta-enchant-chance: 0.50
