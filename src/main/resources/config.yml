@@ -6,7 +6,101 @@ bots:
     - "Checkban"
     - "Adminasss"
     - "Svaaars"
-    - "Ckruub"
+    - "Krutashka"
+    - "Prosto_Vova"
+    - "NeBotNe"
+    - "Zabanen228"
+    - "Kolyanich"
+    - "Zhekados"
+    - "Vasyanoff"
+    - "Dimochkaa"
+    - "PashaNorm"
+    - "Styopchik"
+    - "Romancheg"
+    - "Vitosya"
+    - "Seryozhka"
+    - "Nikitoss"
+    - "Lekhanych"
+    - "Mishanya88"
+    - "GrishkaPvP"
+    - "Artёmcheg"
+    - "Slavikk"
+    - "Deniska_pro"
+    - "Fedosik"
+    - "Egorcheg"
+    - "Kiryushaa"
+    - "Matveyyyy"
+    - "Andryusha"
+    - "Kostyannn"
+    - "Vladossss"
+    - "Ilyukha"
+    - "Ruslanoff"
+    - "Timofeyy"
+    - "Serezha2281"
+    - "NormPasss"
+    - "StopKillMe"
+    - "xXDarkBotXx"
+    - "Noobmaster37"
+    - "ProSvinya"
+    - "BanMeNot"
+    - "just_Kolya"
+    - "Petruxaa"
+    - "Gavriilko"
+    - "Boriskaa"
+    - "Glebosss"
+    - "Arkashaa"
+    - "Zhorzh228"
+    - "Lyoshikk"
+    - "NeAdmin"
+    - "Obmanshik"
+    - "TovarSell"
+    - "KupluDomik"
+    - "DayDeneg"
+    - "Podarochek"
+    - "Donatik"
+    - "FreePvP"
+    - "EzKillz"
+    - "LootMaster"
+    - "CraftBrain"
+    - "DiamondHand"
+    - "NaCheap"
+    - "SkidkaNN"
+    - "BarygaXD"
+    - "Torgovets"
+    - "Kupchik"
+    - "VseProdam"
+    - "AhTrader"
+    - "CheapStuff"
+    - "BigSaller"
+    - "MegaShop"
+    - "UltraLot"
+    - "SellKing"
+    - "AhCzar"
+    - "Prodavan"
+    - "TovarMen"
+    - "SkidkaBoss"
+    - "DeshevlyNety"
+    - "LastPrice"
+    - "KrutoyTorg"
+    - "OdinBot"
+    - "Xizmat"
+    - "Pakupka"
+    - "TorgAsss"
+    - "ResaleKing"
+    - "TopCena"
+    - "PriceCheck"
+    - "AhSharkov"
+    - "Zakupshchik"
+    - "Perekup"
+    - "SellOrDie"
+    - "BarterBot"
+    - "Rynochniy"
+    - "VipTrader"
+    - "CoinFlip99"
+    - "RichSoon"
+    - "10kCoins"
+    - "BrokerXD"
+    - "Investor228"
 
 pricing:
   worth-file: "plugins/Essentials/worth.yml"
@@ -146,9 +240,9 @@ pricing:
 listing:
   enabled: true
   interval-seconds: 45
-  per-cycle: 5
-  max-bot-listings: 1000000000
-  listing-hours: 120
+  per-cycle: 35
+  max-bot-listings: 100000000000
+  listing-hours: 38
   amount-min: 1
   amount-max: 64
   normal-mult-min: 1.1
@@ -207,6 +301,8 @@ chat-requests:
     - "пж выстави"
     - "бот выстави"
     - "выстави"
+    - "выставьте"
+    - "пж выставьте"
   cooldown-seconds: 30
   price-markup: 1.2
   unknown-base-price: 10.0
@@ -276,3 +372,26 @@ pvp-potions:
     - potion-type: "WIND_CHARGED"        # Зелье заряда ветра (сплэш)
       form: splash
       price: 6000
+
+# Кастомные предметы сервера — берутся из YAML-базы плагина (напр. EmperorSword).
+# custom-chance в секции listing определяет шанс выставить кастомку (0.03 = 3%).
+custom-items:
+  enabled: true
+  file: "plugins/EmperorSword/serverdatabase.yml"
+  default-price: 300000
+  prices:
+    sword: 500000          # Кинжал Тени
+    wind_burst: 150000     # Зов Бури
+    elytra: 2000000        # Вуаль Тени
+    mace: 1500000          # Разрушитель Миров
+    pearl: 200000          # Око Гездны
+    arbalet: 300000        # Гром (арбалет)
+    topor: 800000          # Мьёльнир
+    kopie: 700000          # Ярость Ада
+    eda: 80000             # Обед Дракона
+    bogat: 400000          # Слиток Миллиардера
+    oko: 250000            # Oko Смерти
+    totem: 900000          # Древний Идол
+    super_rocket: 60000    # Тяжелый Заряд
+    1tap: 5000000          # Гром (1tap)
+    onetap: 3000000        # ONE TAP

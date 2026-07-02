@@ -1,6 +1,7 @@
 package me.bedsmp.bedahbots.task;
 
 import me.bedsmp.bedahbots.BotManager;
+import me.bedsmp.bedahbots.CustomItemLoader;
 import me.bedsmp.bedahbots.EnchantApplier;
 import me.bedsmp.bedahbots.GrokParser.EnchantPick;
 import me.bedsmp.bedahbots.MetaEnchantCache;
@@ -45,10 +46,12 @@ public final class ListingTask {
     private double gearChance;
     private double bookChance;
     private double potionChance;
+    private double customChance;
     private double metaEnchantChance;
     private Set<Material> whitelist;
     private Set<Material> blacklist;
     private final List<PotionCfg> potionPool = new ArrayList<>();
+    private final CustomItemLoader customLoader;
 
     private record PotionCfg(PotionType type, Material form, double price) {}
 
@@ -60,6 +63,7 @@ public final class ListingTask {
         this.enchant = enchant;
         this.metaCache = metaCache;
         this.log = plugin.getLogger();
+        this.customLoader = new CustomItemLoader(plugin);
         this.whitelist = new HashSet<>();
         this.blacklist = new HashSet<>();
     }
@@ -80,6 +84,7 @@ public final class ListingTask {
         gearChance        = cfg.getDouble("listing.gear-chance", 0.80);
         bookChance        = cfg.getDouble("listing.book-chance", 0.15);
         potionChance      = cfg.getDouble("listing.potion-chance", 0.0);
+        customChance      = cfg.getDouble("custom-items.custom-chance", 0.0);
         metaEnchantChance = cfg.getDouble("listing.meta-enchant-chance", 0.50);
         whitelist = parseMaterials(cfg.getStringList("listing.whitelist"));
         blacklist = parseMaterials(cfg.getStringList("listing.blacklist"));
@@ -103,6 +108,8 @@ public final class ListingTask {
             }
             log.info("ListingTask: загружено " + potionPool.size() + " типов зелий.");
         }
+
+        customLoader.reload(cfg);
     }
 
     private Set<Material> parseMaterials(List<String> names) {
@@ -166,6 +173,10 @@ public final class ListingTask {
 
     private void createOneListing(List<Material> candidates, List<Material> gearCandidates,
                                   List<Material> resourceCandidates) throws Exception {
+        if (!customLoader.isEmpty() && rng.nextDouble() < customChance) {
+            createCustomListing();
+            return;
+        }
         if (!potionPool.isEmpty() && rng.nextDouble() < potionChance) {
             createPotionListing();
             return;
@@ -248,6 +259,23 @@ public final class ListingTask {
 
         NoteForger.forge(botUUID, displayName, book, price, listingHours, log);
         log.info("[Listing] " + botName + " выставил зачарованную книгу за " + String.format("%.2f", price));
+    }
+
+    private void createCustomListing() throws Exception {
+        var entries = customLoader.getItems();
+        var entry = entries.get(rng.nextInt(entries.size()));
+        ItemStack item = entry.item().clone();
+
+        double price = roundPrice(entry.price() * pickMultiplier());
+        price = Math.max(price, minPrice);
+
+        String botName     = botManager.randomName();
+        UUID botUUID       = botManager.uuidFor(botName);
+        String displayName = botManager.displayName(botName);
+
+        NoteForger.forge(botUUID, displayName, item, price, listingHours, log);
+        log.info("[Listing] " + botName + " выставил кастомный предмет [" + entry.key() + "] за "
+                + String.format("%.2f", price));
     }
 
     private void createPotionListing() throws Exception {
