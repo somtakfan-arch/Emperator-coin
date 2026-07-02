@@ -3,6 +3,7 @@ package me.bedsmp.bedahbots.task;
 import me.bedsmp.bedahbots.BotManager;
 import me.bedsmp.bedahbots.CustomItemLoader;
 import me.bedsmp.bedahbots.EnchantApplier;
+import me.bedsmp.bedahbots.NamedItemLoader;
 import me.bedsmp.bedahbots.GrokParser.EnchantPick;
 import me.bedsmp.bedahbots.MetaEnchantCache;
 import me.bedsmp.bedahbots.NoteForger;
@@ -47,11 +48,13 @@ public final class ListingTask {
     private double bookChance;
     private double potionChance;
     private double customChance;
+    private double namedChance;
     private double metaEnchantChance;
     private Set<Material> whitelist;
     private Set<Material> blacklist;
     private final List<PotionCfg> potionPool = new ArrayList<>();
     private final CustomItemLoader customLoader;
+    private final NamedItemLoader namedLoader;
 
     private record PotionCfg(PotionType type, Material form, double price) {}
 
@@ -64,6 +67,7 @@ public final class ListingTask {
         this.metaCache = metaCache;
         this.log = plugin.getLogger();
         this.customLoader = new CustomItemLoader(plugin);
+        this.namedLoader  = new NamedItemLoader(plugin);
         this.whitelist = new HashSet<>();
         this.blacklist = new HashSet<>();
     }
@@ -85,6 +89,7 @@ public final class ListingTask {
         bookChance        = cfg.getDouble("listing.book-chance", 0.15);
         potionChance      = cfg.getDouble("listing.potion-chance", 0.0);
         customChance      = cfg.getDouble("custom-items.custom-chance", 0.0);
+        namedChance       = cfg.getDouble("named-items.chance", 0.0);
         metaEnchantChance = cfg.getDouble("listing.meta-enchant-chance", 0.50);
         whitelist = parseMaterials(cfg.getStringList("listing.whitelist"));
         blacklist = parseMaterials(cfg.getStringList("listing.blacklist"));
@@ -110,6 +115,7 @@ public final class ListingTask {
         }
 
         customLoader.reload(cfg);
+        namedLoader.reload(cfg);
     }
 
     private Set<Material> parseMaterials(List<String> names) {
@@ -121,35 +127,42 @@ public final class ListingTask {
         return set;
     }
 
-    /** Returns keys of all loaded custom items (for tab-completion). */
+    /** Returns keys of all loaded custom + named items (for tab-completion). */
     public List<String> customItemKeys() {
-        return customLoader.getItems().stream()
-                .map(CustomItemLoader.Entry::key)
-                .toList();
+        List<String> keys = new ArrayList<>();
+        customLoader.getItems().forEach(e -> keys.add(e.key()));
+        namedLoader.getItems().forEach(e -> keys.add(e.key()));
+        return keys;
     }
 
     /**
-     * Force-lists a specific custom item by key. Returns true on success,
-     * false if the key was not found.
+     * Force-lists a specific item by key (searches custom then named loaders).
+     * Returns true on success, false if key was not found.
      */
     public boolean forceCustomListing(String key) throws Exception {
-        var entries = customLoader.getItems();
-        CustomItemLoader.Entry entry = null;
-        for (var e : entries) {
-            if (e.key().equalsIgnoreCase(key)) { entry = e; break; }
+        // Search CustomItemLoader first
+        for (var e : customLoader.getItems()) {
+            if (e.key().equalsIgnoreCase(key)) {
+                return forgeEntry(e.key(), e.item().clone(), e.price());
+            }
         }
-        if (entry == null) return false;
+        // Then NamedItemLoader
+        for (var e : namedLoader.getItems()) {
+            if (e.key().equalsIgnoreCase(key)) {
+                return forgeEntry(e.key(), e.item().clone(), e.price());
+            }
+        }
+        return false;
+    }
 
-        ItemStack item = entry.item().clone();
-        double price = roundPrice(entry.price() * pickMultiplier());
+    private boolean forgeEntry(String key, ItemStack item, double basePrice) throws Exception {
+        double price = roundPrice(basePrice * pickMultiplier());
         price = Math.max(price, minPrice);
-
         String botName     = botManager.randomName();
         UUID botUUID       = botManager.uuidFor(botName);
         String displayName = botManager.displayName(botName);
-
         NoteForger.forge(botUUID, displayName, item, price, listingHours, log);
-        log.info("[Listing] addcustom: " + botName + " выставил [" + entry.key() + "] за "
+        log.info("[Listing] addcustom: " + botName + " выставил [" + key + "] за "
                 + String.format("%.2f", price));
         return true;
     }
@@ -208,6 +221,10 @@ public final class ListingTask {
                                   List<Material> resourceCandidates) throws Exception {
         if (!customLoader.isEmpty() && rng.nextDouble() < customChance) {
             createCustomListing();
+            return;
+        }
+        if (!namedLoader.isEmpty() && rng.nextDouble() < namedChance) {
+            createNamedListing();
             return;
         }
         if (!potionPool.isEmpty() && rng.nextDouble() < potionChance) {
@@ -308,6 +325,23 @@ public final class ListingTask {
 
         NoteForger.forge(botUUID, displayName, item, price, listingHours, log);
         log.info("[Listing] " + botName + " выставил кастомный предмет [" + entry.key() + "] за "
+                + String.format("%.2f", price));
+    }
+
+    private void createNamedListing() throws Exception {
+        var entries = namedLoader.getItems();
+        var entry = entries.get(rng.nextInt(entries.size()));
+        ItemStack item = entry.item().clone();
+
+        double price = roundPrice(entry.price() * pickMultiplier());
+        price = Math.max(price, minPrice);
+
+        String botName     = botManager.randomName();
+        UUID botUUID       = botManager.uuidFor(botName);
+        String displayName = botManager.displayName(botName);
+
+        NoteForger.forge(botUUID, displayName, item, price, listingHours, log);
+        log.info("[Listing] " + botName + " выставил именной предмет [" + entry.key() + "] за "
                 + String.format("%.2f", price));
     }
 

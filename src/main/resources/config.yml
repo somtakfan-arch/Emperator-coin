@@ -395,3 +395,267 @@ custom-items:
     super_rocket: 60000    # Тяжелый Заряд
     1tap: 5000000          # Гром (1tap)
     onetap: 3000000        # ONE TAP
+
+# Именные предметы — создаются из материала + имени (Skript-предметы, ThornsWard).
+# Шанс срабатывает независимо от custom-items.
+named-items:
+  enabled: true
+  chance: 0.06
+  items:
+    # ── ThornsWard (PDC-тег обязателен) ─────────────────────────────────────
+    thorns_ward:
+      material: ECHO_SHARD
+      name: "§b✦ Оберег Терновника §b✦"
+      lore:
+        - "§7Пока лежит в инвентаре —"
+        - "§7шипы врага не наносят тебе урона"
+        - "§7и не отбрасывают тебя."
+        - "§8(работает при любом уровне Шипов)"
+      custom-model-data: 7001
+      pdc-namespace: thornsward
+      pdc-key: thorns_ward
+      price: 250000
+    crystaller_sword:
+      material: NETHERITE_SWORD
+      name: "§d✦ Меч Кристаллера §d✦"
+      lore:
+        - "§7При ударе подбрасывает противника"
+        - "§7на 2 блока вверх без отброса в сторону."
+        - "§7Зачарован Остротой V."
+      custom-model-data: 7002
+      enchants:
+        sharpness: 5
+      pdc-namespace: thornsward
+      pdc-key: crystaller_sword
+      price: 600000
+    # ── Skript — Оружие ──────────────────────────────────────────────────────
+    dagger:
+      material: IRON_SWORD
+      name: "§8§lКинжал Предателя"
+      lore:
+        - "§fУдар в спину = х3 урона"
+      price: 120000
+    berserk:
+      material: NETHERITE_AXE
+      name: "§4§lТопор Берсерка"
+      lore:
+        - "§fЧем меньше HP — тем сильнее удар"
+      price: 400000
+    frostsword:
+      material: DIAMOND_SWORD
+      name: "§b§lМеч Заморозки"
+      lore:
+        - "§fУдары наращивают замедление (до ур. 3)"
+      price: 200000
+    bleedsword:
+      material: NETHERITE_SWORD
+      name: "§4§lМеч Кровопускания"
+      lore:
+        - "§fКровотечение: 1 HP/сек 5 секунд"
+      price: 300000
+    silenceblade:
+      material: NETHERITE_SWORD
+      name: "§7§lКлинок Тишины"
+      lore:
+        - "§fБлокирует ПКМ врага на 3 сек"
+      price: 300000
+    hungersword:
+      material: NETHERITE_SWORD
+      name: "§6§lМеч Голода"
+      lore:
+        - "§fОбнуляет голод врага при ударе"
+      price: 280000
+    vmpr:
+      material: NETHERITE_SWORD
+      name: "§4Меч-Вампир"
+      lore:
+        - "§fКрадёт 1 сердце у врага."
+        - "§cКД: 10 секунд"
+      price: 280000
+    reflect:
+      material: DIAMOND_SWORD
+      name: "§9§lМеч Отзеркаливания"
+      lore:
+        - "§f30% урона возвращается врагу"
+      price: 250000
+    scythe:
+      material: NETHERITE_HOE
+      name: "§2§lКоса Жнеца"
+      lore:
+        - "§fБьёт всех врагов в радиусе 3 блоков"
+      enchants:
+        sharpness: 3
+      price: 500000
+    thunderhammer:
+      material: MACE
+      name: "§e§lМолот Грома"
+      lore:
+        - "§fКаждый 3-й удар — молния"
+      price: 350000
+    quake:
+      material: MACE
+      name: "§c§lМолот Землетряса"
+      lore:
+        - "§fПодбрасывает врагов вокруг + замедление"
+        - "§cКД: 8 секунд"
+      price: 350000
+    om:
+      material: NETHERITE_AXE
+      name: "§6Оглушающий Молот"
+      lore:
+        - "§7Свойство: §fОслепляет врага и ломает щит."
+        - "§cКД: 2 минуты"
+      price: 250000
+    ark:
+      material: NETHERITE_AXE
+      name: "§6Разрушитель Брони"
+      lore:
+        - "§eЛомает всю броню цели при ударе!"
+        - "§cОДНОРАЗОВЫЙ"
+      price: 200000
+    # ── Skript — Броня ───────────────────────────────────────────────────────
+    shadowcloak:
+      material: NETHERITE_CHESTPLATE
+      name: "§8§lПлащ Тени"
+      lore:
+        - "§fНевидимость пока стоишь неподвижно"
+      price: 800000
+    phoenixcloak:
+      material: NETHERITE_CHESTPLATE
+      name: "§6§lПлащ Феникса"
+      lore:
+        - "§fВоскрешение при смерти (раз в 10 мин)"
+      enchants:
+        protection: 4
+      price: 1200000
+    vampirechest:
+      material: NETHERITE_CHESTPLATE
+      name: "§4§lНагрудник Вампира"
+      lore:
+        - "§fЛечит за нанесённый урон (lifesteal)"
+      price: 500000
+    spike_chest:
+      material: NETHERITE_CHESTPLATE
+      name: "§c§lШипованный Нагрудник"
+      lore:
+        - "§fОтражает 2 урона атакующему"
+      price: 450000
+    mch:
+      material: NETHERITE_CHESTPLATE
+      name: "§6Нагрудник Небожителя"
+      lore:
+        - "§7Специальное свойство:"
+        - "§eОграничивает урон от Булавы!"
+        - "§fМаксимальный урон: §c3 сердца§f."
+      price: 700000
+    berserklegs:
+      material: NETHERITE_LEGGINGS
+      name: "§4§lПоножи Берсерка"
+      lore:
+        - "§fHP ниже 4 сердец: скорость 2 + сила 1"
+      price: 400000
+    eaglehelm:
+      material: NETHERITE_HELMET
+      name: "§e§lШлем Орла"
+      lore:
+        - "§fПодсвечивает врагов в радиусе 30 блоков"
+      price: 350000
+    ghost_boots:
+      material: NETHERITE_BOOTS
+      name: "§7§lБотинки Призрака"
+      lore:
+        - "§fСкорость + нет отброса + нет фолл-дамага"
+      price: 350000
+    rocketboots:
+      material: NETHERITE_BOOTS
+      name: "§6§lСапоги-Ракеты"
+      lore:
+        - "§fSHIFT в воздухе — ракетный рывок вверх"
+      price: 450000
+    # ── Skript — Спец. предметы ──────────────────────────────────────────────
+    barriertotem:
+      material: TOTEM_OF_UNDYING
+      name: "§b§lТотем Барьера"
+      lore:
+        - "§fКупол-барьер на 10 секунд (ПКМ)"
+        - "§cКД: 30 секунд"
+      price: 400000
+    returntotem:
+      material: TOTEM_OF_UNDYING
+      name: "§a§lТотем Возврата"
+      lore:
+        - "§fПри смерти возвращает половину вещей"
+      price: 350000
+    wolftotem:
+      material: BONE
+      name: "§6§lТотем Призыва"
+      lore:
+        - "§f3 усиленных волка на 30 сек (ПКМ)"
+        - "§cКД: 60 секунд"
+      price: 200000
+    meteorstaff:
+      material: BLAZE_ROD
+      name: "§c§lПосох Метеора"
+      lore:
+        - "§fЗапускает огненный шар (ПКМ)"
+        - "§cКД: 8 секунд"
+      price: 180000
+    dispelwand:
+      material: BLAZE_ROD
+      name: "§5§lЖезл Отмены"
+      lore:
+        - "§fСнимает баффы с цели при ударе"
+        - "§cКД: 6 секунд"
+      price: 150000
+    freezeclock:
+      material: CLOCK
+      name: "§b§lЧасы Заморозки"
+      lore:
+        - "§fЗаморозка врагов в радиусе 6 блоков"
+        - "§cКД: 30 секунд"
+      price: 120000
+    timestaff:
+      material: CLOCK
+      name: "§3§lПосох Времени"
+      lore:
+        - "§fЗамедляет время врагов в радиусе 8 (ПКМ)"
+        - "§cКД: 20 секунд"
+      price: 150000
+    mirror_shield:
+      material: SHIELD
+      name: "§b§lЩит Зеркало"
+      lore:
+        - "§fОтражает заблокированный снаряд во врага"
+      price: 200000
+    swap_pearl:
+      material: ENDER_PEARL
+      name: "§5§lЖемчуг Подмены"
+      lore:
+        - "§fМеняет вас местами с врагом в точке падения"
+      price: 150000
+    darkchains:
+      material: LEAD
+      name: "§8§lЦепи Тьмы"
+      lore:
+        - "§fПривязывает врага к точке (макс 5 блоков, 4 сек)"
+      price: 80000
+    jump_boots:
+      material: GOLDEN_BOOTS
+      name: "§a§lСапоги Прыгуна"
+      lore:
+        - "§fSHIFT в воздухе — двойной прыжок"
+      price: 100000
+    spyeye:
+      material: ENDER_EYE
+      name: "§3§lГлаз Шпиона"
+      lore:
+        - "§fОткрывает инвентарь ближайшего игрока"
+        - "§cКД: 10 секунд"
+      price: 100000
+    knockout:
+      material: BREEZE_ROD
+      name: "§e§lДубина Нокаута"
+      lore:
+        - "§fМощный откид врага назад"
+        - "§cКД: 4 секунды"
+      price: 120000
