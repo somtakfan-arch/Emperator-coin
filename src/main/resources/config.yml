@@ -377,7 +377,7 @@ pvp-potions:
 # custom-chance в секции listing определяет шанс выставить кастомку (0.03 = 3%).
 custom-items:
   enabled: true
-  file: "plugins/EmperorSword/serverdatabase.yml"
+  file: "plugins/ItemEdit/database/server-database.yml"
   default-price: 300000
   prices:
     sword: 500000          # Кинжал Тени
