@@ -116,10 +116,10 @@
       risk: 'risky',
       effect: (state, a1, j) => {
         const cost = scaleByWealth(state, COST_BASE[j]);
-        const bonus = traitCap(state, 'riskTaker', 8) * 0.012;
-        if (chance(0.42 - j * 0.04 + bonus)) {
-          const profit = Math.round(cost * rand(1.3, 3));
-          return { money: profit, happiness: 8, reputation: 2, message: `Вложение выстрелило! Прибыль — ${formatMoney(profit)}.` };
+        const bonus = traitCap(state, 'riskTaker', 8) * 0.014;
+        if (chance(0.5 - j * 0.025 + bonus)) {
+          const payout = Math.round(cost * rand(1.2, 2.6));
+          return { money: payout - cost, happiness: 8, reputation: 2, message: `Вложение выстрелило! Чистая прибыль — ${formatMoney(payout - cost)}.` };
         }
         return { money: -cost, happiness: -10, message: `Инвестиция прогорела. Потеряно ${formatMoney(cost)}.` };
       },
@@ -236,10 +236,10 @@
       risk: 'risky',
       effect: (state, a1, j) => {
         const stake = scaleByWealth(state, COST_BASE[j] * 0.5);
-        const bonus = traitCap(state, 'riskTaker', 8) * 0.014;
-        if (chance(0.32 + bonus)) {
-          const win = Math.round(stake * rand(2, 5));
-          return { money: win, happiness: 12, message: `Невероятно! Выигрыш — ${formatMoney(win)}.` };
+        const bonus = traitCap(state, 'riskTaker', 8) * 0.016;
+        if (chance(0.2 + bonus)) {
+          const payout = Math.round(stake * rand(2, 4.2));
+          return { money: payout - stake, happiness: 12, message: `Невероятно! Чистый выигрыш — ${formatMoney(payout - stake)}.` };
         }
         return { money: -stake, happiness: -8, message: `Азарт подвёл — потеряно ${formatMoney(stake)}.` };
       },
@@ -379,27 +379,27 @@
     'crime',
     [
       { text: (fl, state) => `${cap(fl)} предлагает перевезти "посылку" за ${formatMoney(scaleByWealth(state, 15000))}, не задавая вопросов.`, choices: [
-        { label: (fl, state) => `Согласиться за ${formatMoney(scaleByWealth(state, 15000))}`, trait: 'shady', risk: 'risky', effect: (state) => { const pay = scaleByWealth(state, 15000); const jailChance = Math.max(0.06, 0.25 - traitCap(state, 'shady', 6) * 0.03); return chance(jailChance) ? { jail: true, message: 'Это была ловушка. Тебя задержали с поличным.' } : { money: pay, happiness: -4, message: `Дело сделано, получено ${formatMoney(pay)}. Но неспокойно на душе.` }; } },
+        { label: (fl, state) => `Согласиться за ${formatMoney(scaleByWealth(state, 15000))}`, trait: 'shady', risk: 'risky', effect: (state) => { const pay = scaleByWealth(state, 15000); const jailChance = Math.max(0.035, 0.15 - traitCap(state, 'shady', 6) * 0.02); return chance(jailChance) ? { jail: true, message: 'Это была ловушка. Тебя задержали с поличным.' } : { money: pay, happiness: -4, message: `Дело сделано, получено ${formatMoney(pay)}. Но неспокойно на душе.` }; } },
         { label: 'Отказаться', trait: 'cautious', risk: 'safe', effect: () => ({ reputation: 2, message: 'Мало ли что там было в этой посылке.' }) },
       ]},
       { text: (fl) => `${cap(fl)} зовёт поучаствовать в схеме, похожей на финансовую пирамиду.`, choices: [
-        { label: (fl, state) => `Войти в схему (${formatMoney(scaleByWealth(state, 10000))})`, trait: 'shady', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 10000); return chance(0.3) ? { money: Math.round(cost * 1.5), message: 'Успел выйти вовремя, заработав неплохо.' } : { money: -cost, reputation: -4, happiness: -8, message: 'Пирамида рухнула, деньги пропали.' }; } },
+        { label: (fl, state) => `Войти в схему (${formatMoney(scaleByWealth(state, 10000))})`, trait: 'shady', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 10000); return chance(0.25) ? { money: Math.round(cost * 0.5), message: 'Успел выйти вовремя, заработав немного.' } : { money: -cost, reputation: -4, happiness: -8, message: 'Пирамида рухнула, деньги пропали.' }; } },
         { label: 'Отказаться', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 1, message: 'Обошёл стороной сомнительную схему.' }) },
       ]},
       { text: (fl, state) => `${cap(fl)} намекает, что взятка ${formatMoney(scaleByWealth(state, 8000))} решит все проблемы с проверкой.`, choices: [
-        { label: (fl, state) => `Дать взятку ${formatMoney(scaleByWealth(state, 8000))}`, trait: 'shady', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 8000); const jailChance = Math.max(0.04, 0.2 - traitCap(state, 'shady', 6) * 0.025); return chance(jailChance) ? { jail: true, message: 'Разговор записывали. Взятка обернулась уголовным делом.' } : { money: -cost, energy: 5, message: 'Проблема решена быстро и тихо.' }; } },
+        { label: (fl, state) => `Дать взятку ${formatMoney(scaleByWealth(state, 8000))}`, trait: 'shady', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 8000); const jailChance = Math.max(0.02, 0.12 - traitCap(state, 'shady', 6) * 0.018); return chance(jailChance) ? { jail: true, message: 'Разговор записывали. Взятка обернулась уголовным делом.' } : { money: -cost, energy: 5, message: 'Проблема решена быстро и тихо.' }; } },
         { label: 'Решить вопрос по правилам', trait: 'cautious', risk: 'safe', effect: () => ({ energy: -10, happiness: -2, message: 'Дольше, зато чисто.' }) },
       ]},
       { text: (fl) => `${cap(fl)} рассказывает способ вообще не платить налоги.`, choices: [
-        { label: (fl, state) => `Воспользоваться схемой (экономия ${formatMoney(scaleByWealth(state, 20000))})`, trait: 'shady', risk: 'risky', effect: (state) => { const save = scaleByWealth(state, 20000); const jailChance = Math.max(0.06, 0.25 - traitCap(state, 'shady', 6) * 0.03); return chance(jailChance) ? { jail: true, message: 'Налоговая всё же докопалась. Дело дошло до суда.' } : { money: save, message: `Сэкономил на налогах ${formatMoney(save)}.` }; } },
+        { label: (fl, state) => `Воспользоваться схемой (экономия ${formatMoney(scaleByWealth(state, 20000))})`, trait: 'shady', risk: 'risky', effect: (state) => { const save = scaleByWealth(state, 20000); const jailChance = Math.max(0.035, 0.15 - traitCap(state, 'shady', 6) * 0.02); return chance(jailChance) ? { jail: true, message: 'Налоговая всё же докопалась. Дело дошло до суда.' } : { money: save, message: `Сэкономил на налогах ${formatMoney(save)}.` }; } },
         { label: 'Платить честно', trait: 'cautious', risk: 'safe', effect: () => ({ reputation: 3, message: 'Спокойный сон дороже сомнительной экономии.' }) },
       ]},
       { text: (fl) => `${cap(fl)} предлагает заработать на продаже чужих личных данных.`, choices: [
-        { label: (fl, state) => `Согласиться за ${formatMoney(scaleByWealth(state, 12000))}`, trait: 'shady', risk: 'risky', effect: (state) => { const pay = scaleByWealth(state, 12000); const jailChance = Math.max(0.07, 0.3 - traitCap(state, 'shady', 6) * 0.03); return chance(jailChance) ? { jail: true, message: 'Тебя вычислили по цифровому следу.' } : { money: pay, happiness: -6, message: `Получил ${formatMoney(pay)}, но чувствуешь себя мерзко.` }; } },
+        { label: (fl, state) => `Согласиться за ${formatMoney(scaleByWealth(state, 12000))}`, trait: 'shady', risk: 'risky', effect: (state) => { const pay = scaleByWealth(state, 12000); const jailChance = Math.max(0.04, 0.18 - traitCap(state, 'shady', 6) * 0.02); return chance(jailChance) ? { jail: true, message: 'Тебя вычислили по цифровому следу.' } : { money: pay, happiness: -6, message: `Получил ${formatMoney(pay)}, но чувствуешь себя мерзко.` }; } },
         { label: 'Отказаться', trait: 'cautious', risk: 'safe', effect: () => ({ reputation: 3, message: 'Некоторые вещи не продаются.' }) },
       ]},
       { text: (fl, state) => `${cap(fl)} предлагает подделать документы ради кредита на ${formatMoney(scaleByWealth(state, 30000))}.`, choices: [
-        { label: (fl, state) => `Подделать документы (${formatMoney(scaleByWealth(state, 30000))})`, trait: 'shady', risk: 'risky', effect: (state) => { const gain = scaleByWealth(state, 30000); const jailChance = Math.max(0.06, 0.28 - traitCap(state, 'shady', 6) * 0.03); return chance(jailChance) ? { jail: true, message: 'Банк передал дело в полицию.' } : { money: gain, message: `Кредит одобрен, получено ${formatMoney(gain)}.` }; } },
+        { label: (fl, state) => `Подделать документы (${formatMoney(scaleByWealth(state, 30000))})`, trait: 'shady', risk: 'risky', effect: (state) => { const gain = scaleByWealth(state, 30000); const jailChance = Math.max(0.035, 0.17 - traitCap(state, 'shady', 6) * 0.02); return chance(jailChance) ? { jail: true, message: 'Банк передал дело в полицию.' } : { money: gain, message: `Кредит одобрен, получено ${formatMoney(gain)}.` }; } },
         { label: 'Отказаться и жить по средствам', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 1, message: 'Меньше денег, зато меньше рисков.' }) },
       ]},
     ],
@@ -828,6 +828,15 @@
       choices: [
         { label: 'Порадоваться этим словам', trait: 'familyFirst', risk: 'safe', effect: () => ({ happiness: 8, reputation: 2, message: 'Семья — это действительно важно.' }) },
         { label: 'Смутиться, но сместить фокус на карьеру', trait: 'hardworker', risk: 'balanced', effect: () => ({ happiness: -2, reputation: 1, message: 'Не всё коту масленица.' }) },
+      ],
+    },
+    {
+      id: 'hand_trait_cautious',
+      text: 'Знакомые в шутку называют тебя занудой — ты слишком часто выбираешь надёжный путь вместо рискованного.',
+      conditions: (s) => s.traits.cautious === 5,
+      choices: [
+        { label: 'Согласиться — осторожность себя оправдывает', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 3, reputation: 2, message: 'Медленно, зато без катастроф.' }) },
+        { label: 'Решить, что пора рискнуть посильнее', trait: 'riskTaker', risk: 'risky', effect: () => ({ happiness: 4, message: 'Захотелось наконец сорвать банк, а не откладывать копейку к копейке.' }) },
       ],
     },
   ];

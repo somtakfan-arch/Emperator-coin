@@ -11,6 +11,13 @@ const BILLIONAIRE_GOAL = 1000000000;
 const BASE_DEBT_RATE = 0.025;
 const PREDATORY_DEBT_RATE = 0.075;
 const LOW_ENERGY_THRESHOLD = 12;
+const TIER_BARRIER_CHANCE = 0.6;
+const BARRIER_MESSAGES = [
+  '🚧 Почти получилось — но тут подоспели налоги, комиссии и внезапные счета, откатив всё почти к прежнему уровню.',
+  '🚧 Система не пускает наверх с первой попытки: банк отказал в нужных условиях, а часть прибыли съели непредвиденные траты.',
+  '🚧 Один шаг до нового уровня жизни — и тут же нашлись желающие откусить от прироста: юристы, посредники, "форс-мажоры".',
+  '🚧 Пробиться наверх с наскока не вышло: связи и стартовый капитал решают больше, чем кажется.',
+];
 
 const TIER_BASELINE = {
   homeless: { health: 55, happiness: 35, energy: 50, reputation: 30 },
@@ -73,6 +80,13 @@ const REST_EVENT = {
 function pickNextEvent(state) {
   if (state.energy <= LOW_ENERGY_THRESHOLD) return REST_EVENT;
 
+  if (state.pantry <= 15) {
+    const groceryPool = window.EVENTS.filter(
+      (ev) => !state.usedEventIds.has(ev.id) && ev.conditions(state) && (ev.id.startsWith('shopping_0_') || ev.id === 'hand_boris_shop' || ev.id === 'hand_pantry_empty')
+    );
+    if (groceryPool.length) return groceryPool[randInt(0, groceryPool.length - 1)];
+  }
+
   let pool = window.EVENTS.filter((ev) => !state.usedEventIds.has(ev.id) && ev.conditions(state));
   if (pool.length === 0) {
     state.usedEventIds.clear();
@@ -113,7 +127,7 @@ function applyChoice(state, event, choiceIndex) {
     state.traits[choice.trait] += 1;
   }
 
-  if (event.id !== '__forced_rest__') state.usedEventIds.add(event.id);
+  if (event.id !== '__forced_rest__' && event.id !== 'hand_pantry_empty') state.usedEventIds.add(event.id);
   state.turn += 1;
 
   // пассивная регенерация энергии/здоровья между событиями
@@ -121,13 +135,13 @@ function applyChoice(state, event, choiceIndex) {
   if (state.happiness > 60) state.health = clampNum(state.health + 1, 0, 100);
   if (state.turn % 2 === 0) state.age += 1;
 
-  // запасы еды понемногу расходуются; на нуле бьют по здоровью и настроению
-  state.pantry = clampNum(state.pantry - 5, 0, 100);
+  // запасы еды понемногу расходуются; на нуле мягко бьют по здоровью и настроению
+  state.pantry = clampNum(state.pantry - 4, 0, 100);
   let pantryMessage = '';
   if (state.pantry <= 8) {
-    state.health = clampNum(state.health - 3, 0, 100);
-    state.happiness = clampNum(state.happiness - 2, 0, 100);
-    pantryMessage = '🍽️ Еда почти закончилась — это сказывается на самочувствии.';
+    state.health = clampNum(state.health - 1, 0, 100);
+    state.happiness = clampNum(state.happiness - 1, 0, 100);
+    pantryMessage = '🍽️ Еда почти закончилась — самое время закупиться.';
   }
 
   // проценты по долгу — чем глубже яма, тем быстрее она растёт
@@ -138,8 +152,28 @@ function applyChoice(state, event, choiceIndex) {
     interestMessage = `📉 Долг вырос на ${formatMoney(interest)} из-за процентов${state.debtRate > BASE_DEBT_RATE ? ' (грабительская ставка микрозайма!)' : ''}.`;
   }
 
+  // "стеклянный потолок": вырваться в следующий социальный слой почти
+  // невозможно — система (налоги, внезапные траты, кредитные истории,
+  // закрытые двери) чаще всего откатывает игрока обратно к границе.
   const prevTier = state.tier;
-  state.tier = getTier(state.money).id;
+  let rawNewTier = getTier(state.money);
+  let barrierMessage = '';
+  if (moneyDelta > 0) {
+    const prevIdx = window.TIERS.findIndex((t) => t.id === prevTier);
+    const rawIdx = window.TIERS.findIndex((t) => t.id === rawNewTier.id);
+    if (rawIdx > prevIdx) {
+      const jump = rawIdx - prevIdx;
+      const barrierChance = clampNum(TIER_BARRIER_CHANCE + (jump - 1) * 0.12, TIER_BARRIER_CHANCE, 0.93);
+      if (chance(barrierChance)) {
+        const ceiling = window.TIERS[prevIdx].max;
+        const buffer = Math.max(Math.round(Math.abs(ceiling || 1000) * rand(0.01, 0.05)), randInt(50, 400));
+        state.money = ceiling - buffer;
+        rawNewTier = getTier(state.money);
+        barrierMessage = pick(BARRIER_MESSAGES);
+      }
+    }
+  }
+  state.tier = rawNewTier.id;
   const tierChanged = prevTier !== state.tier;
 
   if (result.jail) {
@@ -167,7 +201,7 @@ function applyChoice(state, event, choiceIndex) {
 
   return {
     message: result.message || '',
-    interestMessage: [interestMessage, pantryMessage].filter(Boolean).join(' '),
+    interestMessage: [barrierMessage, interestMessage, pantryMessage].filter(Boolean).join(' '),
     tierChanged,
     newTier: state.tier,
     newTrait: getFreshlyUnlockedTrait(state, choice.trait),
