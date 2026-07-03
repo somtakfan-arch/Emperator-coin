@@ -21,6 +21,16 @@ commands:
     usage: "/<command> give [игрок]"
     permission: bedsmp.amethystaxe.give
     permission-message: "§cУ вас нет прав на эту команду."
+  nemesis:
+    description: Выдать Немезиду (следящий арбалет)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.nemesis.give
+    permission-message: "§cУ вас нет прав на эту команду."
+  phantom:
+    description: Выдать Призрак (арбалет сквозь стены)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.phantom.give
+    permission-message: "§cУ вас нет прав на эту команду."
 
 permissions:
   bedsmp.thornsward.give:
@@ -31,4 +41,10 @@ permissions:
     default: op
   bedsmp.amethystaxe.give:
     description: Позволяет выдавать Топор Аметиста
+    default: op
+  bedsmp.nemesis.give:
+    description: Позволяет выдавать Немезиду
+    default: op
+  bedsmp.phantom.give:
+    description: Позволяет выдавать Призрак
     default: op

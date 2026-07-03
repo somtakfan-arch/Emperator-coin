@@ -5,21 +5,27 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 public final class ThornsWardPlugin extends JavaPlugin {
 
-    private ThornsWardItem thornsWardItem;
+    private ThornsWardItem     thornsWardItem;
     private CrystallerSwordItem crystallerSwordItem;
-    private AmethystAxeItem amethystAxeItem;
+    private AmethystAxeItem     amethystAxeItem;
+    private NemesisItem         nemesisItem;
+    private PhantomItem         phantomItem;
 
     @Override
     public void onEnable() {
         saveDefaultConfig();
 
-        thornsWardItem = new ThornsWardItem(this);
+        thornsWardItem      = new ThornsWardItem(this);
         crystallerSwordItem = new CrystallerSwordItem(this);
-        amethystAxeItem = new AmethystAxeItem(this);
+        amethystAxeItem     = new AmethystAxeItem(this);
+        nemesisItem         = new NemesisItem(this);
+        phantomItem         = new PhantomItem(this);
 
         getServer().getPluginManager().registerEvents(new ThornsWardListener(this, thornsWardItem), this);
         getServer().getPluginManager().registerEvents(new CrystallerSwordListener(this, crystallerSwordItem), this);
         getServer().getPluginManager().registerEvents(new AmethystAxeListener(this, amethystAxeItem), this);
+        getServer().getPluginManager().registerEvents(new NemesisListener(this, nemesisItem), this);
+        getServer().getPluginManager().registerEvents(new PhantomListener(this, phantomItem), this);
 
         ThornsWardCommand thornsWardCommand = new ThornsWardCommand(thornsWardItem);
         registerCommand("thornsward", thornsWardCommand, thornsWardCommand);
@@ -29,6 +35,12 @@ public final class ThornsWardPlugin extends JavaPlugin {
 
         AmethystAxeCommand amethystAxeCommand = new AmethystAxeCommand(amethystAxeItem);
         registerCommand("amethystaxe", amethystAxeCommand, amethystAxeCommand);
+
+        NemesisCommand nemesisCommand = new NemesisCommand(nemesisItem);
+        registerCommand("nemesis", nemesisCommand, nemesisCommand);
+
+        PhantomCommand phantomCommand = new PhantomCommand(phantomItem);
+        registerCommand("phantom", phantomCommand, phantomCommand);
 
         getLogger().info("ThornsWard включен.");
     }
