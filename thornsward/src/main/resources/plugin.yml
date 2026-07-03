@@ -16,6 +16,11 @@ commands:
     usage: "/<command> give [игрок]"
     permission: bedsmp.crystallersword.give
     permission-message: "§cУ вас нет прав на эту команду."
+  amethystaxe:
+    description: Выдать Топор Аметиста
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.amethystaxe.give
+    permission-message: "§cУ вас нет прав на эту команду."
 
 permissions:
   bedsmp.thornsward.give:
@@ -23,4 +28,7 @@ permissions:
     default: op
   bedsmp.crystallersword.give:
     description: Позволяет выдавать Меч Кристаллера
+    default: op
+  bedsmp.amethystaxe.give:
+    description: Позволяет выдавать Топор Аметиста
     default: op

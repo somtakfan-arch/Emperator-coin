@@ -7,6 +7,7 @@ public final class ThornsWardPlugin extends JavaPlugin {
 
     private ThornsWardItem thornsWardItem;
     private CrystallerSwordItem crystallerSwordItem;
+    private AmethystAxeItem amethystAxeItem;
 
     @Override
     public void onEnable() {
@@ -14,15 +15,20 @@ public final class ThornsWardPlugin extends JavaPlugin {
 
         thornsWardItem = new ThornsWardItem(this);
         crystallerSwordItem = new CrystallerSwordItem(this);
+        amethystAxeItem = new AmethystAxeItem(this);
 
         getServer().getPluginManager().registerEvents(new ThornsWardListener(this, thornsWardItem), this);
         getServer().getPluginManager().registerEvents(new CrystallerSwordListener(this, crystallerSwordItem), this);
+        getServer().getPluginManager().registerEvents(new AmethystAxeListener(this, amethystAxeItem), this);
 
         ThornsWardCommand thornsWardCommand = new ThornsWardCommand(thornsWardItem);
         registerCommand("thornsward", thornsWardCommand, thornsWardCommand);
 
         CrystallerSwordCommand crystallerSwordCommand = new CrystallerSwordCommand(crystallerSwordItem);
         registerCommand("crystallersword", crystallerSwordCommand, crystallerSwordCommand);
+
+        AmethystAxeCommand amethystAxeCommand = new AmethystAxeCommand(amethystAxeItem);
+        registerCommand("amethystaxe", amethystAxeCommand, amethystAxeCommand);
 
         getLogger().info("ThornsWard включен.");
     }
