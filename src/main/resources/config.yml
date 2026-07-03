@@ -240,7 +240,7 @@ pricing:
 listing:
   enabled: true
   interval-seconds: 45
-  per-cycle: 35
+  per-cycle: 5
   max-bot-listings: 100000000000
   listing-hours: 38
   amount-min: 1
@@ -303,7 +303,7 @@ chat-requests:
     - "выстави"
     - "выставьте"
     - "пж выставьте"
-  cooldown-seconds: 30
+  cooldown-seconds: 10
   price-markup: 1.2
   unknown-base-price: 10.0
 
@@ -373,34 +373,32 @@ pvp-potions:
       form: splash
       price: 6000
 
-# Кастомные предметы сервера — берутся из YAML-базы плагина (напр. EmperorSword).
+# Кастомные предметы сервера — берутся из YAML-базы плагина (ItemEdit).
 # custom-chance в секции listing определяет шанс выставить кастомку (0.03 = 3%).
 custom-items:
   enabled: true
   file: "plugins/ItemEdit/database/server-database.yml"
   default-price: 300000
   prices:
-    sword: 500000          # Кинжал Тени
-    wind_burst: 150000     # Зов Бури
-    elytra: 2000000        # Вуаль Тени
-    mace: 1500000          # Разрушитель Миров
-    pearl: 200000          # Око Гездны
+    sword: 750000          # Кинжал Тени
+    wind_burst: 15000      # Зов Бури
+    elytra: 3000000        # Вуаль Тени
+    mace: 2300000          # Разрушитель Миров
+    pearl: 20000           # Око Гездны
     arbalet: 300000        # Гром (арбалет)
-    topor: 800000          # Мьёльнир
+    topor: 6500000         # Мьёльнир
     kopie: 700000          # Ярость Ада
     eda: 80000             # Обед Дракона
     bogat: 400000          # Слиток Миллиардера
-    oko: 250000            # Oko Смерти
-    totem: 900000          # Древний Идол
+    oko: 25000             # Oko Смерти
+    totem: 240000          # Древний Идол
     super_rocket: 60000    # Тяжелый Заряд
-    1tap: 5000000          # Гром (1tap)
-    onetap: 3000000        # ONE TAP
 
 # Именные предметы — создаются из материала + имени (Skript-предметы, ThornsWard).
 # Шанс срабатывает независимо от custom-items.
 named-items:
   enabled: true
-  chance: 0.06
+  chance: 0.08
   items:
     # ── ThornsWard (PDC-тег обязателен) ─────────────────────────────────────
     thorns_ward:
@@ -414,7 +412,7 @@ named-items:
       custom-model-data: 7001
       pdc-namespace: thornsward
       pdc-key: thorns_ward
-      price: 250000
+      price: 5555555
     crystaller_sword:
       material: NETHERITE_SWORD
       name: "§d✦ Меч Кристаллера §d✦"
@@ -427,7 +425,7 @@ named-items:
         sharpness: 5
       pdc-namespace: thornsward
       pdc-key: crystaller_sword
-      price: 600000
+      price: 10000000
     # ── Skript — Оружие ──────────────────────────────────────────────────────
     dagger:
       material: IRON_SWORD
@@ -512,7 +510,7 @@ named-items:
       lore:
         - "§eЛомает всю броню цели при ударе!"
         - "§cОДНОРАЗОВЫЙ"
-      price: 200000
+      price: 12000000
     # ── Skript — Броня ───────────────────────────────────────────────────────
     shadowcloak:
       material: NETHERITE_CHESTPLATE
@@ -533,7 +531,7 @@ named-items:
       name: "§4§lНагрудник Вампира"
       lore:
         - "§fЛечит за нанесённый урон (lifesteal)"
-      price: 500000
+      price: 5000000
     spike_chest:
       material: NETHERITE_CHESTPLATE
       name: "§c§lШипованный Нагрудник"
@@ -547,19 +545,19 @@ named-items:
         - "§7Специальное свойство:"
         - "§eОграничивает урон от Булавы!"
         - "§fМаксимальный урон: §c3 сердца§f."
-      price: 700000
+      price: 50000000
     berserklegs:
       material: NETHERITE_LEGGINGS
       name: "§4§lПоножи Берсерка"
       lore:
         - "§fHP ниже 4 сердец: скорость 2 + сила 1"
-      price: 400000
+      price: 4000000
     eaglehelm:
       material: NETHERITE_HELMET
       name: "§e§lШлем Орла"
       lore:
         - "§fПодсвечивает врагов в радиусе 30 блоков"
-      price: 350000
+      price: 555555
     ghost_boots:
       material: NETHERITE_BOOTS
       name: "§7§lБотинки Призрака"
