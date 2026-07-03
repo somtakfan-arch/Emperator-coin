@@ -14,6 +14,20 @@ public final class ThornsWardPlugin extends JavaPlugin {
     private InstantAppleItem    instantAppleItem;
     private RevengeThornItem    revengeThornItem;
     private SoulLanternItem     soulLanternItem;
+    private DragonRoarItem      dragonRoarItem;
+    private ZeusTridentItem     zeusTridentItem;
+    private SpiritMaskItem      spiritMaskItem;
+    private ShadowCloakItem     shadowCloakItem;
+    private IronCanopyItem      ironCanopyItem;
+    private LeviathanArmorItem  leviathanArmorItem;
+    private ThiefsHoodItem      thiefsHoodItem;
+    private ChronoStoneItem     chronoStoneItem;
+    private SpiderThreadItem    spiderThreadItem;
+    private PhoenixAshItem      phoenixAshItem;
+    private EchoPastItem        echoPastItem;
+    private GravityTrapItem     gravityTrapItem;
+    private ChaosWhistleItem    chaosWhistleItem;
+    private ServerHeartItem     serverHeartItem;
 
     @Override
     public void onEnable() {
@@ -28,6 +42,20 @@ public final class ThornsWardPlugin extends JavaPlugin {
         instantAppleItem    = new InstantAppleItem(this);
         revengeThornItem    = new RevengeThornItem(this);
         soulLanternItem     = new SoulLanternItem(this);
+        dragonRoarItem      = new DragonRoarItem(this);
+        zeusTridentItem     = new ZeusTridentItem(this);
+        spiritMaskItem      = new SpiritMaskItem(this);
+        shadowCloakItem     = new ShadowCloakItem(this);
+        ironCanopyItem      = new IronCanopyItem(this);
+        leviathanArmorItem  = new LeviathanArmorItem(this);
+        thiefsHoodItem      = new ThiefsHoodItem(this);
+        chronoStoneItem     = new ChronoStoneItem(this);
+        spiderThreadItem    = new SpiderThreadItem(this);
+        phoenixAshItem      = new PhoenixAshItem(this);
+        echoPastItem        = new EchoPastItem(this);
+        gravityTrapItem     = new GravityTrapItem(this);
+        chaosWhistleItem    = new ChaosWhistleItem(this);
+        serverHeartItem     = new ServerHeartItem(this);
 
         getServer().getPluginManager().registerEvents(new ThornsWardListener(this, thornsWardItem), this);
         getServer().getPluginManager().registerEvents(new CrystallerSwordListener(this, crystallerSwordItem), this);
@@ -38,6 +66,20 @@ public final class ThornsWardPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new InstantAppleListener(this, instantAppleItem), this);
         getServer().getPluginManager().registerEvents(new RevengeThornListener(this, revengeThornItem), this);
         getServer().getPluginManager().registerEvents(new SoulLanternListener(this, soulLanternItem), this);
+        getServer().getPluginManager().registerEvents(new DragonRoarListener(this, dragonRoarItem), this);
+        getServer().getPluginManager().registerEvents(new ZeusTridentListener(this, zeusTridentItem), this);
+        getServer().getPluginManager().registerEvents(new SpiritMaskListener(spiritMaskItem), this);
+        getServer().getPluginManager().registerEvents(new ShadowCloakListener(this, shadowCloakItem), this);
+        getServer().getPluginManager().registerEvents(new IronCanopyListener(this, ironCanopyItem), this);
+        getServer().getPluginManager().registerEvents(new LeviathanArmorListener(this, leviathanArmorItem), this);
+        getServer().getPluginManager().registerEvents(new ThiefsHoodListener(this, thiefsHoodItem), this);
+        getServer().getPluginManager().registerEvents(new ChronoStoneListener(this, chronoStoneItem), this);
+        getServer().getPluginManager().registerEvents(new SpiderThreadListener(this, spiderThreadItem), this);
+        getServer().getPluginManager().registerEvents(new PhoenixAshListener(this, phoenixAshItem), this);
+        getServer().getPluginManager().registerEvents(new EchoPastListener(this, echoPastItem), this);
+        getServer().getPluginManager().registerEvents(new GravityTrapListener(this, gravityTrapItem), this);
+        getServer().getPluginManager().registerEvents(new ChaosWhistleListener(this, chaosWhistleItem), this);
+        getServer().getPluginManager().registerEvents(new ServerHeartListener(this, serverHeartItem), this);
 
         ThornsWardCommand thornsWardCommand = new ThornsWardCommand(thornsWardItem);
         registerCommand("thornsward", thornsWardCommand, thornsWardCommand);
@@ -65,6 +107,48 @@ public final class ThornsWardPlugin extends JavaPlugin {
 
         SoulLanternCommand soulLanternCommand = new SoulLanternCommand(soulLanternItem);
         registerCommand("soullantern", soulLanternCommand, soulLanternCommand);
+
+        DragonRoarCommand dragonRoarCommand = new DragonRoarCommand(dragonRoarItem);
+        registerCommand("dragonroar", dragonRoarCommand, dragonRoarCommand);
+
+        ZeusTridentCommand zeusTridentCommand = new ZeusTridentCommand(zeusTridentItem);
+        registerCommand("zeustrident", zeusTridentCommand, zeusTridentCommand);
+
+        SpiritMaskCommand spiritMaskCommand = new SpiritMaskCommand(spiritMaskItem);
+        registerCommand("spiritmask", spiritMaskCommand, spiritMaskCommand);
+
+        ShadowCloakCommand shadowCloakCommand = new ShadowCloakCommand(shadowCloakItem);
+        registerCommand("shadowcloak", shadowCloakCommand, shadowCloakCommand);
+
+        IronCanopyCommand ironCanopyCommand = new IronCanopyCommand(ironCanopyItem);
+        registerCommand("ironcanopy", ironCanopyCommand, ironCanopyCommand);
+
+        LeviathanArmorCommand leviathanArmorCommand = new LeviathanArmorCommand(leviathanArmorItem);
+        registerCommand("leviathanarmor", leviathanArmorCommand, leviathanArmorCommand);
+
+        ThiefsHoodCommand thiefsHoodCommand = new ThiefsHoodCommand(thiefsHoodItem);
+        registerCommand("thiefhood", thiefsHoodCommand, thiefsHoodCommand);
+
+        ChronoStoneCommand chronoStoneCommand = new ChronoStoneCommand(chronoStoneItem);
+        registerCommand("chronostone", chronoStoneCommand, chronoStoneCommand);
+
+        SpiderThreadCommand spiderThreadCommand = new SpiderThreadCommand(spiderThreadItem);
+        registerCommand("spiderthread", spiderThreadCommand, spiderThreadCommand);
+
+        PhoenixAshCommand phoenixAshCommand = new PhoenixAshCommand(phoenixAshItem);
+        registerCommand("phoenixash", phoenixAshCommand, phoenixAshCommand);
+
+        EchoPastCommand echoPastCommand = new EchoPastCommand(echoPastItem);
+        registerCommand("echopast", echoPastCommand, echoPastCommand);
+
+        GravityTrapCommand gravityTrapCommand = new GravityTrapCommand(gravityTrapItem);
+        registerCommand("gravitytrap", gravityTrapCommand, gravityTrapCommand);
+
+        ChaosWhistleCommand chaosWhistleCommand = new ChaosWhistleCommand(chaosWhistleItem);
+        registerCommand("chaoswhistle", chaosWhistleCommand, chaosWhistleCommand);
+
+        ServerHeartCommand serverHeartCommand = new ServerHeartCommand(serverHeartItem);
+        registerCommand("serverheart", serverHeartCommand, serverHeartCommand);
 
         getLogger().info("ThornsWard включен.");
     }

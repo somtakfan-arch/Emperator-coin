@@ -62,7 +62,59 @@ revenge-thorn:
 
 # Фонарь Душ — блокирует естественный спавн мобов в радиусе вокруг владельца.
 soul-lantern:
-  # Длительность эффекта в секундах за одно использование.
   duration-seconds: 30
-  # Радиус блокировки спавна (блоки).
   no-spawn-radius: 5
+
+# Рёв Дракона — при ударе создаёт ударную волну, подбрасывающую всех рядом.
+dragon-roar:
+  shockwave-radius: 5.0
+  launch-velocity: 0.9
+
+# Плащ Теней — невидимость при неподвижности.
+shadow-cloak:
+  still-seconds: 2.0
+
+# Железный Полог — щит с отталкивающей сферой при блоке.
+iron-canopy:
+  repel-radius: 4.0
+  repel-strength: 1.5
+
+# Кольчуга Левиафана — снижение урона в воде.
+leviathan-armor:
+  damage-reduction: 3.0
+
+# Капюшон Вора — одноразовое спасение от смерти с телепортацией.
+thiefs-hood:
+  survive-health: 4.0
+  teleport-distance: 15.0
+
+# Хронокамень — заморозка + невидимость + неуязвимость на N секунд.
+chrono-stone:
+  freeze-seconds: 5
+  speed-duration-seconds: 3
+
+# Нить Паука — рыболовная удочка с огромной силой притяжения.
+spider-thread:
+  pull-force: 4.0
+
+# Пепел Феникса — автоматическое воскрешение при смерти.
+phoenix-ash:
+  revive-health: 8.0
+
+# Эхо Прошлого — телепорт к позиции N секунд назад (3 заряда).
+echo-past:
+  history-seconds: 30
+
+# Ловушка Гравитации — бросаемый снаряд создаёт зону притяжения.
+gravity-trap:
+  pull-radius: 4.0
+  duration-seconds: 5
+
+# Свисток Хаоса — вызывает случайного моба у ближайшего врага.
+chaos-whistle:
+  cooldown-seconds: 30
+
+# Сердце Сервера — раскрывает координаты всем игрокам.
+server-heart:
+  reveal-seconds: 10
+  cooldown-seconds: 60

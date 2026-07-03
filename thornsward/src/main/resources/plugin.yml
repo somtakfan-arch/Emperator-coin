@@ -51,6 +51,76 @@ commands:
     usage: "/<command> give [игрок]"
     permission: bedsmp.soullantern.give
     permission-message: "§cУ вас нет прав на эту команду."
+  dragonroar:
+    description: Выдать Рёв Дракона (булава с ударной волной)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.dragonroar.give
+    permission-message: "§cУ вас нет прав на эту команду."
+  zeustrident:
+    description: Выдать Трезубец Зевса (молния при броске)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.zeustrident.give
+    permission-message: "§cУ вас нет прав на эту команду."
+  spiritmask:
+    description: Выдать Маску Духа (мобы игнорируют)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.spiritmask.give
+    permission-message: "§cУ вас нет прав на эту команду."
+  shadowcloak:
+    description: Выдать Плащ Теней (невидимость при неподвижности)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.shadowcloak.give
+    permission-message: "§cУ вас нет прав на эту команду."
+  ironcanopy:
+    description: Выдать Железный Полог (щит отталкивания)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.ironcanopy.give
+    permission-message: "§cУ вас нет прав на эту команду."
+  leviathanarmor:
+    description: Выдать Кольчугу Левиафана (защита в воде)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.leviathanarmor.give
+    permission-message: "§cУ вас нет прав на эту команду."
+  thiefhood:
+    description: Выдать Капюшон Вора (одноразовое спасение от смерти)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.thiefhood.give
+    permission-message: "§cУ вас нет прав на эту команду."
+  chronostone:
+    description: Выдать Хронокамень (заморозка времени, одноразовый)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.chronostone.give
+    permission-message: "§cУ вас нет прав на эту команду."
+  spiderthread:
+    description: Выдать Нить Паука (удочка с огромной силой)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.spiderthread.give
+    permission-message: "§cУ вас нет прав на эту команду."
+  phoenixash:
+    description: Выдать Пепел Феникса (авто-воскрешение)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.phoenixash.give
+    permission-message: "§cУ вас нет прав на эту команду."
+  echopast:
+    description: Выдать Эхо Прошлого (3 заряда телепорта назад)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.echopast.give
+    permission-message: "§cУ вас нет прав на эту команду."
+  gravitytrap:
+    description: Выдать Ловушку Гравитации (бросаемая зона притяжения)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.gravitytrap.give
+    permission-message: "§cУ вас нет прав на эту команду."
+  chaoswhistle:
+    description: Выдать Свисток Хаоса (вызов моба у врага)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.chaoswhistle.give
+    permission-message: "§cУ вас нет прав на эту команду."
+  serverheart:
+    description: Выдать Сердце Сервера (трансляция координат)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.serverheart.give
+    permission-message: "§cУ вас нет прав на эту команду."
 
 permissions:
   bedsmp.thornsward.give:
@@ -79,4 +149,46 @@ permissions:
     default: op
   bedsmp.soullantern.give:
     description: Позволяет выдавать Фонарь Душ
+    default: op
+  bedsmp.dragonroar.give:
+    description: Позволяет выдавать Рёв Дракона
+    default: op
+  bedsmp.zeustrident.give:
+    description: Позволяет выдавать Трезубец Зевса
+    default: op
+  bedsmp.spiritmask.give:
+    description: Позволяет выдавать Маску Духа
+    default: op
+  bedsmp.shadowcloak.give:
+    description: Позволяет выдавать Плащ Теней
+    default: op
+  bedsmp.ironcanopy.give:
+    description: Позволяет выдавать Железный Полог
+    default: op
+  bedsmp.leviathanarmor.give:
+    description: Позволяет выдавать Кольчугу Левиафана
+    default: op
+  bedsmp.thiefhood.give:
+    description: Позволяет выдавать Капюшон Вора
+    default: op
+  bedsmp.chronostone.give:
+    description: Позволяет выдавать Хронокамень
+    default: op
+  bedsmp.spiderthread.give:
+    description: Позволяет выдавать Нить Паука
+    default: op
+  bedsmp.phoenixash.give:
+    description: Позволяет выдавать Пепел Феникса
+    default: op
+  bedsmp.echopast.give:
+    description: Позволяет выдавать Эхо Прошлого
+    default: op
+  bedsmp.gravitytrap.give:
+    description: Позволяет выдавать Ловушку Гравитации
+    default: op
+  bedsmp.chaoswhistle.give:
+    description: Позволяет выдавать Свисток Хаоса
+    default: op
+  bedsmp.serverheart.give:
+    description: Позволяет выдавать Сердце Сервера
     default: op
