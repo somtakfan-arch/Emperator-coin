@@ -11,6 +11,7 @@ public final class ThornsWardPlugin extends JavaPlugin {
     private NemesisItem         nemesisItem;
     private PhantomItem         phantomItem;
     private MirrorShieldItem    mirrorShieldItem;
+    private InstantAppleItem    instantAppleItem;
 
     @Override
     public void onEnable() {
@@ -22,6 +23,7 @@ public final class ThornsWardPlugin extends JavaPlugin {
         nemesisItem         = new NemesisItem(this);
         phantomItem         = new PhantomItem(this);
         mirrorShieldItem    = new MirrorShieldItem(this);
+        instantAppleItem    = new InstantAppleItem(this);
 
         getServer().getPluginManager().registerEvents(new ThornsWardListener(this, thornsWardItem), this);
         getServer().getPluginManager().registerEvents(new CrystallerSwordListener(this, crystallerSwordItem), this);
@@ -29,6 +31,7 @@ public final class ThornsWardPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new NemesisListener(this, nemesisItem), this);
         getServer().getPluginManager().registerEvents(new PhantomListener(this, phantomItem), this);
         getServer().getPluginManager().registerEvents(new MirrorShieldListener(this, mirrorShieldItem), this);
+        getServer().getPluginManager().registerEvents(new InstantAppleListener(this, instantAppleItem), this);
 
         ThornsWardCommand thornsWardCommand = new ThornsWardCommand(thornsWardItem);
         registerCommand("thornsward", thornsWardCommand, thornsWardCommand);
@@ -47,6 +50,9 @@ public final class ThornsWardPlugin extends JavaPlugin {
 
         MirrorShieldCommand mirrorShieldCommand = new MirrorShieldCommand(mirrorShieldItem);
         registerCommand("mirrorshield", mirrorShieldCommand, mirrorShieldCommand);
+
+        InstantAppleCommand instantAppleCommand = new InstantAppleCommand(instantAppleItem);
+        registerCommand("instantapple", instantAppleCommand, instantAppleCommand);
 
         getLogger().info("ThornsWard включен.");
     }

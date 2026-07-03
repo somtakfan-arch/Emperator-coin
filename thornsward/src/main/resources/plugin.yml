@@ -36,6 +36,11 @@ commands:
     usage: "/<command> give [игрок]"
     permission: bedsmp.mirrorshield.give
     permission-message: "§cУ вас нет прав на эту команду."
+  instantapple:
+    description: Выдать Яблоко Богов (мгновенное зачарованное яблоко)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.instantapple.give
+    permission-message: "§cУ вас нет прав на эту команду."
 
 permissions:
   bedsmp.thornsward.give:
@@ -55,4 +60,7 @@ permissions:
     default: op
   bedsmp.mirrorshield.give:
     description: Позволяет выдавать Зеркало Немезиды
+    default: op
+  bedsmp.instantapple.give:
+    description: Позволяет выдавать Яблоко Богов
     default: op
