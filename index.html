@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Эмператор: от бомжа до миллиардера</title>
+  <meta name="description" content="Текстовая игра-симулятор жизни: пройди путь от бомжа или обычного человека до миллиардера, переживая сотни неожиданных поворотов судьбы." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👑</text></svg>" />
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- ЭКРАН 1: ВВОД ИМЕНИ -->
+  <main id="screen-intro" class="screen active">
+    <div class="card intro-card">
+      <div class="crown">👑</div>
+      <h1>Эмператор</h1>
+      <p class="subtitle">От бомжа (или миллионера) — до миллиардера</p>
+      <p class="lead">
+        Введи любое имя. Дальше судьба случайно выберет тебе одного из 25 персонажей
+        со своим возрастом, работой, имуществом, деньгами, семьёй и аллергией.
+        Пройди больше 400 непредсказуемых поворотов жизни, разбогатей — или обанкроться.
+      </p>
+      <input id="name-input" type="text" maxlength="24" placeholder="Введи своё имя..." autocomplete="off" />
+      <button id="start-btn" class="btn btn-primary">Начать жизнь</button>
+      <button id="show-roster-btn" class="btn btn-link">Кто мне может достаться? (25 персонажей)</button>
+    </div>
+  </main>
+
+  <!-- МОДАЛКА СО СПИСКОМ ПЕРСОНАЖЕЙ -->
+  <div id="roster-modal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2>25 возможных персонажей</h2>
+        <button id="roster-close-btn" class="btn btn-icon" aria-label="Закрыть">✕</button>
+      </div>
+      <div id="roster-list" class="roster-list"></div>
+    </div>
+  </div>
+
+  <!-- ЭКРАН 2: КАРТОЧКА ПЕРСОНАЖА -->
+  <main id="screen-reveal" class="screen">
+    <div class="card">
+      <p class="reveal-kicker">Судьба распорядилась так:</p>
+      <h2 id="reveal-name" class="reveal-name"></h2>
+      <div id="reveal-tier" class="tier-pill"></div>
+      <div class="reveal-grid">
+        <div class="reveal-item"><span>Возраст</span><b id="reveal-age"></b></div>
+        <div class="reveal-item"><span>Работа</span><b id="reveal-job"></b></div>
+        <div class="reveal-item"><span>Имущество</span><b id="reveal-property"></b></div>
+        <div class="reveal-item"><span>Деньги</span><b id="reveal-money"></b></div>
+        <div class="reveal-item"><span>Семья</span><b id="reveal-family"></b></div>
+        <div class="reveal-item"><span>Аллергия</span><b id="reveal-allergy"></b></div>
+      </div>
+      <div class="reveal-actions">
+        <button id="reveal-continue-btn" class="btn btn-primary">В путь!</button>
+        <button id="reveal-reroll-btn" class="btn btn-secondary">Перебросить судьбу</button>
+      </div>
+    </div>
+  </main>
+
+  <!-- ЭКРАН 3: ИГРА -->
+  <main id="screen-game" class="screen">
+    <div class="game-wrap">
+
+      <header class="hud">
+        <div class="hud-top">
+          <div class="hud-id">
+            <b id="stat-name"></b>
+            <span id="stat-tier-label" class="tier-pill small"></span>
+          </div>
+          <div class="hud-money" id="stat-money"></div>
+        </div>
+        <div class="hud-sub">
+          Возраст: <b id="stat-age"></b> · Работа: <b id="stat-job"></b>
+        </div>
+
+        <div id="tier-track" class="tier-track"></div>
+
+        <div class="bars">
+          <div class="bar-row">
+            <span>❤️ Здоровье</span>
+            <div class="bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="bar-health" class="bar-fill bar-health"></div></div>
+          </div>
+          <div class="bar-row">
+            <span>🙂 Счастье</span>
+            <div class="bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="bar-happiness" class="bar-fill bar-happiness"></div></div>
+          </div>
+          <div class="bar-row">
+            <span>⚡ Энергия</span>
+            <div class="bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="bar-energy" class="bar-fill bar-energy"></div></div>
+          </div>
+          <div class="bar-row">
+            <span>⭐ Репутация</span>
+            <div class="bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="bar-reputation" class="bar-fill bar-reputation"></div></div>
+          </div>
+        </div>
+      </header>
+
+      <section id="event-card" class="card event-card">
+        <p id="event-text" class="event-text"></p>
+        <div id="choices" class="choices"></div>
+      </section>
+
+      <section id="outcome" class="card outcome">
+        <div id="tier-banner" class="tier-banner hidden"></div>
+        <p id="outcome-message" class="outcome-message"></p>
+        <button id="next-btn" class="btn btn-primary">Далее →</button>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ЭКРАН 4: ИТОГ -->
+  <main id="screen-end" class="screen">
+    <div class="card end-card">
+      <h2 id="end-title" class="end-title"></h2>
+      <p id="end-text" class="lead"></p>
+      <div class="reveal-grid">
+        <div class="reveal-item"><span>Имя</span><b id="end-name"></b></div>
+        <div class="reveal-item"><span>Итоговый статус</span><b id="end-tier"></b></div>
+        <div class="reveal-item"><span>Капитал</span><b id="end-money"></b></div>
+        <div class="reveal-item"><span>Возраст</span><b id="end-age"></b></div>
+        <div class="reveal-item"><span>Прожито событий</span><b id="end-turns"></b></div>
+      </div>
+      <button id="restart-btn" class="btn btn-primary">Начать новую жизнь</button>
+    </div>
+  </main>
+
+  <script src="js/utils.js"></script>
+  <script src="js/characters.js"></script>
+  <script src="js/events.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/main.js"></script>
+</body>
+</html>
