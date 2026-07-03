@@ -31,6 +31,11 @@ commands:
     usage: "/<command> give [игрок]"
     permission: bedsmp.phantom.give
     permission-message: "§cУ вас нет прав на эту команду."
+  mirrorshield:
+    description: Выдать Зеркало Немезиды (щит отражения стрел)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.mirrorshield.give
+    permission-message: "§cУ вас нет прав на эту команду."
 
 permissions:
   bedsmp.thornsward.give:
@@ -47,4 +52,7 @@ permissions:
     default: op
   bedsmp.phantom.give:
     description: Позволяет выдавать Призрак
+    default: op
+  bedsmp.mirrorshield.give:
+    description: Позволяет выдавать Зеркало Немезиды
     default: op

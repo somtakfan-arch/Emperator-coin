@@ -10,6 +10,7 @@ public final class ThornsWardPlugin extends JavaPlugin {
     private AmethystAxeItem     amethystAxeItem;
     private NemesisItem         nemesisItem;
     private PhantomItem         phantomItem;
+    private MirrorShieldItem    mirrorShieldItem;
 
     @Override
     public void onEnable() {
@@ -20,12 +21,14 @@ public final class ThornsWardPlugin extends JavaPlugin {
         amethystAxeItem     = new AmethystAxeItem(this);
         nemesisItem         = new NemesisItem(this);
         phantomItem         = new PhantomItem(this);
+        mirrorShieldItem    = new MirrorShieldItem(this);
 
         getServer().getPluginManager().registerEvents(new ThornsWardListener(this, thornsWardItem), this);
         getServer().getPluginManager().registerEvents(new CrystallerSwordListener(this, crystallerSwordItem), this);
         getServer().getPluginManager().registerEvents(new AmethystAxeListener(this, amethystAxeItem), this);
         getServer().getPluginManager().registerEvents(new NemesisListener(this, nemesisItem), this);
         getServer().getPluginManager().registerEvents(new PhantomListener(this, phantomItem), this);
+        getServer().getPluginManager().registerEvents(new MirrorShieldListener(this, mirrorShieldItem), this);
 
         ThornsWardCommand thornsWardCommand = new ThornsWardCommand(thornsWardItem);
         registerCommand("thornsward", thornsWardCommand, thornsWardCommand);
@@ -41,6 +44,9 @@ public final class ThornsWardPlugin extends JavaPlugin {
 
         PhantomCommand phantomCommand = new PhantomCommand(phantomItem);
         registerCommand("phantom", phantomCommand, phantomCommand);
+
+        MirrorShieldCommand mirrorShieldCommand = new MirrorShieldCommand(mirrorShieldItem);
+        registerCommand("mirrorshield", mirrorShieldCommand, mirrorShieldCommand);
 
         getLogger().info("ThornsWard включен.");
     }
