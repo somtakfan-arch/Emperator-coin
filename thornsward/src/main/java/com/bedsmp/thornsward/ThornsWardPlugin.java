@@ -12,6 +12,8 @@ public final class ThornsWardPlugin extends JavaPlugin {
     private PhantomItem         phantomItem;
     private MirrorShieldItem    mirrorShieldItem;
     private InstantAppleItem    instantAppleItem;
+    private RevengeThornItem    revengeThornItem;
+    private SoulLanternItem     soulLanternItem;
 
     @Override
     public void onEnable() {
@@ -24,6 +26,8 @@ public final class ThornsWardPlugin extends JavaPlugin {
         phantomItem         = new PhantomItem(this);
         mirrorShieldItem    = new MirrorShieldItem(this);
         instantAppleItem    = new InstantAppleItem(this);
+        revengeThornItem    = new RevengeThornItem(this);
+        soulLanternItem     = new SoulLanternItem(this);
 
         getServer().getPluginManager().registerEvents(new ThornsWardListener(this, thornsWardItem), this);
         getServer().getPluginManager().registerEvents(new CrystallerSwordListener(this, crystallerSwordItem), this);
@@ -32,6 +36,8 @@ public final class ThornsWardPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new PhantomListener(this, phantomItem), this);
         getServer().getPluginManager().registerEvents(new MirrorShieldListener(this, mirrorShieldItem), this);
         getServer().getPluginManager().registerEvents(new InstantAppleListener(this, instantAppleItem), this);
+        getServer().getPluginManager().registerEvents(new RevengeThornListener(this, revengeThornItem), this);
+        getServer().getPluginManager().registerEvents(new SoulLanternListener(this, soulLanternItem), this);
 
         ThornsWardCommand thornsWardCommand = new ThornsWardCommand(thornsWardItem);
         registerCommand("thornsward", thornsWardCommand, thornsWardCommand);
@@ -53,6 +59,12 @@ public final class ThornsWardPlugin extends JavaPlugin {
 
         InstantAppleCommand instantAppleCommand = new InstantAppleCommand(instantAppleItem);
         registerCommand("instantapple", instantAppleCommand, instantAppleCommand);
+
+        RevengeThornCommand revengeThornCommand = new RevengeThornCommand(revengeThornItem);
+        registerCommand("revengethorn", revengeThornCommand, revengeThornCommand);
+
+        SoulLanternCommand soulLanternCommand = new SoulLanternCommand(soulLanternItem);
+        registerCommand("soullantern", soulLanternCommand, soulLanternCommand);
 
         getLogger().info("ThornsWard включен.");
     }

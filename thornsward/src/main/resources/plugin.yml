@@ -41,6 +41,16 @@ commands:
     usage: "/<command> give [игрок]"
     permission: bedsmp.instantapple.give
     permission-message: "§cУ вас нет прав на эту команду."
+  revengethorn:
+    description: Выдать Шип Возмездия (нагрудник телепортации к атакующему)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.revengethorn.give
+    permission-message: "§cУ вас нет прав на эту команду."
+  soullantern:
+    description: Выдать Фонарь Душ (блокирует спавн мобов вокруг)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.soullantern.give
+    permission-message: "§cУ вас нет прав на эту команду."
 
 permissions:
   bedsmp.thornsward.give:
@@ -63,4 +73,10 @@ permissions:
     default: op
   bedsmp.instantapple.give:
     description: Позволяет выдавать Яблоко Богов
+    default: op
+  bedsmp.revengethorn.give:
+    description: Позволяет выдавать Шип Возмездия
+    default: op
+  bedsmp.soullantern.give:
+    description: Позволяет выдавать Фонарь Душ
     default: op
