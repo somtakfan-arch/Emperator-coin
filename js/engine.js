@@ -50,6 +50,7 @@ function createGameState(name, character) {
     allergyNone: character.allergy === 'нет аллергий',
     hasFamily: character.family !== 'сирота, семьи никогда не было',
     hasJob: !/нет работы|безработ/i.test(character.job),
+    hasBoss: !!character.hasBoss && !/нет работы|безработ/i.test(character.job),
     health: baseline.health,
     happiness: baseline.happiness,
     energy: baseline.energy,
@@ -112,10 +113,12 @@ function applyChoice(state, event, choiceIndex) {
 
   if (result.jobLoss) {
     state.hasJob = false;
+    state.hasBoss = false;
     state.job = 'безработный(ая)';
   }
   if (result.jobGain) {
     state.hasJob = true;
+    state.hasBoss = true;
     state.job = 'подработка';
   }
   if (result.debtRateUp) state.debtRate = PREDATORY_DEBT_RATE;

@@ -30,6 +30,8 @@
   const businessGate = (s) => isBusinessy(s) && s.reputation >= 20;
   const hasFamilyFn = (s) => s.hasFamily;
   const hasJobFn = (s) => s.hasJob;
+  const hasBossFn = (s) => s.hasJob && s.hasBoss;
+  const selfEmployedFn = (s) => s.hasJob && !s.hasBoss;
   const noJobFn = (s) => !s.hasJob;
   const hasAllergyFn = (s) => !s.allergyNone;
   const traitCap = (state, key, max) => Math.min((state.traits && state.traits[key]) || 0, max);
@@ -536,7 +538,39 @@
       ]},
     ],
     ['в офисе', 'на физически тяжёлой работе', 'в сфере обслуживания', 'в творческой профессии'],
-    hasJobFn
+    hasBossFn
+  );
+
+  const selfEmployed = buildFlavorFamily(
+    'selfEmployed',
+    [
+      { text: (fl) => `Алгоритмы ${fl} внезапно поменялись, и охваты/поток клиентов резко просели.`, choices: [
+        { label: (fl, state) => `Вложиться в продвижение (${formatMoney(scaleByWealth(state, 3500))})`, risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 3500); return chance(0.55) ? { money: -Math.round(cost * 0.3), reputation: 4, happiness: 4, message: 'Вложение помогло быстро восстановить охваты.' } : { money: -cost, happiness: -4, message: 'Деньги потрачены, а эффект почти не заметен.' }; } },
+        { label: 'Переждать без вложений', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -5, reputation: -1, message: 'Просело надолго, но бюджет цел.' }) },
+      ]},
+      { text: () => `Клиент задерживает оплату за уже сделанную работу.`, choices: [
+        { label: 'Требовать оплату немедленно', risk: 'risky', effect: (state) => (chance(socialChance(state, 0.3, 0.006)) ? { money: scaleByWealth(state, 4000), message: 'Клиент нашёл деньги и расплатился.' } : { reputation: -3, happiness: -6, message: 'Клиент обиделся и пропал вовсе без оплаты.' }) },
+        { label: 'Договориться на отсрочку', risk: 'safe', effect: () => ({ happiness: -2, reputation: 1, message: 'Отношения сохранены, но касса подождёт.' }) },
+      ]},
+      { text: (fl) => `Конкурент ${fl} демпингует и переманивает твою аудиторию.`, choices: [
+        { label: (fl, state) => `Снизить цены и побороться (−${formatMoney(scaleByWealth(state, 2500))} с дохода)`, risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 2500); return { money: -cost, reputation: 3, message: 'Клиентов удалось удержать, но маржа просела.' }; } },
+        { label: 'Остаться при своих условиях', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -3, message: 'Часть аудитории всё же ушла к конкуренту.' }) },
+      ]},
+      { text: () => `Подвернулась возможность выступить на крупном мероприятии бесплатно, но с большой аудиторией.`, choices: [
+        { label: 'Согласиться ради известности', trait: 'hardworker', risk: 'balanced', effect: () => ({ energy: -15, reputation: 7, happiness: 5, message: 'Известность выросла, хоть и без прямой оплаты.' }) },
+        { label: 'Отказаться, время дороже', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 1, message: 'Занялся оплачиваемыми делами.' }) },
+      ]},
+      { text: (fl) => `${cap(fl)} на время заблокировали из-за жалобы недоброжелателей.`, choices: [
+        { label: (fl, state) => `Оспорить и вернуть доступ (${formatMoney(scaleByWealth(state, 1500))})`, risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 1500); return chance(0.6) ? { money: -cost, happiness: 3, message: 'Доступ восстановили быстрее, чем ожидал.' } : { money: -cost, happiness: -8, energy: -10, message: 'Разбирательство затянулось надолго.' }; } },
+        { label: 'Переждать блокировку', risk: 'safe', effect: () => ({ happiness: -6, energy: -6, message: 'Доход встал на паузу, но нервы целее.' }) },
+      ]},
+      { text: () => `Партнёр по разовому проекту предлагает сотрудничество за процент от будущей прибыли вместо фиксированной оплаты.`, choices: [
+        { label: 'Согласиться на процент', trait: 'riskTaker', risk: 'risky', effect: (state) => { const base = scaleByWealth(state, 6000); return chance(0.4) ? { money: Math.round(base * rand(1.5, 3)), happiness: 8, message: 'Проект выстрелил — процент оказался выгоднее ставки.' } : { money: 0, happiness: -4, message: 'Проект не взлетел — процент от нуля есть ноль.' }; } },
+        { label: 'Настоять на фиксированной оплате', trait: 'cautious', risk: 'safe', effect: (state) => { const fixed = scaleByWealth(state, 4000); return { money: fixed, message: `Получил гарантированные ${formatMoney(fixed)}.` }; } },
+      ]},
+    ],
+    ['в блоге', 'в твоём деле', 'в частной практике', 'в твоей нише'],
+    selfEmployedFn
   );
 
   /* ============ 3. АВТОРСКИЕ СОБЫТИЯ (≈32) ============ */
@@ -635,7 +669,7 @@
     {
       id: 'hand_windfall_3',
       text: 'Работодатель неожиданно выплатил щедрую годовую премию.',
-      conditions: hasJobFn,
+      conditions: hasBossFn,
       choices: [
         { label: 'Порадоваться и отложить премию', trait: 'cautious', risk: 'safe', effect: (state) => { const win = scaleByWealth(state, rand(3000, 15000)); return { money: win, happiness: 6, message: `Премия ${formatMoney(win)} — приятный бонус за труд.` }; } },
         { label: 'Сразу потратить на себя', risk: 'balanced', effect: (state) => { const win = scaleByWealth(state, rand(3000, 15000)); return { money: Math.round(win * 0.5), happiness: 12, message: 'Побаловал себя чем-то давно желанным.' }; } },
@@ -725,7 +759,7 @@
     {
       id: 'hand_new_position',
       text: 'Другая компания предлагает тебе более высокую и денежную позицию.',
-      conditions: hasJobFn,
+      conditions: hasBossFn,
       choices: [
         { label: (state) => `Принять предложение (+${formatMoney(scaleByWealth(state, 5000))})`, trait: 'hardworker', risk: 'balanced', effect: (state) => { const bonus = scaleByWealth(state, 5000); return { money: bonus, reputation: 3, happiness: 6, message: 'Новая должность — новые возможности!' }; } },
         { label: 'Остаться на нынешнем месте', risk: 'safe', effect: () => ({ reputation: 2, happiness: -1, message: 'Верность старому месту тоже чего-то стоит.' }) },
@@ -845,7 +879,7 @@
 
   window.EVENTS = [].concat(
     invest, shopping, health, housing, transport, selfdev, gambling, business,
-    survival, luxury, family, crime, weather, tech, general, work,
+    survival, luxury, family, crime, weather, tech, general, work, selfEmployed,
     HAND_EVENTS
   );
 })();
