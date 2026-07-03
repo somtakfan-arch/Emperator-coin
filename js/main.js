@@ -6,6 +6,7 @@
 (function () {
   const TIER_ORDER = ['homeless', 'poor', 'middle', 'rich', 'millionaire', 'billionaire'];
   const TIER_ICON = { homeless: '🏚️', poor: '🥫', middle: '🏠', rich: '🏙️', millionaire: '💎', billionaire: '👑' };
+  const RISK_BADGE = { safe: '✅ надёжно', risky: '⚠️ риск', balanced: '⚖️ неоднозначно' };
 
   let state = null;
   let currentCharacter = null;
@@ -103,8 +104,9 @@
   const choicesEl = document.getElementById('choices');
   const outcomeEl = document.getElementById('outcome');
   const outcomeMsgEl = document.getElementById('outcome-message');
+  const outcomeInterestEl = document.getElementById('outcome-interest');
   const nextBtn = document.getElementById('next-btn');
-  const tierBannerEl = document.getElementById('tier-banner');
+  const tierBannerEl = document.getElementById('banner-stack');
 
   function renderStats() {
     document.getElementById('stat-name').textContent = state.name;
@@ -115,12 +117,26 @@
     const tier = getTier(state.money);
     document.getElementById('stat-tier-label').textContent = `${TIER_ICON[tier.id] || ''} ${tier.label}`;
 
+    setBar('bar-pantry', state.pantry);
     setBar('bar-health', state.health);
     setBar('bar-happiness', state.happiness);
     setBar('bar-energy', state.energy);
     setBar('bar-reputation', state.reputation);
 
     renderTierTrack(tier.id);
+    renderTraitBadges();
+  }
+
+  function renderTraitBadges() {
+    const el = document.getElementById('trait-badges');
+    const traits = getActiveTraits(state);
+    if (!traits.length) {
+      el.innerHTML = '';
+      el.classList.add('hidden');
+      return;
+    }
+    el.classList.remove('hidden');
+    el.innerHTML = traits.map((t) => `<span class="trait-badge" title="${t.label}">${t.icon} ${t.label}</span>`).join('');
   }
 
   function setBar(id, value) {
@@ -161,7 +177,9 @@
     currentEvent.choices.forEach((choice, idx) => {
       const btn = document.createElement('button');
       btn.className = 'choice-btn';
-      btn.textContent = typeof choice.label === 'function' ? choice.label(state) : choice.label;
+      const label = typeof choice.label === 'function' ? choice.label(state) : choice.label;
+      const badge = choice.risk && RISK_BADGE[choice.risk] ? `<span class="risk-badge risk-${choice.risk}">${RISK_BADGE[choice.risk]}</span>` : '';
+      btn.innerHTML = `<span class="choice-label">${label}</span>${badge}`;
       btn.addEventListener('click', () => handleChoice(idx));
       choicesEl.appendChild(btn);
     });
@@ -176,19 +194,30 @@
 
     document.getElementById('event-card').classList.add('hidden');
     outcomeMsgEl.textContent = result.message || 'Ход сделан.';
+    outcomeInterestEl.textContent = result.interestMessage || '';
+    outcomeInterestEl.classList.toggle('hidden', !result.interestMessage);
     outcomeEl.classList.add('active');
     renderStats();
 
+    const banners = [];
     if (result.tierChanged) {
       const tier = getTier(state.money);
       const wentUp = TIER_ORDER.indexOf(tier.id) > TIER_ORDER.indexOf(prevTierId);
-      tierBannerEl.textContent = wentUp
-        ? `${TIER_ICON[tier.id] || ''} Новый статус: ${tier.label}!`
-        : `${TIER_ICON[tier.id] || ''} Статус понижен: ${tier.label}...`;
-      tierBannerEl.className = 'tier-banner ' + (wentUp ? 'up' : 'down');
+      banners.push({
+        text: wentUp ? `${TIER_ICON[tier.id] || ''} Новый статус: ${tier.label}!` : `${TIER_ICON[tier.id] || ''} Статус понижен: ${tier.label}...`,
+        cls: wentUp ? 'up' : 'down',
+      });
+    }
+    if (result.newTrait) {
+      banners.push({ text: `${result.newTrait.icon} Новая черта характера: «${result.newTrait.label}»`, cls: 'up' });
+    }
+
+    if (banners.length) {
+      tierBannerEl.innerHTML = banners.map((b) => `<div class="tier-banner ${b.cls}">${b.text}</div>`).join('');
       tierBannerEl.classList.remove('hidden');
     } else {
       tierBannerEl.classList.add('hidden');
+      tierBannerEl.innerHTML = '';
     }
 
     if (state.ended) {
@@ -217,6 +246,20 @@
     document.getElementById('end-age').textContent = summary.age;
     document.getElementById('end-turns').textContent = summary.turns;
     document.getElementById('end-name').textContent = state.name;
+
+    const epilogueEl = document.getElementById('end-epilogue');
+    epilogueEl.textContent = summary.epilogue || '';
+    epilogueEl.classList.toggle('hidden', !summary.epilogue);
+
+    const traitsEl = document.getElementById('end-traits');
+    if (summary.traits.length) {
+      traitsEl.innerHTML = summary.traits.map((t) => `<span class="trait-badge" title="${t.label}">${t.icon} ${t.label}</span>`).join('');
+      traitsEl.classList.remove('hidden');
+    } else {
+      traitsEl.innerHTML = '';
+      traitsEl.classList.add('hidden');
+    }
+
     showScreen('end');
   }
 

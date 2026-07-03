@@ -249,6 +249,19 @@ h1, h2 { margin: 0 0 8px; }
 .tier-node.done { opacity: 0.65; filter: grayscale(0.4); }
 .tier-node.current { opacity: 1; filter: grayscale(0); transform: scale(1.15); }
 
+.trait-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+.trait-badges.hidden { display: none; }
+.trait-badge {
+  display: inline-block;
+  background: rgba(124, 92, 255, 0.15);
+  color: var(--purple);
+  border: 1px solid rgba(124, 92, 255, 0.35);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
 .bars { display: flex; flex-direction: column; gap: 8px; }
 .bar-row { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-dim); }
 .bar-row span { width: 100px; flex-shrink: 0; }
@@ -261,6 +274,7 @@ h1, h2 { margin: 0 0 8px; }
   border: 1px solid var(--border);
 }
 .bar-fill { height: 100%; border-radius: 999px; transition: width .3s ease; }
+.bar-pantry { background: linear-gradient(90deg, #fb923c, #fdba74); }
 .bar-health { background: linear-gradient(90deg, #f87171, #fca5a5); }
 .bar-happiness { background: linear-gradient(90deg, #fbbf24, #fde68a); }
 .bar-energy { background: linear-gradient(90deg, #60a5fa, #93c5fd); }
@@ -271,6 +285,10 @@ h1, h2 { margin: 0 0 8px; }
 
 .choices { display: flex; flex-direction: column; gap: 10px; }
 .choice-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
   text-align: left;
   background: var(--bg-alt);
   border: 1px solid var(--border);
@@ -283,20 +301,35 @@ h1, h2 { margin: 0 0 8px; }
 }
 .choice-btn:hover { border-color: var(--accent-2); background: #262b42; }
 .choice-btn:active { transform: scale(0.99); }
+.choice-label { flex: 1; }
+.risk-badge {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.risk-safe { background: rgba(52, 211, 153, 0.15); color: var(--green); }
+.risk-risky { background: rgba(248, 113, 113, 0.15); color: var(--red); }
+.risk-balanced { background: rgba(96, 165, 250, 0.15); color: var(--blue); }
 
 .outcome { display: none; padding: 26px; }
 .outcome.active { display: block; }
-.outcome-message { font-size: 15.5px; line-height: 1.5; color: var(--text); margin: 0 0 20px; }
+.outcome-message { font-size: 15.5px; line-height: 1.5; color: var(--text); margin: 0 0 8px; }
+.outcome-interest { font-size: 13px; line-height: 1.5; color: var(--red); margin: 0 0 20px; }
+.outcome-interest.hidden { display: none; }
 
+.banner-stack { margin-bottom: 4px; }
+.banner-stack.hidden { display: none; }
 .tier-banner {
   padding: 10px 14px;
   border-radius: 10px;
   font-weight: 700;
   font-size: 14px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   text-align: center;
 }
-.tier-banner.hidden { display: none; }
 .tier-banner.up { background: rgba(52, 211, 153, 0.15); color: var(--green); }
 .tier-banner.down { background: rgba(248, 113, 113, 0.15); color: var(--red); }
 
@@ -306,6 +339,19 @@ h1, h2 { margin: 0 0 8px; }
 
 .end-card { text-align: center; }
 .end-title { font-size: 26px; margin-bottom: 10px; }
+.end-card .trait-badges { justify-content: center; margin-bottom: 14px; }
+.epilogue {
+  font-size: 13.5px;
+  font-style: italic;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin: 0 0 18px;
+  padding: 12px 14px;
+  background: var(--bg-alt);
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+.epilogue.hidden { display: none; }
 
 /* ---------- Адаптив ---------- */
 

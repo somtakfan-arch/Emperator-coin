@@ -76,8 +76,13 @@
         </div>
 
         <div id="tier-track" class="tier-track"></div>
+        <div id="trait-badges" class="trait-badges hidden"></div>
 
         <div class="bars">
+          <div class="bar-row">
+            <span>🍽️ Еда</span>
+            <div class="bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="bar-pantry" class="bar-fill bar-pantry"></div></div>
+          </div>
           <div class="bar-row">
             <span>❤️ Здоровье</span>
             <div class="bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="bar-health" class="bar-fill bar-health"></div></div>
@@ -103,8 +108,9 @@
       </section>
 
       <section id="outcome" class="card outcome">
-        <div id="tier-banner" class="tier-banner hidden"></div>
+        <div id="banner-stack" class="banner-stack hidden"></div>
         <p id="outcome-message" class="outcome-message"></p>
+        <p id="outcome-interest" class="outcome-interest hidden"></p>
         <button id="next-btn" class="btn btn-primary">Далее →</button>
       </section>
 
@@ -116,6 +122,8 @@
     <div class="card end-card">
       <h2 id="end-title" class="end-title"></h2>
       <p id="end-text" class="lead"></p>
+      <div id="end-traits" class="trait-badges hidden"></div>
+      <p id="end-epilogue" class="epilogue hidden"></p>
       <div class="reveal-grid">
         <div class="reveal-item"><span>Имя</span><b id="end-name"></b></div>
         <div class="reveal-item"><span>Итоговый статус</span><b id="end-tier"></b></div>
