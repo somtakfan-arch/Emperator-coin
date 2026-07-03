@@ -8,9 +8,11 @@
      подписи кнопок считают её той же формулой, что и эффект —
      формула детерминирована от state.money, поэтому число не
      "врёт").
-   - Часть исходов зависит не от чистой удачи, а от характеристик
-     игрока (репутация, здоровье, накопленные черты характера) —
-     разумные решения ощутимо повышают шансы на успех.
+   - НИКАКОЙ удачи: исход любого выбора — детерминированная функция
+     характеристик игрока (репутация, здоровье, энергия, накопленные
+     черты характера). Одно и то же решение при одних и тех же
+     характеристиках всегда даёт один и тот же результат — не
+     подбрасывается ни одна монетка.
    - Игра помнит крупные покупки (телефон/куртка/мебель) и запас
      еды (state.pantry) — события учитывают это в тексте.
 
@@ -35,9 +37,16 @@
   const noJobFn = (s) => !s.hasJob;
   const hasAllergyFn = (s) => !s.allergyNone;
   const traitCap = (state, key, max) => Math.min((state.traits && state.traits[key]) || 0, max);
-  // шанс успеха, растущий вместе с репутацией — "разум", а не удача
-  const socialChance = (state, base, slope) => clampNum(base + state.reputation * slope, 0.05, 0.95);
-  const resilienceChance = (state, base, slope) => clampNum(base + state.health * slope, 0.05, 0.95);
+
+  /* ---------- детерминированные пороги вместо удачи ---------- */
+  // Никакого Math.random() в исходах: результат каждого выбора зависит
+  // только от текущих характеристик персонажа.
+  const repOk = (state, threshold) => state.reputation >= threshold;
+  const healthOk = (state, threshold) => state.health >= threshold;
+  const energyOk = (state, threshold) => state.energy >= threshold;
+  const traitOk = (state, key, threshold) => traitCap(state, key, 10) >= threshold;
+  // масштаб награды/тяжести исхода — плавно зависит от характеристики, без броска кубика
+  const scaleByStat = (statValue, statMax, min, max) => min + (max - min) * clampNum(statValue / statMax, 0, 1);
 
   /* ---------- строители семей событий ---------- */
 
@@ -83,10 +92,10 @@
     return events;
   }
 
-  function costOrEndure(statKey, gainBase, badChance, badBase, costLabelPrefix, endureLabelPrefix) {
+  function costOrEndure(statKey, gainBase, energyThreshold, badBase, costLabelPrefix, endureLabelPrefix) {
     return {
       costLabel: (state, a1, j) => `${costLabelPrefix} (${formatMoney(scaleByWealth(state, COST_BASE[j]))})`,
-      endureLabel: (state, a1, j) => `${endureLabelPrefix} (сэкономишь ~${formatMoney(scaleByWealth(state, COST_BASE[j] * 0.15))}, но есть риск)`,
+      endureLabel: (state, a1, j) => `${endureLabelPrefix} (сэкономишь ~${formatMoney(scaleByWealth(state, COST_BASE[j] * 0.15))}, нужен запас энергии)`,
       cost: (state, a1, j) => {
         const cost = scaleByWealth(state, COST_BASE[j]);
         const r = { money: -cost, happiness: 3, message: `Потратил ${formatMoney(cost)} — вопрос закрыт.` };
@@ -94,14 +103,14 @@
         return r;
       },
       endure: (state, a1, j) => {
-        if (chance(badChance)) {
+        if (!energyOk(state, energyThreshold)) {
           const hit = badBase + j * 3;
-          const r = { happiness: -6, message: 'Стало хуже — экономия вышла боком.' };
+          const r = { happiness: -6, message: 'Сил не хватило, чтобы разобраться своими руками — экономия вышла боком.' };
           r[statKey] = (r[statKey] || 0) - hit;
           return r;
         }
         const saved = scaleByWealth(state, COST_BASE[j] * 0.15);
-        return { money: saved, happiness: -1, message: `Кое-как обошёлся и сэкономил ${formatMoney(saved)}.` };
+        return { money: saved, happiness: -1, message: `Энергии хватило, чтобы обойтись своими силами — сэкономил ${formatMoney(saved)}.` };
       },
     };
   }
@@ -118,12 +127,13 @@
       risk: 'risky',
       effect: (state, a1, j) => {
         const cost = scaleByWealth(state, COST_BASE[j]);
-        const bonus = traitCap(state, 'riskTaker', 8) * 0.014;
-        if (chance(0.5 - j * 0.025 + bonus)) {
-          const payout = Math.round(cost * rand(1.2, 2.6));
-          return { money: payout - cost, happiness: 8, reputation: 2, message: `Вложение выстрелило! Чистая прибыль — ${formatMoney(payout - cost)}.` };
+        const skill = state.reputation + traitCap(state, 'riskTaker', 8) * 4;
+        if (skill >= 55 + j * 10) {
+          const mult = scaleByStat(skill, 130, 1.2, 2.6);
+          const payout = Math.round(cost * mult);
+          return { money: payout - cost, happiness: 8, reputation: 2, message: `Разбираешься в теме — вложение выстрелило! Чистая прибыль — ${formatMoney(payout - cost)}.` };
         }
-        return { money: -cost, happiness: -10, message: `Инвестиция прогорела. Потеряно ${formatMoney(cost)}.` };
+        return { money: -cost, happiness: -10, message: `Не хватило ни репутации, ни опыта, чтобы разглядеть подвох. Инвестиция прогорела, потеряно ${formatMoney(cost)}.` };
       },
     },
     { label: 'Отказаться, слишком рискованно', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -1, message: 'Ты решил не рисковать и остался при своих.' }) }
@@ -165,11 +175,11 @@
         const saved = scaleByWealth(state, COST_BASE[j] * 0.35);
         const key = POSSESSION_KEY[a1];
         const base = key ? { addPossession: key } : a1 === 'продукты на неделю' ? { pantrySet: 70 } : {};
-        if (chance(0.3)) {
+        if (!repOk(state, 45)) {
           const healthHit = a1.includes('лекар') ? -14 : -5;
-          return Object.assign({}, base, { money: -Math.round(saved * 0.3), health: healthHit, happiness: -5, message: 'Товар оказался некачественным, пришлось доплачивать за нормальный.' });
+          return Object.assign({}, base, { money: -Math.round(saved * 0.3), health: healthHit, happiness: -5, message: 'Без нужных знакомств нарвался на некачественный товар, пришлось доплачивать за нормальный.' });
         }
-        return Object.assign({}, base, { money: saved, happiness: 3, message: `Сэкономил ${formatMoney(saved)}, всё пригодилось.` });
+        return Object.assign({}, base, { money: saved, happiness: 3, message: `Знаешь, к кому обращаться — сэкономил ${formatMoney(saved)}, всё пригодилось.` });
       },
     },
     {
@@ -185,7 +195,7 @@
     }
   );
 
-  const healthFx = costOrEndure('health', 10, 0.4, 8, 'Заняться здоровьем', 'Перетерпеть');
+  const healthFx = costOrEndure('health', 10, 55, 8, 'Заняться здоровьем', 'Перетерпеть');
   const health = buildCostTierFamily(
     'health',
     ['У тебя простуда, которая не проходит уже неделю.', 'Тебя замучила бессонница и хроническая усталость.', 'К тебе подступает эмоциональное выгорание на работе.', 'Ты потянул(а) спину, поднимая тяжёлое.', 'Уже давно пора сделать плановый осмотр у врача.', 'У тебя разболелся зуб — терпеть больше нет сил.'],
@@ -194,7 +204,7 @@
     { label: healthFx.endureLabel, trait: 'cautious', risk: 'risky', effect: healthFx.endure }
   );
 
-  const housingFx = costOrEndure('happiness', 6, 0.35, 10, 'Вызвать мастера', 'Сделать на скорую руку');
+  const housingFx = costOrEndure('happiness', 6, 45, 10, 'Вызвать мастера', 'Сделать на скорую руку');
   const housing = buildCostTierFamily(
     'housing',
     ['потекла крыша после сильного дождя', 'сосед сверху устроил потоп в квартире', 'хозяин жилья резко поднял плату', 'управляющая компания требует оплатить капремонт', 'сломались холодильник и стиральная машина разом', 'нужно срочно менять проводку, пока не случился пожар'],
@@ -203,7 +213,7 @@
     { label: housingFx.endureLabel, trait: 'cautious', risk: 'risky', effect: housingFx.endure }
   );
 
-  const transportFx = costOrEndure('energy', 6, 0.35, 10, 'Отдать в сервис', 'Перетерпеть неудобства');
+  const transportFx = costOrEndure('energy', 6, 45, 10, 'Отдать в сервис', 'Перетерпеть неудобства');
   const transport = buildCostTierFamily(
     'transport',
     ['сломалась машина по дороге на работу', 'случилось небольшое ДТП не по твоей вине', 'эвакуатор увёз машину со штрафстоянки', 'пришёл штраф за нарушение ПДД', 'двигатель начал барахлить', 'лопнуло колесо прямо на трассе'],
@@ -214,7 +224,7 @@
 
   const selfdev = buildCostTierFamily(
     'selfdev',
-['Тебе предложили курс английского языка.', 'У тебя появилась возможность поступить на MBA.', 'Абонемент в твой спортзал горит скидкой.', 'Психотерапевт посоветовал тебе пройти курс сессий.', 'Вышла книга-бестселлер о личных финансах, которая может пригодиться.', 'Знакомый коуч предлагает тебе менторство.'],
+    ['Тебе предложили курс английского языка.', 'У тебя появилась возможность поступить на MBA.', 'Абонемент в твой спортзал горит скидкой.', 'Психотерапевт посоветовал тебе пройти курс сессий.', 'Вышла книга-бестселлер о личных финансах, которая может пригодиться.', 'Знакомый коуч предлагает тебе менторство.'],
     (a1, j, state) => `${a1} Это будет стоить ${formatMoney(scaleByWealth(state, COST_BASE[j] * 0.7))}. Вложиться в себя?`,
     {
       label: (state, a1, j) => `Вложиться в себя (${formatMoney(scaleByWealth(state, COST_BASE[j] * 0.7))})`,
@@ -238,12 +248,13 @@
       risk: 'risky',
       effect: (state, a1, j) => {
         const stake = scaleByWealth(state, COST_BASE[j] * 0.5);
-        const bonus = traitCap(state, 'riskTaker', 8) * 0.016;
-        if (chance(0.2 + bonus)) {
-          const payout = Math.round(stake * rand(2, 4.2));
-          return { money: payout - stake, happiness: 12, message: `Невероятно! Чистый выигрыш — ${formatMoney(payout - stake)}.` };
+        // казино не обыграть удачей — только многолетний опыт (черта "азартный" на максимуме) даёт системное преимущество
+        if (traitOk(state, 'riskTaker', 8)) {
+          const mult = scaleByStat(traitCap(state, 'riskTaker', 10), 10, 2, 4.2);
+          const payout = Math.round(stake * mult);
+          return { money: payout - stake, happiness: 12, message: `Годы за игровым столом наконец окупились! Чистый выигрыш — ${formatMoney(payout - stake)}.` };
         }
-        return { money: -stake, happiness: -8, message: `Азарт подвёл — потеряно ${formatMoney(stake)}.` };
+        return { money: -stake, happiness: -8, message: `Казино своих не отпускает — потеряно ${formatMoney(stake)}.` };
       },
     },
     { label: 'Уйти, не рискуя', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -1, message: 'Ты решил не искушать судьбу.' }) }
@@ -259,12 +270,13 @@
       risk: 'risky',
       effect: (state, a1, j) => {
         const cost = scaleByWealth(state, COST_BASE[j] * 1.4);
-        const bonus = traitCap(state, 'riskTaker', 8) * 0.015 + traitCap(state, 'hardworker', 8) * 0.01;
-        if (chance(0.5 + bonus)) {
-          const profit = Math.round(cost * rand(1.2, 2.5));
-          return { money: profit - cost, reputation: 4, message: `Ход окупился! Чистая прибыль — ${formatMoney(profit - cost)}.` };
+        const skill = state.reputation + traitCap(state, 'riskTaker', 8) * 3 + traitCap(state, 'hardworker', 8) * 3;
+        if (skill >= 75 + j * 8) {
+          const mult = scaleByStat(skill, 150, 1.2, 2.5);
+          const profit = Math.round(cost * mult);
+          return { money: profit - cost, reputation: 4, message: `Опыт и репутация сделали своё дело! Чистая прибыль — ${formatMoney(profit - cost)}.` };
         }
-        return { money: -cost, happiness: -6, message: `Решение не сработало, потеряно ${formatMoney(cost)}.` };
+        return { money: -cost, happiness: -6, message: `Не хватило деловой хватки — решение не сработало, потеряно ${formatMoney(cost)}.` };
       },
     },
     {
@@ -285,7 +297,7 @@
     'survival',
     [
       { text: (fl) => `Ты нашёл у ${fl} почти нетронутую еду в мусорном баке. Есть или пройти мимо?`, choices: [
-        { label: 'Съесть, голод не тётка', risk: 'risky', effect: (state) => (chance(resilienceChance(state, 0.55, -0.006)) ? { health: -18, happiness: -6, message: 'Отравление. Пришлось тяжело.' } : { health: 6, happiness: 4, message: 'Обошлось, и даже сытно.' }) },
+        { label: 'Съесть, голод не тётка', risk: 'risky', effect: (state) => (healthOk(state, 45) ? { health: 6, happiness: 4, message: 'Крепкий организм справился — обошлось, и даже сытно.' } : { health: -18, happiness: -6, message: 'Организм и так на пределе — отравление. Пришлось тяжело.' }) },
         { label: 'Пройти мимо', risk: 'safe', effect: () => ({ happiness: -3, message: 'Голод остался, зато безопасно.' }) },
       ]},
       { text: (fl) => `Мужчина у ${fl} предлагает разгрузить машину за пару часов и заплатить наличными.`, choices: [
@@ -294,18 +306,18 @@
       ]},
       { text: (fl) => `Охранник у ${fl} требует, чтобы ты ушёл, иначе вызовет полицию.`, choices: [
         { label: 'Уйти без споров', risk: 'safe', effect: () => ({ energy: -8, happiness: -2, message: 'Пришлось искать новое место.' }) },
-        { label: 'Попытаться поспорить', risk: 'risky', effect: (state) => (chance(socialChance(state, 0.15, 0.006)) ? { happiness: 2, message: 'Охранник махнул рукой и отстал.' } : { reputation: -6, happiness: -10, message: 'Приехала полиция, разговор был неприятным.' }) },
+        { label: 'Попытаться поспорить', risk: 'risky', effect: (state) => (repOk(state, 55) ? { happiness: 2, message: 'Держался уверенно — охранник махнул рукой и отстал.' } : { reputation: -6, happiness: -10, message: 'Вид был не самый убедительный — приехала полиция, разговор был неприятным.' }) },
       ]},
       { text: (fl) => `Волонтёры у ${fl} раздают горячий чай, еду и тёплые вещи.`, choices: [
         { label: 'Взять помощь', risk: 'safe', effect: () => ({ health: 10, happiness: 8, message: 'Стало немного легче.' }) },
         { label: 'Отказаться, гордость не позволяет', trait: 'cautious', risk: 'balanced', effect: () => ({ happiness: -4, reputation: 2, message: 'Тяжело, зато по-своему.' }) },
       ]},
       { text: (fl) => `Ночью у ${fl} резко похолодало, а укрыться нечем.`, choices: [
-        { label: 'Искать любое укрытие', risk: 'risky', effect: (state) => (chance(resilienceChance(state, 0.4, -0.005)) ? { health: -15, message: 'Ночь выдалась тяжёлой, здоровье подкосило.' } : { health: -3, energy: -5, message: 'Кое-как пережил холодную ночь.' }) },
+        { label: 'Искать любое укрытие', risk: 'risky', effect: (state) => (healthOk(state, 60) ? { health: -3, energy: -5, message: 'Запас здоровья позволил кое-как пережить холодную ночь.' } : { health: -15, message: 'Организм и так истощён — ночь выдалась тяжёлой, здоровье подкосило.' }) },
         { label: 'Не спать и двигаться всю ночь', risk: 'balanced', effect: () => ({ energy: -25, health: -2, message: 'Не замёрз, но вымотался в ноль.' }) },
       ]},
       { text: (fl) => `Пока ты отдыхал у ${fl}, кто-то рылся в твоих вещах.`, choices: [
-        { label: 'Броситься проверять и разбираться', risk: 'balanced', effect: (state) => { if (chance(0.5)) return { happiness: -2, message: 'Успел, ничего не пропало.' }; const loss = scaleByWealth(state, 300); return { money: -loss, happiness: -8, message: `Пропали последние ${formatMoney(loss)}.` }; } },
+        { label: 'Броситься проверять и разбираться', risk: 'balanced', effect: (state) => { if (energyOk(state, 50)) return { happiness: -2, message: 'Сил хватило среагировать быстро — успел, ничего не пропало.' }; const loss = scaleByWealth(state, 300); return { money: -loss, happiness: -8, message: `Слишком вымотан, чтобы среагировать вовремя — пропали последние ${formatMoney(loss)}.` }; } },
         { label: 'Смириться, что бы ни было', risk: 'safe', effect: () => ({ happiness: -5, message: 'Что случилось, то случилось.' }) },
       ]},
     ],
@@ -317,7 +329,7 @@
     'luxury',
     [
       { text: (fl, state) => `На аукционе ${fl} подначивает тебя сделать ставку ${formatMoney(scaleByWealth(state, 60000))} на редкую картину.`, choices: [
-        { label: (fl, state) => `Сделать ставку ${formatMoney(scaleByWealth(state, 60000))}`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 60000); return chance(0.4) ? { money: -cost, happiness: 14, reputation: 6, message: `Картина твоя за ${formatMoney(cost)}! Все восхищены.` } : { money: -Math.round(cost * 1.3), happiness: -6, message: 'Ты явно переплатил в азарте торгов.' }; } },
+        { label: (fl, state) => `Сделать ставку ${formatMoney(scaleByWealth(state, 60000))}`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 60000); return repOk(state, 60) ? { money: -cost, happiness: 14, reputation: 6, message: `Знакомые оценщики подсказали верный момент — картина твоя за ${formatMoney(cost)}! Все восхищены.` } : { money: -Math.round(cost * 1.3), happiness: -6, message: 'Без нужных связей в этом мире ты явно переплатил в азарте торгов.' }; } },
         { label: 'Остаться зрителем', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -1, message: 'Может, и к лучшему.' }) },
       ]},
       { text: (fl, state) => `${cap(fl)} просит внести взнос ${formatMoney(scaleByWealth(state, 40000))} на благотворительном балу.`, choices: [
@@ -329,12 +341,12 @@
         { label: 'Отказаться, слишком спонтанно', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -2, message: 'Скидка сгорела, зато деньги целы.' }) },
       ]},
       { text: (fl, state) => `${cap(fl)} зовёт инвестировать ${formatMoney(scaleByWealth(state, 120000))} в футбольный клуб.`, choices: [
-        { label: (fl, state) => `Инвестировать ${formatMoney(scaleByWealth(state, 120000))}`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 120000); const bonus = traitCap(state, 'riskTaker', 8) * 0.012; return chance(0.45 + bonus) ? { money: Math.round(cost * rand(1.5, 3)) - cost, reputation: 5, message: 'Клуб взлетел в лиге, вложение окупилось с лихвой!' } : { money: -cost, happiness: -8, message: 'Клуб вылетел из лиги, деньги пропали.' }; } },
+        { label: (fl, state) => `Инвестировать ${formatMoney(scaleByWealth(state, 120000))}`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 120000); const skill = state.reputation + traitCap(state, 'riskTaker', 8) * 3; if (skill >= 65) { const mult = scaleByStat(skill, 130, 1.5, 3); return { money: Math.round(cost * mult) - cost, reputation: 5, message: 'Клуб взлетел в лиге, вложение окупилось с лихвой!' }; } return { money: -cost, happiness: -8, message: 'Клуб вылетел из лиги, деньги пропали.' }; } },
         { label: 'Отказаться', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -1, message: 'Футбол — это не про инвестиции.' }) },
       ]},
       { text: (fl, state) => `Тебя поймали папарацци в неловкой ситуации. ${cap(fl)} советует нанять пиарщика за ${formatMoney(scaleByWealth(state, 25000))}.`, choices: [
         { label: (fl, state) => `Нанять пиарщика (${formatMoney(scaleByWealth(state, 25000))})`, risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 25000); return { money: -cost, reputation: 10, message: 'Репутация спасена, скандал замят.' }; } },
-        { label: 'Проигнорировать', risk: 'risky', effect: (state) => (chance(socialChance(state, 0.3, 0.005)) ? { happiness: 2, message: 'Всё само собой утихло.' } : { reputation: -12, happiness: -8, message: 'Скандал разросся в прессе.' }) },
+        { label: 'Проигнорировать', risk: 'risky', effect: (state) => (repOk(state, 45) ? { happiness: 2, message: 'Прочная репутация выдержала — всё само собой утихло.' } : { reputation: -12, happiness: -8, message: 'Слабая репутация не спасла — скандал разросся в прессе.' }) },
       ]},
       { text: (fl, state) => `${cap(fl)} предлагает арендовать частный остров на сезон за ${formatMoney(scaleByWealth(state, 200000))}.`, choices: [
         { label: (fl, state) => `Арендовать остров (${formatMoney(scaleByWealth(state, 200000))})`, risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 200000); return { money: -cost, happiness: 22, energy: 15, message: `Незабываемый отдых обошёлся в ${formatMoney(cost)}.` }; } },
@@ -353,7 +365,7 @@
         { label: 'Объяснить, что сейчас не время', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -6, message: 'Пришлось разочаровать близкого человека.' }) },
       ]},
       { text: (fl) => `${cap(fl)} предлагает переехать в другой город ради новой жизни.`, choices: [
-        { label: (fl, state) => `Согласиться на переезд (~${formatMoney(scaleByWealth(state, 8000))})`, trait: 'familyFirst', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 8000); return chance(0.5) ? { money: -cost, happiness: 12, energy: -10, message: 'Переезд оказался лучшим решением!' } : { money: -Math.round(cost * 1.5), happiness: -6, energy: -15, message: 'Переезд дался тяжело и дорого.' }; } },
+        { label: (fl, state) => `Согласиться на переезд (~${formatMoney(scaleByWealth(state, 8000))})`, trait: 'familyFirst', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 8000); return traitOk(state, 'familyFirst', 2) ? { money: -cost, happiness: 12, energy: -10, message: 'Крепкая семья помогла пережить переезд легко — оказался лучшим решением!' } : { money: -Math.round(cost * 1.5), happiness: -6, energy: -15, message: 'Без сплочённости в семье переезд дался тяжело и дорого.' }; } },
         { label: 'Остаться на месте', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -4, message: 'Привычная жизнь продолжается.' }) },
       ]},
       { text: (fl, state) => `${cap(fl)} просит одолжить ${formatMoney(scaleByWealth(state, 10000))} без гарантии возврата.`, choices: [
@@ -381,27 +393,27 @@
     'crime',
     [
       { text: (fl, state) => `${cap(fl)} предлагает перевезти "посылку" за ${formatMoney(scaleByWealth(state, 15000))}, не задавая вопросов.`, choices: [
-        { label: (fl, state) => `Согласиться за ${formatMoney(scaleByWealth(state, 15000))}`, trait: 'shady', risk: 'risky', effect: (state) => { const pay = scaleByWealth(state, 15000); const jailChance = Math.max(0.035, 0.15 - traitCap(state, 'shady', 6) * 0.02); return chance(jailChance) ? { jail: true, message: 'Это была ловушка. Тебя задержали с поличным.' } : { money: pay, happiness: -4, message: `Дело сделано, получено ${formatMoney(pay)}. Но неспокойно на душе.` }; } },
+        { label: (fl, state) => `Согласиться за ${formatMoney(scaleByWealth(state, 15000))}`, trait: 'shady', risk: 'risky', effect: (state) => { const pay = scaleByWealth(state, 15000); return traitOk(state, 'shady', 2) ? { money: pay, happiness: -4, message: `Опыт подсказал, как всё провернуть чисто — дело сделано, получено ${formatMoney(pay)}.` } : { jail: true, message: 'Не хватило опыта распознать ловушку. Тебя задержали с поличным.' }; } },
         { label: 'Отказаться', trait: 'cautious', risk: 'safe', effect: () => ({ reputation: 2, message: 'Мало ли что там было в этой посылке.' }) },
       ]},
       { text: (fl) => `${cap(fl)} зовёт поучаствовать в схеме, похожей на финансовую пирамиду.`, choices: [
-        { label: (fl, state) => `Войти в схему (${formatMoney(scaleByWealth(state, 10000))})`, trait: 'shady', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 10000); return chance(0.25) ? { money: Math.round(cost * 0.5), message: 'Успел выйти вовремя, заработав немного.' } : { money: -cost, reputation: -4, happiness: -8, message: 'Пирамида рухнула, деньги пропали.' }; } },
+        { label: (fl, state) => `Войти в схему (${formatMoney(scaleByWealth(state, 10000))})`, trait: 'shady', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 10000); return traitOk(state, 'shady', 3) ? { money: Math.round(cost * 0.5), message: 'Опыт подсказал, когда пора выходить — успел вовремя, заработав немного.' } : { money: -cost, reputation: -4, happiness: -8, message: 'Пирамида рухнула раньше, чем ты сообразил выйти — деньги пропали.' }; } },
         { label: 'Отказаться', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 1, message: 'Обошёл стороной сомнительную схему.' }) },
       ]},
       { text: (fl, state) => `${cap(fl)} намекает, что взятка ${formatMoney(scaleByWealth(state, 8000))} решит все проблемы с проверкой.`, choices: [
-        { label: (fl, state) => `Дать взятку ${formatMoney(scaleByWealth(state, 8000))}`, trait: 'shady', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 8000); const jailChance = Math.max(0.02, 0.12 - traitCap(state, 'shady', 6) * 0.018); return chance(jailChance) ? { jail: true, message: 'Разговор записывали. Взятка обернулась уголовным делом.' } : { money: -cost, energy: 5, message: 'Проблема решена быстро и тихо.' }; } },
+        { label: (fl, state) => `Дать взятку ${formatMoney(scaleByWealth(state, 8000))}`, trait: 'shady', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 8000); return traitOk(state, 'shady', 1) ? { money: -cost, energy: 5, message: 'Знаешь, как такие вопросы решаются — проблема решена быстро и тихо.' } : { jail: true, message: 'Слишком неопытно подошёл к делу. Разговор записывали — взятка обернулась уголовным делом.' }; } },
         { label: 'Решить вопрос по правилам', trait: 'cautious', risk: 'safe', effect: () => ({ energy: -10, happiness: -2, message: 'Дольше, зато чисто.' }) },
       ]},
       { text: (fl) => `${cap(fl)} рассказывает способ вообще не платить налоги.`, choices: [
-        { label: (fl, state) => `Воспользоваться схемой (экономия ${formatMoney(scaleByWealth(state, 20000))})`, trait: 'shady', risk: 'risky', effect: (state) => { const save = scaleByWealth(state, 20000); const jailChance = Math.max(0.035, 0.15 - traitCap(state, 'shady', 6) * 0.02); return chance(jailChance) ? { jail: true, message: 'Налоговая всё же докопалась. Дело дошло до суда.' } : { money: save, message: `Сэкономил на налогах ${formatMoney(save)}.` }; } },
+        { label: (fl, state) => `Воспользоваться схемой (экономия ${formatMoney(scaleByWealth(state, 20000))})`, trait: 'shady', risk: 'risky', effect: (state) => { const save = scaleByWealth(state, 20000); return traitOk(state, 'shady', 2) ? { money: save, message: `Схема отработана до мелочей — сэкономил на налогах ${formatMoney(save)}.` } : { jail: true, message: 'Схема была слишком грубой. Налоговая докопалась — дело дошло до суда.' }; } },
         { label: 'Платить честно', trait: 'cautious', risk: 'safe', effect: () => ({ reputation: 3, message: 'Спокойный сон дороже сомнительной экономии.' }) },
       ]},
       { text: (fl) => `${cap(fl)} предлагает заработать на продаже чужих личных данных.`, choices: [
-        { label: (fl, state) => `Согласиться за ${formatMoney(scaleByWealth(state, 12000))}`, trait: 'shady', risk: 'risky', effect: (state) => { const pay = scaleByWealth(state, 12000); const jailChance = Math.max(0.04, 0.18 - traitCap(state, 'shady', 6) * 0.02); return chance(jailChance) ? { jail: true, message: 'Тебя вычислили по цифровому следу.' } : { money: pay, happiness: -6, message: `Получил ${formatMoney(pay)}, но чувствуешь себя мерзко.` }; } },
+        { label: (fl, state) => `Согласиться за ${formatMoney(scaleByWealth(state, 12000))}`, trait: 'shady', risk: 'risky', effect: (state) => { const pay = scaleByWealth(state, 12000); return traitOk(state, 'shady', 3) ? { money: pay, happiness: -6, message: `Замёл цифровые следы как надо — получил ${formatMoney(pay)}, но чувствуешь себя мерзко.` } : { jail: true, message: 'Цифровой след остался на видном месте. Тебя вычислили.' }; } },
         { label: 'Отказаться', trait: 'cautious', risk: 'safe', effect: () => ({ reputation: 3, message: 'Некоторые вещи не продаются.' }) },
       ]},
       { text: (fl, state) => `${cap(fl)} предлагает подделать документы ради кредита на ${formatMoney(scaleByWealth(state, 30000))}.`, choices: [
-        { label: (fl, state) => `Подделать документы (${formatMoney(scaleByWealth(state, 30000))})`, trait: 'shady', risk: 'risky', effect: (state) => { const gain = scaleByWealth(state, 30000); const jailChance = Math.max(0.035, 0.17 - traitCap(state, 'shady', 6) * 0.02); return chance(jailChance) ? { jail: true, message: 'Банк передал дело в полицию.' } : { money: gain, message: `Кредит одобрен, получено ${formatMoney(gain)}.` }; } },
+        { label: (fl, state) => `Подделать документы (${formatMoney(scaleByWealth(state, 30000))})`, trait: 'shady', risk: 'risky', effect: (state) => { const gain = scaleByWealth(state, 30000); return traitOk(state, 'shady', 2) ? { money: gain, message: `Подделка выполнена мастерски — кредит одобрен, получено ${formatMoney(gain)}.` } : { jail: true, message: 'Банк заметил нестыковки и передал дело в полицию.' }; } },
         { label: 'Отказаться и жить по средствам', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 1, message: 'Меньше денег, зато меньше рисков.' }) },
       ]},
     ],
@@ -430,7 +442,7 @@
       ]},
       { text: (fl, state) => `Из-за снегопада ${fl} на пару дней стало не выбраться из города. Закупиться заранее — ${formatMoney(scaleByWealth(state, 2500))}.`, choices: [
         { label: (fl, state) => `Закупиться заранее (${formatMoney(scaleByWealth(state, 2500))})`, risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 2500); return { money: -cost, happiness: 4, message: `Переждал с комфортом, потратив ${formatMoney(cost)}.` }; } },
-        { label: 'Понадеяться, что пронесёт', risk: 'risky', effect: () => (chance(0.4) ? { health: -10, happiness: -8, message: 'Еда закончилась раньше, чем расчистили дороги.' } : { happiness: 1, message: 'Обошлось, снег быстро убрали.' }) },
+        { label: 'Понадеяться, что пронесёт', risk: 'risky', effect: (state) => (state.pantry >= 30 ? { happiness: 1, message: 'Запасы дома выручили — обошлось, снег быстро убрали.' } : { health: -10, happiness: -8, message: 'Запасов дома не было — еда закончилась раньше, чем расчистили дороги.' }) },
       ]},
       { text: (fl, state) => `Прошёл ураган и наделал бед ${fl}. Восстановление сообща — ${formatMoney(scaleByWealth(state, 4000))} с твоей стороны.`, choices: [
         { label: (fl, state) => `Помочь и восстановить (${formatMoney(scaleByWealth(state, 4000))})`, risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 4000); return { money: -cost, reputation: 6, happiness: 6, message: `Все объединились, дело пошло быстрее. Потрачено ${formatMoney(cost)}.` }; } },
@@ -453,21 +465,21 @@
         { label: 'Забить и завести новый', risk: 'risky', effect: () => ({ happiness: -6, reputation: -2, message: 'Часть контактов и репутации потеряна.' }) },
       ]},
       { text: (fl, state) => `Тебе предлагают дорогую подписку ${fl} за ${formatMoney(scaleByWealth(state, 5000))} с "гарантированным доходом".`, choices: [
-        { label: (fl, state) => `Оформить за ${formatMoney(scaleByWealth(state, 5000))}`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 5000); return chance(0.25) ? { money: Math.round(cost * 2) - cost, message: 'На удивление, сервис реально сработал!' } : { money: -cost, happiness: -6, message: 'Классический развод на деньги.' }; } },
+        { label: (fl, state) => `Оформить за ${formatMoney(scaleByWealth(state, 5000))}`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 5000); return { money: -cost, happiness: -6, message: 'Классический развод на деньги — "гарантированный доход" не наступил.' }; } },
         { label: 'Не вестись', trait: 'cautious', risk: 'safe', effect: () => ({ reputation: 1, message: 'Бесплатный сыр бывает только в мышеловке.' }) },
       ]},
       { text: () => `Мошенники звонят и представляются службой безопасности банка.`, choices: [
-        { label: 'Поверить и выполнить инструкции', risk: 'risky', effect: (state) => { const loss = scaleByWealth(state, 8000); const savvy = traitCap(state, 'cautious', 10); return chance(0.7 - savvy * 0.035) ? { money: -loss, happiness: -14, message: `Со счёта списали ${formatMoney(loss)}. Классическая схема мошенников.` } : { happiness: -2, message: 'В последний момент что-то насторожило, успел остановиться — прошлый опыт научил быть внимательнее.' }; } },
+        { label: 'Поверить и выполнить инструкции', risk: 'risky', effect: (state) => { const loss = scaleByWealth(state, 8000); return traitOk(state, 'cautious', 4) ? { happiness: -2, message: 'Прошлый опыт научил быть внимательнее — что-то насторожило, успел остановиться.' } : { money: -loss, happiness: -14, message: `Со счёта списали ${formatMoney(loss)}. Классическая схема мошенников.` }; } },
         { label: 'Положить трубку и перезвонить в банк напрямую', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 2, reputation: 1, message: 'Бдительность спасла деньги.' }) },
       ]},
       { text: () => `Криптокошелёк, который ты когда-то завёл ради интереса, внезапно подскочил в цене.`, choices: [
         { label: (fl, state) => `Продать всё сейчас (${formatMoney(scaleByWealth(state, 7000))})`, trait: 'cautious', risk: 'safe', effect: (state) => { const gain = scaleByWealth(state, 7000); return { money: gain, happiness: 9, message: `Зафиксировал прибыль — ${formatMoney(gain)}.` }; } },
-        { label: 'Придержать, вдруг вырастет ещё', trait: 'riskTaker', risk: 'risky', effect: (state) => { if (chance(0.4)) { const gain = scaleByWealth(state, 15000); return { money: gain, happiness: 12, message: 'Ставка сыграла, цена выросла ещё больше!' }; } const loss = scaleByWealth(state, 6000); return { money: -loss, happiness: -8, message: 'Цена рухнула обратно, часть прибыли потеряна.' }; } },
+        { label: 'Придержать, вдруг вырастет ещё', trait: 'riskTaker', risk: 'risky', effect: (state) => { if (traitOk(state, 'riskTaker', 5)) { const gain = scaleByWealth(state, 15000); return { money: gain, happiness: 12, message: 'Опытный взгляд на рынок не подвёл — цена выросла ещё больше!' }; } const loss = scaleByWealth(state, 6000); return { money: -loss, happiness: -8, message: 'Без нужного опыта на рынке цена рухнула обратно, часть прибыли потеряна.' }; } },
       ]},
       {
         text: (fl, state) => `Тебе предлагают купить рекламу на Wildberries за ${formatMoney(scaleByWealth(state, 25000))}, раз уж у тебя есть хоть какая-то аудитория и подработка на маркетплейсах.`,
         choices: [
-          { label: (fl, state) => `Купить рекламу за ${formatMoney(scaleByWealth(state, 25000))} на Wildberries`, risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 25000); const gain = Math.round(cost * rand(0.7, 1.6)); return { money: gain - cost, reputation: -1, message: `Реклама на Wildberries обошлась в ${formatMoney(cost)} и принесла ${formatMoney(gain)} заказов.` }; } },
+          { label: (fl, state) => `Купить рекламу за ${formatMoney(scaleByWealth(state, 25000))} на Wildberries`, risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 25000); const mult = scaleByStat(state.reputation, 100, 0.7, 1.6); const gain = Math.round(cost * mult); return { money: gain - cost, reputation: -1, message: `Реклама на Wildberries обошлась в ${formatMoney(cost)} и принесла ${formatMoney(gain)} заказов.` }; } },
           { label: 'Отказаться, беречь бюджет и репутацию', risk: 'safe', effect: () => ({ reputation: 2, message: 'Аудитория оценила честность без рекламной накрутки.' }) },
         ],
       },
@@ -492,7 +504,7 @@
         { label: 'Проехать мимо, не твоё дело', risk: 'safe', effect: () => ({ happiness: -3, message: 'Совесть немного покусывает.' }) },
       ]},
       { text: () => `Соседи устроили шумную вечеринку и мешают спать.`, choices: [
-        { label: 'Пойти и попросить потише', risk: 'balanced', effect: (state) => (chance(socialChance(state, 0.3, 0.006)) ? { happiness: 3, message: 'Соседи извинились и убавили звук.' } : { happiness: -6, reputation: -1, message: 'Разговор перешёл в ссору.' }) },
+        { label: 'Пойти и попросить потише', risk: 'balanced', effect: (state) => (repOk(state, 45) ? { happiness: 3, message: 'С тобой разговаривают уважительно — соседи извинились и убавили звук.' } : { happiness: -6, reputation: -1, message: 'Разговор перешёл в ссору.' }) },
         { label: 'Терпеть в наушниках', risk: 'safe', effect: () => ({ energy: -10, message: 'Выспаться не удалось.' }) },
       ]},
       { text: () => `Сломалась важная техника дома.`, choices: [
@@ -513,14 +525,14 @@
     [
       { text: (fl) => `Попросили остаться на сверхурочные без доплаты — а ты как раз работаешь ${fl}.`, choices: [
         { label: (fl, state) => `Согласиться (доплатят ~${formatMoney(scaleByWealth(state, 1000))})`, trait: 'hardworker', risk: 'balanced', effect: (state) => { const pay = scaleByWealth(state, 1000); return { energy: -15, money: pay, happiness: -4, message: 'Сделал, как просили. Вымотался, но кое-что заплатили.' }; } },
-        { label: 'Отказаться и отстоять границы', risk: 'risky', effect: (state) => (chance(socialChance(state, 0.35, 0.006)) ? { reputation: 4, happiness: 5, message: 'Отстоял границы, начальство это оценило.' } : { reputation: -4, happiness: -5, message: 'Начальству это не понравилось.' }) },
+        { label: 'Отказаться и отстоять границы', risk: 'risky', effect: (state) => (repOk(state, 45) ? { reputation: 4, happiness: 5, message: 'Отстоял границы, начальство это оценило.' } : { reputation: -4, happiness: -5, message: 'Начальству это не понравилось.' }) },
       ]},
       { text: () => `Возник конфликт с коллегой из-за чужой ошибки в отчёте.`, choices: [
-        { label: 'Доказать свою правоту', risk: 'risky', effect: (state) => (chance(socialChance(state, 0.25, 0.007)) ? { reputation: 5, happiness: 4, message: 'Справедливость восторжествовала — тебе поверили.' } : { reputation: -3, happiness: -6, message: 'Конфликт только усугубился.' }) },
+        { label: 'Доказать свою правоту', risk: 'risky', effect: (state) => (repOk(state, 50) ? { reputation: 5, happiness: 4, message: 'Справедливость восторжествовала — тебе поверили.' } : { reputation: -3, happiness: -6, message: 'Конфликт только усугубился.' }) },
         { label: 'Взять вину на себя ради мира', risk: 'safe', effect: () => ({ happiness: -5, reputation: -1, message: 'Тяжело, зато в коллективе спокойнее.' }) },
       ]},
       { text: () => `Зарплату задержали уже на две недели.`, choices: [
-        { label: (fl, state) => `Требовать деньги немедленно`, risk: 'balanced', effect: (state) => { if (chance(socialChance(state, 0.2, 0.007))) { const pay = scaleByWealth(state, 3000); return { money: pay, reputation: 1, message: `Зарплату выбили — ${formatMoney(pay)}.` }; } return { reputation: -3, happiness: -6, message: 'Начальство пообещало "скоро", но пока тишина.' }; } },
+        { label: 'Требовать деньги немедленно', risk: 'balanced', effect: (state) => { if (repOk(state, 55)) { const pay = scaleByWealth(state, 3000); return { money: pay, reputation: 1, message: `Зарплату выбили — ${formatMoney(pay)}.` }; } return { reputation: -3, happiness: -6, message: 'Начальство пообещало "скоро", но пока тишина.' }; } },
         { label: 'Ждать молча', risk: 'safe', effect: () => ({ happiness: -8, message: 'Ожидание выматывает нервы.' }) },
       ]},
       { text: () => `Появилась возможность подработать в свой законный выходной.`, choices: [
@@ -532,9 +544,9 @@
         { label: 'Пропустить, дела важнее', risk: 'safe', effect: () => ({ reputation: -2, energy: 5, message: 'Отдохнул дома, но карьерный момент упущен.' }) },
       ]},
       { text: (fl) => `Босс неожиданно вызывает тебя "на ковёр" и сообщает, что тебя увольняют. Работал ты ${fl}.`, choices: [
-        { label: 'Устроить скандал', trait: 'riskTaker', risk: 'risky', effect: (state) => { if (chance(0.3)) { const pay = scaleByWealth(state, 4000); return { money: pay, reputation: -6, happiness: -6, jobLoss: true, message: `Скандал помог выбить компенсацию — ${formatMoney(pay)}. Но работы больше нет.` }; } return { reputation: -8, happiness: -14, jobLoss: true, message: 'Скандал ничего не дал, только испортил репутацию.' }; } },
+        { label: 'Устроить скандал', trait: 'riskTaker', risk: 'risky', effect: (state) => { if (repOk(state, 60)) { const pay = scaleByWealth(state, 4000); return { money: pay, reputation: -6, happiness: -6, jobLoss: true, message: `Твоё имя ещё имеет вес — скандал помог выбить компенсацию ${formatMoney(pay)}. Но работы больше нет.` }; } return { reputation: -8, happiness: -14, jobLoss: true, message: 'Скандал ничего не дал, только испортил репутацию.' }; } },
         { label: (fl, state) => `Молча уйти (расчёт ~${formatMoney(scaleByWealth(state, 1500))})`, trait: 'cautious', risk: 'safe', effect: (state) => { const pay = scaleByWealth(state, 1500); return { money: pay, happiness: -8, jobLoss: true, message: `Ушёл с достоинством, получив ${formatMoney(pay)} расчётных.` }; } },
-        { label: 'Попросить дать второй шанс', trait: 'hardworker', risk: 'balanced', effect: (state) => (chance(socialChance(state, 0.15, 0.005)) ? { reputation: 3, happiness: 4, message: 'Босс сжалился и дал ещё один шанс.' } : { happiness: -12, jobLoss: true, message: 'Босс был непреклонен — увольнение состоялось.' }) },
+        { label: 'Попросить дать второй шанс', trait: 'hardworker', risk: 'balanced', effect: (state) => (repOk(state, 60) ? { reputation: 3, happiness: 4, message: 'Твоя репутация сыграла в плюс — босс сжалился и дал ещё один шанс.' } : { happiness: -12, jobLoss: true, message: 'Босс был непреклонен — увольнение состоялось.' }) },
       ]},
     ],
     ['в офисе', 'на физически тяжёлой работе', 'в сфере обслуживания', 'в творческой профессии'],
@@ -545,11 +557,11 @@
     'selfEmployed',
     [
       { text: (fl) => `Алгоритмы ${fl} внезапно поменялись, и охваты/поток клиентов резко просели.`, choices: [
-        { label: (fl, state) => `Вложиться в продвижение (${formatMoney(scaleByWealth(state, 3500))})`, risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 3500); return chance(0.55) ? { money: -Math.round(cost * 0.3), reputation: 4, happiness: 4, message: 'Вложение помогло быстро восстановить охваты.' } : { money: -cost, happiness: -4, message: 'Деньги потрачены, а эффект почти не заметен.' }; } },
+        { label: (fl, state) => `Вложиться в продвижение (${formatMoney(scaleByWealth(state, 3500))})`, risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 3500); return repOk(state, 40) ? { money: -Math.round(cost * 0.3), reputation: 4, happiness: 4, message: 'Наработанные связи помогли быстро восстановить охваты.' } : { money: -cost, happiness: -4, message: 'Деньги потрачены, а эффект почти не заметен.' }; } },
         { label: 'Переждать без вложений', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -5, reputation: -1, message: 'Просело надолго, но бюджет цел.' }) },
       ]},
       { text: () => `Клиент задерживает оплату за уже сделанную работу.`, choices: [
-        { label: 'Требовать оплату немедленно', risk: 'risky', effect: (state) => (chance(socialChance(state, 0.3, 0.006)) ? { money: scaleByWealth(state, 4000), message: 'Клиент нашёл деньги и расплатился.' } : { reputation: -3, happiness: -6, message: 'Клиент обиделся и пропал вовсе без оплаты.' }) },
+        { label: 'Требовать оплату немедленно', risk: 'risky', effect: (state) => (repOk(state, 45) ? { money: scaleByWealth(state, 4000), message: 'Твоя репутация сыграла роль — клиент нашёл деньги и расплатился.' } : { reputation: -3, happiness: -6, message: 'Клиент обиделся и пропал вовсе без оплаты.' }) },
         { label: 'Договориться на отсрочку', risk: 'safe', effect: () => ({ happiness: -2, reputation: 1, message: 'Отношения сохранены, но касса подождёт.' }) },
       ]},
       { text: (fl) => `Конкурент ${fl} демпингует и переманивает твою аудиторию.`, choices: [
@@ -561,11 +573,11 @@
         { label: 'Отказаться, время дороже', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 1, message: 'Занялся оплачиваемыми делами.' }) },
       ]},
       { text: (fl) => `${cap(fl)} на время заблокировали из-за жалобы недоброжелателей.`, choices: [
-        { label: (fl, state) => `Оспорить и вернуть доступ (${formatMoney(scaleByWealth(state, 1500))})`, risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 1500); return chance(0.6) ? { money: -cost, happiness: 3, message: 'Доступ восстановили быстрее, чем ожидал.' } : { money: -cost, happiness: -8, energy: -10, message: 'Разбирательство затянулось надолго.' }; } },
+        { label: (fl, state) => `Оспорить и вернуть доступ (${formatMoney(scaleByWealth(state, 1500))})`, risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 1500); return repOk(state, 35) ? { money: -cost, happiness: 3, message: 'Репутация помогла — доступ восстановили быстрее, чем ожидал.' } : { money: -cost, happiness: -8, energy: -10, message: 'Разбирательство затянулось надолго.' }; } },
         { label: 'Переждать блокировку', risk: 'safe', effect: () => ({ happiness: -6, energy: -6, message: 'Доход встал на паузу, но нервы целее.' }) },
       ]},
       { text: () => `Партнёр по разовому проекту предлагает сотрудничество за процент от будущей прибыли вместо фиксированной оплаты.`, choices: [
-        { label: 'Согласиться на процент', trait: 'riskTaker', risk: 'risky', effect: (state) => { const base = scaleByWealth(state, 6000); return chance(0.4) ? { money: Math.round(base * rand(1.5, 3)), happiness: 8, message: 'Проект выстрелил — процент оказался выгоднее ставки.' } : { money: 0, happiness: -4, message: 'Проект не взлетел — процент от нуля есть ноль.' }; } },
+        { label: 'Согласиться на процент', trait: 'riskTaker', risk: 'risky', effect: (state) => { const base = scaleByWealth(state, 6000); if (traitOk(state, 'riskTaker', 4)) { const mult = scaleByStat(traitCap(state, 'riskTaker', 10), 10, 1.5, 3); return { money: Math.round(base * mult), happiness: 8, message: 'Чутьё не подвело — проект выстрелил, процент оказался выгоднее ставки.' }; } return { money: 0, happiness: -4, message: 'Без должного опыта оценить проект не вышло — процент от нуля есть ноль.' }; } },
         { label: 'Настоять на фиксированной оплате', trait: 'cautious', risk: 'safe', effect: (state) => { const fixed = scaleByWealth(state, 4000); return { money: fixed, message: `Получил гарантированные ${formatMoney(fixed)}.` }; } },
       ]},
     ],
@@ -581,7 +593,7 @@
       text: (state) => `Заканчиваются продукты${state.pantry <= 20 ? ' (холодильник почти пуст)' : ''}. У дяди Бори дешевле — примерно ${formatMoney(scaleByWealth(state, 500))}, но там вечно что-то с сроками годности. В "Пятёрочке" дороже — ${formatMoney(scaleByWealth(state, 900))}, зато надёжно.`,
       conditions: always,
       choices: [
-        { label: (state) => `Идти к дяде Боре (~${formatMoney(scaleByWealth(state, 500))})`, risk: 'risky', effect: (state) => { const saved = scaleByWealth(state, 500); if (chance(0.25)) return { money: -Math.round(saved * 0.4), health: -8, pantrySet: 60, message: 'Купил просрочку, потом было плохо.' }; return { money: saved, happiness: 2, pantrySet: 85, message: `Сэкономил ${formatMoney(saved)}, дядя Боря сегодня в ударе.` }; } },
+        { label: (state) => `Идти к дяде Боре (~${formatMoney(scaleByWealth(state, 500))})`, risk: 'risky', effect: (state) => { const saved = scaleByWealth(state, 500); if (!traitOk(state, 'cautious', 2)) return { money: -Math.round(saved * 0.4), health: -8, pantrySet: 60, message: 'Не научился ещё разбираться в товаре — купил просрочку, потом было плохо.' }; return { money: saved, happiness: 2, pantrySet: 85, message: `Знаешь, что и как выбирать — сэкономил ${formatMoney(saved)}, дядя Боря сегодня в ударе.` }; } },
         { label: (state) => `Идти в "Пятёрочку" (${formatMoney(scaleByWealth(state, 900))})`, trait: 'cautious', risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 900); return { money: -cost, happiness: 1, pantrySet: 100, message: `Купил всё свежее за ${formatMoney(cost)}.` }; } },
       ],
     },
@@ -653,8 +665,8 @@
       text: 'Ты выиграл в лотерею небольшую, но приятную сумму.',
       conditions: always,
       choices: [
-        { label: 'Сохранить деньги', trait: 'cautious', risk: 'safe', effect: (state) => { const win = scaleByWealth(state, rand(4000, 20000)); return { money: win, happiness: 5, message: `Выигрыш ${formatMoney(win)} лёг на счёт.` }; } },
-        { label: 'Потратить с размахом', risk: 'balanced', effect: (state) => { const win = scaleByWealth(state, rand(4000, 20000)); return { money: Math.round(win * 0.3), happiness: 18, message: 'Устроил себе праздник на весь выигрыш.' }; } },
+        { label: 'Сохранить деньги', trait: 'cautious', risk: 'safe', effect: (state) => { const win = scaleByWealth(state, 4000 + scaleByStat(state.reputation, 100, 0, 16000)); return { money: win, happiness: 5, message: `Выигрыш ${formatMoney(win)} лёг на счёт.` }; } },
+        { label: 'Потратить с размахом', risk: 'balanced', effect: (state) => { const win = scaleByWealth(state, 4000 + scaleByStat(state.reputation, 100, 0, 16000)); return { money: Math.round(win * 0.3), happiness: 18, message: 'Устроил себе праздник на весь выигрыш.' }; } },
       ],
     },
     {
@@ -662,7 +674,7 @@
       text: 'Дальний родственник, о котором ты почти забыл, оставил тебе небольшое наследство.',
       conditions: (s) => s.age >= 25,
       choices: [
-        { label: 'Принять наследство', risk: 'safe', effect: (state) => { const win = scaleByWealth(state, rand(8000, 40000)); return { money: win, happiness: 6, message: `Неожиданно получил ${formatMoney(win)}.` }; } },
+        { label: 'Принять наследство', risk: 'safe', effect: (state) => { const win = scaleByWealth(state, 8000 + scaleByStat(state.age, 85, 0, 32000)); return { money: win, happiness: 6, message: `Неожиданно получил ${formatMoney(win)}.` }; } },
         { label: 'Отказаться в пользу других родственников', trait: 'familyFirst', risk: 'safe', effect: () => ({ reputation: 4, happiness: 2, message: 'Благородный жест оценили в семье.' }) },
       ],
     },
@@ -671,8 +683,8 @@
       text: 'Работодатель неожиданно выплатил щедрую годовую премию.',
       conditions: hasBossFn,
       choices: [
-        { label: 'Порадоваться и отложить премию', trait: 'cautious', risk: 'safe', effect: (state) => { const win = scaleByWealth(state, rand(3000, 15000)); return { money: win, happiness: 6, message: `Премия ${formatMoney(win)} — приятный бонус за труд.` }; } },
-        { label: 'Сразу потратить на себя', risk: 'balanced', effect: (state) => { const win = scaleByWealth(state, rand(3000, 15000)); return { money: Math.round(win * 0.5), happiness: 12, message: 'Побаловал себя чем-то давно желанным.' }; } },
+        { label: 'Порадоваться и отложить премию', trait: 'cautious', risk: 'safe', effect: (state) => { const win = scaleByWealth(state, 3000 + scaleByStat(state.reputation, 100, 0, 12000)); return { money: win, happiness: 6, message: `Премия ${formatMoney(win)} — приятный бонус за труд.` }; } },
+        { label: 'Сразу потратить на себя', risk: 'balanced', effect: (state) => { const win = scaleByWealth(state, 3000 + scaleByStat(state.reputation, 100, 0, 12000)); return { money: Math.round(win * 0.5), happiness: 12, message: 'Побаловал себя чем-то давно желанным.' }; } },
       ],
     },
     {
@@ -681,7 +693,7 @@
       conditions: hasAllergyFn,
       choices: [
         { label: 'Незаметно уйти', risk: 'safe', effect: () => ({ happiness: -3, health: 2, message: 'Ушёл вовремя, обошлось без приступа.' }) },
-        { label: 'Перетерпеть, чтобы не показаться грубым', risk: 'risky', effect: (state) => { const hit = randInt(10, 25); const cost = chance(0.4) ? scaleByWealth(state, 3000) : 0; return { health: -hit, money: -cost, happiness: -6, message: cost ? `Реакция оказалась серьёзной, пришлось вызывать скорую за ${formatMoney(cost)}.` : 'Реакция была неприятной, но обошлось своими силами.' }; } },
+        { label: 'Перетерпеть, чтобы не показаться грубым', risk: 'risky', effect: (state) => { const hit = Math.round(scaleByStat(100 - state.health, 100, 10, 25)); const cost = state.health < 40 ? scaleByWealth(state, 3000) : 0; return { health: -hit, money: -cost, happiness: -6, message: cost ? `Здоровье было не в лучшей форме — реакция оказалась серьёзной, пришлось вызывать скорую за ${formatMoney(cost)}.` : 'Реакция была неприятной, но обошлось своими силами.' }; } },
       ],
     },
     {
@@ -690,7 +702,7 @@
       conditions: hasAllergyFn,
       choices: [
         { label: 'Извиниться и срочно выйти', risk: 'safe', effect: () => ({ reputation: -2, health: 3, message: 'Неловко, зато цел и невредим.' }) },
-        { label: 'Досидеть до конца встречи', risk: 'risky', effect: () => { const hit = randInt(8, 20); return { health: -hit, reputation: 2, message: 'Встречу довёл до конца, но здоровью досталось.' }; } },
+        { label: 'Досидеть до конца встречи', risk: 'risky', effect: (state) => { const hit = Math.round(scaleByStat(100 - state.health, 100, 8, 20)); return { health: -hit, reputation: 2, message: 'Встречу довёл до конца, но здоровью досталось.' }; } },
       ],
     },
     {
@@ -707,7 +719,7 @@
       text: (state) => `Ты давно не сталкивался с ${state.allergy} и решил на всякий случай проверить, не прошла ли аллергия.`,
       conditions: hasAllergyFn,
       choices: [
-        { label: 'Рискнуть и проверить', trait: 'riskTaker', risk: 'risky', effect: (state) => (chance(resilienceChance(state, 0.75, -0.005)) ? { health: -randInt(15, 30), happiness: -8, message: 'Аллергия оказалась на месте. Было очень плохо.' } : { happiness: 6, message: 'Крепкое здоровье помогло — на этот раз обошлось без реакции.' }) },
+        { label: 'Рискнуть и проверить', trait: 'riskTaker', risk: 'risky', effect: (state) => (healthOk(state, 60) ? { happiness: 6, message: 'Крепкое здоровье помогло — на этот раз обошлось без реакции.' } : { health: -Math.round(scaleByStat(100 - state.health, 100, 15, 30)), happiness: -8, message: 'Организм ослаблен — аллергия оказалась на месте. Было очень плохо.' }) },
         { label: 'Не испытывать судьбу', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 1, message: 'Осторожность — тоже стратегия.' }) },
       ],
     },
@@ -716,7 +728,7 @@
       text: (state) => `Друзья зовут в поездку, но там почти наверняка будет ${state.allergy}, а аптечки с собой нет.`,
       conditions: hasAllergyFn,
       choices: [
-        { label: 'Поехать несмотря ни на что', risk: 'risky', effect: (state) => (chance(resilienceChance(state, 0.6, -0.006)) ? { health: -randInt(10, 22), happiness: 4, message: 'Поездка была отличной, но не без приступа.' } : { happiness: 14, message: 'Съездил отлично, и обошлось без последствий.' }) },
+        { label: 'Поехать несмотря ни на что', risk: 'risky', effect: (state) => (healthOk(state, 50) ? { happiness: 14, message: 'Здоровье позволило съездить отлично, и обошлось без последствий.' } : { health: -Math.round(scaleByStat(100 - state.health, 100, 10, 22)), happiness: 4, message: 'Поездка была отличной, но не без приступа.' }) },
         { label: 'Остаться дома', risk: 'safe', effect: () => ({ happiness: -6, health: 2, message: 'Скучно, зато безопасно.' }) },
       ],
     },
@@ -735,7 +747,7 @@
       conditions: always,
       choices: [
         { label: (state) => `Закупиться масками и витаминами (${formatMoney(scaleByWealth(state, 1500))})`, risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 1500); return { money: -cost, health: 8, message: `Подготовился заранее за ${formatMoney(cost)}.` }; } },
-        { label: 'Не придавать значения', risk: 'risky', effect: (state) => (chance(resilienceChance(state, 0.55, -0.005)) ? { health: -14, happiness: -4, message: 'Всё-таки заболел.' } : { happiness: 1, message: 'Крепкий иммунитет справился, пронесло.' }) },
+        { label: 'Не придавать значения', risk: 'risky', effect: (state) => (healthOk(state, 55) ? { happiness: 1, message: 'Крепкий иммунитет справился, пронесло.' } : { health: -14, happiness: -4, message: 'Иммунитет не справился — всё-таки заболел.' }) },
       ],
     },
     {
@@ -780,7 +792,7 @@
       conditions: always,
       choices: [
         { label: (state) => `Обратиться к врачу (${formatMoney(scaleByWealth(state, 1200))})`, risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 1200); return { money: -cost, health: 10, message: `Обошлось без осложнений, потрачено ${formatMoney(cost)}.` }; } },
-        { label: 'Отлежаться дома', risk: 'risky', effect: (state) => (chance(resilienceChance(state, 0.45, -0.005)) ? { health: -18, message: 'Стало хуже, надо было идти к врачу.' } : { health: -4, message: 'Крепкий организм справился сам.' }) },
+        { label: 'Отлежаться дома', risk: 'risky', effect: (state) => (healthOk(state, 50) ? { health: -4, message: 'Крепкий организм справился сам.' } : { health: -18, message: 'Организм ослаблен — стало хуже, надо было идти к врачу.' }) },
       ],
     },
     {
@@ -797,7 +809,7 @@
       text: 'У тебя внезапно появилась идея для небольшого побочного дела.',
       conditions: always,
       choices: [
-        { label: (state) => `Попробовать запустить (${formatMoney(scaleByWealth(state, 2000))})`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 2000); return chance(0.4) ? { money: Math.round(cost * 2) - cost, happiness: 8, message: 'Идея выстрелила, дело приносит доход!' } : { money: -cost, happiness: -4, message: 'Идея не взлетела, деньги потрачены впустую.' }; } },
+        { label: (state) => `Попробовать запустить (${formatMoney(scaleByWealth(state, 2000))})`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 2000); return repOk(state, 50) ? { money: Math.round(cost * 2) - cost, happiness: 8, message: 'Репутация и связи сделали своё — идея выстрелила, дело приносит доход!' } : { money: -cost, happiness: -4, message: 'Идея не взлетела, деньги потрачены впустую.' }; } },
         { label: 'Оставить идею на потом', risk: 'safe', effect: () => ({ happiness: -1, message: 'Может, ещё вернёшься к этой мысли.' }) },
       ],
     },
@@ -824,7 +836,7 @@
       text: 'Инвестбанкиры предлагают вывести твою компанию на биржу через IPO.',
       conditions: isBusinessy,
       choices: [
-        { label: (state) => `Провести IPO (потенциал ${formatMoney(scaleByWealth(state, 400000))})`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const gain = scaleByWealth(state, 400000); return chance(socialChance(state, 0.3, 0.005)) ? { money: gain, reputation: 12, happiness: 15, message: `IPO прошло блестяще! Капитал вырос на ${formatMoney(gain)}.` } : { money: -Math.round(gain * 0.2), reputation: -5, happiness: -8, message: 'Рынок встретил IPO прохладно, акции просели.' }; } },
+        { label: (state) => `Провести IPO (потенциал ${formatMoney(scaleByWealth(state, 400000))})`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const gain = scaleByWealth(state, 400000); return repOk(state, 60) ? { money: gain, reputation: 12, happiness: 15, message: `Репутация убедила рынок — IPO прошло блестяще! Капитал вырос на ${formatMoney(gain)}.` } : { money: -Math.round(gain * 0.2), reputation: -5, happiness: -8, message: 'Рынок встретил IPO прохладно, акции просели.' }; } },
         { label: 'Остаться частной компанией', trait: 'cautious', risk: 'safe', effect: () => ({ reputation: 2, message: 'Контроль важнее шумихи.' }) },
       ],
     },

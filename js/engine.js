@@ -11,7 +11,6 @@ const BILLIONAIRE_GOAL = 1000000000;
 const BASE_DEBT_RATE = 0.025;
 const PREDATORY_DEBT_RATE = 0.075;
 const LOW_ENERGY_THRESHOLD = 12;
-const TIER_BARRIER_CHANCE = 0.6;
 const BARRIER_MESSAGES = [
   '🚧 Почти получилось — но тут подоспели налоги, комиссии и внезапные счета, откатив всё почти к прежнему уровню.',
   '🚧 Система не пускает наверх с первой попытки: банк отказал в нужных условиях, а часть прибыли съели непредвиденные траты.',
@@ -156,8 +155,9 @@ function applyChoice(state, event, choiceIndex) {
   }
 
   // "стеклянный потолок": вырваться в следующий социальный слой почти
-  // невозможно — система (налоги, внезапные траты, кредитные истории,
-  // закрытые двери) чаще всего откатывает игрока обратно к границе.
+  // невозможно без наработанной репутации — никакой удачи, только
+  // порог по характеристике. Чем крупнее прыжок через уровни, тем
+  // выше нужна репутация, чтобы его удержать.
   const prevTier = state.tier;
   let rawNewTier = getTier(state.money);
   let barrierMessage = '';
@@ -166,13 +166,13 @@ function applyChoice(state, event, choiceIndex) {
     const rawIdx = window.TIERS.findIndex((t) => t.id === rawNewTier.id);
     if (rawIdx > prevIdx) {
       const jump = rawIdx - prevIdx;
-      const barrierChance = clampNum(TIER_BARRIER_CHANCE + (jump - 1) * 0.12, TIER_BARRIER_CHANCE, 0.93);
-      if (chance(barrierChance)) {
+      const requiredReputation = clampNum(60 + (jump - 1) * 15, 60, 92);
+      if (state.reputation < requiredReputation) {
         const ceiling = window.TIERS[prevIdx].max;
-        const buffer = Math.max(Math.round(Math.abs(ceiling || 1000) * rand(0.01, 0.05)), randInt(50, 400));
+        const buffer = Math.max(Math.round(Math.abs(ceiling || 1000) * 0.03), 200);
         state.money = ceiling - buffer;
         rawNewTier = getTier(state.money);
-        barrierMessage = pick(BARRIER_MESSAGES);
+        barrierMessage = BARRIER_MESSAGES[jump % BARRIER_MESSAGES.length];
       }
     }
   }
