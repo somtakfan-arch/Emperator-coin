@@ -28,6 +28,8 @@ public final class ThornsWardPlugin extends JavaPlugin {
     private GravityTrapItem     gravityTrapItem;
     private ChaosWhistleItem    chaosWhistleItem;
     private ServerHeartItem     serverHeartItem;
+    private VoodooDollItem      voodooDollItem;
+    private ChaosFeatherItem    chaosFeatherItem;
 
     @Override
     public void onEnable() {
@@ -56,6 +58,8 @@ public final class ThornsWardPlugin extends JavaPlugin {
         gravityTrapItem     = new GravityTrapItem(this);
         chaosWhistleItem    = new ChaosWhistleItem(this);
         serverHeartItem     = new ServerHeartItem(this);
+        voodooDollItem      = new VoodooDollItem(this);
+        chaosFeatherItem    = new ChaosFeatherItem(this);
 
         getServer().getPluginManager().registerEvents(new ThornsWardListener(this, thornsWardItem), this);
         getServer().getPluginManager().registerEvents(new CrystallerSwordListener(this, crystallerSwordItem), this);
@@ -80,6 +84,8 @@ public final class ThornsWardPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new GravityTrapListener(this, gravityTrapItem), this);
         getServer().getPluginManager().registerEvents(new ChaosWhistleListener(this, chaosWhistleItem), this);
         getServer().getPluginManager().registerEvents(new ServerHeartListener(this, serverHeartItem), this);
+        getServer().getPluginManager().registerEvents(new VoodooDollListener(this, voodooDollItem), this);
+        getServer().getPluginManager().registerEvents(new ChaosFeatherListener(this, chaosFeatherItem), this);
 
         ThornsWardCommand thornsWardCommand = new ThornsWardCommand(thornsWardItem);
         registerCommand("thornsward", thornsWardCommand, thornsWardCommand);
@@ -149,6 +155,12 @@ public final class ThornsWardPlugin extends JavaPlugin {
 
         ServerHeartCommand serverHeartCommand = new ServerHeartCommand(serverHeartItem);
         registerCommand("serverheart", serverHeartCommand, serverHeartCommand);
+
+        VoodooDollCommand voodooDollCommand = new VoodooDollCommand(voodooDollItem);
+        registerCommand("voodoodoll", voodooDollCommand, voodooDollCommand);
+
+        ChaosFeatherCommand chaosFeatherCommand = new ChaosFeatherCommand(chaosFeatherItem);
+        registerCommand("chaosfeather", chaosFeatherCommand, chaosFeatherCommand);
 
         getLogger().info("ThornsWard включен.");
     }

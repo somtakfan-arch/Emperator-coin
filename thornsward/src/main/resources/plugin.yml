@@ -121,6 +121,16 @@ commands:
     usage: "/<command> give [игрок]"
     permission: bedsmp.serverheart.give
     permission-message: "§cУ вас нет прав на эту команду."
+  voodoodoll:
+    description: Выдать Куклу Вуду (зеркальный урон)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.voodoodoll.give
+    permission-message: "§cУ вас нет прав на эту команду."
+  chaosfeather:
+    description: Выдать Перо Хаоса (случайные эффекты скорости)
+    usage: "/<command> give [игрок]"
+    permission: bedsmp.chaosfeather.give
+    permission-message: "§cУ вас нет прав на эту команду."
 
 permissions:
   bedsmp.thornsward.give:
@@ -191,4 +201,10 @@ permissions:
     default: op
   bedsmp.serverheart.give:
     description: Позволяет выдавать Сердце Сервера
+    default: op
+  bedsmp.voodoodoll.give:
+    description: Позволяет выдавать Куклу Вуду
+    default: op
+  bedsmp.chaosfeather.give:
+    description: Позволяет выдавать Перо Хаоса
     default: op
