@@ -101,10 +101,14 @@
     return events;
   }
 
+  // ВАЖНО: "сэкономил" ≠ "заработал". Ветка "перетерпеть/сделать самому"
+  // просто не тратит деньги (в отличие от платной ветки) — она НЕ
+  // должна начислять деньги как доход, иначе экономия превращается в
+  // бесплатный заработок из ниоткуда.
   function costOrEndure(statKey, gainBase, energyThreshold, badBase, costLabelPrefix, endureLabelPrefix) {
     return {
       costLabel: (state, a1, j) => `${costLabelPrefix} (${formatMoney(scaleByWealth(state, COST_BASE[j]))})`,
-      endureLabel: (state, a1, j) => `${endureLabelPrefix} (сэкономишь ~${formatMoney(scaleByWealth(state, COST_BASE[j] * 0.15))}, нужен запас энергии)`,
+      endureLabel: (state, a1, j) => `${endureLabelPrefix} (не платишь ни рубля, но нужен запас энергии)`,
       cost: (state, a1, j) => {
         const cost = scaleByWealth(state, COST_BASE[j]);
         const r = { money: -cost, happiness: 3, message: `Потратил ${formatMoney(cost)} — вопрос закрыт.` };
@@ -114,12 +118,11 @@
       endure: (state, a1, j) => {
         if (!energyOk(state, energyThreshold)) {
           const hit = badBase + j * 3;
-          const r = { happiness: -6, message: 'Сил не хватило, чтобы разобраться своими руками — экономия вышла боком.' };
+          const r = { happiness: -6, message: 'Сил не хватило, чтобы разобраться своими руками — вышло только хуже.' };
           r[statKey] = (r[statKey] || 0) - hit;
           return r;
         }
-        const saved = scaleByWealth(state, COST_BASE[j] * 0.15);
-        return { money: saved, happiness: -1, message: `Энергии хватило, чтобы обойтись своими силами — сэкономил ${formatMoney(saved)}.` };
+        return { happiness: -1, message: 'Энергии хватило, чтобы обойтись своими силами — не потратил(а) ни рубля.' };
       },
     };
   }
@@ -224,9 +227,9 @@
         const base = key ? { addPossession: key } : a1 === 'продукты на неделю' ? { pantrySet: 70 } : {};
         if (!repOk(state, 45)) {
           const healthHit = a1.includes('лекар') ? -14 : -5;
-          return Object.assign({}, base, { money: -Math.round(saved * 0.3), health: healthHit, happiness: -5, message: 'Без нужных знакомств нарвался на некачественный товар, пришлось доплачивать за нормальный.' });
+          return Object.assign({}, base, { money: -Math.round(saved * 1.8), health: healthHit, happiness: -5, message: 'Без нужных знакомств нарвался на некачественный товар, пришлось доплачивать за нормальный.' });
         }
-        return Object.assign({}, base, { money: saved, happiness: 3, message: `Знаешь, к кому обращаться — сэкономил ${formatMoney(saved)}, всё пригодилось.` });
+        return Object.assign({}, base, { money: -saved, happiness: 3, message: `Знаешь, к кому обращаться — обошлось всего в ${formatMoney(saved)}, и всё пригодилось.` });
       },
     },
     {
@@ -487,7 +490,7 @@
         { label: 'Решить вопрос по правилам', trait: 'cautious', risk: 'safe', effect: () => ({ energy: -10, happiness: -2, message: 'Дольше, зато чисто.' }) },
       ]},
       { text: (fl) => `${cap(fl)} рассказывает способ вообще не платить налоги.`, choices: [
-        { label: (fl, state) => `Воспользоваться схемой (экономия ${formatMoney(scaleByWealth(state, 20000))})`, trait: 'shady', risk: 'risky', effect: (state) => { const save = scaleByWealth(state, 20000); return traitOk(state, 'shady', 2) ? { money: save, message: `Схема отработана до мелочей — сэкономил на налогах ${formatMoney(save)}.` } : { jail: true, message: 'Схема была слишком грубой. Налоговая докопалась — дело дошло до суда.' }; } },
+        { label: () => 'Воспользоваться схемой', trait: 'shady', risk: 'risky', effect: (state) => (traitOk(state, 'shady', 2) ? { happiness: 2, message: 'Схема отработана до мелочей — на налоги в этот раз тратиться не пришлось.' } : { jail: true, message: 'Схема была слишком грубой. Налоговая докопалась — дело дошло до суда.' }) },
         { label: 'Платить честно', trait: 'cautious', risk: 'safe', effect: () => ({ reputation: 3, message: 'Спокойный сон дороже сомнительной экономии.' }) },
       ]},
       { text: (fl) => `${cap(fl)} предлагает заработать на продаже чужих личных данных.`, choices: [
@@ -675,7 +678,7 @@
       text: (state) => `Заканчиваются продукты${state.pantry <= 20 ? ' (холодильник почти пуст)' : ''}. У дяди Бори дешевле — примерно ${formatMoney(scaleByWealth(state, 500))}, но там вечно что-то с сроками годности. В "Пятёрочке" дороже — ${formatMoney(scaleByWealth(state, 900))}, зато надёжно.`,
       conditions: always,
       choices: [
-        { label: (state) => `Идти к дяде Боре (~${formatMoney(scaleByWealth(state, 500))})`, risk: 'risky', effect: (state) => { const saved = scaleByWealth(state, 500); if (!traitOk(state, 'cautious', 2)) return { money: -Math.round(saved * 0.4), health: -8, pantrySet: 60, message: 'Не научился ещё разбираться в товаре — купил просрочку, потом было плохо.' }; return { money: saved, happiness: 2, pantrySet: 85, message: `Знаешь, что и как выбирать — сэкономил ${formatMoney(saved)}, дядя Боря сегодня в ударе.` }; } },
+        { label: (state) => `Идти к дяде Боре (~${formatMoney(scaleByWealth(state, 500))})`, risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 500); if (!traitOk(state, 'cautious', 2)) return { money: -cost, health: -8, pantrySet: 60, message: 'Не научился ещё разбираться в товаре — купил просрочку, потом было плохо.' }; return { money: -cost, happiness: 2, pantrySet: 85, message: `Знаешь, что и как выбирать — обошлось всего в ${formatMoney(cost)}, дядя Боря сегодня в ударе.` }; } },
         { label: (state) => `Идти в "Пятёрочку" (${formatMoney(scaleByWealth(state, 900))})`, trait: 'cautious', risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 900); return { money: -cost, happiness: 1, pantrySet: 100, message: `Купил всё свежее за ${formatMoney(cost)}.` }; } },
       ],
     },
@@ -1290,7 +1293,7 @@
       ]},
       { text: (fl) => `Тебе снова хочется оформить очередную подписку "всего за копейки в месяц" — ${fl}.`, choices: [
         { label: (fl, state) => `Оформить подписку (${formatMoney(scaleByWealth(state, 400))}/мес)`, risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 400); return { money: -cost, happiness: 3, message: 'Ещё одна мелкая подписка в копилку расходов.' }; } },
-        { label: 'Пересмотреть уже имеющиеся подписки', trait: 'cautious', risk: 'safe', effect: (state) => { const saved = scaleByWealth(state, 500); return { money: saved, happiness: 1, message: `Отменил ненужное — сэкономил ${formatMoney(saved)}.` }; } },
+        { label: 'Пересмотреть уже имеющиеся подписки', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 1, message: 'Отменил ненужное — новых трат в этот раз не будет.' }) },
       ]},
       { text: (fl) => `На кассе супермаркета глаза разбегаются от импульсивных мелочей у выхода, ${fl}.`, choices: [
         { label: (fl, state) => `Набрать мелочей (${formatMoney(scaleByWealth(state, 600))})`, risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 600); return { money: -cost, happiness: 3, message: 'Мелкие радости тоже важны.' }; } },
@@ -1417,7 +1420,7 @@
     'crypto',
     [
       { text: (fl, state) => `С домашнего ПК открыт график ${fl}. Похоже, сейчас удачный момент для сделки на ${formatMoney(scaleByWealth(state, 6000))}.`, choices: [
-        { label: (fl, state) => `Купить на ${formatMoney(scaleByWealth(state, 6000))}`, trait: 'riskTaker', risk: 'risky', minigame: (state) => ({
+        { label: (fl, state) => `Купить на ${formatMoney(scaleByWealth(state, 6000))}`, trait: 'riskTaker', risk: 'risky', minigame: (fl, state) => ({
             type: 'timing',
             title: 'Поймай момент для сделки',
             instructions: 'Цена ходит туда-сюда по шкале. Останови её точно в зелёной зоне, чтобы войти по выгодному курсу.',
@@ -1500,6 +1503,112 @@
     richEventGate
   );
 
+  /* ============ 6. НАСТОЯЩИЙ ЗАРАБОТОК (8×8 + 8×8 = 128) ============
+     В отличие от "сэкономил", здесь деньги — реальный доход за реально
+     выполненную работу или честно выигранный приз, а не бонус на
+     пустом месте. */
+
+  const quickgigs = buildFlavorFamily(
+    'quickgigs',
+    [
+      { text: (fl, state) => `Нужно помочь с переездом мебели ${fl} — предлагают ${formatMoney(scaleByWealth(state, 1500))} за пару часов работы.`, choices: [
+        { label: (fl, state) => `Взяться (${formatMoney(scaleByWealth(state, 1500))})`, trait: 'hardworker', risk: 'safe', effect: (state) => { const pay = scaleByWealth(state, 1500); return { money: pay, energy: -15, message: `Заработал ${formatMoney(pay)} тяжёлым трудом.` }; } },
+        { label: 'Отказаться', risk: 'safe', effect: () => ({ happiness: -1, message: 'Упустил лёгкий приработок.' }) },
+      ]},
+      { text: (fl, state) => `Просят выгулять и присмотреть за собакой ${fl} за ${formatMoney(scaleByWealth(state, 800))}.`, choices: [
+        { label: (fl, state) => `Согласиться (${formatMoney(scaleByWealth(state, 800))})`, risk: 'safe', effect: (state) => { const pay = scaleByWealth(state, 800); return { money: pay, happiness: 3, energy: -6, message: `Приятная прогулка принесла ${formatMoney(pay)}.` }; } },
+        { label: 'Отказаться', risk: 'safe', effect: () => ({ happiness: -1, message: 'Не в этот раз.' }) },
+      ]},
+      { text: (fl, state) => `Знакомым ${fl} нужна помощь с переводом документов за ${formatMoney(scaleByWealth(state, 2000))}.`, choices: [
+        { label: (fl, state) => `Взяться за перевод (${formatMoney(scaleByWealth(state, 2000))})`, trait: 'hardworker', risk: 'safe', effect: (state) => { const pay = scaleByWealth(state, 2000); return { money: pay, energy: -10, reputation: repOk(state, 40) ? 1 : 0, message: `Перевод сдан вовремя — заработано ${formatMoney(pay)}.` }; } },
+        { label: 'Отказаться, нет времени', risk: 'safe', effect: () => ({ happiness: -1, message: 'Придётся поискать другую подработку.' }) },
+      ]},
+      { text: (fl, state) => `Соседям ${fl} нужна разовая помощь с настройкой компьютера за ${formatMoney(scaleByWealth(state, 1200))}.`, choices: [
+        { label: (fl, state) => `Помочь за плату (${formatMoney(scaleByWealth(state, 1200))})`, risk: 'safe', effect: (state) => { const pay = scaleByWealth(state, 1200); return { money: pay, energy: -8, message: `Быстро починил технику — заработано ${formatMoney(pay)}.` }; } },
+        { label: 'Отказаться', risk: 'safe', effect: () => ({ happiness: -1, message: 'Пусть разбираются сами.' }) },
+      ]},
+      { text: (fl, state) => `Предлагают провести разовое занятие репетитором ${fl} за ${formatMoney(scaleByWealth(state, 1800))}.`, choices: [
+        { label: (fl, state) => `Провести занятие (${formatMoney(scaleByWealth(state, 1800))})`, trait: 'hardworker', risk: 'safe', effect: (state) => { const pay = scaleByWealth(state, 1800); return { money: pay, energy: -10, reputation: 1, message: `Занятие прошло отлично — заработано ${formatMoney(pay)}.` }; } },
+        { label: 'Отказаться', risk: 'safe', effect: () => ({ happiness: -1, message: 'Может, в другой раз.' }) },
+      ]},
+      { text: (fl, state) => `Нужна срочная помощь с доставкой заказа ${fl} за ${formatMoney(scaleByWealth(state, 900))}.`, choices: [
+        { label: (fl, state) => `Доставить (${formatMoney(scaleByWealth(state, 900))})`, risk: 'safe', effect: (state) => { const pay = scaleByWealth(state, 900); return { money: pay, energy: -12, message: `Доставка выполнена — заработано ${formatMoney(pay)}.` }; } },
+        { label: 'Отказаться', risk: 'safe', effect: () => ({ happiness: -1, message: 'Сил на это не было.' }) },
+      ]},
+      { text: (fl, state) => `Просят сфотографировать мероприятие ${fl} за ${formatMoney(scaleByWealth(state, 3500))}.`, choices: [
+        { label: (fl, state) => `Согласиться на съёмку (${formatMoney(scaleByWealth(state, 3500))})`, trait: 'hardworker', risk: 'safe', effect: (state) => { const pay = scaleByWealth(state, 3500); return { money: pay, energy: -14, reputation: 1, message: `Съёмка удалась — заработано ${formatMoney(pay)}.` }; } },
+        { label: 'Отказаться', risk: 'safe', effect: () => ({ happiness: -1, message: 'Камера сегодня отдыхает.' }) },
+      ]},
+      { text: (fl, state) => `Нужна разовая помощь с ремонтом мелкой техники ${fl} за ${formatMoney(scaleByWealth(state, 1300))}.`, choices: [
+        { label: (fl, state) => `Взяться за ремонт (${formatMoney(scaleByWealth(state, 1300))})`, risk: 'safe', effect: (state) => { const pay = scaleByWealth(state, 1300); return { money: pay, energy: -9, message: `Ремонт выполнен — заработано ${formatMoney(pay)}.` }; } },
+        { label: 'Отказаться', risk: 'safe', effect: () => ({ happiness: -1, message: 'Пусть несут в мастерскую.' }) },
+      ]},
+    ],
+    ['по соседству', 'через приложение подработок', 'от знакомого', 'по объявлению', 'от старого клиента', 'в своём районе', 'по рекомендации друга', 'на разовой основе'],
+    always
+  );
+
+  const contests = buildFlavorFamily(
+    'contests',
+    [
+      { text: (fl) => `Объявлен ${fl} с денежным призом.`, choices: [
+        { label: (fl, state) => `Участвовать за приз ${formatMoney(scaleByWealth(state, 5000))}`, trait: 'hardworker', risk: 'balanced', minigame: (fl, state) => ({
+            type: 'math',
+            title: 'Реши задачу турнира',
+            instructions: 'Реши задачу до истечения времени, чтобы выиграть приз.',
+            winText: 'Задача решена точно и вовремя — приз твой!',
+            loseText: 'Не успел решить задачу правильно.',
+            params: (() => { const base = Math.round(scaleByWealth(state, 5000) * 1.2); const pool = [base, Math.round(base * 1.1), Math.round(base * 0.9), Math.round(base * 1.3)]; const order = [[0, 1, 2, 3], [1, 3, 0, 2], [2, 0, 3, 1], [3, 2, 1, 0]][state.turn % 4]; return { question: `Призовой фонд ${formatMoney(base)} делится по правилам турнира — сколько достанется победителю?`, answers: order.map((i) => ({ label: formatMoney(pool[i]), correct: i === 0 })), timeLimit: 9000 }; })(),
+          }), effect: (state) => { const prize = scaleByWealth(state, 5000); return miniSuccess(state, state.reputation + traitCap(state, 'hardworker', 8) * 4 >= 60) ? { money: prize, reputation: 4, happiness: 10, message: `Победа! Приз — ${formatMoney(prize)}.` } : { happiness: -4, message: 'Не хватило точности — приз достался другому.' }; } },
+        { label: 'Не участвовать', risk: 'safe', effect: () => ({ happiness: -1, message: 'Соревнование прошло без тебя.' }) },
+      ]},
+      { text: (fl) => `${cap(fl)} набирает участников на турнир с реальным призовым фондом.`, choices: [
+        { label: (fl, state) => `Побороться за ${formatMoney(scaleByWealth(state, 8000))}`, trait: 'riskTaker', risk: 'risky', minigame: (fl, state) => ({
+            type: 'timing',
+            title: 'Финальный раунд турнира',
+            instructions: 'Останови маркер точно в зелёной зоне в решающий момент.',
+            winText: 'Точный финал — победа и приз забраны!',
+            loseText: 'Чуть-чуть не хватило точности в решающий момент.',
+            params: { period: 1000, zoneCenter: 0.5, zoneWidth: scaleByStat(traitCap(state, 'riskTaker', 10), 10, 0.1, 0.24), timeLimit: 5000 },
+          }), effect: (state) => { const prize = scaleByWealth(state, 8000); return miniSuccess(state, traitOk(state, 'riskTaker', 4)) ? { money: prize, happiness: 12, reputation: 3, message: `Турнир выигран — ${formatMoney(prize)} в кармане.` } : { happiness: -5, message: 'Турнир не задался в этот раз.' }; } },
+        { label: 'Остаться зрителем', risk: 'safe', effect: () => ({ happiness: 1, message: 'Наблюдать со стороны тоже интересно.' }) },
+      ]},
+      { text: () => `Кулинарное шоу приглашает поучаствовать в отборе с денежным призом.`, choices: [
+        { label: (fl, state) => `Готовить на отборе (${formatMoney(scaleByWealth(state, 6000))})`, trait: 'hardworker', risk: 'balanced', effect: (state) => { const prize = scaleByWealth(state, 6000); return repOk(state, 35) ? { money: prize, happiness: 10, reputation: 3, message: `Блюдо оценили высоко — приз ${formatMoney(prize)}.` } : { happiness: -3, message: 'До призовых мест не хватило совсем чуть-чуть.' }; } },
+        { label: 'Не участвовать', risk: 'safe', effect: () => ({ happiness: -1, message: 'Кухня сегодня отдыхает.' }) },
+      ]},
+      { text: () => `Городской спортивный турнир собирает участников на денежный приз.`, choices: [
+        { label: (fl, state) => `Выступить за ${formatMoney(scaleByWealth(state, 4500))}`, risk: 'risky', effect: (state) => (healthOk(state, 55) ? { money: scaleByWealth(state, 4500), happiness: 12, health: -4, message: `Хорошая физическая форма принесла победу и ${formatMoney(scaleByWealth(state, 4500))}.` } : { health: -10, happiness: -4, message: 'Не хватило физической формы, чтобы дойти до призов.' }) },
+        { label: 'Смотреть с трибуны', risk: 'safe', effect: () => ({ happiness: 1, message: 'Поддержал участников с трибуны.' }) },
+      ]},
+      { text: () => `Литературный конкурс объявляет денежную премию за лучший рассказ.`, choices: [
+        { label: (fl, state) => `Отправить рассказ на конкурс (приз ${formatMoney(scaleByWealth(state, 7000))})`, trait: 'hardworker', risk: 'balanced', effect: (state) => { const prize = scaleByWealth(state, 7000); return repOk(state, 40) ? { money: prize, reputation: 5, happiness: 10, message: `Рассказ отметили жюри — премия ${formatMoney(prize)}.` } : { happiness: -3, message: 'Жюри выбрало другого автора.' }; } },
+        { label: 'Не участвовать', risk: 'safe', effect: () => ({ happiness: -1, message: 'Может, в следующий раз.' }) },
+      ]},
+      { text: () => `Локальный хакатон обещает денежный приз команде-победителю.`, choices: [
+        { label: (fl, state) => `Собрать команду и участвовать (приз ${formatMoney(scaleByWealth(state, 9000))})`, trait: 'hardworker', risk: 'balanced', minigame: (fl, state) => ({
+            type: 'math',
+            title: 'Реши задачу хакатона',
+            instructions: 'Правильно посчитай решение до истечения времени.',
+            winText: 'Решение принято — команда побеждает!',
+            loseText: 'Расчёт не сошёлся — жюри отдало победу другим.',
+            params: (() => { const base = Math.round(scaleByWealth(state, 9000) * 1.15); const pool = [base, Math.round(base * 0.85), Math.round(base * 1.25), Math.round(base * 1.05)]; const order = [[0, 1, 2, 3], [2, 0, 3, 1], [1, 3, 0, 2], [3, 2, 1, 0]][state.turn % 4]; return { question: `Призовой фонд команды: ${formatMoney(base)}. Сколько на человека при делении на четверых?`, answers: order.map((i) => ({ label: formatMoney(Math.round(pool[i] / 4)), correct: i === 0 })), timeLimit: 10000 }; })(),
+          }), effect: (state) => { const prize = scaleByWealth(state, 9000); return miniSuccess(state, state.reputation + traitCap(state, 'hardworker', 8) * 5 >= 65) ? { money: prize, reputation: 5, happiness: 12, message: `Хакатон выигран — ${formatMoney(prize)} на команду.` } : { energy: -10, happiness: -4, message: 'Ночь без сна не спасла проект от поражения.' }; } },
+        { label: 'Не участвовать', risk: 'safe', effect: () => ({ happiness: -1, message: 'Выспался вместо хакатона.' }) },
+      ]},
+      { text: () => `Организаторы квиза приглашают на игру с денежным призовым фондом.`, choices: [
+        { label: (fl, state) => `Сыграть в квиз (${formatMoney(scaleByWealth(state, 2500))})`, risk: 'balanced', effect: (state) => (repOk(state, 30) ? { money: scaleByWealth(state, 2500), happiness: 8, message: `Команда выиграла квиз — ${formatMoney(scaleByWealth(state, 2500))}.` } : { happiness: -2, message: 'До победы не хватило одного вопроса.' }) },
+        { label: 'Остаться дома', risk: 'safe', effect: () => ({ happiness: -1, message: 'Пропустил весёлый вечер.' }) },
+      ]},
+      { text: () => `Фотоконкурс с денежной премией принимает заявки.`, choices: [
+        { label: (fl, state) => `Отправить работу (премия ${formatMoney(scaleByWealth(state, 3000))})`, risk: 'balanced', effect: (state) => (repOk(state, 35) ? { money: scaleByWealth(state, 3000), reputation: 3, happiness: 8, message: `Работа отмечена жюри — премия ${formatMoney(scaleByWealth(state, 3000))}.` } : { happiness: -2, message: 'Работа не прошла отбор в этот раз.' }) },
+        { label: 'Не участвовать', risk: 'safe', effect: () => ({ happiness: -1, message: 'Может, в следующий раз повезёт больше с судьями.' }) },
+      ]},
+    ],
+    ['турнир по настольным играм', 'районный чемпионат', 'открытый кубок', 'городской конкурс', 'региональный отбор', 'любительский чемпионат', 'корпоративный турнир', 'фестивальный конкурс'],
+    always
+  );
+
   /* ============ Сборка общего пула ============ */
 
   window.EVENTS = [].concat(
@@ -1508,6 +1617,7 @@
     HAND_EVENTS,
     neighborsHome, gadgetsBreak, wardrobeWear, petcare, civicDuty, hobbyCost, socialEvents, selfcare,
     education, travel, romance, charity, vices, sidehustle, carlife, remoteWork,
-    crypto, richEvents
+    crypto, richEvents,
+    quickgigs, contests
   );
 })();
