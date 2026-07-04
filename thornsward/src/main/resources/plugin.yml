@@ -137,6 +137,7 @@ commands:
     usage: "/<command>"
     permission: bedsmp.thornswardshop.open
     permission-message: "§cУ вас нет прав на эту команду."
+    aliases: [feathers, feathershop, перышки, пёрышки]
 
 permissions:
   bedsmp.thornsward.give:
