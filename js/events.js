@@ -438,12 +438,12 @@
     [
       { text: (fl, state) => `${cap(fl)} предлагает перевезти "посылку" за ${formatMoney(scaleByWealth(state, 15000))}, не задавая вопросов.`, choices: [
         { label: (fl, state) => `Согласиться за ${formatMoney(scaleByWealth(state, 15000))}`, trait: 'shady', risk: 'risky', minigame: () => ({
-            type: 'reaction',
+            type: 'timing',
             title: 'Проезжай мимо поста незаметно',
-            instructions: 'Жди подходящий момент и жми точно в него — не раньше и не позже.',
+            instructions: 'Останови маркер точно в зелёной зоне — не раньше и не позже.',
             winText: 'Проскочил идеально, никто не заметил.',
             loseText: 'Среагировал не вовремя — попался.',
-            params: { delay: 1200, windowMs: 850, waitLabel: 'Едешь...', promptLabel: 'ЖМИ!' },
+            params: { period: 1100, zoneCenter: 0.5, zoneWidth: 0.22, timeLimit: 5000 },
           }), effect: (state) => { const pay = scaleByWealth(state, 15000); return miniSuccess(state, traitOk(state, 'shady', 2)) ? { money: pay, happiness: -4, message: `Провернул всё чисто — дело сделано, получено ${formatMoney(pay)}.` } : { jail: true, message: 'Не среагировал вовремя. Тебя задержали с поличным.' }; } },
         { label: 'Отказаться', trait: 'cautious', risk: 'safe', effect: () => ({ reputation: 2, message: 'Мало ли что там было в этой посылке.' }) },
       ]},

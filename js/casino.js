@@ -1,15 +1,13 @@
 /* =========================================================
    ЭМПЕРАТОР: ОТ БОМЖА ДО МИЛЛИАРДЕРА
    Вкладка "Казино" — отдельные ставки на мини-игры.
-   Итог решает точность/расчёт/реакция игрока, без единого
-   броска кубика.
+   Итог решает точность/расчёт игрока, без единого броска кубика.
    ========================================================= */
 
 window.CasinoUI = (function () {
   const GAMES = {
     timing: { label: '🎯 Тайминг', payout: 2.5, instructions: 'Останови маркер точно в зелёной зоне.' },
     math: { label: '🧮 Быстрый счёт', payout: 1.8, instructions: 'Реши арифметику до истечения времени.' },
-    reaction: { label: '⚡ Реакция', payout: 3, instructions: 'Жми точно в открывшееся окно — не раньше и не позже.' },
   };
   let activeGame = 'timing';
 
@@ -68,11 +66,9 @@ window.CasinoUI = (function () {
 
     if (activeGame === 'timing') {
       window.MiniGames.timing.mount(host, { period: 900, zoneCenter: 0.5, zoneWidth: 0.18, timeLimit: 5000 }, (success) => resolve(success));
-    } else if (activeGame === 'math') {
+    } else {
       const q = mathQuestion(stake);
       window.MiniGames.math.mount(host, { question: q.question, answers: q.answers, timeLimit: 8000 }, (success) => resolve(success));
-    } else {
-      window.MiniGames.reaction.mount(host, { delay: 1300, windowMs: 700, waitLabel: 'Жди...', promptLabel: 'ЖМИ!' }, (success) => resolve(success));
     }
   }
 

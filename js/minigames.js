@@ -130,59 +130,8 @@ window.MiniGames = (function () {
     return () => finish(false, { cancelled: true });
   }
 
-  /* ---------- 3. "Реакция": среагировать точно в окно ---------- */
-  function mountReaction(host, opts, onDone) {
-    clear(host);
-    const delay = opts.delay || 1400;
-    const windowMs = opts.windowMs || 900;
-    const waitLabel = opts.waitLabel || 'Жди...';
-    const promptLabel = opts.promptLabel || 'ДЕЙСТВУЙ!';
-
-    const wrap = document.createElement('div');
-    wrap.className = 'mg-reaction-wrap';
-    wrap.innerHTML = `<button class="btn mg-reaction-btn mg-reaction-wait">${waitLabel}</button>`;
-    host.appendChild(wrap);
-
-    const btn = wrap.querySelector('.mg-reaction-btn');
-    let phase = 'wait';
-    let done = false;
-    let toShow = null;
-    let toExpire = null;
-
-    function finish(success, meta) {
-      if (done) return;
-      done = true;
-      clearTimeout(toShow);
-      clearTimeout(toExpire);
-      onDone(success, meta);
-    }
-
-    btn.addEventListener('click', () => {
-      if (phase === 'wait') {
-        finish(false, { tooEarly: true });
-      } else if (phase === 'active') {
-        finish(true, {});
-      }
-    });
-
-    toShow = setTimeout(() => {
-      phase = 'active';
-      btn.textContent = promptLabel;
-      btn.classList.add('mg-reaction-active');
-      toExpire = setTimeout(() => {
-        if (phase === 'active') {
-          phase = 'expired';
-          finish(false, { tooLate: true });
-        }
-      }, windowMs);
-    }, delay);
-
-    return () => finish(false, { cancelled: true });
-  }
-
   return {
     timing: { mount: mountTiming },
     math: { mount: mountMath },
-    reaction: { mount: mountReaction },
   };
 })();

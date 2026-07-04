@@ -7,7 +7,6 @@
 const AUTO_BANKRUPT_THRESHOLD = -300000;
 const MAX_AGE = 85;
 const MAX_TURNS = 70;
-const BILLIONAIRE_GOAL = 1000000000;
 const BASE_DEBT_RATE = 0.025;
 const PREDATORY_DEBT_RATE = 0.075;
 const LOW_ENERGY_THRESHOLD = 12;
@@ -331,9 +330,6 @@ function applyChoice(state, event, choiceIndex) {
   } else if (state.money <= AUTO_BANKRUPT_THRESHOLD) {
     state.ended = true;
     state.endingType = 'bankrupt';
-  } else if (computeEffectiveWealth(state) >= BILLIONAIRE_GOAL) {
-    state.ended = true;
-    state.endingType = 'billionaire';
   } else if (state.age >= MAX_AGE) {
     state.ended = true;
     state.endingType = 'lifeEnd';
@@ -378,10 +374,6 @@ const ENDING_TEXT = {
   jail: {
     title: '⛓️ Тюрьма',
     text: 'Погоня за лёгкими деньгами закончилась приговором суда. Все амбиции придётся отложить на очень долгий срок.',
-  },
-  billionaire: {
-    title: '👑 Миллиардер!',
-    text: 'Ты прошёл путь до самой вершины и вошёл в клуб миллиардеров. Это настоящая история триумфа.',
   },
   lifeEnd: {
     title: '🕯️ Конец жизненного пути',
