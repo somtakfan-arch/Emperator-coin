@@ -60,6 +60,7 @@ function createGameState(name, character) {
     pantry: 55,
     possessions: new Set(),
     inventory: {},
+    cryptoHoldings: {},
     doctorCharges: 0,
     doctorVisits: 0,
     debtRate: BASE_DEBT_RATE,
@@ -305,6 +306,70 @@ function placeCasinoBet(state, stake, success, payoutMultiplier) {
   }
   const barrier = applyTierBarrier(state);
   return { ok: true, success, winnings, barrier };
+}
+
+/* ---------- крипта отдельной вкладкой: вход по мини-игре, позиция держится сколько угодно ---------- */
+
+function hasElectronicsItem(state) {
+  return ownsCategory(state, 'electronics');
+}
+
+/** Индекс цены монеты — детерминированная "волна" от номера хода и
+ *  индекса монеты. Один и тот же ход всегда даёт один и тот же индекс,
+ *  никакого Math.random(). */
+function cryptoPriceIndex(state, coinIdx) {
+  const phase = coinIdx * 1.7;
+  const wave = 35 * Math.sin(state.turn * 0.35 + phase) + 10 * Math.sin(state.turn * 0.9 + phase * 2);
+  return Math.max(20, Math.round(100 + wave));
+}
+
+/** Открыть/докупить позицию. Успех мини-игры даёт вход по более
+ *  выгодной цене, провал — по менее выгодной; деньги не начисляются
+ *  и не сгорают сразу — итог решится при продаже позиции. */
+function buyCrypto(state, coinIdx, stake, success) {
+  if (stake <= 0) return { ok: false, message: 'Укажи сумму инвестиции.' };
+  if (state.money < stake) return { ok: false, message: 'Не хватает денег на такую сумму.' };
+  state.money -= stake;
+  const price = cryptoPriceIndex(state, coinIdx);
+  const entryPrice = success ? Math.round(price * 0.85) : Math.round(price * 1.15);
+  state.cryptoHoldings = state.cryptoHoldings || {};
+  const key = String(coinIdx);
+  const existing = state.cryptoHoldings[key];
+  if (existing) {
+    const totalInvested = existing.invested + stake;
+    const blendedEntry = Math.round((existing.invested * existing.entryPrice + stake * entryPrice) / totalInvested);
+    state.cryptoHoldings[key] = { invested: totalInvested, entryPrice: blendedEntry };
+  } else {
+    state.cryptoHoldings[key] = { invested: stake, entryPrice };
+  }
+  const barrier = applyTierBarrier(state);
+  return {
+    ok: true,
+    success,
+    barrier,
+    message: success
+      ? `Вошёл в позицию по выгодной цене (индекс ${entryPrice}).`
+      : `Момент был не лучшим — вход по индексу ${entryPrice}.`,
+  };
+}
+
+function sellCrypto(state, coinIdx) {
+  const key = String(coinIdx);
+  const holding = state.cryptoHoldings && state.cryptoHoldings[key];
+  if (!holding) return { ok: false, message: 'Нечего продавать.' };
+  const price = cryptoPriceIndex(state, coinIdx);
+  const value = Math.round(holding.invested * (price / holding.entryPrice));
+  state.money += value;
+  delete state.cryptoHoldings[key];
+  const barrier = applyTierBarrier(state);
+  const profit = value - holding.invested;
+  return {
+    ok: true,
+    value,
+    profit,
+    barrier,
+    message: profit >= 0 ? `Продано с прибылью ${formatMoney(profit)}.` : `Продано в убыток ${formatMoney(Math.abs(profit))}.`,
+  };
 }
 
 const REST_EVENT = {

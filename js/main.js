@@ -253,6 +253,7 @@
     shop: () => window.InventoryUI.renderAll(),
     doctor: () => window.DoctorUI.render(),
     casino: () => window.CasinoUI.render(),
+    crypto: () => window.CryptoUI.render(),
     auction: () => window.AuctionUI.render(),
     leaderboard: () => window.LeaderboardUI.render(),
   };
