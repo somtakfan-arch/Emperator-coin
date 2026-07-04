@@ -37,6 +37,9 @@
   const noJobFn = (s) => !s.hasJob;
   const hasAllergyFn = (s) => !s.allergyNone;
   const traitCap = (state, key, max) => Math.min((state.traits && state.traits[key]) || 0, max);
+  const ownsCategoryFn = (s, category) => Object.keys(s.inventory || {}).some((id) => { const it = window.ITEMS.byId[id]; return it && it.category === category && (s.inventory[id] || 0) > 0; });
+  const hasCarFn = (s) => ownsCategoryFn(s, 'cars');
+  const hasElectronicsFn = (s) => ownsCategoryFn(s, 'electronics');
 
   /* ---------- детерминированные пороги вместо удачи ---------- */
   // Никакого Math.random() в исходах: результат каждого выбора зависит
@@ -938,11 +941,457 @@
     },
   ];
 
+  /* ============ 4. НОВЫЕ COST-TIER СЕМЬИ (8 × 20 × 4 = 640) ============ */
+
+  const neighborsFx = costOrEndure('happiness', 5, 45, 8, 'Решить вопрос', 'Отложить на потом');
+  const neighborsHome = buildCostTierFamily(
+    'neighborhome',
+    [
+      'соседи снизу пожаловались на шум', 'во дворе прорвало трубу и залило подвал', 'домофон сломался, а мастер берёт недёшево',
+      'лифт встал, и жильцы скидываются на ремонт', 'во дворе нужно скинуться на новую детскую площадку', 'управляющая компания заявила о внеплановом сборе на ремонт фасада',
+      'сосед по лестничной клетке просит одолжить денег до зарплаты', 'домовой чат бурлит из-за скандала с парковкой', 'нужно скинуться соседями на охрану двора',
+      'почтовый ящик взломали, и нужно менять замок', 'в подъезде отключили свет из-за долгов за электричество', 'собрание жильцов требует взноса на систему видеонаблюдения',
+      'у соседей потоп, и они просят помощи с ремонтом', 'во дворе завели ремонт теплотрассы, и нужно временное отопление', 'домофонная компания предлагает платное обновление системы',
+      'консьерж просит скинуться на подарок к празднику', 'председатель ТСЖ настаивает на срочном взносе', 'во дворе украли велосипед, и нужна страховка получше',
+      'соседский кот повадился портить вещи на балконе', 'жилищная инспекция выписала предписание за перепланировку',
+    ],
+    (a1, j, state) => `Дом преподносит сюрприз: ${a1}. Решить вопрос стоит ${formatMoney(scaleByWealth(state, COST_BASE[j]))}. Разобраться сейчас или отложить?`,
+    { label: neighborsFx.costLabel, risk: 'safe', effect: neighborsFx.cost },
+    { label: neighborsFx.endureLabel, trait: 'cautious', risk: 'risky', effect: neighborsFx.endure }
+  );
+
+  const gadgetsFx = costOrEndure('energy', 6, 45, 10, 'Починить сейчас', 'Обойтись подручными средствами');
+  const gadgetsBreak = buildCostTierFamily(
+    'gadgetbreak',
+    [
+      'сломался ноутбук в разгар важных дел', 'телефон разбился, экран весь в трещинах', 'наушники окончательно перестали работать',
+      'роутер барахлит, и интернет постоянно рвётся', 'принтер отказывается печатать важные документы', 'аккумулятор в ноутбуке садится за считанные минуты',
+      'игровая приставка перестала читать диски', 'камера на телефоне разбилась после падения', 'зарядное устройство сгорело вместе с розеткой',
+      'смарт-часы перестали синхронизироваться', 'внешний жёсткий диск со всеми файлами не читается', 'клавиатура ноутбука залита кофе',
+      'телевизор дома внезапно перестал включаться', 'колонки для музыки шипят и трещат', 'веб-камера для созвонов сломалась перед важной встречей',
+      'планшет завис намертво и не реагирует ни на что', 'микрофон для подкастов барахлит', 'старый смартфон разрядился и не заряжается вовсе',
+      'монитор пошёл цветными полосами', 'модем интернет-провайдера сгорел после грозы',
+    ],
+    (a1, j, state) => `Незадача с техникой: ${a1}. Ремонт или замена обойдётся в ${formatMoney(scaleByWealth(state, COST_BASE[j]))}. Чинить сейчас или обойтись подручными средствами?`,
+    { label: gadgetsFx.costLabel, risk: 'safe', effect: gadgetsFx.cost },
+    { label: gadgetsFx.endureLabel, trait: 'cautious', risk: 'risky', effect: gadgetsFx.endure }
+  );
+
+  const wardrobeFx = costOrEndure('reputation', 4, 45, 6, 'Обновить гардероб', 'Перетерпеть, как есть');
+  const wardrobeWear = buildCostTierFamily(
+    'wardrobewear',
+    [
+      'любимая куртка порвалась в самый неподходящий момент', 'туфли протёрлись прямо перед важной встречей', 'рубашка безнадёжно испачкалась пятном, которое не отстирывается',
+      'молния на куртке сломалась на морозе', 'костюм сел после неудачной стирки', 'кроссовки вышли из строя посреди рабочей недели',
+      'пуговицы на пиджаке одна за другой отрываются', 'любимый свитер побила моль', 'туфли на каблуках сломались посреди улицы',
+      'куртка вышла из моды, и это стали замечать коллеги', 'рубашка полиняла в стирке вместе с цветными вещами', 'ремень порвался в неподходящий момент',
+      'пальто протекает под дождём', 'джинсы порвались по шву', 'любимый шарф потерялся перед важным выходом',
+      'перчатки истрепались в морозы', 'галстук залит соусом на деловом обеде', 'шапка растянулась и уже не держит форму',
+      'носки все до одного протёрлись до дыр', 'ремешок на любимых часах истрепался',
+    ],
+    (a1, j, state) => `Проблема с внешним видом: ${a1}. Обновить обойдётся в ${formatMoney(scaleByWealth(state, COST_BASE[j]))}. Обновить гардероб или перетерпеть, как есть?`,
+    { label: wardrobeFx.costLabel, risk: 'safe', effect: wardrobeFx.cost },
+    { label: wardrobeFx.endureLabel, trait: 'cautious', risk: 'risky', effect: wardrobeFx.endure }
+  );
+
+  const petcareFx = costOrEndure('happiness', 5, 45, 7, 'Позаботиться о питомце', 'Перетерпеть без расходов');
+  const petcare = buildCostTierFamily(
+    'petcare',
+    [
+      'у питомца проблемы со здоровьем, срочно нужен ветеринар', 'закончился корм для питомца, а любимый бренд подорожал', 'питомцу нужна срочная прививка',
+      'питомец погрыз важные вещи дома', 'питомцу нужна стрижка у грумера', 'питомец потерялся, и расклеены объявления по району',
+      'ветклиника предлагает дорогую страховку для питомца', 'питомцу нужна новая переноска для поездок', 'питомец не в духе и требует дорогие игрушки',
+      'питомцу нужна операция после неудачного падения', 'питомец разодрал новый диван', 'питомцу нужен курс витаминов от ветеринара',
+      'питомца не с кем оставить на время поездки', 'питомцу нужна новая когтеточка вместо мебели', 'питомец подхватил блох после прогулки',
+      'питомцу нужен новый поводок и намордник', 'питомец громко скулит по ночам, соседи жалуются', 'питомцу нужна кастрация или стерилизация',
+      'питомец испортил ковёр во время грозы', 'питомцу нужен визит к специалисту по поведению',
+    ],
+    (a1, j, state) => `С питомцем беда: ${a1}. Решение вопроса обойдётся в ${formatMoney(scaleByWealth(state, COST_BASE[j]))}. Заняться этим сейчас или потерпеть?`,
+    { label: petcareFx.costLabel, risk: 'safe', effect: petcareFx.cost },
+    { label: petcareFx.endureLabel, trait: 'cautious', risk: 'risky', effect: petcareFx.endure }
+  );
+
+  const civicFx = costOrEndure('reputation', 4, 45, 6, 'Разобраться официально', 'Найти обходной путь');
+  const civicDuty = buildCostTierFamily(
+    'civicduty',
+    [
+      'пришла повестка на срочные военные сборы', 'вызывают в суд свидетелем по чужому делу', 'истёк срок действия паспорта, а очередь в МФЦ огромная',
+      'пришёл штраф за неправильную парковку', 'налоговая требует пояснений по декларации', 'нужно оформить кучу документов на новое жильё',
+      'коммунальщики требуют доступ для проверки счётчиков', 'участковый пришёл с проверкой по жалобе соседей', 'нужно продлить водительские права',
+      'пришло письмо о просроченном техосмотре', 'вызывают на медкомиссию для военкомата', 'нужно зарегистрировать перепланировку в квартире',
+      'нужно поставить машину на учёт в новом регионе', 'нужно оформить загранпаспорт перед поездкой', 'приставы прислали письмо по старому недоразумению',
+      'нужно подтвердить льготу через портал госуслуг', 'требуют оплатить экологический сбор за старую машину', 'нужно пройти обязательную диспансеризацию',
+      'миграционная служба просит донести документы', 'нужно оформить страховку по новым требованиям',
+    ],
+    (a1, j, state) => `Гражданский вопрос: ${a1}. Официальное решение стоит ${formatMoney(scaleByWealth(state, COST_BASE[j]))}. Разобраться по правилам или найти обходной путь?`,
+    { label: civicFx.costLabel, risk: 'safe', effect: civicFx.cost },
+    { label: civicFx.endureLabel, trait: 'shady', risk: 'risky', effect: civicFx.endure }
+  );
+
+  const hobbyFx = costOrEndure('happiness', 7, 45, 5, 'Побаловать себя', 'Отказаться от траты');
+  const hobbyCost = buildCostTierFamily(
+    'hobbycost',
+    [
+      'новый набор для рисования, о котором ты давно мечтал(а)', 'коллекционную фигурку выставили на распродаже', 'билеты на фестиваль любимой музыки',
+      'новую удочку для рыбалки', 'абонемент на скалодром', 'редкую пластинку для коллекции',
+      'новый объектив для фотоаппарата', 'мастер-класс по кулинарии от известного шефа', 'снаряжение для похода в горы',
+      'новую гитару взамен старой', 'настольную игру, о которой все говорят', 'билет на турнир по любимой игре',
+      'материалы для рукоделия', 'новый велосипед для покатушек по выходным', 'абонемент в шахматный клуб',
+      'оборудование для домашней студии подкастов', 'коллекционное издание любимой книги', 'инвентарь для сноуборда перед сезоном',
+      'билеты на выставку современного искусства', 'новый набор для домашнего пивоварения',
+    ],
+    (a1, j, state) => `По увлечению вопрос: подвернулась ${a1}. Это будет стоить ${formatMoney(scaleByWealth(state, COST_BASE[j] * 0.6))}. Побаловать себя или отказаться от траты?`,
+    { label: hobbyFx.costLabel, risk: 'balanced', effect: hobbyFx.cost },
+    { label: hobbyFx.endureLabel, trait: 'cautious', risk: 'safe', effect: hobbyFx.endure }
+  );
+
+  const socialFx = costOrEndure('happiness', 6, 45, 6, 'Пойти при полном параде', 'Отговориться и не ходить');
+  const socialEvents = buildCostTierFamily(
+    'socialevent',
+    [
+      'свадьба дальнего родственника', 'юбилей бывшего коллеги', 'выпускной вечер в старом университете',
+      'корпоратив у друзей в другой компании', 'день рождения близкого друга', 'крестины у соседей',
+      'встреча выпускников школы', 'помолвка знакомой пары', 'новоселье у друзей',
+      'юбилей свадьбы родителей', 'торжественный банкет от партнёров по бизнесу', 'прощальная вечеринка коллеги перед переездом',
+      'день рождения ребёнка друзей', 'почётное приглашение на местный праздник', 'встреча старых армейских товарищей',
+      'торжество по случаю выхода на пенсию наставника', 'гала-вечер благотворительного фонда', 'юбилей компании, где ты когда-то работал(а)',
+      'презентация книги знакомого автора', 'открытие нового заведения общего знакомого',
+    ],
+    (a1, j, state) => `Приглашение: ${a1}. Достойно поучаствовать обойдётся в ${formatMoney(scaleByWealth(state, COST_BASE[j] * 0.5))}. Пойти при полном параде или отговориться?`,
+    { label: socialFx.costLabel, risk: 'balanced', effect: socialFx.cost },
+    { label: socialFx.endureLabel, trait: 'cautious', risk: 'safe', effect: socialFx.endure }
+  );
+
+  const selfcareFx = costOrEndure('health', 8, 50, 8, 'Заняться собой', 'Перетерпеть без трат');
+  const selfcare = buildCostTierFamily(
+    'selfcare',
+    [
+      'давно пора сходить к стоматологу на профилактику', 'нужен новый рецепт на очки, зрение подводит', 'пора записаться на массаж после постоянного напряжения',
+      'давно не был(а) на диспансеризации', 'нужно провериться у дерматолога из-за странной родинки', 'пора обновить рецепт на постоянные лекарства',
+      'стоит записаться на приём к неврологу из-за головных болей', 'нужно пройти чекап у терапевта после долгого перерыва', 'пора сделать плановую вакцинацию',
+      'давно откладываешь визит к окулисту', 'нужно провериться у кардиолога для профилактики', 'пора записаться на чистку зубов',
+      'стоит сходить к диетологу за консультацией', 'нужно пройти анализы, которые давно откладывались', 'пора обратиться к психотерапевту, чтобы разгрузить голову',
+      'давно пора показаться ЛОР-врачу из-за постоянного насморка', 'нужно провериться у эндокринолога', 'пора записаться к ортопеду из-за боли в спине',
+      'стоит сходить на приём к косметологу', 'давно не проверял(а) слух у сурдолога',
+    ],
+    (a1, j, state) => `Забота о себе: ${a1}. Стоит это ${formatMoney(scaleByWealth(state, COST_BASE[j] * 0.6))}. Заняться собой сейчас или перетерпеть без трат?`,
+    { label: selfcareFx.costLabel, risk: 'safe', effect: selfcareFx.cost },
+    { label: selfcareFx.endureLabel, trait: 'cautious', risk: 'risky', effect: selfcareFx.endure }
+  );
+
+  /* ============ 5. НОВЫЕ FLAVOR-СЕМЬИ (6×64 + 2×36 = 456) ============ */
+
+  const education = buildFlavorFamily(
+    'education',
+    [
+      { text: (fl, state) => `Тебе предлагают записаться на ${fl} за ${formatMoney(scaleByWealth(state, 3500))}.`, choices: [
+        { label: (fl, state) => `Записаться (${formatMoney(scaleByWealth(state, 3500))})`, trait: 'hardworker', risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 3500); return { money: -cost, reputation: 3, happiness: 4, message: 'Новые знания уже пригодились в деле.' }; } },
+        { label: 'Отказаться, и так сойдёт', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -1, message: 'Может, в другой раз.' }) },
+      ]},
+      { text: () => `Экзамен по важному курсу назначен на завтра, а ты толком не готов(а).`, choices: [
+        { label: 'Зубрить всю ночь', trait: 'hardworker', risk: 'risky', effect: (state) => (energyOk(state, 40) ? { reputation: 4, happiness: 3, message: 'Успел подготовиться — экзамен сдан на отлично.' } : { energy: -20, happiness: -6, message: 'Сил не хватило — экзамен сдан еле-еле.' }) },
+        { label: 'Смириться с посредственным результатом', risk: 'safe', effect: () => ({ happiness: -3, message: 'Не блестяще, но и не провал.' }) },
+      ]},
+      { text: (fl) => `Преподаватель курса ${fl} предлагает тебе платные индивидуальные консультации.`, choices: [
+        { label: (fl, state) => `Согласиться (${formatMoney(scaleByWealth(state, 1500))})`, risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 1500); return { money: -cost, reputation: 2, happiness: 2, message: 'Индивидуальные занятия того стоили.' }; } },
+        { label: 'Разобраться самостоятельно', trait: 'cautious', risk: 'safe', effect: () => ({ energy: -4, message: 'Пришлось попотеть, но справился(ась) сам(а).' }) },
+      ]},
+      { text: () => `Тебе предложили выступить с докладом перед всей группой.`, choices: [
+        { label: 'Согласиться выступить', trait: 'hardworker', risk: 'risky', effect: (state) => (repOk(state, 45) ? { reputation: 6, happiness: 6, message: 'Выступление прошло блестяще.' } : { happiness: -5, message: 'Выступление вышло неуверенным.' }) },
+        { label: 'Отказаться от выступления', risk: 'safe', effect: () => ({ happiness: 1, message: 'Комфортная зона важнее.' }) },
+      ]},
+      { text: (fl) => `Тебе предлагают бесплатную стажировку вместо продолжения курса ${fl}.`, choices: [
+        { label: 'Пойти на стажировку', trait: 'riskTaker', risk: 'risky', effect: (state) => { const gain = scaleByWealth(state, 2000); return traitOk(state, 'riskTaker', 3) ? { money: gain, reputation: 4, message: 'Стажировка обернулась неожиданным доходом.' } : { happiness: -3, message: 'Стажировка не задалась — опыта было маловато.' }; } },
+        { label: 'Продолжить обучение', trait: 'cautious', risk: 'safe', effect: () => ({ reputation: 2, message: 'Базовые знания — тоже фундамент.' }) },
+      ]},
+      { text: () => `Однокурсник просит списать у тебя домашнее задание.`, choices: [
+        { label: 'Дать списать', trait: 'familyFirst', risk: 'balanced', effect: () => ({ happiness: 2, reputation: -1, message: 'Помог, но совесть немного гложет.' }) },
+        { label: 'Отказать', trait: 'cautious', risk: 'safe', effect: () => ({ reputation: 1, happiness: -1, message: 'Честность дороже.' }) },
+      ]},
+      { text: (fl, state) => `Стоимость (${fl}) внезапно выросла на ${formatMoney(scaleByWealth(state, 2000))} из-за "инфляции".`, choices: [
+        { label: (fl, state) => `Доплатить (${formatMoney(scaleByWealth(state, 2000))})`, risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 2000); return { money: -cost, message: 'Доплатил, чтобы не бросать на середине.' }; } },
+        { label: 'Бросить обучение', trait: 'shady', risk: 'risky', effect: () => ({ happiness: -4, message: 'Деньги за первую часть курса пропали зря.' }) },
+      ]},
+      { text: () => `Тебя пригласили в приёмную комиссию — помочь набирать новых студентов за вознаграждение.`, choices: [
+        { label: (fl, state) => `Согласиться (${formatMoney(scaleByWealth(state, 2500))})`, trait: 'hardworker', risk: 'balanced', effect: (state) => { const pay = scaleByWealth(state, 2500); return { money: pay, energy: -10, message: 'Дополнительный доход не помешал.' }; } },
+        { label: 'Отказаться, время дороже', risk: 'safe', effect: () => ({ energy: 4, message: 'Сэкономил силы для главного.' }) },
+      ]},
+    ],
+    ['онлайн-курс по программированию', 'вечерние курсы иностранного языка', 'мастер-класс по ораторскому искусству', 'сертификационную программу по маркетингу', 'курс повышения квалификации', 'занятия с репетитором по финансам', 'программу MBA-интенсив', 'воскресные курсы кройки и шитья'],
+    always
+  );
+
+  const travel = buildFlavorFamily(
+    'travel',
+    [
+      { text: (fl, state) => `Горящий тур ${fl} продаётся за ${formatMoney(scaleByWealth(state, 12000))}.`, choices: [
+        { label: (fl, state) => `Купить тур (${formatMoney(scaleByWealth(state, 12000))})`, risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 12000); return { money: -cost, happiness: 16, energy: 8, message: 'Поездка вышла отличной, зарядился впечатлениями.' }; } },
+        { label: 'Остаться дома', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -3, message: 'Бюджет цел, но настроение так себе.' }) },
+      ]},
+      { text: () => `В аэропорту рейс задержали на много часов.`, choices: [
+        { label: (fl, state) => `Взять номер в отеле у аэропорта (${formatMoney(scaleByWealth(state, 3000))})`, risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 3000); return { money: -cost, energy: 10, message: 'Отдохнул с комфортом, дождавшись рейса.' }; } },
+        { label: 'Ждать в зале ожидания', trait: 'cautious', risk: 'risky', effect: () => ({ energy: -18, happiness: -6, message: 'Долгое ожидание вымотало окончательно.' }) },
+      ]},
+      { text: (fl) => `В поездке ${fl} багаж потерялся при пересадке.`, choices: [
+        { label: (fl, state) => `Купить всё необходимое на месте (${formatMoney(scaleByWealth(state, 4000))})`, risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 4000); return { money: -cost, happiness: 2, message: 'Неприятно, но поездку удалось не испортить.' }; } },
+        { label: 'Обходиться тем, что есть', trait: 'cautious', risk: 'risky', effect: () => ({ happiness: -8, message: 'Отдых подпорчен, но нервы целее.' }) },
+      ]},
+      { text: () => `Местный гид предлагает эксклюзивную экскурсию не по программе.`, choices: [
+        { label: (fl, state) => `Согласиться (${formatMoney(scaleByWealth(state, 2500))})`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 2500); return repOk(state, 30) ? { money: -Math.round(cost * 0.6), happiness: 14, message: 'Экскурсия оказалась незабываемой и не такой уж дорогой.' } : { money: -cost, happiness: 4, message: 'Экскурсия была неплохой, но переплатил как турист.' }; } },
+        { label: 'Придерживаться программы', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 2, message: 'Спокойный, предсказуемый отдых.' }) },
+      ]},
+      { text: (fl) => `В поездке ${fl} тебя пригласили на местный праздник с угощениями.`, choices: [
+        { label: 'Пойти и попробовать всё', risk: 'risky', effect: (state) => (healthOk(state, 45) ? { happiness: 12, message: 'Праздник запомнится надолго.' } : { happiness: 6, health: -6, message: 'Праздник понравился, но желудок оказался не готов.' }) },
+        { label: 'Вежливо отказаться', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 1, message: 'Осторожность в путешествии не помешает.' }) },
+      ]},
+      { text: () => `Таксист в чужом городе явно пытается обсчитать за поездку.`, choices: [
+        { label: 'Поспорить о цене', risk: 'balanced', effect: (state) => (repOk(state, 35) ? { money: scaleByWealth(state, 300), happiness: 3, message: 'Удалось отстоять честную цену.' } : { happiness: -4, message: 'Пришлось заплатить по завышенному тарифу.' }) },
+        { label: 'Молча заплатить и забыть', risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 600); return { money: -cost, message: 'Проще заплатить, чем спорить в чужой стране.' }; } },
+      ]},
+      { text: (fl) => `Друзья зовут присоединиться к поездке ${fl} в последний момент.`, choices: [
+        { label: (fl, state) => `Сорваться и поехать (${formatMoney(scaleByWealth(state, 9000))})`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 9000); return { money: -cost, happiness: 18, energy: -6, message: 'Спонтанная поездка подарила море впечатлений.' }; } },
+        { label: 'Остаться и не тратиться', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -4, message: 'Бюджет цел, но было немного завидно.' }) },
+      ]},
+      { text: () => `Страховая компания предлагает расширенную туристическую страховку.`, choices: [
+        { label: (fl, state) => `Оформить (${formatMoney(scaleByWealth(state, 1200))})`, trait: 'cautious', risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 1200); return { money: -cost, happiness: 2, message: 'Спокойствие в поездке того стоило.' }; } },
+        { label: 'Обойтись без неё', trait: 'riskTaker', risk: 'risky', effect: () => ({ happiness: 1, message: 'Сэкономил, понадеявшись на удачу... то есть на авось.' }) },
+      ]},
+    ],
+    ['по горам', 'на побережье', 'в старинный город', 'в соседнюю страну', 'в тропики', 'на курорт с термальными источниками', 'в национальный парк', 'по маршруту дикого кемпинга'],
+    always
+  );
+
+  const romance = buildFlavorFamily(
+    'romance',
+    [
+      { text: (fl) => `Тебя пригласили на свидание ${fl}.`, choices: [
+        { label: (fl, state) => `Пойти на свидание (${formatMoney(scaleByWealth(state, 1500))})`, risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 1500); return { money: -cost, happiness: 12, message: 'Свидание прошло тепло и приятно.' }; } },
+        { label: 'Вежливо отказаться', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -2, message: 'Не время для отношений.' }) },
+      ]},
+      { text: () => `Отношения переживают непростой момент — нужен откровенный разговор.`, choices: [
+        { label: 'Поговорить честно', trait: 'familyFirst', risk: 'balanced', effect: (state) => (repOk(state, 35) ? { happiness: 10, reputation: 2, message: 'Разговор всё расставил по местам.' } : { happiness: -6, message: 'Разговор дался тяжело и не решил всего.' }) },
+        { label: 'Избежать разговора', risk: 'safe', effect: () => ({ happiness: -5, message: 'Проблема осталась нерешённой.' }) },
+      ]},
+      { text: (fl) => `Партнёр(ша) предлагает вместе съездить ${fl}.`, choices: [
+        { label: (fl, state) => `Согласиться (${formatMoney(scaleByWealth(state, 6000))})`, risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 6000); return { money: -cost, happiness: 16, message: 'Поездка вдвоём укрепила отношения.' }; } },
+        { label: 'Предложить что-то поскромнее', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 4, message: 'Скромно, но душевно.' }) },
+      ]},
+      { text: () => `Ты узнал(а), что вторая половина скрывала от тебя финансовые проблемы.`, choices: [
+        { label: (fl, state) => `Помочь разобраться (${formatMoney(scaleByWealth(state, 5000))})`, trait: 'familyFirst', risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 5000); return { money: -cost, happiness: 6, message: 'Вместе решать проблемы оказалось проще.' }; } },
+        { label: 'Потребовать больше прозрачности', trait: 'cautious', risk: 'risky', effect: () => ({ happiness: -6, reputation: 1, message: 'Доверие временно пошатнулось.' }) },
+      ]},
+      { text: (fl) => `На вечеринке ${fl} с тобой флиртует привлекательный незнакомец(ка).`, choices: [
+        { label: 'Пофлиртовать в ответ', trait: 'riskTaker', risk: 'risky', effect: () => ({ happiness: 8, reputation: -2, message: 'Приятный вечер, но не без пересудов.' }) },
+        { label: 'Вежливо перевести тему', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 1, message: 'Верность важнее мимолётного внимания.' }) },
+      ]},
+      { text: () => `Родители второй половины настойчиво зовут познакомиться поближе.`, choices: [
+        { label: (fl, state) => `Прийти с хорошим подарком (${formatMoney(scaleByWealth(state, 2000))})`, trait: 'familyFirst', risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 2000); return { money: -cost, reputation: 3, happiness: 6, message: 'Знакомство прошло тепло.' }; } },
+        { label: 'Прийти с пустыми руками', risk: 'risky', effect: () => ({ reputation: -2, happiness: -2, message: 'Впечатление получилось не лучшим.' }) },
+      ]},
+      { text: (fl) => `Ты давно думаешь о серьёзном шаге в отношениях ${fl}.`, choices: [
+        { label: (fl, state) => `Сделать решительный шаг (${formatMoney(scaleByWealth(state, 15000))})`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 15000); return repOk(state, 40) ? { money: -cost, happiness: 22, reputation: 3, message: 'Решительный шаг встретил тёплый отклик.' } : { money: -cost, happiness: -4, message: 'Момент оказался не самым подходящим.' }; } },
+        { label: 'Подождать ещё немного', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 1, message: 'Спешить с таким не стоит.' }) },
+      ]},
+      { text: () => `Бывший(ая) партнёр(ша) неожиданно вышел(ла) на связь после долгого молчания.`, choices: [
+        { label: 'Ответить и поговорить', trait: 'riskTaker', risk: 'risky', effect: () => ({ happiness: 4, reputation: -1, message: 'Разговор всколыхнул старые чувства.' }) },
+        { label: 'Не отвечать', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 1, message: 'Прошлое остаётся в прошлом.' }) },
+      ]},
+    ],
+    ['в уютном кафе', 'на выставке современного искусства', 'на прогулке в парке', 'в новом ресторане', 'на общем празднике друзей', 'в кино', 'на набережной вечером', 'в туристической поездке'],
+    always
+  );
+
+  const charity = buildFlavorFamily(
+    'charity',
+    [
+      { text: (fl) => `Волонтёрская организация зовёт помочь ${fl}.`, choices: [
+        { label: 'Пойти волонтёрить', trait: 'familyFirst', risk: 'balanced', effect: () => ({ energy: -12, happiness: 8, reputation: 4, message: 'Помощь другим приносит настоящее удовлетворение.' }) },
+        { label: 'Отказаться, своих дел хватает', risk: 'safe', effect: () => ({ happiness: -1, message: 'Может, в другой раз найдётся время.' }) },
+      ]},
+      { text: (fl, state) => `Благотворительный фонд просит пожертвование ${fl} в размере ${formatMoney(scaleByWealth(state, 2000))}.`, choices: [
+        { label: (fl, state) => `Пожертвовать (${formatMoney(scaleByWealth(state, 2000))})`, trait: 'familyFirst', risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 2000); return { money: -cost, happiness: 6, reputation: 3, message: 'Небольшая помощь, но приятно на душе.' }; } },
+        { label: 'Отказаться в этот раз', risk: 'safe', effect: () => ({ happiness: -1, message: 'Не всегда есть возможность помочь.' }) },
+      ]},
+      { text: () => `Друзья устраивают сбор денег для знакомого, попавшего в беду.`, choices: [
+        { label: (fl, state) => `Скинуться щедро (${formatMoney(scaleByWealth(state, 3000))})`, trait: 'familyFirst', risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 3000); return { money: -cost, reputation: 4, happiness: 5, message: 'Щедрость заметили и оценили.' }; } },
+        { label: 'Скинуться символически', risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 300); return { money: -cost, happiness: 1, message: 'Символическое участие тоже участие.' }; } },
+      ]},
+      { text: (fl) => `Тебе предлагают стать наставником для новичка ${fl}.`, choices: [
+        { label: 'Согласиться безвозмездно', trait: 'familyFirst', risk: 'safe', effect: () => ({ energy: -8, happiness: 6, reputation: 3, message: 'Наставничество оказалось благодарным делом.' }) },
+        { label: 'Отказаться, нет времени', risk: 'safe', effect: () => ({ happiness: -1, message: 'Время — тоже ресурс.' }) },
+      ]},
+      { text: () => `Приют для животных просит помощи с ремонтом вольеров.`, choices: [
+        { label: (fl, state) => `Оплатить материалы (${formatMoney(scaleByWealth(state, 2500))})`, trait: 'familyFirst', risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 2500); return { money: -cost, happiness: 7, reputation: 2, message: 'Приют выглядит гораздо уютнее.' }; } },
+        { label: 'Помочь своими руками бесплатно', trait: 'hardworker', risk: 'safe', effect: () => ({ energy: -15, happiness: 6, message: 'Физический труд тоже ценный вклад.' }) },
+      ]},
+      { text: (fl) => `Местная школа ${fl} просит спонсорскую помощь на нужды учеников.`, choices: [
+        { label: (fl, state) => `Помочь школе (${formatMoney(scaleByWealth(state, 4000))})`, trait: 'familyFirst', risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 4000); return { money: -cost, reputation: 5, happiness: 6, message: 'Дети получили нужную помощь.' }; } },
+        { label: 'Отказать, ситуация не позволяет', risk: 'safe', effect: () => ({ happiness: -2, message: 'В другой раз получится помочь.' }) },
+      ]},
+      { text: () => `Экологическая инициатива зовёт на субботник по очистке района.`, choices: [
+        { label: 'Прийти и поучаствовать', trait: 'familyFirst', risk: 'safe', effect: () => ({ energy: -10, happiness: 5, reputation: 2, message: 'Район стал заметно чище — приятно.' }) },
+        { label: 'Пропустить субботник', risk: 'safe', effect: () => ({ happiness: -1, message: 'Не всё получается успеть.' }) },
+      ]},
+      { text: (fl) => `Тебя просят выступить лицом благотворительной кампании ${fl}.`, choices: [
+        { label: 'Согласиться быть лицом кампании', trait: 'familyFirst', risk: 'balanced', effect: (state) => (repOk(state, 40) ? { reputation: 8, happiness: 6, message: 'Кампания получила заметный отклик.' } : { happiness: 2, message: 'Участие прошло скромно, без особого шума.' }) },
+        { label: 'Остаться в стороне', risk: 'safe', effect: () => ({ happiness: -1, message: 'Публичность не для всех.' }) },
+      ]},
+    ],
+    ['бездомным людям', 'детям из детдомов', 'пожилым людям', 'пострадавшим от наводнения', 'многодетным семьям', 'приюту для животных', 'ветеранам', 'людям с инвалидностью'],
+    always
+  );
+
+  const vices = buildFlavorFamily(
+    'vices',
+    [
+      { text: (fl) => `Ты снова тянешься за фастфудом вместо нормального обеда — ${fl}.`, choices: [
+        { label: 'Съесть фастфуд', risk: 'risky', effect: (state) => (healthOk(state, 55) ? { happiness: 4, message: 'Разок можно, организм справится.' } : { health: -6, happiness: 3, message: 'Желудок явно недоволен таким выбором.' }) },
+        { label: 'Приготовить нормальную еду', trait: 'cautious', risk: 'safe', effect: () => ({ health: 3, happiness: -1, message: 'Дольше, зато полезнее.' }) },
+      ]},
+      { text: (fl, state) => `На маркетплейсе очередная скидка на то, что тебе не особо нужно, за ${formatMoney(scaleByWealth(state, 2500))} — ${fl}.`, choices: [
+        { label: (fl, state) => `Купить под настроение (${formatMoney(scaleByWealth(state, 2500))})`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 2500); return { money: -cost, happiness: 6, message: 'Импульсивная покупка порадовала, хоть и была не нужна.' }; } },
+        { label: 'Закрыть вкладку', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -1, message: 'Кошелёк цел, соблазн побеждён.' }) },
+      ]},
+      { text: (fl) => `Вечер затянулся у экрана телефона — скроллинг соцсетей не отпускает, ${fl}.`, choices: [
+        { label: 'Лечь спать вовремя', trait: 'cautious', risk: 'safe', effect: () => ({ energy: 8, message: 'Здоровый сон того стоил.' }) },
+        { label: 'Продолжать скроллить до ночи', risk: 'risky', effect: () => ({ energy: -14, happiness: 2, message: 'Утром об этом решении явно пожалеешь.' }) },
+      ]},
+      { text: (fl) => `Друзья зовут "по одной" в бар в будний вечер — ${fl}.`, choices: [
+        { label: (fl, state) => `Пойти (${formatMoney(scaleByWealth(state, 1500))})`, risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 1500); return healthOk(state, 50) ? { money: -cost, happiness: 10, message: 'Вечер удался, самочувствие в порядке.' } : { money: -cost, happiness: 6, health: -5, message: 'Вечер удался, но организм не оценил.' }; } },
+        { label: 'Остаться дома', trait: 'cautious', risk: 'safe', effect: () => ({ energy: 5, happiness: -2, message: 'Скучновато, зато трезво и полезно.' }) },
+      ]},
+      { text: (fl) => `Тебе снова хочется оформить очередную подписку "всего за копейки в месяц" — ${fl}.`, choices: [
+        { label: (fl, state) => `Оформить подписку (${formatMoney(scaleByWealth(state, 400))}/мес)`, risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 400); return { money: -cost, happiness: 3, message: 'Ещё одна мелкая подписка в копилку расходов.' }; } },
+        { label: 'Пересмотреть уже имеющиеся подписки', trait: 'cautious', risk: 'safe', effect: (state) => { const saved = scaleByWealth(state, 500); return { money: saved, happiness: 1, message: `Отменил ненужное — сэкономил ${formatMoney(saved)}.` }; } },
+      ]},
+      { text: (fl) => `На кассе супермаркета глаза разбегаются от импульсивных мелочей у выхода, ${fl}.`, choices: [
+        { label: (fl, state) => `Набрать мелочей (${formatMoney(scaleByWealth(state, 600))})`, risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 600); return { money: -cost, happiness: 3, message: 'Мелкие радости тоже важны.' }; } },
+        { label: 'Пройти мимо', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -1, message: 'Сила воли на высоте.' }) },
+      ]},
+      { text: (fl) => `Знакомый предлагает "всего разок" попробовать сомнительное вещество на вечеринке — ${fl}.`, choices: [
+        { label: 'Отказаться категорически', trait: 'cautious', risk: 'safe', effect: () => ({ reputation: 2, happiness: -1, message: 'Здоровье и голова важнее одного вечера.' }) },
+        { label: 'Согласиться "всего один раз"', trait: 'riskTaker', risk: 'risky', effect: (state) => { const hit = Math.round(scaleByStat(100 - state.health, 100, 10, 26)); return { health: -hit, happiness: 6, message: 'Вечер запомнился, но здоровье этого не оценило.' }; } },
+      ]},
+      { text: (fl) => `Ты снова засиделся(ась) за игрой допоздна вместо важных дел, ${fl}.`, choices: [
+        { label: 'Выключить и лечь спать', trait: 'cautious', risk: 'safe', effect: () => ({ energy: 6, message: 'Дисциплина себя окупает.' }) },
+        { label: 'Доиграть ещё "одну партию"', risk: 'risky', effect: () => ({ energy: -12, happiness: 4, message: 'Одна партия незаметно превратилась в пять.' }) },
+      ]},
+    ],
+    ['в последнее время', 'который раз подряд', 'опять', 'по привычке', 'несмотря на все обещания себе', 'в очередной раз', 'машинально', 'не в силах остановиться'],
+    always
+  );
+
+  const sidehustle = buildFlavorFamily(
+    'sidehustle',
+    [
+      { text: (fl, state) => `Подвернулась возможность подработать ${fl} за ${formatMoney(scaleByWealth(state, 2500))}.`, choices: [
+        { label: (fl, state) => `Взяться за подработку (${formatMoney(scaleByWealth(state, 2500))})`, trait: 'hardworker', risk: 'balanced', effect: (state) => { const pay = scaleByWealth(state, 2500); return { money: pay, energy: -14, message: `Подработка принесла ${formatMoney(pay)}.` }; } },
+        { label: 'Отказаться, и так дел хватает', risk: 'safe', effect: () => ({ energy: 4, message: 'Отдых важнее лишних денег.' }) },
+      ]},
+      { text: () => `Клиент по мелкой подработке остался недоволен результатом и требует переделать бесплатно.`, choices: [
+        { label: 'Переделать бесплатно', trait: 'cautious', risk: 'safe', effect: () => ({ energy: -10, reputation: 2, message: 'Клиент остался доволен, репутация не пострадала.' }) },
+        { label: 'Настоять на своей правоте', risk: 'risky', effect: (state) => (repOk(state, 45) ? { reputation: 3, message: 'Аргументы оказались убедительными.' } : { reputation: -4, happiness: -4, message: 'Спор испортил репутацию среди знакомых.' }) },
+      ]},
+      { text: (fl) => `Появился шанс наладить постоянный поток заказов ${fl}.`, choices: [
+        { label: (fl, state) => `Вложиться в развитие (${formatMoney(scaleByWealth(state, 4000))})`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 4000); return repOk(state, 40) ? { money: Math.round(cost * 1.6) - cost, reputation: 3, message: 'Вложение окупилось — заказы пошли стабильным потоком.' } : { money: -cost, happiness: -4, message: 'Вложение не оправдало себя.' }; } },
+        { label: 'Развиваться постепенно', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 2, message: 'Медленно, зато без рисков.' }) },
+      ]},
+      { text: () => `Подработка неожиданно потребовала гораздо больше времени, чем обещали.`, choices: [
+        { label: 'Доделать всё как обещал(а)', trait: 'hardworker', risk: 'balanced', effect: () => ({ energy: -18, reputation: 3, happiness: -2, message: 'Слово сдержано, хоть и вымотался.' }) },
+        { label: 'Прекратить на середине', risk: 'risky', effect: () => ({ reputation: -4, happiness: 1, message: 'Недоделанная работа аукнется репутацией.' }) },
+      ]},
+      { text: (fl, state) => `За подработку ${fl} предлагают оплату натурой вместо денег на сумму ${formatMoney(scaleByWealth(state, 3000))}.`, choices: [
+        { label: 'Согласиться на бартер', trait: 'riskTaker', risk: 'risky', effect: (state) => { const val = scaleByWealth(state, 3000); return traitOk(state, 'riskTaker', 2) ? { money: Math.round(val * 0.7), happiness: 4, message: 'Бартер удалось выгодно перепродать.' } : { happiness: -3, message: 'Полученное оказалось трудно применить или продать.' }; } },
+        { label: 'Настоять на деньгах', trait: 'cautious', risk: 'safe', effect: (state) => { const pay = scaleByWealth(state, 2000); return { money: pay, message: `Договорился на деньги — получил ${formatMoney(pay)}.` }; } },
+      ]},
+      { text: () => `Появилась возможность обучить новичка твоему подработочному ремеслу за деньги.`, choices: [
+        { label: (fl, state) => `Обучить за плату (${formatMoney(scaleByWealth(state, 2000))})`, trait: 'hardworker', risk: 'safe', effect: (state) => { const pay = scaleByWealth(state, 2000); return { money: pay, energy: -8, reputation: 1, message: `Обучение принесло ${formatMoney(pay)}.` }; } },
+        { label: 'Отказаться делиться секретами ремесла', trait: 'shady', risk: 'safe', effect: () => ({ happiness: 1, message: 'Конкурентов меньше — тоже стратегия.' }) },
+      ]},
+      { text: (fl) => `Подработка ${fl} внезапно попала в поле зрения налоговой.`, choices: [
+        { label: (fl, state) => `Легализовать доход (${formatMoney(scaleByWealth(state, 1500))})`, trait: 'cautious', risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 1500); return { money: -cost, reputation: 3, message: 'Всё официально — спится спокойнее.' }; } },
+        { label: 'Продолжать в тени', trait: 'shady', risk: 'risky', effect: (state) => { const fine = scaleByWealth(state, 5000); return traitOk(state, 'shady', 4) ? { happiness: 2, message: 'Пронесло — вопросов больше не возникло.' } : { money: -fine, reputation: -5, message: `Поймали — штраф ${formatMoney(fine)}.` }; } },
+      ]},
+      { text: () => `Появился шанс объединиться с другим фрилансером и брать более крупные заказы вместе.`, choices: [
+        { label: 'Объединиться в команду', trait: 'hardworker', risk: 'balanced', effect: (state) => { const gain = scaleByWealth(state, 3500); return repOk(state, 35) ? { money: gain, reputation: 3, message: 'Совместные заказы пошли даже лучше, чем ожидалось.' } : { money: Math.round(gain * 0.3), message: 'Сотрудничество принесло скромный, но результат.' }; } },
+        { label: 'Работать соло, как привык(ла)', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 2, message: 'Полный контроль над своим делом важнее.' }) },
+      ]},
+    ],
+    ['репетитором', 'фотографом на мероприятиях', 'водителем по вечерам', 'мастером по мелкому ремонту', 'копирайтером на заказ', 'декоратором на праздники', 'сборщиком заказов на складе', 'ведущим на мероприятиях'],
+    always
+  );
+
+  const carlife = buildFlavorFamily(
+    'carlife',
+    [
+      { text: (fl) => `Компания знакомых зовёт в автопробег ${fl} на выходные.`, choices: [
+        { label: (fl, state) => `Поехать (${formatMoney(scaleByWealth(state, 3000))} на бензин и еду)`, risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 3000); return { money: -cost, happiness: 14, message: 'Автопробег подарил массу впечатлений.' }; } },
+        { label: 'Остаться дома', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -2, message: 'Машина простаивает в гараже ещё один день.' }) },
+      ]},
+      { text: () => `На парковке кто-то поцарапал твою машину и уехал, не оставив записки.`, choices: [
+        { label: (fl, state) => `Отполировать за свой счёт (${formatMoney(scaleByWealth(state, 4000))})`, risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 4000); return { money: -cost, happiness: 3, message: 'Машина снова как новая.' }; } },
+        { label: 'Оставить царапину как есть', trait: 'cautious', risk: 'risky', effect: () => ({ happiness: -5, message: 'Царапина будет напоминать о неприятном случае.' }) },
+      ]},
+      { text: (fl) => `Знакомые просят одолжить машину ${fl}.`, choices: [
+        { label: 'Одолжить машину', trait: 'familyFirst', risk: 'risky', effect: (state) => (repOk(state, 40) ? { happiness: 4, reputation: 2, message: 'Машину вернули в целости, все довольны.' } : { happiness: -6, message: 'Машину вернули не в лучшем состоянии.' }) },
+        { label: 'Вежливо отказать', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -1, message: 'Своя машина — под своим контролем.' }) },
+      ]},
+      { text: () => `Пришло время планового технического обслуживания машины.`, choices: [
+        { label: (fl, state) => `Пройти ТО в срок (${formatMoney(scaleByWealth(state, 5000))})`, trait: 'cautious', risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 5000); return { money: -cost, happiness: 3, message: 'Машина в отличном состоянии, можно не переживать.' }; } },
+        { label: 'Отложить ТО на потом', risk: 'risky', effect: () => ({ happiness: -4, message: 'Рискованно, но пока обходится без последствий.' }) },
+      ]},
+      { text: (fl) => `Автоклуб зовёт на встречу единомышленников ${fl}.`, choices: [
+        { label: (fl, state) => `Сходить на встречу (${formatMoney(scaleByWealth(state, 1200))})`, risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 1200); return { money: -cost, happiness: 8, reputation: 2, message: 'Приятно провёл время среди своих.' }; } },
+        { label: 'Пропустить встречу', risk: 'safe', effect: () => ({ happiness: -1, message: 'Дела не отпустили.' }) },
+      ]},
+      { text: () => `Машину пытались угнать ночью — сигнализация спасла, но осадок остался.`, choices: [
+        { label: (fl, state) => `Установить систему получше (${formatMoney(scaleByWealth(state, 6000))})`, trait: 'cautious', risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 6000); return { money: -cost, happiness: 4, message: 'Теперь спится намного спокойнее.' }; } },
+        { label: 'Оставить как есть', trait: 'riskTaker', risk: 'risky', effect: () => ({ happiness: -3, message: 'Тревога за машину никуда не делась.' }) },
+      ]},
+    ],
+    ['по побережью', 'в соседний город', 'по горной дороге', 'на природу с ночёвкой', 'на автомобильный фестиваль', 'по историческим местам'],
+    hasCarFn
+  );
+
+  const remoteWork = buildFlavorFamily(
+    'remoteWork',
+    [
+      { text: (fl) => `Появилась возможность взять полностью удалённый проект ${fl} — но нужна стабильная техника.`, choices: [
+        { label: (fl, state) => `Взяться за проект (${formatMoney(scaleByWealth(state, 3000))} доход)`, trait: 'hardworker', risk: 'balanced', effect: (state) => { const pay = scaleByWealth(state, 3000); return { money: pay, energy: -10, message: `Удалённый проект принёс ${formatMoney(pay)}.` }; } },
+        { label: 'Отказаться, слишком много рисков', risk: 'safe', effect: () => ({ energy: 4, message: 'Спокойствие дороже.' }) },
+      ]},
+      { text: (fl) => `Интернет дома отключили на весь день посреди важного созвона ${fl}.`, choices: [
+        { label: (fl, state) => `Поехать работать в коворкинг (${formatMoney(scaleByWealth(state, 800))})`, risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 800); return { money: -cost, reputation: 2, message: 'Успел на созвон вовремя, репутация не пострадала.' }; } },
+        { label: 'Пропустить созвон', risk: 'risky', effect: () => ({ reputation: -4, happiness: -3, message: 'Пропущенный созвон не остался незамеченным.' }) },
+      ]},
+      { text: (fl) => `Заказчик ${fl} просит быть на связи в неудобное время.`, choices: [
+        { label: 'Подстроиться под заказчика', trait: 'hardworker', risk: 'balanced', effect: () => ({ energy: -14, money: 0, reputation: 3, message: 'Гибкость оценили — отношения с заказчиком укрепились.' }) },
+        { label: 'Настоять на удобном графике', trait: 'cautious', risk: 'risky', effect: (state) => (repOk(state, 45) ? { reputation: 1, message: 'Заказчик согласился пойти навстречу.' } : { reputation: -3, happiness: -3, message: 'Заказчик остался недоволен негибкостью.' }) },
+      ]},
+      { text: (fl) => `Появилась возможность вести цифровой кочевой образ жизни ${fl}, работая из разных городов.`, choices: [
+        { label: (fl, state) => `Попробовать (${formatMoney(scaleByWealth(state, 4000))} на переезд)`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 4000); return { money: -cost, happiness: 14, message: 'Смена обстановки пошла на пользу продуктивности.' }; } },
+        { label: 'Остаться на привычном месте', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 1, message: 'Стабильность тоже имеет ценность.' }) },
+      ]},
+      { text: (fl) => `Техника внезапно подвела прямо во время оплачиваемого удалённого созвона ${fl}.`, choices: [
+        { label: (fl, state) => `Срочно взять резервное устройство (${formatMoney(scaleByWealth(state, 2000))})`, risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 2000); return { money: -cost, reputation: 2, message: 'Созвон спасён в последний момент.' }; } },
+        { label: 'Извиниться и перенести созвон', risk: 'risky', effect: () => ({ reputation: -2, happiness: -3, message: 'Клиент отнёсся с пониманием, но осадок остался.' }) },
+      ]},
+      { text: (fl) => `Компания ${fl} предлагает полностью перейти на удалёнку с сохранением зарплаты.`, choices: [
+        { label: 'Согласиться на удалёнку', trait: 'hardworker', risk: 'balanced', effect: () => ({ happiness: 10, energy: 6, message: 'Удалёнка освободила уйму времени и сил.' }) },
+        { label: 'Остаться в офисе', trait: 'cautious', risk: 'safe', effect: () => ({ reputation: 1, message: 'Личное присутствие тоже даёт свои плюсы.' }) },
+      ]},
+    ],
+    ['с зарубежным клиентом', 'с новым стартапом', 'с крупным агентством', 'с постоянным заказчиком', 'из другого часового пояса', 'на бирже фриланса'],
+    hasElectronicsFn
+  );
+
   /* ============ Сборка общего пула ============ */
 
   window.EVENTS = [].concat(
     invest, shopping, health, housing, transport, selfdev, gambling, business,
     survival, luxury, family, crime, weather, tech, general, work, selfEmployed,
-    HAND_EVENTS
+    HAND_EVENTS,
+    neighborsHome, gadgetsBreak, wardrobeWear, petcare, civicDuty, hobbyCost, socialEvents, selfcare,
+    education, travel, romance, charity, vices, sidehustle, carlife, remoteWork
   );
 })();

@@ -63,11 +63,54 @@ function createGameState(name, character) {
     doctorCharges: 0,
     doctorVisits: 0,
     debtRate: BASE_DEBT_RATE,
+    jailed: false,
+    jailTurns: 0,
     ended: false,
     endingType: null,
     tier: tier.id,
     startTier: tier.id,
   };
+}
+
+/* ---------- экипировка: одежда обязательна, сумка увеличивает инвентарь ---------- */
+
+// Часы/электроника/ювелирка носятся с собой и упираются в вместимость;
+// одежда (на теле) и машины (в гараже) места не занимают, а сумки сами
+// эту вместимость увеличивают — иначе некуда было бы класть новую сумку.
+const CARRIED_CATEGORIES = ['watches', 'electronics', 'jewelry'];
+const BAG_CAPACITY = { bag_market: 6, bag_backpack: 8, bag_bruno: 12, bag_duval: 18, bag_golden: 30 };
+const NO_BAG_CAPACITY = 3;
+
+function ownsCategory(state, category) {
+  return Object.keys(state.inventory || {}).some((id) => {
+    const it = window.ITEMS.byId[id];
+    return it && it.category === category && (state.inventory[id] || 0) > 0;
+  });
+}
+
+function hasClothes(state) {
+  return ownsCategory(state, 'clothes');
+}
+
+function hasCarItem(state) {
+  return ownsCategory(state, 'cars');
+}
+
+function getInventoryCapacity(state) {
+  let cap = NO_BAG_CAPACITY;
+  Object.keys(state.inventory || {}).forEach((id) => {
+    if (BAG_CAPACITY[id] !== undefined && (state.inventory[id] || 0) > 0) cap = Math.max(cap, BAG_CAPACITY[id]);
+  });
+  return cap;
+}
+
+function countCarriedItems(state) {
+  let total = 0;
+  Object.keys(state.inventory || {}).forEach((id) => {
+    const it = window.ITEMS.byId[id];
+    if (it && CARRIED_CATEGORIES.indexOf(it.category) !== -1) total += state.inventory[id] || 0;
+  });
+  return total;
 }
 
 /* ---------- сохранение/загрузка слота персонажа ---------- */
@@ -126,6 +169,9 @@ function buyItem(state, itemId) {
   const item = window.ITEMS.byId[itemId];
   if (!item) return { ok: false, message: 'Такого товара нет.' };
   if (state.money < item.price) return { ok: false, message: 'Не хватает денег.' };
+  if (CARRIED_CATEGORIES.indexOf(item.category) !== -1 && countCarriedItems(state) >= getInventoryCapacity(state)) {
+    return { ok: false, message: `Инвентарь переполнен (вмещает ${getInventoryCapacity(state)}) — купи сумку побольше или продай что-нибудь лишнее.` };
+  }
   state.money -= item.price;
   state.inventory[itemId] = (state.inventory[itemId] || 0) + 1;
   const fx = item.effects || {};
@@ -180,6 +226,9 @@ function openCase(state, caseId, position) {
   const caseDef = window.CASES.find((c) => c.id === caseId);
   if (!caseDef) return { ok: false, message: 'Такого кейса нет.' };
   if (state.money < caseDef.price) return { ok: false, message: 'Не хватает денег на кейс.' };
+  if (CARRIED_CATEGORIES.indexOf(caseDef.category) !== -1 && countCarriedItems(state) >= getInventoryCapacity(state)) {
+    return { ok: false, message: `Инвентарь переполнен (вмещает ${getInventoryCapacity(state)}) — сначала освободи место или купи сумку побольше.` };
+  }
   state.money -= caseDef.price;
   const itemId = resolveCaseItem(caseDef, position);
   const item = window.ITEMS.byId[itemId];
@@ -232,7 +281,71 @@ const REST_EVENT = {
   ],
 };
 
+/* ---------- тюрьма: залог вместо мгновенного конца игры ---------- */
+
+function computeBailCost(state) {
+  return scaleByWealth(state, 20000);
+}
+
+const JAIL_EVENT = {
+  id: '__jailed__',
+  text: (state) => `Ты за решёткой. Залог для освобождения — ${formatMoney(computeBailCost(state))}.`,
+  conditions: () => true,
+  choices: [
+    {
+      label: (state) => `Заплатить залог (${formatMoney(computeBailCost(state))})`,
+      risk: 'balanced',
+      effect: (state) => {
+        const bail = computeBailCost(state);
+        if (state.money < bail) return { happiness: -3, message: 'Денег на залог не хватает — придётся отбывать срок.' };
+        state.jailed = false;
+        state.jailTurns = 0;
+        return { money: -bail, reputation: -8, happiness: -4, message: `Залог оплачен (${formatMoney(bail)}). Ты вышел на свободу, но репутация подпорчена.` };
+      },
+    },
+    {
+      label: 'Отбывать срок дальше',
+      risk: 'safe',
+      effect: (state) => {
+        state.jailTurns = (state.jailTurns || 0) + 1;
+        if (state.jailTurns >= 3) {
+          state.jailed = false;
+          state.jailTurns = 0;
+          return { happiness: -10, energy: -15, reputation: -3, message: 'Срок отбыт полностью. Вышел на свободу — потрёпанный, но при своём.' };
+        }
+        return { happiness: -6, energy: -8, message: `Ещё один день за решёткой... (${state.jailTurns}/3)` };
+      },
+    },
+  ],
+};
+
+/* ---------- одежда: без неё на люди не выйти ---------- */
+
+const CLOTHES_EVENT = {
+  id: '__no_clothes__',
+  text: 'У тебя нет приличной одежды, чтобы показаться на людях — без неё многие дела на улице подождут.',
+  conditions: () => true,
+  choices: [
+    {
+      label: () => `Купить одежду на рынке (${formatMoney(300)})`,
+      risk: 'safe',
+      effect: (state) => {
+        if (state.money < 300) return { happiness: -2, message: 'Даже на рынке не хватает денег на одежду...' };
+        return { money: -300, happiness: 2, addItem: 'clothes_market', message: 'Взял футболку с вещевого рынка — теперь можно показаться на людях.' };
+      },
+    },
+    {
+      label: 'Взять обноски бесплатно',
+      trait: 'cautious',
+      risk: 'safe',
+      effect: () => ({ reputation: -3, happiness: -3, addItem: 'clothes_market', message: 'Донашиваешь чужие обноски — стыдно, зато не с голым торсом.' }),
+    },
+  ],
+};
+
 function pickNextEvent(state) {
+  if (state.jailed) return JAIL_EVENT;
+  if (!hasClothes(state)) return CLOTHES_EVENT;
   if (state.energy <= LOW_ENERGY_THRESHOLD) return REST_EVENT;
 
   if (state.pantry <= 15) {
@@ -279,16 +392,20 @@ function applyChoice(state, event, choiceIndex) {
   if (result.debtRateReset) state.debtRate = BASE_DEBT_RATE;
   if (typeof result.pantrySet === 'number') state.pantry = clampNum(result.pantrySet, 0, 100);
   if (result.addPossession) state.possessions.add(result.addPossession);
+  if (result.addItem) state.inventory[result.addItem] = (state.inventory[result.addItem] || 0) + 1;
+  if (result.jail) { state.jailed = true; state.jailTurns = 0; }
 
   if (choice.trait && state.traits[choice.trait] !== undefined) {
     state.traits[choice.trait] += 1;
   }
 
-  if (event.id !== '__forced_rest__' && event.id !== 'hand_pantry_empty') state.usedEventIds.add(event.id);
+  const EXEMPT_FROM_HISTORY = ['__forced_rest__', 'hand_pantry_empty', '__jailed__', '__no_clothes__'];
+  if (EXEMPT_FROM_HISTORY.indexOf(event.id) === -1) state.usedEventIds.add(event.id);
   state.turn += 1;
 
   // пассивная регенерация энергии/здоровья между событиями
   state.energy = clampNum(state.energy + 4, 0, 100);
+  if (hasCarItem(state)) state.energy = clampNum(state.energy + 1, 0, 100); // своя машина экономит силы и время
   if (state.happiness > 60) state.health = clampNum(state.health + 1, 0, 100);
   if (state.turn % 2 === 0) {
     // регулярные визиты к врачу останавливают старение — можно жить бесконечно
@@ -318,10 +435,7 @@ function applyChoice(state, event, choiceIndex) {
 
   const { tierChanged, barrierMessage } = applyTierBarrier(state);
 
-  if (result.jail) {
-    state.ended = true;
-    state.endingType = 'jail';
-  } else if (result.bankrupt) {
+  if (result.bankrupt) {
     state.ended = true;
     state.endingType = 'bankrupt';
   } else if (state.health <= 0) {
@@ -370,10 +484,6 @@ const ENDING_TEXT = {
   death: {
     title: '⚰️ Конец истории',
     text: 'Здоровье не выдержало напряжённой жизни. История подошла к концу раньше, чем хотелось бы.',
-  },
-  jail: {
-    title: '⛓️ Тюрьма',
-    text: 'Погоня за лёгкими деньгами закончилась приговором суда. Все амбиции придётся отложить на очень долгий срок.',
   },
   lifeEnd: {
     title: '🕯️ Конец жизненного пути',

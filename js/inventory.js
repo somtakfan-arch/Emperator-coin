@@ -10,6 +10,12 @@ window.InventoryUI = (function () {
     const state = window.Game.getState();
     const host = document.getElementById('inventory-list');
     host.innerHTML = '';
+
+    const capHint = document.getElementById('inventory-capacity-hint');
+    const cap = getInventoryCapacity(state);
+    const used = countCarriedItems(state);
+    capHint.textContent = `🎒 Часы/электроника/ювелирка занимают место: ${used}/${cap}. Без сумки вмещается только ${NO_BAG_CAPACITY} — купи сумку, чтобы носить больше.`;
+
     const ownedIds = Object.keys(state.inventory || {}).filter((id) => state.inventory[id] > 0);
     if (!ownedIds.length) {
       host.innerHTML = '<p class="tab-hint">Инвентарь пуст. Загляни в магазин.</p>';
@@ -87,8 +93,9 @@ window.InventoryUI = (function () {
       const actions = card.querySelector('.item-actions');
       const buyBtn = document.createElement('button');
       buyBtn.className = 'btn btn-primary btn-sm';
-      buyBtn.textContent = 'Купить';
-      buyBtn.disabled = state.money < item.price;
+      const isFull = CARRIED_CATEGORIES.indexOf(item.category) !== -1 && countCarriedItems(state) >= getInventoryCapacity(state);
+      buyBtn.textContent = isFull ? 'Инвентарь полон' : 'Купить';
+      buyBtn.disabled = state.money < item.price || isFull;
       buyBtn.addEventListener('click', () => {
         const r = buyItem(state, item.id);
         window.Game.afterSideAction(r.ok ? r.barrier : null, r.message);
@@ -120,8 +127,9 @@ window.InventoryUI = (function () {
       const actions = card.querySelector('.item-actions');
       const openBtn = document.createElement('button');
       openBtn.className = 'btn btn-primary btn-sm';
-      openBtn.textContent = 'Открыть';
-      openBtn.disabled = state.money < caseDef.price;
+      const isFull = CARRIED_CATEGORIES.indexOf(caseDef.category) !== -1 && countCarriedItems(state) >= getInventoryCapacity(state);
+      openBtn.textContent = isFull ? 'Инвентарь полон' : 'Открыть';
+      openBtn.disabled = state.money < caseDef.price || isFull;
       openBtn.addEventListener('click', () => openCaseFlow(caseDef));
       actions.appendChild(openBtn);
       host.appendChild(card);
@@ -131,6 +139,7 @@ window.InventoryUI = (function () {
   function openCaseFlow(caseDef) {
     const state = window.Game.getState();
     if (state.money < caseDef.price) return;
+    if (CARRIED_CATEGORIES.indexOf(caseDef.category) !== -1 && countCarriedItems(state) >= getInventoryCapacity(state)) return;
 
     const modal = document.getElementById('minigame-modal');
     document.getElementById('minigame-title').textContent = `Открытие: ${caseDef.name}`;
