@@ -71,8 +71,8 @@
           text: (state) => textFn(a1, j, state),
           conditions: conditionFn || always,
           choices: [
-            { label: (state) => resolveDynamic(choiceA.label, state, a1, j), trait: choiceA.trait, risk: choiceA.risk, minigame: choiceA.minigame ? (state) => resolveDynamic(choiceA.minigame, state, a1, j) : undefined, effect: (state) => choiceA.effect(state, a1, j) },
-            { label: (state) => resolveDynamic(choiceB.label, state, a1, j), trait: choiceB.trait, risk: choiceB.risk, minigame: choiceB.minigame ? (state) => resolveDynamic(choiceB.minigame, state, a1, j) : undefined, effect: (state) => choiceB.effect(state, a1, j) },
+            { label: (state) => resolveDynamic(choiceA.label, state, a1, j), trait: choiceA.trait, risk: choiceA.risk, shopCategory: choiceA.shopCategory, minigame: choiceA.minigame ? (state) => resolveDynamic(choiceA.minigame, state, a1, j) : undefined, effect: (state) => choiceA.effect(state, a1, j) },
+            { label: (state) => resolveDynamic(choiceB.label, state, a1, j), trait: choiceB.trait, risk: choiceB.risk, shopCategory: choiceB.shopCategory, minigame: choiceB.minigame ? (state) => resolveDynamic(choiceB.minigame, state, a1, j) : undefined, effect: (state) => choiceB.effect(state, a1, j) },
           ],
         });
       }
@@ -121,6 +121,31 @@
         const saved = scaleByWealth(state, COST_BASE[j] * 0.15);
         return { money: saved, happiness: -1, message: `Энергии хватило, чтобы обойтись своими силами — сэкономил ${formatMoney(saved)}.` };
       },
+    };
+  }
+
+  /** Эффект для выбора с "shopCategory": открывает мини-магазин, игрок
+   *  сам выбирает конкретную вещь вместо абстрактной суммы. Реальный
+   *  выбор приходит через state._quickShopItem (тот же приём, что и
+   *  state._miniGameSuccess у мини-игр) — main.js выставляет его перед
+   *  вызовом applyChoice. Резервная ветка (без выбора) нужна только на
+   *  случай прямого вызова effect() в обход UI. */
+  function shopPickChoiceEffect(costMultiplier, fallbackMessageFn) {
+    return (state, a1, j) => {
+      const picked = state._quickShopItem;
+      if (picked) {
+        const fx = picked.effects || {};
+        return {
+          money: -picked.price,
+          addItem: picked.id,
+          happiness: fx.happiness || 0,
+          reputation: fx.reputation || 0,
+          health: fx.health || 0,
+          message: `Купил(а): ${picked.name} за ${formatMoney(picked.price)}.`,
+        };
+      }
+      const cost = scaleByWealth(state, COST_BASE[j] * costMultiplier);
+      return { money: -cost, happiness: 3, message: fallbackMessageFn(cost) };
     };
   }
 
@@ -975,8 +1000,8 @@
       'планшет завис намертво и не реагирует ни на что', 'микрофон для подкастов барахлит', 'старый смартфон разрядился и не заряжается вовсе',
       'монитор пошёл цветными полосами', 'модем интернет-провайдера сгорел после грозы',
     ],
-    (a1, j, state) => `Незадача с техникой: ${a1}. Ремонт или замена обойдётся в ${formatMoney(scaleByWealth(state, COST_BASE[j]))}. Чинить сейчас или обойтись подручными средствами?`,
-    { label: gadgetsFx.costLabel, risk: 'safe', effect: gadgetsFx.cost },
+    (a1, j, state) => `Незадача с техникой: ${a1}. Можно подобрать замену в магазине или обойтись подручными средствами.`,
+    { label: () => 'Выбрать новую технику в магазине', risk: 'safe', shopCategory: 'electronics', effect: shopPickChoiceEffect(1, (cost) => `Починил(а) технику за ${formatMoney(cost)}.`) },
     { label: gadgetsFx.endureLabel, trait: 'cautious', risk: 'risky', effect: gadgetsFx.endure }
   );
 
@@ -992,8 +1017,8 @@
       'перчатки истрепались в морозы', 'галстук залит соусом на деловом обеде', 'шапка растянулась и уже не держит форму',
       'носки все до одного протёрлись до дыр', 'ремешок на любимых часах истрепался',
     ],
-    (a1, j, state) => `Проблема с внешним видом: ${a1}. Обновить обойдётся в ${formatMoney(scaleByWealth(state, COST_BASE[j]))}. Обновить гардероб или перетерпеть, как есть?`,
-    { label: wardrobeFx.costLabel, risk: 'safe', effect: wardrobeFx.cost },
+    (a1, j, state) => `Проблема с внешним видом: ${a1}. Можно обновить гардероб, выбрав конкретную вещь в магазине, или перетерпеть, как есть.`,
+    { label: () => 'Обновить гардероб (выбрать в магазине)', risk: 'safe', shopCategory: 'clothes', effect: shopPickChoiceEffect(1, (cost) => `Обновил(а) гардероб за ${formatMoney(cost)}.`) },
     { label: wardrobeFx.endureLabel, trait: 'cautious', risk: 'risky', effect: wardrobeFx.endure }
   );
 
@@ -1060,8 +1085,8 @@
       'торжество по случаю выхода на пенсию наставника', 'гала-вечер благотворительного фонда', 'юбилей компании, где ты когда-то работал(а)',
       'презентация книги знакомого автора', 'открытие нового заведения общего знакомого',
     ],
-    (a1, j, state) => `Приглашение: ${a1}. Достойно поучаствовать обойдётся в ${formatMoney(scaleByWealth(state, COST_BASE[j] * 0.5))}. Пойти при полном параде или отговориться?`,
-    { label: socialFx.costLabel, risk: 'balanced', effect: socialFx.cost },
+    (a1, j, state) => `Приглашение: ${a1}. Можно подобрать наряд в магазине и пойти при полном параде — или отговориться.`,
+    { label: () => 'Пойти при полном параде (выбрать наряд в магазине)', risk: 'balanced', shopCategory: 'clothes', effect: shopPickChoiceEffect(0.5, (cost) => `Собрался(-лась) при полном параде за ${formatMoney(cost)}.`) },
     { label: socialFx.endureLabel, trait: 'cautious', risk: 'safe', effect: socialFx.endure }
   );
 

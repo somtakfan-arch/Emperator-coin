@@ -349,10 +349,13 @@
       const label = typeof choice.label === 'function' ? choice.label(state) : choice.label;
       const badge = choice.risk && RISK_BADGE[choice.risk] ? `<span class="risk-badge risk-${choice.risk}">${RISK_BADGE[choice.risk]}</span>` : '';
       const miniBadge = choice.minigame ? '<span class="risk-badge risk-mini">🎮 мини-игра</span>' : '';
-      btn.innerHTML = `<span class="choice-label">${label}</span><span class="choice-badges">${miniBadge}${badge}</span>`;
+      const shopBadge = choice.shopCategory ? '<span class="risk-badge risk-shop">🛍️ выбор в магазине</span>' : '';
+      btn.innerHTML = `<span class="choice-label">${label}</span><span class="choice-badges">${miniBadge}${shopBadge}${badge}</span>`;
       btn.addEventListener('click', () => {
         if (choice.minigame) {
           startMiniGame(choice, idx);
+        } else if (choice.shopCategory) {
+          openQuickShopForChoice(choice, idx);
         } else {
           handleChoice(idx);
         }
@@ -373,6 +376,14 @@
   const minigameTitleEl = document.getElementById('minigame-title');
   const minigameInstructionsEl = document.getElementById('minigame-instructions');
   const minigameHostEl = document.getElementById('minigame-host');
+
+  function openQuickShopForChoice(choice, idx) {
+    window.InventoryUI.openQuickShop(choice.shopCategory, state, (item) => {
+      state._quickShopItem = item;
+      handleChoice(idx);
+      delete state._quickShopItem;
+    });
+  }
 
   function startMiniGame(choice, idx) {
     const desc = choice.minigame(state);

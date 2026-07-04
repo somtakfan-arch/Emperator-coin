@@ -180,5 +180,42 @@ window.InventoryUI = (function () {
     renderCaseList();
   }
 
-  return { renderAll, renderInventoryTab, renderShopList };
+  /** Мини-магазин, встроенный прямо в сюжетное событие: вместо
+   *  абстрактной суммы игрок выбирает конкретную вещь из категории.
+   *  onPick вызывается только если что-то реально выбрано и куплено —
+   *  закрытие без выбора не резолвит событие. */
+  function openQuickShop(category, state, onPick) {
+    const modal = document.getElementById('quickshop-modal');
+    const host = document.getElementById('quickshop-list');
+    document.getElementById('quickshop-title').textContent = `Выбери: ${window.ITEMS.CATEGORY_LABEL[category] || category}`;
+    host.innerHTML = '';
+    window.ITEMS.byCategory(category).forEach((item) => {
+      const card = document.createElement('div');
+      card.className = 'item-card';
+      const isFull = CARRIED_CATEGORIES.indexOf(item.category) !== -1 && countCarriedItems(state) >= getInventoryCapacity(state);
+      card.innerHTML = `
+        <div class="item-icon">${item.icon}</div>
+        <div class="item-name">${item.name}${item.brand ? ` <span class="item-brand">${item.brand}</span>` : ''}</div>
+        <div class="item-meta">${formatMoney(item.price)}</div>
+        <div class="item-actions"></div>
+      `;
+      const btn = document.createElement('button');
+      btn.className = 'btn btn-primary btn-sm';
+      btn.textContent = isFull ? 'Инвентарь полон' : 'Выбрать';
+      btn.disabled = state.money < item.price || isFull;
+      btn.addEventListener('click', () => {
+        modal.classList.remove('active');
+        onPick(item);
+      });
+      card.querySelector('.item-actions').appendChild(btn);
+      host.appendChild(card);
+    });
+    modal.classList.add('active');
+  }
+
+  document.getElementById('quickshop-close-btn').addEventListener('click', () => {
+    document.getElementById('quickshop-modal').classList.remove('active');
+  });
+
+  return { renderAll, renderInventoryTab, renderShopList, openQuickShop };
 })();

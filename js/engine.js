@@ -110,6 +110,28 @@ function hasCarItem(state) {
   return ownsCategory(state, 'cars');
 }
 
+const RENT_YIELD_PER_TURN = 0.0004; // ~0.04% от стоимости "лишней" недвижимости за ход
+
+/** Аренда: первая (самая дорогая) объект недвижимости — это дом, где
+ *  живёшь, остальные можно сдавать. Доход капает каждый ход. */
+function computeRentalIncome(state) {
+  const housingIds = Object.keys(state.inventory || {}).filter((id) => {
+    const it = window.ITEMS.byId[id];
+    return it && it.category === 'housing' && (state.inventory[id] || 0) > 0;
+  });
+  if (housingIds.length === 0) return 0;
+  let totalValue = 0;
+  let maxPrice = 0;
+  housingIds.forEach((id) => {
+    const it = window.ITEMS.byId[id];
+    const qty = state.inventory[id];
+    totalValue += it.price * qty;
+    if (it.price > maxPrice) maxPrice = it.price;
+  });
+  const rentableValue = Math.max(0, totalValue - maxPrice);
+  return Math.round(rentableValue * RENT_YIELD_PER_TURN);
+}
+
 function getInventoryCapacity(state) {
   let cap = NO_BAG_CAPACITY;
   Object.keys(state.inventory || {}).forEach((id) => {
@@ -448,6 +470,21 @@ function applyChoice(state, event, choiceIndex) {
     interestMessage = `📉 Долг вырос на ${formatMoney(interest)} из-за процентов${state.debtRate > BASE_DEBT_RATE ? ' (грабительская ставка микрозайма!)' : ''}.`;
   }
 
+  // аренда со "лишней" недвижимости капает каждый ход
+  let rentMessage = '';
+  const rent = computeRentalIncome(state);
+  if (rent > 0) {
+    state.money += rent;
+    rentMessage = `🏠 Доход от аренды: +${formatMoney(rent)}.`;
+  }
+
+  // репутация не копится вечно сама по себе — её нужно поддерживать
+  let reputationDecayMessage = '';
+  if (state.turn % 3 === 0 && state.reputation > 0) {
+    state.reputation = clampNum(state.reputation - 1, 0, 100);
+    reputationDecayMessage = '⭐ Репутация слегка поблёкла без новых поводов её подтверждать.';
+  }
+
   const { tierChanged, barrierMessage } = applyTierBarrier(state);
 
   if (result.bankrupt) {
@@ -469,7 +506,7 @@ function applyChoice(state, event, choiceIndex) {
 
   return {
     message: result.message || '',
-    interestMessage: [barrierMessage, interestMessage, pantryMessage].filter(Boolean).join(' '),
+    interestMessage: [barrierMessage, interestMessage, pantryMessage, rentMessage, reputationDecayMessage].filter(Boolean).join(' '),
     tierChanged,
     newTier: state.tier,
     newTrait: getFreshlyUnlockedTrait(state, choice.trait),

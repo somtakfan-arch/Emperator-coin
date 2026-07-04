@@ -316,6 +316,7 @@ h1, h2 { margin: 0 0 8px; }
 .risk-risky { background: rgba(248, 113, 113, 0.15); color: var(--red); }
 .risk-balanced { background: rgba(96, 165, 250, 0.15); color: var(--blue); }
 .risk-mini { background: rgba(192, 132, 252, 0.18); color: var(--purple); }
+.risk-shop { background: rgba(240, 180, 41, 0.18); color: var(--accent); }
 
 .outcome { display: none; padding: 26px; }
 .outcome.active { display: block; }
