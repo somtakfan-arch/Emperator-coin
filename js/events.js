@@ -47,6 +47,8 @@
   const traitOk = (state, key, threshold) => traitCap(state, key, 10) >= threshold;
   // масштаб награды/тяжести исхода — плавно зависит от характеристики, без броска кубика
   const scaleByStat = (statValue, statMax, min, max) => min + (max - min) * clampNum(statValue / statMax, 0, 1);
+  // если событие несёт мини-игру, её реальный результат важнее статичного порога
+  const miniSuccess = (state, fallback) => (state._miniGameSuccess !== undefined ? state._miniGameSuccess : fallback);
 
   /* ---------- строители семей событий ---------- */
 
@@ -63,8 +65,8 @@
           text: (state) => textFn(a1, j, state),
           conditions: conditionFn || always,
           choices: [
-            { label: (state) => resolveDynamic(choiceA.label, state, a1, j), trait: choiceA.trait, risk: choiceA.risk, effect: (state) => choiceA.effect(state, a1, j) },
-            { label: (state) => resolveDynamic(choiceB.label, state, a1, j), trait: choiceB.trait, risk: choiceB.risk, effect: (state) => choiceB.effect(state, a1, j) },
+            { label: (state) => resolveDynamic(choiceA.label, state, a1, j), trait: choiceA.trait, risk: choiceA.risk, minigame: choiceA.minigame ? (state) => resolveDynamic(choiceA.minigame, state, a1, j) : undefined, effect: (state) => choiceA.effect(state, a1, j) },
+            { label: (state) => resolveDynamic(choiceB.label, state, a1, j), trait: choiceB.trait, risk: choiceB.risk, minigame: choiceB.minigame ? (state) => resolveDynamic(choiceB.minigame, state, a1, j) : undefined, effect: (state) => choiceB.effect(state, a1, j) },
           ],
         });
       }
@@ -84,6 +86,7 @@
             label: (state) => (typeof c.label === 'function' ? c.label(fl, state) : c.label),
             trait: c.trait,
             risk: c.risk,
+            minigame: c.minigame ? (state) => (typeof c.minigame === 'function' ? c.minigame(fl, state) : c.minigame) : undefined,
             effect: (state) => c.effect(state, fl),
           })),
         });
@@ -125,15 +128,28 @@
       label: (state, a1, j) => `Вложить ${formatMoney(scaleByWealth(state, COST_BASE[j]))}`,
       trait: 'riskTaker',
       risk: 'risky',
+      minigame: (state, a1, j) => ({
+        type: 'timing',
+        title: 'Поймай момент для сделки',
+        instructions: 'Цена ходит туда-сюда по шкале. Останови её точно в зелёной зоне, чтобы зайти в сделку по выгодной цене.',
+        winText: 'Вошёл в сделку в идеальный момент!',
+        loseText: 'Промахнулся мимо нужного момента входа.',
+        params: {
+          period: 1600 - j * 150,
+          zoneCenter: 0.5,
+          zoneWidth: scaleByStat(state.reputation, 100, 0.14, 0.34),
+          timeLimit: 6000,
+        },
+      }),
       effect: (state, a1, j) => {
         const cost = scaleByWealth(state, COST_BASE[j]);
         const skill = state.reputation + traitCap(state, 'riskTaker', 8) * 4;
-        if (skill >= 55 + j * 10) {
+        if (miniSuccess(state, skill >= 55 + j * 10)) {
           const mult = scaleByStat(skill, 130, 1.2, 2.6);
           const payout = Math.round(cost * mult);
-          return { money: payout - cost, happiness: 8, reputation: 2, message: `Разбираешься в теме — вложение выстрелило! Чистая прибыль — ${formatMoney(payout - cost)}.` };
+          return { money: payout - cost, happiness: 8, reputation: 2, message: `Точный вход в сделку! Чистая прибыль — ${formatMoney(payout - cost)}.` };
         }
-        return { money: -cost, happiness: -10, message: `Не хватило ни репутации, ни опыта, чтобы разглядеть подвох. Инвестиция прогорела, потеряно ${formatMoney(cost)}.` };
+        return { money: -cost, happiness: -10, message: `Момент был выбран неверно. Инвестиция прогорела, потеряно ${formatMoney(cost)}.` };
       },
     },
     { label: 'Отказаться, слишком рискованно', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -1, message: 'Ты решил не рисковать и остался при своих.' }) }
@@ -246,13 +262,26 @@
       label: (state, a1, j) => `Рискнуть — ставка ${formatMoney(scaleByWealth(state, COST_BASE[j] * 0.5))}`,
       trait: 'riskTaker',
       risk: 'risky',
+      minigame: (state, a1, j) => ({
+        type: 'timing',
+        title: 'Обыграй рулетку',
+        instructions: 'Шарик крутится по кругу. Останови его точно на зелёном секторе, чтобы забрать банк.',
+        winText: 'Точное попадание — банк твой!',
+        loseText: 'Мимо — казино забирает ставку.',
+        params: {
+          period: 1000 - j * 80,
+          zoneCenter: 0.5,
+          zoneWidth: scaleByStat(traitCap(state, 'riskTaker', 10), 10, 0.08, 0.22),
+          timeLimit: 5000,
+        },
+      }),
       effect: (state, a1, j) => {
         const stake = scaleByWealth(state, COST_BASE[j] * 0.5);
-        // казино не обыграть удачей — только многолетний опыт (черта "азартный" на максимуме) даёт системное преимущество
-        if (traitOk(state, 'riskTaker', 8)) {
+        // казино не обыграть удачей — только точное попадание в мини-игре (или многолетний опыт, если игра пропущена)
+        if (miniSuccess(state, traitOk(state, 'riskTaker', 8))) {
           const mult = scaleByStat(traitCap(state, 'riskTaker', 10), 10, 2, 4.2);
           const payout = Math.round(stake * mult);
-          return { money: payout - stake, happiness: 12, message: `Годы за игровым столом наконец окупились! Чистый выигрыш — ${formatMoney(payout - stake)}.` };
+          return { money: payout - stake, happiness: 12, message: `Точный удар — чистый выигрыш ${formatMoney(payout - stake)}.` };
         }
         return { money: -stake, happiness: -8, message: `Казино своих не отпускает — потеряно ${formatMoney(stake)}.` };
       },
@@ -268,15 +297,30 @@
       label: (state, a1, j) => `Вложиться (${formatMoney(scaleByWealth(state, COST_BASE[j] * 1.4))})`,
       trait: 'riskTaker',
       risk: 'risky',
+      minigame: (state, a1, j) => {
+        const cost = scaleByWealth(state, COST_BASE[j] * 1.4);
+        const correct = Math.round(cost * 1.2);
+        const pool = [correct, Math.round(cost * 1.1), Math.round(cost * 1.3), Math.round(cost * 0.8)];
+        const order = [[0, 1, 2, 3], [1, 3, 0, 2], [2, 0, 3, 1], [3, 2, 1, 0]][j % 4];
+        const answers = order.map((idx) => ({ label: formatMoney(pool[idx]), correct: idx === 0 }));
+        return {
+          type: 'math',
+          title: 'Прикинь окупаемость',
+          instructions: 'Чтобы решение точно окупилось, нужно верно посчитать вложение с учётом 20% издержек.',
+          winText: 'Расчёт верный — можно действовать.',
+          loseText: 'Ошибка в расчётах дорого обошлась.',
+          params: { question: `${formatMoney(cost)} + 20% издержек = ?`, answers, timeLimit: 9000 },
+        };
+      },
       effect: (state, a1, j) => {
         const cost = scaleByWealth(state, COST_BASE[j] * 1.4);
         const skill = state.reputation + traitCap(state, 'riskTaker', 8) * 3 + traitCap(state, 'hardworker', 8) * 3;
-        if (skill >= 75 + j * 8) {
+        if (miniSuccess(state, skill >= 75 + j * 8)) {
           const mult = scaleByStat(skill, 150, 1.2, 2.5);
           const profit = Math.round(cost * mult);
-          return { money: profit - cost, reputation: 4, message: `Опыт и репутация сделали своё дело! Чистая прибыль — ${formatMoney(profit - cost)}.` };
+          return { money: profit - cost, reputation: 4, message: `Расчёт оказался верным! Чистая прибыль — ${formatMoney(profit - cost)}.` };
         }
-        return { money: -cost, happiness: -6, message: `Не хватило деловой хватки — решение не сработало, потеряно ${formatMoney(cost)}.` };
+        return { money: -cost, happiness: -6, message: `Просчёт в цифрах — решение не сработало, потеряно ${formatMoney(cost)}.` };
       },
     },
     {
@@ -393,7 +437,14 @@
     'crime',
     [
       { text: (fl, state) => `${cap(fl)} предлагает перевезти "посылку" за ${formatMoney(scaleByWealth(state, 15000))}, не задавая вопросов.`, choices: [
-        { label: (fl, state) => `Согласиться за ${formatMoney(scaleByWealth(state, 15000))}`, trait: 'shady', risk: 'risky', effect: (state) => { const pay = scaleByWealth(state, 15000); return traitOk(state, 'shady', 2) ? { money: pay, happiness: -4, message: `Опыт подсказал, как всё провернуть чисто — дело сделано, получено ${formatMoney(pay)}.` } : { jail: true, message: 'Не хватило опыта распознать ловушку. Тебя задержали с поличным.' }; } },
+        { label: (fl, state) => `Согласиться за ${formatMoney(scaleByWealth(state, 15000))}`, trait: 'shady', risk: 'risky', minigame: () => ({
+            type: 'reaction',
+            title: 'Проезжай мимо поста незаметно',
+            instructions: 'Жди подходящий момент и жми точно в него — не раньше и не позже.',
+            winText: 'Проскочил идеально, никто не заметил.',
+            loseText: 'Среагировал не вовремя — попался.',
+            params: { delay: 1200, windowMs: 850, waitLabel: 'Едешь...', promptLabel: 'ЖМИ!' },
+          }), effect: (state) => { const pay = scaleByWealth(state, 15000); return miniSuccess(state, traitOk(state, 'shady', 2)) ? { money: pay, happiness: -4, message: `Провернул всё чисто — дело сделано, получено ${formatMoney(pay)}.` } : { jail: true, message: 'Не среагировал вовремя. Тебя задержали с поличным.' }; } },
         { label: 'Отказаться', trait: 'cautious', risk: 'safe', effect: () => ({ reputation: 2, message: 'Мало ли что там было в этой посылке.' }) },
       ]},
       { text: (fl) => `${cap(fl)} зовёт поучаствовать в схеме, похожей на финансовую пирамиду.`, choices: [

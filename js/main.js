@@ -179,13 +179,56 @@
       btn.className = 'choice-btn';
       const label = typeof choice.label === 'function' ? choice.label(state) : choice.label;
       const badge = choice.risk && RISK_BADGE[choice.risk] ? `<span class="risk-badge risk-${choice.risk}">${RISK_BADGE[choice.risk]}</span>` : '';
-      btn.innerHTML = `<span class="choice-label">${label}</span>${badge}`;
-      btn.addEventListener('click', () => handleChoice(idx));
+      const miniBadge = choice.minigame ? '<span class="risk-badge risk-mini">🎮 мини-игра</span>' : '';
+      btn.innerHTML = `<span class="choice-label">${label}</span><span class="choice-badges">${miniBadge}${badge}</span>`;
+      btn.addEventListener('click', () => {
+        if (choice.minigame) {
+          startMiniGame(choice, idx);
+        } else {
+          handleChoice(idx);
+        }
+      });
       choicesEl.appendChild(btn);
     });
 
     document.getElementById('event-card').classList.remove('hidden');
     outcomeEl.classList.remove('active');
+  }
+
+  const minigameModal = document.getElementById('minigame-modal');
+  const minigameTitleEl = document.getElementById('minigame-title');
+  const minigameInstructionsEl = document.getElementById('minigame-instructions');
+  const minigameHostEl = document.getElementById('minigame-host');
+
+  function startMiniGame(choice, idx) {
+    const desc = choice.minigame(state);
+    minigameTitleEl.textContent = desc.title || 'Мини-игра';
+    minigameInstructionsEl.textContent = desc.instructions || '';
+    minigameModal.classList.add('active');
+
+    const gameApi = window.MiniGames[desc.type];
+    gameApi.mount(minigameHostEl, desc.params || {}, (success) => {
+      showMiniGameResult(success, desc, () => {
+        minigameModal.classList.remove('active');
+        state._miniGameSuccess = success;
+        handleChoice(idx);
+        delete state._miniGameSuccess;
+      });
+    });
+  }
+
+  function showMiniGameResult(success, desc, onContinue) {
+    minigameHostEl.innerHTML = '';
+    const resultEl = document.createElement('div');
+    resultEl.className = 'minigame-result ' + (success ? 'win' : 'lose');
+    resultEl.textContent = success ? (desc.winText || 'Получилось!') : (desc.loseText || 'Не вышло.');
+    minigameHostEl.appendChild(resultEl);
+
+    const btn = document.createElement('button');
+    btn.className = 'btn btn-primary';
+    btn.textContent = 'Продолжить';
+    btn.addEventListener('click', onContinue, { once: true });
+    minigameHostEl.appendChild(btn);
   }
 
   function handleChoice(idx) {

@@ -302,6 +302,7 @@ h1, h2 { margin: 0 0 8px; }
 .choice-btn:hover { border-color: var(--accent-2); background: #262b42; }
 .choice-btn:active { transform: scale(0.99); }
 .choice-label { flex: 1; }
+.choice-badges { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .risk-badge {
   flex-shrink: 0;
   font-size: 11px;
@@ -313,6 +314,7 @@ h1, h2 { margin: 0 0 8px; }
 .risk-safe { background: rgba(52, 211, 153, 0.15); color: var(--green); }
 .risk-risky { background: rgba(248, 113, 113, 0.15); color: var(--red); }
 .risk-balanced { background: rgba(96, 165, 250, 0.15); color: var(--blue); }
+.risk-mini { background: rgba(192, 132, 252, 0.18); color: var(--purple); }
 
 .outcome { display: none; padding: 26px; }
 .outcome.active { display: block; }
@@ -352,6 +354,77 @@ h1, h2 { margin: 0 0 8px; }
   border: 1px solid var(--border);
 }
 .epilogue.hidden { display: none; }
+
+/* ---------- Мини-игры ---------- */
+
+.minigame-content { max-width: 460px; }
+.minigame-instructions { color: var(--text-dim); font-size: 13.5px; line-height: 1.5; margin: 0 0 18px; }
+.minigame-host { display: flex; flex-direction: column; align-items: stretch; gap: 14px; }
+
+.mg-timing-wrap, .mg-math-wrap, .mg-reaction-wrap { display: flex; flex-direction: column; gap: 14px; align-items: stretch; }
+
+.mg-timing-track {
+  position: relative;
+  height: 14px;
+  background: var(--bg-alt);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.mg-timing-zone {
+  position: absolute;
+  top: 0; bottom: 0;
+  background: rgba(52, 211, 153, 0.35);
+  border-left: 2px solid var(--green);
+  border-right: 2px solid var(--green);
+}
+.mg-timing-marker {
+  position: absolute;
+  top: -3px;
+  width: 6px;
+  height: 20px;
+  border-radius: 3px;
+  background: var(--accent);
+  transform: translateX(-50%);
+  box-shadow: 0 0 8px rgba(240, 180, 41, 0.7);
+}
+.mg-stop-btn { width: 100%; }
+
+.mg-timer { text-align: center; font-size: 12.5px; color: var(--text-dim); }
+
+.mg-math-question { font-size: 17px; font-weight: 700; text-align: center; margin-bottom: 4px; }
+.mg-math-answers { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mg-math-answer { padding: 12px; font-size: 14px; }
+
+.mg-reaction-wrap { align-items: center; }
+.mg-reaction-btn {
+  width: 100%;
+  padding: 30px 16px;
+  font-size: 18px;
+  font-weight: 800;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: background .15s, color .15s, transform .1s;
+}
+.mg-reaction-btn.mg-reaction-active {
+  background: linear-gradient(90deg, var(--accent), #f7cf6a);
+  color: #201400;
+  transform: scale(1.03);
+}
+.mg-reaction-btn:active { transform: scale(0.97); }
+
+.minigame-result {
+  text-align: center;
+  font-weight: 700;
+  font-size: 15px;
+  padding: 14px;
+  border-radius: 10px;
+}
+.minigame-result.win { background: rgba(52, 211, 153, 0.15); color: var(--green); }
+.minigame-result.lose { background: rgba(248, 113, 113, 0.15); color: var(--red); }
 
 /* ---------- Адаптив ---------- */
 
