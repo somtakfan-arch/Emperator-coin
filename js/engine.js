@@ -78,8 +78,14 @@ function createGameState(name, character) {
 // одежда (на теле) и машины (в гараже) места не занимают, а сумки сами
 // эту вместимость увеличивают — иначе некуда было бы класть новую сумку.
 const CARRIED_CATEGORIES = ['watches', 'electronics', 'jewelry'];
-const BAG_CAPACITY = { bag_market: 6, bag_backpack: 8, bag_bruno: 12, bag_duval: 18, bag_golden: 30 };
+const BAG_CAPACITY = {
+  bag_totebag: 5, bag_market: 6, bag_zarra: 8, bag_backpack: 8, bag_bruno: 12, bag_maikl_kors: 14,
+  bag_duval: 18, bag_guccho2: 20, bag_balensiaga: 20, bag_luiviton: 21, bag_prada_travel: 22,
+  bag_shanella_micro: 24, bag_golden: 30, bag_hermec: 29, bag_vault: 45,
+};
 const NO_BAG_CAPACITY = 3;
+// "хорошая одежда" — от куртки и выше; открывает доступ к дорогим/статусным мероприятиям
+const GOOD_CLOTHES_THRESHOLD = 15000;
 
 function ownsCategory(state, category) {
   return Object.keys(state.inventory || {}).some((id) => {
@@ -90,6 +96,14 @@ function ownsCategory(state, category) {
 
 function hasClothes(state) {
   return ownsCategory(state, 'clothes');
+}
+
+/** Хорошая одежда (не просто любая) — пропуск на богатые мероприятия. */
+function hasGoodClothes(state) {
+  return Object.keys(state.inventory || {}).some((id) => {
+    const it = window.ITEMS.byId[id];
+    return it && it.category === 'clothes' && it.price >= GOOD_CLOTHES_THRESHOLD && (state.inventory[id] || 0) > 0;
+  });
 }
 
 function hasCarItem(state) {
@@ -403,8 +417,9 @@ function applyChoice(state, event, choiceIndex) {
   if (EXEMPT_FROM_HISTORY.indexOf(event.id) === -1) state.usedEventIds.add(event.id);
   state.turn += 1;
 
-  // пассивная регенерация энергии/здоровья между событиями
-  state.energy = clampNum(state.energy + 4, 0, 100);
+  // энергия сама почти не восстанавливается — без нормального сна и отдыха
+  // силы будут заканчиваться по-настоящему, а не бесконечно тлеть на автопилоте
+  state.energy = clampNum(state.energy + 1, 0, 100);
   if (hasCarItem(state)) state.energy = clampNum(state.energy + 1, 0, 100); // своя машина экономит силы и время
   if (state.happiness > 60) state.health = clampNum(state.health + 1, 0, 100);
   if (state.turn % 2 === 0) {

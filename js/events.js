@@ -40,6 +40,9 @@
   const ownsCategoryFn = (s, category) => Object.keys(s.inventory || {}).some((id) => { const it = window.ITEMS.byId[id]; return it && it.category === category && (s.inventory[id] || 0) > 0; });
   const hasCarFn = (s) => ownsCategoryFn(s, 'cars');
   const hasElectronicsFn = (s) => ownsCategoryFn(s, 'electronics');
+  const GOOD_CLOTHES_THRESHOLD = 15000;
+  const hasGoodClothesFn = (s) => Object.keys(s.inventory || {}).some((id) => { const it = window.ITEMS.byId[id]; return it && it.category === 'clothes' && it.price >= GOOD_CLOTHES_THRESHOLD && (s.inventory[id] || 0) > 0; });
+  const richEventGate = (s) => hasGoodClothesFn(s) && s.reputation >= 20;
 
   /* ---------- детерминированные пороги вместо удачи ---------- */
   // Никакого Math.random() в исходах: результат каждого выбора зависит
@@ -1385,6 +1388,93 @@
     hasElectronicsFn
   );
 
+  const crypto = buildFlavorFamily(
+    'crypto',
+    [
+      { text: (fl, state) => `С домашнего ПК открыт график ${fl}. Похоже, сейчас удачный момент для сделки на ${formatMoney(scaleByWealth(state, 6000))}.`, choices: [
+        { label: (fl, state) => `Купить на ${formatMoney(scaleByWealth(state, 6000))}`, trait: 'riskTaker', risk: 'risky', minigame: (state) => ({
+            type: 'timing',
+            title: 'Поймай момент для сделки',
+            instructions: 'Цена ходит туда-сюда по шкале. Останови её точно в зелёной зоне, чтобы войти по выгодному курсу.',
+            winText: 'Вошёл в сделку точно вовремя!',
+            loseText: 'Промахнулся с моментом входа.',
+            params: { period: 1300, zoneCenter: 0.5, zoneWidth: scaleByStat(state.reputation, 100, 0.12, 0.3), timeLimit: 6000 },
+          }), effect: (state) => { const cost = scaleByWealth(state, 6000); const skill = state.reputation + traitCap(state, 'riskTaker', 8) * 4; if (miniSuccess(state, skill >= 55)) { const mult = scaleByStat(skill, 130, 1.3, 2.8); const payout = Math.round(cost * mult); return { money: payout - cost, happiness: 8, message: `Точный вход — чистая прибыль ${formatMoney(payout - cost)}.` }; } return { money: -cost, happiness: -8, message: `Момент выбран неверно — потеряно ${formatMoney(cost)}.` }; } },
+        { label: 'Не рисковать', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: -1, message: 'Решил не лезть в волатильный рынок.' }) },
+      ]},
+      { text: (fl, state) => `Собрать майнинг-ферму дома из связки видеокарт обойдётся в ${formatMoney(scaleByWealth(state, 40000))}.`, choices: [
+        { label: (fl, state) => `Собрать ферму (${formatMoney(scaleByWealth(state, 40000))})`, trait: 'hardworker', risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 40000); return traitOk(state, 'hardworker', 3) ? { money: Math.round(cost * 0.4), happiness: 4, message: 'Ферма настроена грамотно — стабильно капает доход.' } : { money: -Math.round(cost * 0.3), happiness: -4, message: 'Ферма грелась и глючила чаще, чем зарабатывала.' }; } },
+        { label: 'Не связываться с железом', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 1, message: 'Электричество и шум того не стоят.' }) },
+      ]},
+      { text: (fl) => `Знакомый предлагает вложиться в коллекцию NFT на основе ${fl}.`, choices: [
+        { label: (fl, state) => `Вложиться (${formatMoney(scaleByWealth(state, 3000))})`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 3000); return traitOk(state, 'riskTaker', 4) ? { money: Math.round(cost * 1.8) - cost, happiness: 6, message: 'Коллекция неожиданно выстрелила в цене.' } : { money: -cost, happiness: -5, message: 'Коллекция обесценилась почти до нуля.' }; } },
+        { label: 'Обойти стороной', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 1, message: 'Слишком похоже на пузырь.' }) },
+      ]},
+      { text: (fl, state) => `Биржа предлагает застейкать ${fl} под проценты — заблокировать на время ради дохода.`, choices: [
+        { label: (fl, state) => `Застейкать на ${formatMoney(scaleByWealth(state, 8000))}`, trait: 'cautious', risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 8000); const income = Math.round(cost * scaleByStat(state.reputation, 100, 0.05, 0.22)); return { money: income, happiness: 3, message: `Пассивный доход от стейкинга — ${formatMoney(income)}.` }; } },
+        { label: 'Оставить деньги свободными', risk: 'safe', effect: () => ({ happiness: 1, message: 'Гибкость важнее пассивного процента.' }) },
+      ]},
+      { text: () => `Пришло письмо якобы от службы поддержки биржи с просьбой "подтвердить" сид-фразу кошелька.`, choices: [
+        { label: 'Проигнорировать и не отвечать', trait: 'cautious', risk: 'safe', effect: () => ({ reputation: 1, message: 'Классический фишинг — мимо.' }) },
+        { label: 'Перейти по ссылке и ввести данные', trait: 'riskTaker', risk: 'risky', effect: (state) => { const loss = scaleByWealth(state, 20000); return traitOk(state, 'cautious', 3) ? { happiness: 1, message: 'Что-то насторожило в последний момент — успел остановиться.' } : { money: -loss, happiness: -14, message: `Кошелёк опустошён мошенниками — потеряно ${formatMoney(loss)}.` }; } },
+      ]},
+      { text: (fl, state) => `Брокер предлагает открыть плечо x10 на ${fl} — риск огромный, но и потенциал тоже.`, choices: [
+        { label: (fl, state) => `Открыть позицию с плечом (${formatMoney(scaleByWealth(state, 10000))})`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 10000); const skill = traitCap(state, 'riskTaker', 10) * 6 + state.reputation; if (traitOk(state, 'riskTaker', 6) && skill >= 90) { const gain = Math.round(cost * 3.5); return { money: gain - cost, happiness: 14, message: `Плечо сыграло в плюс — прибыль ${formatMoney(gain - cost)}.` }; } return { money: -cost, happiness: -12, message: 'Позицию ликвидировало почти мгновенно — плечо не прощает ошибок.' }; } },
+        { label: 'Торговать без плеча', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 1, message: 'Медленнее, зато депозит цел.' }) },
+      ]},
+      { text: () => `Налоговая прислала запрос о доходах с криптовалютных операций.`, choices: [
+        { label: (fl, state) => `Задекларировать всё честно (${formatMoney(scaleByWealth(state, 4000))})`, trait: 'cautious', risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 4000); return { money: -cost, reputation: 3, message: 'Всё официально — спится спокойнее.' }; } },
+        { label: 'Промолчать и понадеяться на анонимность', trait: 'shady', risk: 'risky', effect: (state) => { const fine = scaleByWealth(state, 15000); return traitOk(state, 'shady', 4) ? { happiness: 2, message: 'Обошлось без вопросов.' } : { money: -fine, reputation: -6, message: `Вычислили — штраф ${formatMoney(fine)}.` }; } },
+      ]},
+      { text: (fl) => `Рынок ${fl} рухнул на десятки процентов за одну ночь.`, choices: [
+        { label: 'Держать и не паниковать', trait: 'cautious', risk: 'risky', effect: (state) => (traitOk(state, 'cautious', 4) ? { happiness: 2, message: 'Выдержка окупилась — рынок постепенно отыграл падение.' } : { happiness: -8, message: 'Нервы сдали, но продавать всё равно не стал(а) — вышло не лучшим образом.' }) },
+        { label: (fl, state) => `Зафиксировать убыток и выйти (−${formatMoney(scaleByWealth(state, 12000))})`, risk: 'safe', effect: (state) => { const loss = scaleByWealth(state, 12000); return { money: -loss, happiness: -4, message: `Вышел из рынка с убытком ${formatMoney(loss)}, зато без риска потерять больше.` }; } },
+      ]},
+    ],
+    ['БитКоин', 'Эфириум', 'Догги-Коин', 'Соляно', 'Риплон', 'Кардано-Клон', 'Полигоint', 'безымянный альткоин'],
+    hasElectronicsFn
+  );
+
+  const richEvents = buildFlavorFamily(
+    'richEvents',
+    [
+      { text: (fl, state) => `В хорошем костюме тебя пускают на ${fl}. Там можно завести знакомство, которое принесёт ${formatMoney(scaleByWealth(state, 30000))}.`, choices: [
+        { label: 'Активно налаживать связи', trait: 'hardworker', risk: 'balanced', effect: (state) => { const gain = scaleByWealth(state, 30000); return repOk(state, 40) ? { money: gain, reputation: 6, happiness: 10, message: `Знакомство оказалось невероятно полезным — ${formatMoney(gain)} чистыми.` } : { happiness: 4, message: 'Вечер прошёл приятно, но серьёзных контактов завести не удалось.' }; } },
+        { label: 'Держаться скромно в стороне', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 2, message: 'Приятный вечер без лишних рисков.' }) },
+      ]},
+      { text: (fl, state) => `На ${fl} выставлен лот, который перекупщики берут в разы дороже уже на следующий день.`, choices: [
+        { label: (fl, state) => `Купить лот (${formatMoney(scaleByWealth(state, 50000))})`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 50000); return repOk(state, 45) ? { money: Math.round(cost * 1.6) - cost, happiness: 10, message: 'Чутьё на ценные вещи не подвело — перепродажа принесла хорошую прибыль.' } : { money: -Math.round(cost * 0.3), happiness: -4, message: 'Лот оказался переоценён — часть денег потеряна.' }; } },
+        { label: 'Просто посмотреть', risk: 'safe', effect: () => ({ happiness: 2, message: 'Красивое зрелище без финансового риска.' }) },
+      ]},
+      { text: (fl, state) => `На ${fl} к тебе подходит инвестор с предложением подписать контракт на ${formatMoney(scaleByWealth(state, 80000))}.`, choices: [
+        { label: 'Подписать контракт на месте', trait: 'riskTaker', risk: 'risky', effect: (state) => { const gain = scaleByWealth(state, 80000); return repOk(state, 50) ? { money: gain, reputation: 5, message: `Репутация сыграла роль — контракт подписан на ${formatMoney(gain)}.` } : { happiness: -4, message: 'Инвестор передумал в последний момент, увидев недостаток связей.' }; } },
+        { label: 'Взять время подумать', trait: 'cautious', risk: 'safe', effect: () => ({ reputation: 1, message: 'Осторожность в бизнесе не помешает.' }) },
+      ]},
+      { text: (fl, state) => `${cap(fl)} — отличный повод сделать щедрое пожертвование на глазах у нужных людей, ${formatMoney(scaleByWealth(state, 25000))}.`, choices: [
+        { label: (fl, state) => `Пожертвовать публично (${formatMoney(scaleByWealth(state, 25000))})`, trait: 'familyFirst', risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 25000); return { money: -cost, reputation: 8, happiness: 8, message: 'Жест оценили — репутация в нужных кругах выросла заметно.' }; } },
+        { label: 'Пожертвовать анонимно и скромно', risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 3000); return { money: -cost, happiness: 4, message: 'Скромный вклад без лишнего внимания.' }; } },
+      ]},
+      { text: (fl) => `На ${fl} модный дом предлагает тебе стать лицом рекламной кампании.`, choices: [
+        { label: (fl, state) => `Согласиться на съёмку (${formatMoney(scaleByWealth(state, 60000))})`, risk: 'balanced', effect: (state) => { const gain = scaleByWealth(state, 60000); return repOk(state, 45) ? { money: gain, reputation: 7, happiness: 10, message: `Кампания принесла ${formatMoney(gain)} и известность.` } : { money: Math.round(gain * 0.2), happiness: 2, message: 'Съёмка прошла без особого резонанса.' }; } },
+        { label: 'Отказаться, публичность не нужна', risk: 'safe', effect: () => ({ happiness: 1, message: 'Приватность дороже известности.' }) },
+      ]},
+      { text: (fl) => `На ${fl} тебе предлагают вступить в закрытый инвестиционный клуб за высокий взнос.`, choices: [
+        { label: (fl, state) => `Вступить (${formatMoney(scaleByWealth(state, 100000))})`, trait: 'riskTaker', risk: 'risky', effect: (state) => { const cost = scaleByWealth(state, 100000); return repOk(state, 55) ? { money: Math.round(cost * 1.4) - cost, reputation: 6, message: 'Клуб открыл доступ к действительно ценным сделкам.' } : { money: -cost, happiness: -6, message: 'Взнос внесён, а обещанной пользы почти не последовало.' }; } },
+        { label: 'Вежливо отказаться', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 1, message: 'Не всё то золото, что дорого стоит.' }) },
+      ]},
+      { text: (fl, state) => `На ${fl} завязался разговор с человеком, который явно может дать инсайд по крупной сделке.`, choices: [
+        { label: 'Аккуратно выведать детали', trait: 'shady', risk: 'risky', effect: (state) => { const gain = scaleByWealth(state, 45000); return traitOk(state, 'shady', 2) ? { money: gain, message: `Инсайд оказался точным — заработано ${formatMoney(gain)}.` } : { happiness: -3, message: 'Информация оказалась пустышкой.' }; } },
+        { label: 'Не лезть в чужие дела', trait: 'cautious', risk: 'safe', effect: () => ({ reputation: 1, message: 'Репутация человека, которому можно доверять, тоже чего-то стоит.' }) },
+      ]},
+      { text: (fl, state) => `Организаторы ${fl} просят тебя выступить спонсором следующего мероприятия за ${formatMoney(scaleByWealth(state, 70000))}.`, choices: [
+        { label: (fl, state) => `Стать спонсором (${formatMoney(scaleByWealth(state, 70000))})`, trait: 'hardworker', risk: 'balanced', effect: (state) => { const cost = scaleByWealth(state, 70000); return repOk(state, 45) ? { money: -Math.round(cost * 0.4), reputation: 10, happiness: 8, message: 'Спонсорство окупилось связями почти наполовину.' } : { money: -cost, reputation: 5, message: 'Спонсорство обошлось недёшево, зато на виду у нужных людей.' }; } },
+        { label: 'Отказаться от спонсорства', risk: 'safe', effect: () => ({ happiness: 1, message: 'Не все вложения обязаны быть публичными.' }) },
+      ]},
+    ],
+    ['гала-ужине Форбс Клуба', 'закрытом аукционе искусства', 'яхт-вечеринке инвесторов', 'благотворительном балу элиты', 'частном показе мод', 'саммите топ-предпринимателей', 'вечере в загородном гольф-клубе', 'приватной презентации нового фонда'],
+    richEventGate
+  );
+
   /* ============ Сборка общего пула ============ */
 
   window.EVENTS = [].concat(
@@ -1392,6 +1482,7 @@
     survival, luxury, family, crime, weather, tech, general, work, selfEmployed,
     HAND_EVENTS,
     neighborsHome, gadgetsBreak, wardrobeWear, petcare, civicDuty, hobbyCost, socialEvents, selfcare,
-    education, travel, romance, charity, vices, sidehustle, carlife, remoteWork
+    education, travel, romance, charity, vices, sidehustle, carlife, remoteWork,
+    crypto, richEvents
   );
 })();

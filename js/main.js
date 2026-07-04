@@ -364,6 +364,11 @@
     outcomeEl.classList.remove('active');
   }
 
+  document.getElementById('sleep-btn').addEventListener('click', () => {
+    if (document.getElementById('event-card').classList.contains('hidden')) return;
+    handleChoice(0, REST_EVENT);
+  });
+
   const minigameModal = document.getElementById('minigame-modal');
   const minigameTitleEl = document.getElementById('minigame-title');
   const minigameInstructionsEl = document.getElementById('minigame-instructions');
@@ -400,9 +405,10 @@
     minigameHostEl.appendChild(btn);
   }
 
-  function handleChoice(idx) {
+  function handleChoice(idx, eventOverride) {
+    const event = eventOverride || currentEvent;
     const prevTierId = getTier(computeEffectiveWealth(state)).id;
-    const result = applyChoice(state, currentEvent, idx);
+    const result = applyChoice(state, event, idx);
 
     document.getElementById('event-card').classList.add('hidden');
     outcomeMsgEl.textContent = result.message || 'Ход сделан.';

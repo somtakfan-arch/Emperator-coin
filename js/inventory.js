@@ -63,7 +63,7 @@ window.InventoryUI = (function () {
   function renderShopCategoryTabs() {
     const host = document.getElementById('shop-category-tabs');
     host.innerHTML = '';
-    const cats = ['food', 'clothes', 'cars', 'bags', 'watches', 'electronics', 'jewelry'];
+    const cats = ['food', 'clothes', 'cars', 'bags', 'watches', 'electronics', 'jewelry', 'housing'];
     cats.forEach((cat) => {
       const chip = document.createElement('button');
       chip.className = 'chip' + (cat === activeShopCategory ? ' active' : '');
