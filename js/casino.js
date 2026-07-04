@@ -1,13 +1,12 @@
 /* =========================================================
    ЭМПЕРАТОР: ОТ БОМЖА ДО МИЛЛИАРДЕРА
-   Вкладка "Казино" — отдельные ставки на мини-игры.
-   Итог решает точность/расчёт игрока, без единого броска кубика.
+   Вкладка "Казино" — отдельная ставка на мини-игру "Тайминг".
+   Итог решает точность игрока, без единого броска кубика.
    ========================================================= */
 
 window.CasinoUI = (function () {
   const GAMES = {
     timing: { label: '🎯 Тайминг', payout: 2.5, instructions: 'Останови маркер точно в зелёной зоне.' },
-    math: { label: '🧮 Быстрый счёт', payout: 1.8, instructions: 'Реши арифметику до истечения времени.' },
   };
   let activeGame = 'timing';
 
@@ -23,13 +22,6 @@ window.CasinoUI = (function () {
     });
     document.getElementById('casino-bet-row').classList.remove('hidden');
     document.getElementById('casino-message').textContent = GAMES[activeGame].instructions;
-  }
-
-  function mathQuestion(stake) {
-    const a = Math.round(stake * 1.2);
-    const pool = [a, Math.round(stake * 1.1), Math.round(stake * 1.3), Math.round(stake * 0.8)];
-    const order = [[0, 1, 2, 3], [1, 3, 0, 2], [2, 0, 3, 1], [3, 2, 1, 0]][Math.floor(stake) % 4];
-    return { question: `${formatMoney(stake)} + 20% = ?`, answers: order.map((i) => ({ label: formatMoney(pool[i]), correct: i === 0 })) };
   }
 
   function play() {
@@ -64,12 +56,7 @@ window.CasinoUI = (function () {
       host.appendChild(btn);
     }
 
-    if (activeGame === 'timing') {
-      window.MiniGames.timing.mount(host, { period: 900, zoneCenter: 0.5, zoneWidth: 0.18, timeLimit: 5000 }, (success) => resolve(success));
-    } else {
-      const q = mathQuestion(stake);
-      window.MiniGames.math.mount(host, { question: q.question, answers: q.answers, timeLimit: 8000 }, (success) => resolve(success));
-    }
+    window.MiniGames.timing.mount(host, { period: 900, zoneCenter: 0.5, zoneWidth: 0.18, timeLimit: 5000 }, (success) => resolve(success));
   }
 
   document.getElementById('casino-play-btn').addEventListener('click', play);
