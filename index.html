@@ -10,8 +10,48 @@
 </head>
 <body>
 
+  <!-- ЭКРАН 0: АККАУНТ -->
+  <main id="screen-auth" class="screen active">
+    <div class="card intro-card">
+      <div class="crown">👑</div>
+      <h1>Эмператор</h1>
+      <p class="subtitle">Аккаунт, лидеры, аукцион между игроками</p>
+      <p id="auth-cloud-hint" class="lead"></p>
+
+      <div id="auth-cloud-form">
+        <input id="auth-email" type="email" placeholder="Email" autocomplete="username" />
+        <input id="auth-password" type="password" placeholder="Пароль" autocomplete="current-password" />
+        <button id="auth-register-btn" class="btn btn-primary">Зарегистрироваться</button>
+        <button id="auth-login-btn" class="btn btn-secondary">Войти</button>
+        <p id="auth-message" class="auth-message"></p>
+      </div>
+
+      <button id="auth-guest-btn" class="btn btn-link">Играть без аккаунта (без лидеров и аукциона)</button>
+      <button id="auth-admin-btn" class="btn btn-link admin-link">⚙ Админ-панель</button>
+    </div>
+  </main>
+
+  <!-- ЭКРАН АДМИН-ПАНЕЛИ -->
+  <main id="screen-admin" class="screen">
+    <div class="card intro-card">
+      <h2>⚙ Админ-панель</h2>
+      <div id="admin-gate">
+        <input id="admin-password" type="password" placeholder="Пароль" autocomplete="off" />
+        <button id="admin-unlock-btn" class="btn btn-primary">Войти</button>
+        <p id="admin-gate-message" class="auth-message"></p>
+      </div>
+      <div id="admin-panel" class="hidden">
+        <p id="admin-cloud-hint" class="tab-hint"></p>
+        <input id="admin-search-input" type="text" placeholder="Email или имя игрока..." />
+        <button id="admin-search-btn" class="btn btn-secondary">Найти</button>
+        <div id="admin-results" class="item-grid"></div>
+      </div>
+      <button id="admin-back-btn" class="btn btn-link">← Назад</button>
+    </div>
+  </main>
+
   <!-- ЭКРАН 1: ВВОД ИМЕНИ -->
-  <main id="screen-intro" class="screen active">
+  <main id="screen-intro" class="screen">
     <div class="card intro-card">
       <div class="crown">👑</div>
       <h1>Эмператор</h1>
@@ -113,17 +153,95 @@
         </div>
       </header>
 
-      <section id="event-card" class="card event-card">
-        <p id="event-text" class="event-text"></p>
-        <div id="choices" class="choices"></div>
-      </section>
+      <nav id="game-tabs" class="game-tabs">
+        <button class="tab-btn active" data-tab="story">📜 История</button>
+        <button class="tab-btn" data-tab="inventory">🎒 Инвентарь</button>
+        <button class="tab-btn" data-tab="shop">🛍️ Магазин</button>
+        <button class="tab-btn" data-tab="doctor">💊 Доктор</button>
+        <button class="tab-btn" data-tab="casino">🎰 Казино</button>
+        <button class="tab-btn" data-tab="auction">🏛️ Аукцион</button>
+        <button class="tab-btn" data-tab="leaderboard">🏆 Лидеры</button>
+      </nav>
 
-      <section id="outcome" class="card outcome">
-        <div id="banner-stack" class="banner-stack hidden"></div>
-        <p id="outcome-message" class="outcome-message"></p>
-        <p id="outcome-interest" class="outcome-interest hidden"></p>
-        <button id="next-btn" class="btn btn-primary">Далее →</button>
-      </section>
+      <div id="tab-story" class="tab-panel active">
+        <section id="event-card" class="card event-card">
+          <p id="event-text" class="event-text"></p>
+          <div id="choices" class="choices"></div>
+        </section>
+
+        <section id="outcome" class="card outcome">
+          <div id="banner-stack" class="banner-stack hidden"></div>
+          <p id="outcome-message" class="outcome-message"></p>
+          <p id="outcome-interest" class="outcome-interest hidden"></p>
+          <button id="next-btn" class="btn btn-primary">Далее →</button>
+        </section>
+      </div>
+
+      <div id="tab-inventory" class="tab-panel">
+        <section class="card">
+          <h3 class="tab-title">Твои вещи</h3>
+          <p class="tab-hint">Еду можно съесть — поднимет шкалу "Еда". Остальное входит в чистую стоимость и его можно продать или выставить на аукцион.</p>
+          <div id="inventory-list" class="item-grid"></div>
+        </section>
+      </div>
+
+      <div id="tab-shop" class="tab-panel">
+        <section class="card">
+          <h3 class="tab-title">Магазин</h3>
+          <div id="shop-category-tabs" class="chip-row"></div>
+          <div id="shop-list" class="item-grid"></div>
+          <h3 class="tab-title">Кейсы</h3>
+          <p class="tab-hint">Кейс открывается мини-игрой "Поймай момент" — точность решает, какая вещь достанется, а не удача.</p>
+          <div id="case-list" class="item-grid"></div>
+        </section>
+      </div>
+
+      <div id="tab-doctor" class="tab-panel">
+        <section class="card">
+          <h3 class="tab-title">💊 Доктор</h3>
+          <p class="tab-hint">Каждый визит стоит денег, лечит здоровье и настроение и продлевает жизнь на несколько циклов старения. Если ходить регулярно — состариться попросту не успеешь.</p>
+          <div id="doctor-stats" class="reveal-grid"></div>
+          <button id="doctor-visit-btn" class="btn btn-primary">Записаться на приём</button>
+          <p id="doctor-message" class="outcome-message"></p>
+        </section>
+      </div>
+
+      <div id="tab-casino" class="tab-panel">
+        <section class="card">
+          <h3 class="tab-title">🎰 Казино</h3>
+          <p class="tab-hint">Выбери игру и ставку. Итог решает твоя точность/реакция/расчёт — без единого броска кубика.</p>
+          <div id="casino-games" class="chip-row"></div>
+          <div id="casino-bet-row" class="casino-bet-row hidden">
+            <label for="casino-bet-input">Ставка, ₽:</label>
+            <input id="casino-bet-input" type="number" min="1" step="1" />
+            <button id="casino-play-btn" class="btn btn-primary">Играть</button>
+          </div>
+          <p id="casino-message" class="outcome-message"></p>
+        </section>
+      </div>
+
+      <div id="tab-auction" class="tab-panel">
+        <section class="card">
+          <h3 class="tab-title">🏛️ Аукцион</h3>
+          <p id="auction-auth-hint" class="tab-hint"></p>
+          <div id="auction-authed" class="hidden">
+            <div class="auction-sell-row">
+              <select id="auction-item-select"></select>
+              <input id="auction-price-input" type="number" min="1" step="1" placeholder="Цена, ₽" />
+              <button id="auction-list-btn" class="btn btn-secondary">Выставить</button>
+            </div>
+            <div id="auction-list" class="item-grid"></div>
+          </div>
+        </section>
+      </div>
+
+      <div id="tab-leaderboard" class="tab-panel">
+        <section class="card">
+          <h3 class="tab-title">🏆 Таблица лидеров</h3>
+          <p id="leaderboard-auth-hint" class="tab-hint"></p>
+          <div id="leaderboard-list" class="leaderboard-list"></div>
+        </section>
+      </div>
 
     </div>
   </main>
@@ -148,9 +266,25 @@
 
   <script src="js/utils.js"></script>
   <script src="js/characters.js"></script>
+  <script src="js/items.js"></script>
   <script src="js/minigames.js"></script>
   <script src="js/events.js"></script>
   <script src="js/engine.js"></script>
+
+  <!-- Firebase (облако): если проект не настроен в js/firebase-config.js,
+       игра сама переключается в оффлайн-режим без аккаунтов/лидеров/аукциона. -->
+  <script src="js/firebase-config.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js" onerror="window.__firebaseSdkFailed = true;"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js" onerror="window.__firebaseSdkFailed = true;"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js" onerror="window.__firebaseSdkFailed = true;"></script>
+  <script src="js/cloud.js"></script>
+
+  <script src="js/inventory.js"></script>
+  <script src="js/doctor.js"></script>
+  <script src="js/casino.js"></script>
+  <script src="js/auction.js"></script>
+  <script src="js/leaderboard.js"></script>
+  <script src="js/admin.js"></script>
   <script src="js/main.js"></script>
 </body>
 </html>

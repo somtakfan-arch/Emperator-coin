@@ -1,7 +1,7 @@
 /* =========================================================
    ЭМПЕРАТОР: ОТ БОМЖА ДО МИЛЛИАРДЕРА
    Игровой движок: состояние, ходы, черты характера, долги,
-   условия победы/поражения.
+   инвентарь, доктор, условия победы/поражения.
    ========================================================= */
 
 const AUTO_BANKRUPT_THRESHOLD = -300000;
@@ -11,6 +11,7 @@ const BILLIONAIRE_GOAL = 1000000000;
 const BASE_DEBT_RATE = 0.025;
 const PREDATORY_DEBT_RATE = 0.075;
 const LOW_ENERGY_THRESHOLD = 12;
+const NET_WORTH_FACTOR = 0.5; // вещи в инвентаре считаются в "чистой стоимости" не по полной цене
 const BARRIER_MESSAGES = [
   '🚧 Почти получилось — но тут подоспели налоги, комиссии и внезапные счета, откатив всё почти к прежнему уровню.',
   '🚧 Система не пускает наверх с первой попытки: банк отказал в нужных условиях, а часть прибыли съели непредвиденные траты.',
@@ -59,12 +60,151 @@ function createGameState(name, character) {
     traits: { riskTaker: 0, cautious: 0, hardworker: 0, shady: 0, familyFirst: 0 },
     pantry: 55,
     possessions: new Set(),
+    inventory: {},
+    doctorCharges: 0,
+    doctorVisits: 0,
     debtRate: BASE_DEBT_RATE,
     ended: false,
     endingType: null,
     tier: tier.id,
     startTier: tier.id,
   };
+}
+
+/* ---------- чистая стоимость и "стеклянный потолок" ---------- */
+
+function computeEffectiveWealth(state) {
+  const netWorth = window.ITEMS ? window.ITEMS.computeInventoryNetWorth(state) : 0;
+  return state.money + netWorth * NET_WORTH_FACTOR;
+}
+
+/** Пересчитывает уровень с учётом барьера перехода наверх.
+ *  Вызывается после ЛЮБОГО действия, которое могло изменить деньги
+ *  или имущество: хода по сюжету, покупки/продажи вещи, визита к
+ *  врачу, ставки в казино, сделки на аукционе. */
+function applyTierBarrier(state) {
+  const prevTier = state.tier;
+  let rawNewTier = getTier(computeEffectiveWealth(state));
+  let barrierMessage = '';
+  const prevIdx = window.TIERS.findIndex((t) => t.id === prevTier);
+  const rawIdx = window.TIERS.findIndex((t) => t.id === rawNewTier.id);
+  if (rawIdx > prevIdx) {
+    const jump = rawIdx - prevIdx;
+    const requiredReputation = clampNum(55 + (jump - 1) * 13, 55, 90);
+    if (state.reputation < requiredReputation) {
+      const ceiling = window.TIERS[prevIdx].max;
+      const netWorth = window.ITEMS ? window.ITEMS.computeInventoryNetWorth(state) : 0;
+      const buffer = Math.max(Math.round(Math.abs(ceiling || 1000) * 0.03), 200);
+      const targetEffective = ceiling - buffer;
+      state.money = Math.round(targetEffective - netWorth * NET_WORTH_FACTOR);
+      rawNewTier = getTier(computeEffectiveWealth(state));
+      barrierMessage = BARRIER_MESSAGES[jump % BARRIER_MESSAGES.length];
+    }
+  }
+  state.tier = rawNewTier.id;
+  return { tierChanged: prevTier !== state.tier, barrierMessage };
+}
+
+/* ---------- инвентарь: покупка, еда, кейсы ---------- */
+
+function buyItem(state, itemId) {
+  const item = window.ITEMS.byId[itemId];
+  if (!item) return { ok: false, message: 'Такого товара нет.' };
+  if (state.money < item.price) return { ok: false, message: 'Не хватает денег.' };
+  state.money -= item.price;
+  state.inventory[itemId] = (state.inventory[itemId] || 0) + 1;
+  const fx = item.effects || {};
+  if (fx.happiness) state.happiness = clampNum(state.happiness + fx.happiness, 0, 100);
+  if (fx.reputation) state.reputation = clampNum(state.reputation + fx.reputation, 0, 100);
+  if (fx.health) state.health = clampNum(state.health + fx.health, 0, 100);
+  const barrier = applyTierBarrier(state);
+  return { ok: true, message: `Куплено: ${item.name} за ${formatMoney(item.price)}.`, barrier };
+}
+
+function eatFoodItem(state, itemId) {
+  const item = window.ITEMS.byId[itemId];
+  if (!item || item.category !== 'food') return { ok: false, message: 'Это нельзя съесть.' };
+  if (!state.inventory[itemId]) return { ok: false, message: 'У тебя этого нет в инвентаре.' };
+  state.inventory[itemId] -= 1;
+  if (state.inventory[itemId] <= 0) delete state.inventory[itemId];
+  const fx = item.effects || {};
+  state.pantry = clampNum(state.pantry + (fx.pantry || 0), 0, 100);
+  if (fx.happiness) state.happiness = clampNum(state.happiness + fx.happiness, 0, 100);
+  if (fx.health) state.health = clampNum(state.health + fx.health, 0, 100);
+  if (fx.reputation) state.reputation = clampNum(state.reputation + fx.reputation, 0, 100);
+  return { ok: true, message: `Съедено: ${item.name}.` };
+}
+
+function sellItem(state, itemId) {
+  const item = window.ITEMS.byId[itemId];
+  if (!item || !state.inventory[itemId]) return { ok: false, message: 'Нечего продавать.' };
+  const price = Math.round(item.price * 0.6);
+  state.inventory[itemId] -= 1;
+  if (state.inventory[itemId] <= 0) delete state.inventory[itemId];
+  state.money += price;
+  const barrier = applyTierBarrier(state);
+  return { ok: true, message: `Продано: ${item.name} за ${formatMoney(price)} (60% от цены).`, barrier, price };
+}
+
+/** Открытие кейса через мини-игру "Поймай момент": позиция маркера
+ *  (0..1) детерминированно определяет, какой предмет из пула
+ *  достанется — чем точнее в центр, тем реже и ценнее вещь. */
+function resolveCaseItem(caseDef, position) {
+  const d = Math.abs(position - 0.5);
+  const pool = caseDef.pool;
+  const n = pool.length;
+  let idx;
+  if (d <= 0.05) idx = n - 1;
+  else if (d <= 0.14) idx = Math.min(n - 1, n - 2);
+  else if (d <= 0.26) idx = Math.min(n - 1, Math.floor(n / 2));
+  else idx = 0;
+  return pool[clampNum(idx, 0, n - 1)];
+}
+
+function openCase(state, caseId, position) {
+  const caseDef = window.CASES.find((c) => c.id === caseId);
+  if (!caseDef) return { ok: false, message: 'Такого кейса нет.' };
+  if (state.money < caseDef.price) return { ok: false, message: 'Не хватает денег на кейс.' };
+  state.money -= caseDef.price;
+  const itemId = resolveCaseItem(caseDef, position);
+  const item = window.ITEMS.byId[itemId];
+  state.inventory[itemId] = (state.inventory[itemId] || 0) + 1;
+  const barrier = applyTierBarrier(state);
+  return { ok: true, item, message: `Из кейса выпало: ${item.name}!`, barrier };
+}
+
+/* ---------- доктор: платное лечение продлевает жизнь ---------- */
+
+const DOCTOR_BASE_COST = 4000;
+const DOCTOR_CHARGES_PER_VISIT = 6;
+
+function visitDoctor(state) {
+  const cost = scaleByWealth(state, DOCTOR_BASE_COST);
+  if (state.money < cost) return { ok: false, message: 'Не хватает денег на приём.' };
+  state.money -= cost;
+  state.health = clampNum(state.health + 15, 0, 100);
+  state.happiness = clampNum(state.happiness + 5, 0, 100);
+  state.doctorCharges = (state.doctorCharges || 0) + DOCTOR_CHARGES_PER_VISIT;
+  state.doctorVisits = (state.doctorVisits || 0) + 1;
+  const barrier = applyTierBarrier(state);
+  return { ok: true, cost, message: `Приём оплачен (${formatMoney(cost)}). Врач продлил жизнь ещё на ${DOCTOR_CHARGES_PER_VISIT} циклов старения.`, barrier };
+}
+
+/* ---------- казино отдельной вкладкой: ставка + мини-игра ---------- */
+
+function placeCasinoBet(state, stake, success, payoutMultiplier) {
+  if (state.money < stake) return { ok: false, message: 'Не хватает денег на такую ставку.' };
+  state.money -= stake;
+  let winnings = 0;
+  if (success) {
+    winnings = Math.round(stake * payoutMultiplier);
+    state.money += winnings;
+    state.happiness = clampNum(state.happiness + 6, 0, 100);
+  } else {
+    state.happiness = clampNum(state.happiness - 4, 0, 100);
+  }
+  const barrier = applyTierBarrier(state);
+  return { ok: true, success, winnings, barrier };
 }
 
 const REST_EVENT = {
@@ -135,7 +275,14 @@ function applyChoice(state, event, choiceIndex) {
   // пассивная регенерация энергии/здоровья между событиями
   state.energy = clampNum(state.energy + 4, 0, 100);
   if (state.happiness > 60) state.health = clampNum(state.health + 1, 0, 100);
-  if (state.turn % 2 === 0) state.age += 1;
+  if (state.turn % 2 === 0) {
+    // регулярные визиты к врачу останавливают старение — можно жить бесконечно
+    if (state.doctorCharges > 0) {
+      state.doctorCharges -= 1;
+    } else {
+      state.age += 1;
+    }
+  }
 
   // запасы еды понемногу расходуются; на нуле мягко бьют по здоровью и настроению
   state.pantry = clampNum(state.pantry - 4, 0, 100);
@@ -154,30 +301,7 @@ function applyChoice(state, event, choiceIndex) {
     interestMessage = `📉 Долг вырос на ${formatMoney(interest)} из-за процентов${state.debtRate > BASE_DEBT_RATE ? ' (грабительская ставка микрозайма!)' : ''}.`;
   }
 
-  // "стеклянный потолок": вырваться в следующий социальный слой почти
-  // невозможно без наработанной репутации — никакой удачи, только
-  // порог по характеристике. Чем крупнее прыжок через уровни, тем
-  // выше нужна репутация, чтобы его удержать.
-  const prevTier = state.tier;
-  let rawNewTier = getTier(state.money);
-  let barrierMessage = '';
-  if (moneyDelta > 0) {
-    const prevIdx = window.TIERS.findIndex((t) => t.id === prevTier);
-    const rawIdx = window.TIERS.findIndex((t) => t.id === rawNewTier.id);
-    if (rawIdx > prevIdx) {
-      const jump = rawIdx - prevIdx;
-      const requiredReputation = clampNum(60 + (jump - 1) * 15, 60, 92);
-      if (state.reputation < requiredReputation) {
-        const ceiling = window.TIERS[prevIdx].max;
-        const buffer = Math.max(Math.round(Math.abs(ceiling || 1000) * 0.03), 200);
-        state.money = ceiling - buffer;
-        rawNewTier = getTier(state.money);
-        barrierMessage = BARRIER_MESSAGES[jump % BARRIER_MESSAGES.length];
-      }
-    }
-  }
-  state.tier = rawNewTier.id;
-  const tierChanged = prevTier !== state.tier;
+  const { tierChanged, barrierMessage } = applyTierBarrier(state);
 
   if (result.jail) {
     state.ended = true;
@@ -191,7 +315,7 @@ function applyChoice(state, event, choiceIndex) {
   } else if (state.money <= AUTO_BANKRUPT_THRESHOLD) {
     state.ended = true;
     state.endingType = 'bankrupt';
-  } else if (state.money >= BILLIONAIRE_GOAL) {
+  } else if (computeEffectiveWealth(state) >= BILLIONAIRE_GOAL) {
     state.ended = true;
     state.endingType = 'billionaire';
   } else if (state.age >= MAX_AGE) {
@@ -263,7 +387,7 @@ const EPILOGUE_TEXT = {
 
 function getEndingSummary(state) {
   const info = ENDING_TEXT[state.endingType] || ENDING_TEXT.timeUp;
-  const tier = getTier(state.money);
+  const tier = getTier(computeEffectiveWealth(state));
   const traits = getActiveTraits(state);
   const epilogue = traits.length ? EPILOGUE_TEXT[traits[0].key] : '';
   return {
