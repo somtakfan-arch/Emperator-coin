@@ -11,10 +11,12 @@
   let state = null;
   let currentCharacter = null;
   let currentEvent = null;
+  let currentSlotIndex = null;
 
   const screens = {
     auth: document.getElementById('screen-auth'),
     admin: document.getElementById('screen-admin'),
+    slots: document.getElementById('screen-slots'),
     intro: document.getElementById('screen-intro'),
     reveal: document.getElementById('screen-reveal'),
     game: document.getElementById('screen-game'),
@@ -50,8 +52,13 @@
       if (barrierResult && barrierResult.barrierMessage) showToast(barrierResult.barrierMessage);
       else if (message) showToast(message);
       if (window.Cloud.enabled) window.Cloud.saveState(state);
+      saveCurrentSlot();
     },
   };
+
+  function saveCurrentSlot() {
+    if (state && currentSlotIndex !== null) window.Slots.saveSlot(currentSlotIndex, state);
+  }
 
   /* ---------------- Экран 0: аккаунт ---------------- */
 
@@ -74,19 +81,96 @@
     const email = document.getElementById('auth-email').value.trim();
     const password = document.getElementById('auth-password').value;
     if (!email || !password) { authMessage.textContent = 'Укажи email и пароль.'; return; }
-    window.Cloud.register(email, password).then(() => showScreen('intro')).catch((e) => { authMessage.textContent = e.message; });
+    window.Cloud.register(email, password).then(() => enterSlotsScreen()).catch((e) => { authMessage.textContent = e.message; });
   });
 
   document.getElementById('auth-login-btn').addEventListener('click', () => {
     const email = document.getElementById('auth-email').value.trim();
     const password = document.getElementById('auth-password').value;
     if (!email || !password) { authMessage.textContent = 'Укажи email и пароль.'; return; }
-    window.Cloud.login(email, password).then(() => showScreen('intro')).catch((e) => { authMessage.textContent = e.message; });
+    window.Cloud.login(email, password).then(() => enterSlotsScreen()).catch((e) => { authMessage.textContent = e.message; });
   });
 
-  document.getElementById('auth-guest-btn').addEventListener('click', () => showScreen('intro'));
+  document.getElementById('auth-guest-btn').addEventListener('click', () => enterSlotsScreen());
   document.getElementById('auth-admin-btn').addEventListener('click', () => showScreen('admin'));
   document.getElementById('admin-back-btn').addEventListener('click', () => showScreen('auth'));
+
+  function enterSlotsScreen() {
+    if (window.Cloud.enabled && window.Cloud.currentUser) {
+      window.Slots.syncFromCloud().then(renderSlotsScreen).catch(renderSlotsScreen);
+    } else {
+      renderSlotsScreen();
+    }
+  }
+
+  /* ---------------- Экран слотов персонажей ---------------- */
+
+  const slotsListEl = document.getElementById('slots-list');
+
+  function renderSlotsScreen() {
+    const summaries = window.Slots.getSummaries();
+    slotsListEl.innerHTML = '';
+    summaries.forEach((summary, index) => {
+      const card = document.createElement('div');
+      card.className = 'slot-card';
+      if (!summary) {
+        card.innerHTML = `
+          <div class="slot-empty">Пустой слот</div>
+          <button class="btn btn-primary btn-sm slot-create-btn">Создать персонажа</button>
+        `;
+        card.querySelector('.slot-create-btn').addEventListener('click', () => {
+          currentSlotIndex = index;
+          showScreen('intro');
+        });
+      } else {
+        card.innerHTML = `
+          <div class="slot-name">${summary.name}</div>
+          <div class="slot-tier">${TIER_ICON[summary.tierId] || ''} ${summary.tierLabel}${summary.ended ? ' · история окончена' : ''}</div>
+          <div class="slot-row">Возраст: <b>${summary.age}</b></div>
+          <div class="slot-row">Капитал: <b>${formatMoney(summary.money)}</b></div>
+          <div class="slot-actions">
+            <button class="btn btn-primary btn-sm slot-play-btn">Играть</button>
+            <button class="btn btn-secondary btn-sm slot-delete-btn">Удалить</button>
+          </div>
+        `;
+        card.querySelector('.slot-play-btn').addEventListener('click', () => {
+          currentSlotIndex = index;
+          loadSlotIntoGame(index);
+        });
+        card.querySelector('.slot-delete-btn').addEventListener('click', () => {
+          if (!confirm(`Удалить персонажа «${summary.name}»? Это действие необратимо.`)) return;
+          window.Slots.deleteSlot(index);
+          renderSlotsScreen();
+        });
+      }
+      slotsListEl.appendChild(card);
+    });
+    showScreen('slots');
+  }
+
+  function loadSlotIntoGame(index) {
+    const loaded = window.Slots.loadSlot(index);
+    if (!loaded) return;
+    state = loaded;
+    currentCharacter = window.CHARACTERS.find((c) => c.id === state.characterId) || null;
+    showScreen('game');
+    if (state.ended) {
+      finishGame();
+    } else {
+      switchTab('story');
+      renderNextEvent();
+    }
+  }
+
+  document.getElementById('slots-back-btn').addEventListener('click', () => {
+    if (window.Cloud.enabled && window.Cloud.currentUser) window.Cloud.logout();
+    showScreen('auth');
+  });
+
+  document.getElementById('intro-back-btn').addEventListener('click', () => {
+    currentSlotIndex = null;
+    renderSlotsScreen();
+  });
 
   /* ---------------- Экран 1: имя ---------------- */
 
@@ -137,34 +221,21 @@
   /* ---------------- Экран 2: карточка персонажа ---------------- */
 
   function beginNewLife(name) {
+    // Судьбу нельзя перекрутить: персонаж выбирается один раз и
+    // закрепляется за этим слотом навсегда.
     currentCharacter = pick(window.CHARACTERS);
     state = createGameState(name, currentCharacter);
 
-    function showReveal() {
-      const tier = getTier(computeEffectiveWealth(state));
-      document.getElementById('reveal-name').textContent = name;
-      document.getElementById('reveal-tier').textContent = `${TIER_ICON[tier.id] || ''} ${tier.label}`;
-      document.getElementById('reveal-age').textContent = currentCharacter.age;
-      document.getElementById('reveal-job').textContent = currentCharacter.job;
-      document.getElementById('reveal-property').textContent = currentCharacter.property;
-      document.getElementById('reveal-money').textContent = formatMoney(state.money);
-      document.getElementById('reveal-family').textContent = currentCharacter.family;
-      document.getElementById('reveal-allergy').textContent = currentCharacter.allergy;
-      showScreen('reveal');
-    }
-
-    if (window.Cloud.enabled && window.Cloud.currentUser) {
-      window.Cloud.loadProfile(window.Cloud.currentUser.uid).then((profile) => {
-        if (profile) {
-          state.money = typeof profile.money === 'number' ? profile.money : state.money;
-          state.inventory = profile.inventory || {};
-          applyTierBarrier(state);
-        }
-        showReveal();
-      }).catch(showReveal);
-    } else {
-      showReveal();
-    }
+    const tier = getTier(computeEffectiveWealth(state));
+    document.getElementById('reveal-name').textContent = name;
+    document.getElementById('reveal-tier').textContent = `${TIER_ICON[tier.id] || ''} ${tier.label}`;
+    document.getElementById('reveal-age').textContent = currentCharacter.age;
+    document.getElementById('reveal-job').textContent = currentCharacter.job;
+    document.getElementById('reveal-property').textContent = currentCharacter.property;
+    document.getElementById('reveal-money').textContent = formatMoney(state.money);
+    document.getElementById('reveal-family').textContent = currentCharacter.family;
+    document.getElementById('reveal-allergy').textContent = currentCharacter.allergy;
+    showScreen('reveal');
   }
 
   document.getElementById('reveal-continue-btn').addEventListener('click', () => {
@@ -172,10 +243,7 @@
     switchTab('story');
     renderNextEvent();
     if (window.Cloud.enabled) window.Cloud.saveState(state);
-  });
-
-  document.getElementById('reveal-reroll-btn').addEventListener('click', () => {
-    beginNewLife(state.name);
+    saveCurrentSlot();
   });
 
   /* ---------------- Вкладки внутри игрового экрана ---------------- */
@@ -371,7 +439,14 @@
     }
 
     if (window.Cloud.enabled) window.Cloud.saveState(state);
+    saveCurrentSlot();
   }
+
+  document.getElementById('switch-slot-btn').addEventListener('click', () => {
+    saveCurrentSlot();
+    currentSlotIndex = null;
+    renderSlotsScreen();
+  });
 
   nextBtn.addEventListener('click', () => {
     if (state.ended) {
@@ -406,13 +481,20 @@
       traitsEl.classList.add('hidden');
     }
 
+    saveCurrentSlot();
     showScreen('end');
   }
 
   document.getElementById('restart-btn').addEventListener('click', () => {
+    if (currentSlotIndex !== null) window.Slots.deleteSlot(currentSlotIndex);
     showScreen('intro');
     nameInput.value = '';
     nameInput.focus();
+  });
+
+  document.getElementById('end-slots-btn').addEventListener('click', () => {
+    currentSlotIndex = null;
+    renderSlotsScreen();
   });
 
   showScreen('auth');

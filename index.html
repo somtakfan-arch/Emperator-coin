@@ -50,6 +50,18 @@
     </div>
   </main>
 
+  <!-- ЭКРАН СЛОТОВ ПЕРСОНАЖЕЙ -->
+  <main id="screen-slots" class="screen">
+    <div class="card intro-card">
+      <div class="crown">👑</div>
+      <h1>Эмператор</h1>
+      <p class="subtitle">Три жизни, три судьбы</p>
+      <p class="lead">У тебя есть 3 слота для персонажей. Судьбу нельзя перекрутить — какой персонаж выпадет, с тем и придётся идти до конца.</p>
+      <div id="slots-list" class="slots-list"></div>
+      <button id="slots-back-btn" class="btn btn-link">← Выйти из аккаунта</button>
+    </div>
+  </main>
+
   <!-- ЭКРАН 1: ВВОД ИМЕНИ -->
   <main id="screen-intro" class="screen">
     <div class="card intro-card">
@@ -58,12 +70,14 @@
       <p class="subtitle">От бомжа (или миллионера) — до миллиардера</p>
       <p class="lead">
         Введи любое имя. Дальше судьба случайно выберет тебе одного из 25 персонажей
-        со своим возрастом, работой, имуществом, деньгами, семьёй и аллергией.
+        со своим возрастом, работой, имуществом, деньгами, семьёй и аллергией —
+        и перекрутить её будет нельзя, какой персонаж выпадет, с тем и пойдёшь дальше.
         Пройди больше 400 непредсказуемых поворотов жизни, разбогатей — или обанкроться.
       </p>
       <input id="name-input" type="text" maxlength="24" placeholder="Введи своё имя..." autocomplete="off" />
       <button id="start-btn" class="btn btn-primary">Начать жизнь</button>
       <button id="show-roster-btn" class="btn btn-link">Кто мне может достаться? (25 персонажей)</button>
+      <button id="intro-back-btn" class="btn btn-link">← К слотам персонажей</button>
     </div>
   </main>
 
@@ -103,9 +117,9 @@
         <div class="reveal-item"><span>Семья</span><b id="reveal-family"></b></div>
         <div class="reveal-item"><span>Аллергия</span><b id="reveal-allergy"></b></div>
       </div>
+      <p class="reveal-locked-hint">🔒 Судьбу не перекрутить — этот персонаж закреплён за слотом навсегда.</p>
       <div class="reveal-actions">
         <button id="reveal-continue-btn" class="btn btn-primary">В путь!</button>
-        <button id="reveal-reroll-btn" class="btn btn-secondary">Перебросить судьбу</button>
       </div>
     </div>
   </main>
@@ -124,6 +138,7 @@
         </div>
         <div class="hud-sub">
           Возраст: <b id="stat-age"></b> · Работа: <b id="stat-job"></b>
+          <button id="switch-slot-btn" class="btn-switch-slot" title="Сменить персонажа">🔀 Сменить персонажа</button>
         </div>
 
         <div id="tier-track" class="tier-track"></div>
@@ -260,7 +275,8 @@
         <div class="reveal-item"><span>Возраст</span><b id="end-age"></b></div>
         <div class="reveal-item"><span>Прожито событий</span><b id="end-turns"></b></div>
       </div>
-      <button id="restart-btn" class="btn btn-primary">Начать новую жизнь</button>
+      <button id="restart-btn" class="btn btn-primary">Начать новую жизнь в этом слоте</button>
+      <button id="end-slots-btn" class="btn btn-link">← К слотам персонажей</button>
     </div>
   </main>
 
@@ -270,6 +286,7 @@
   <script src="js/minigames.js"></script>
   <script src="js/events.js"></script>
   <script src="js/engine.js"></script>
+  <script src="js/slots.js"></script>
 
   <!-- Firebase (облако): если проект не настроен в js/firebase-config.js,
        игра сама переключается в оффлайн-режим без аккаунтов/лидеров/аукциона. -->

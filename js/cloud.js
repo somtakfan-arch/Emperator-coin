@@ -4,11 +4,14 @@
 
    Модель данных:
    - users/{uid}: { email, name, money, inventory, netWorth,
-     effectiveWealth, tier, bestTier, age, turn, updatedAt }
-     Это ПОСТОЯННЫЙ кошелёк и инвентарь игрока — он переживает
-     рестарт "жизни" (новый случайный персонаж), в отличие от
-     истории/черт характера, которые живут только в рамках одной
-     партии в браузере.
+     effectiveWealth, tier, bestTier, age, turn, slots, updatedAt }
+     `slots` — массив из 3 независимых персонажей (полное состояние
+     партии каждого: деньги, инвентарь, история, черты характера) —
+     см. js/slots.js. Судьбу нельзя перекрутить: персонаж слота
+     закрепляется за ним, пока слот не будет очищен. Остальные поля
+     (money/inventory/tier/...) — это снимок ТЕКУЩЕГО активного
+     персонажа, по которому считается таблица лидеров и работает
+     выдача/списание денег в админ-панели.
    - auction/{listingId}: { sellerUid, sellerName, itemId, itemName,
      price, category, createdAt }
 
@@ -131,6 +134,26 @@ window.Cloud = (function () {
     }).catch((e) => console.warn('Cloud save failed:', e.message));
   }
 
+  /** Зеркалит 3 слота персонажей в облако, чтобы они не терялись
+   *  при входе с другого устройства. */
+  function saveSlots(slots) {
+    if (!enabled || !currentUser) return Promise.resolve();
+    return db
+      .collection('users')
+      .doc(currentUser.uid)
+      .set({ slots, slotsUpdatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true })
+      .catch((e) => console.warn('Cloud slots save failed:', e.message));
+  }
+
+  function loadSlots() {
+    if (!enabled || !currentUser) return Promise.resolve(null);
+    return db
+      .collection('users')
+      .doc(currentUser.uid)
+      .get()
+      .then((doc) => (doc.exists && doc.data().slots ? doc.data().slots : null));
+  }
+
   function getLeaderboard(limit) {
     if (!enabled) return Promise.resolve([]);
     return db.collection('users').orderBy('effectiveWealth', 'desc').limit(limit || 20).get().then((snap) => {
@@ -239,6 +262,8 @@ window.Cloud = (function () {
     logout,
     loadProfile,
     saveState,
+    saveSlots,
+    loadSlots,
     getLeaderboard,
     createAuctionListing,
     listAuctionListings,

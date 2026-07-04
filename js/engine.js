@@ -71,6 +71,22 @@ function createGameState(name, character) {
   };
 }
 
+/* ---------- сохранение/загрузка слота персонажа ---------- */
+
+function serializeState(state) {
+  const copy = Object.assign({}, state);
+  copy.usedEventIds = Array.from(state.usedEventIds || []);
+  copy.possessions = Array.from(state.possessions || []);
+  return copy;
+}
+
+function deserializeState(obj) {
+  const state = Object.assign({}, obj);
+  state.usedEventIds = new Set(obj.usedEventIds || []);
+  state.possessions = new Set(obj.possessions || []);
+  return state;
+}
+
 /* ---------- чистая стоимость и "стеклянный потолок" ---------- */
 
 function computeEffectiveWealth(state) {
