@@ -5,8 +5,6 @@
    ========================================================= */
 
 const AUTO_BANKRUPT_THRESHOLD = -300000;
-const MAX_AGE = 85;
-const MAX_TURNS = 70;
 const BASE_DEBT_RATE = 0.025;
 const PREDATORY_DEBT_RATE = 0.075;
 const LOW_ENERGY_THRESHOLD = 12;
@@ -552,6 +550,9 @@ function applyChoice(state, event, choiceIndex) {
 
   const { tierChanged, barrierMessage } = applyTierBarrier(state);
 
+  // Путь не обрывается ни по возрасту, ни по числу ходов — пока здоровье
+  // не кончилось, история продолжается. Единственные настоящие концы:
+  // смерть (здоровье на нуле) и банкротство.
   if (result.bankrupt) {
     state.ended = true;
     state.endingType = 'bankrupt';
@@ -561,12 +562,6 @@ function applyChoice(state, event, choiceIndex) {
   } else if (state.money <= AUTO_BANKRUPT_THRESHOLD) {
     state.ended = true;
     state.endingType = 'bankrupt';
-  } else if (state.age >= MAX_AGE) {
-    state.ended = true;
-    state.endingType = 'lifeEnd';
-  } else if (state.turn >= MAX_TURNS) {
-    state.ended = true;
-    state.endingType = 'timeUp';
   }
 
   return {
@@ -602,14 +597,6 @@ const ENDING_TEXT = {
     title: '⚰️ Конец истории',
     text: 'Здоровье не выдержало напряжённой жизни. История подошла к концу раньше, чем хотелось бы.',
   },
-  lifeEnd: {
-    title: '🕯️ Конец жизненного пути',
-    text: 'Годы взяли своё. Жизнь подошла к естественному завершению — самое время подвести итоги.',
-  },
-  timeUp: {
-    title: '🏁 Итоги пути',
-    text: 'Прошло достаточно лет, чтобы подвести черту под этим этапом истории.',
-  },
 };
 
 const EPILOGUE_TEXT = {
@@ -621,7 +608,7 @@ const EPILOGUE_TEXT = {
 };
 
 function getEndingSummary(state) {
-  const info = ENDING_TEXT[state.endingType] || ENDING_TEXT.timeUp;
+  const info = ENDING_TEXT[state.endingType] || ENDING_TEXT.death;
   const tier = getTier(computeEffectiveWealth(state));
   const traits = getActiveTraits(state);
   const epilogue = traits.length ? EPILOGUE_TEXT[traits[0].key] : '';
