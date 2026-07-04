@@ -162,6 +162,11 @@ public final class ThornsWardPlugin extends JavaPlugin {
         ChaosFeatherCommand chaosFeatherCommand = new ChaosFeatherCommand(chaosFeatherItem);
         registerCommand("chaosfeather", chaosFeatherCommand, chaosFeatherCommand);
 
+        ThornsWardShop shop = new ThornsWardShop(this);
+        getServer().getPluginManager().registerEvents(new ThornsWardShopListener(shop), this);
+        ThornsWardShopCommand shopCommand = new ThornsWardShopCommand(shop);
+        registerCommand("thornswardshop", shopCommand, shopCommand);
+
         getLogger().info("ThornsWard включен.");
     }
 

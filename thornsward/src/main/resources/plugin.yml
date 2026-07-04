@@ -3,6 +3,7 @@ version: '${project.version}'
 main: com.bedsmp.thornsward.ThornsWardPlugin
 api-version: '1.21'
 author: BedSMP
+softdepend: [PlayerPoints]
 description: Оберег Терновника — гасит урон и отбрасывание от Шипов (Thorns) любого уровня.
 
 commands:
@@ -131,6 +132,11 @@ commands:
     usage: "/<command> give [игрок]"
     permission: bedsmp.chaosfeather.give
     permission-message: "§cУ вас нет прав на эту команду."
+  thornswardshop:
+    description: Открыть магазин предметов ThornsWard за PlayerPoints
+    usage: "/<command>"
+    permission: bedsmp.thornswardshop.open
+    permission-message: "§cУ вас нет прав на эту команду."
 
 permissions:
   bedsmp.thornsward.give:
@@ -208,3 +214,6 @@ permissions:
   bedsmp.chaosfeather.give:
     description: Позволяет выдавать Перо Хаоса
     default: op
+  bedsmp.thornswardshop.open:
+    description: Позволяет открывать магазин ThornsWard
+    default: true

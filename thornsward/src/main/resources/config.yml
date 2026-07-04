@@ -132,3 +132,31 @@ chaos-feather:
   interval-seconds: 3
   # Радиус применения эффекта (блоки).
   radius: 10
+
+# Магазин перьев (PlayerPoints) — цены в "перьях" за каждый предмет.
+shop:
+  thornsward: 200
+  crystallersword: 300
+  amethystaxe: 250
+  nemesis: 400
+  phantom: 400
+  mirrorshield: 350
+  instantapple: 150
+  revengethorn: 300
+  soullantern: 150
+  dragonroar: 350
+  zeustrident: 400
+  spiritmask: 300
+  shadowcloak: 350
+  ironcanopy: 300
+  leviathanarmor: 250
+  thiefhood: 500
+  chronostone: 600
+  spiderthread: 200
+  phoenixash: 600
+  echopast: 400
+  gravitytrap: 250
+  chaoswhistle: 300
+  serverheart: 150
+  voodoodoll: 500
+  chaosfeather: 300
