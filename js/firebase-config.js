@@ -19,10 +19,10 @@
    ========================================================= */
 
 window.FIREBASE_CONFIG = {
-  apiKey: 'ВСТАВЬ_СЮДА',
-  authDomain: 'ВСТАВЬ_СЮДА.firebaseapp.com',
-  projectId: 'ВСТАВЬ_СЮДА',
-  storageBucket: 'ВСТАВЬ_СЮДА.appspot.com',
-  messagingSenderId: 'ВСТАВЬ_СЮДА',
-  appId: 'ВСТАВЬ_СЮДА',
+  apiKey: 'AIzaSyA0MxwYUUa9uHvOsIp7noBtgVESVAvmUUE',
+  authDomain: 'lifegame-defd1.firebaseapp.com',
+  projectId: 'lifegame-defd1',
+  storageBucket: 'lifegame-defd1.firebasestorage.app',
+  messagingSenderId: '432652694530',
+  appId: '1:432652694530:web:d4160ee4f6deb05442231b',
 };
