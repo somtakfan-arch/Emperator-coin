@@ -86,7 +86,7 @@ window.DuelsUI = (function () {
         }
         host.appendChild(card);
       });
-    });
+    }).catch((e) => { host.innerHTML = `<p class="tab-hint">Не удалось загрузить: ${e.message}</p>`; });
   }
 
   function playDuelMinigame(onDone) {

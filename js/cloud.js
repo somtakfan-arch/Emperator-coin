@@ -214,12 +214,22 @@ window.Cloud = (function () {
     );
   }
 
+  /** Firestore-таймстемп -> число мс (для сортировки без orderBy —
+   *  see комментарий у listOpenDuels про составные индексы). */
+  function toMillis(ts) {
+    return ts && typeof ts.toMillis === 'function' ? ts.toMillis() : 0;
+  }
+
   function listOpenDuels() {
     if (!enabled) return Promise.resolve([]);
-    return db.collection('duels').where('status', '==', 'pending').orderBy('createdAt', 'desc').limit(20).get().then((snap) => {
+    // Без orderBy: where + orderBy на разных полях требует составной
+    // индекс, который по умолчанию не создан — запрос падал молча.
+    // Сортируем на клиенте вместо этого.
+    return db.collection('duels').where('status', '==', 'pending').limit(50).get().then((snap) => {
       const rows = [];
       snap.forEach((doc) => rows.push(Object.assign({ id: doc.id }, doc.data())));
-      return rows;
+      rows.sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
+      return rows.slice(0, 20);
     });
   }
 
@@ -317,10 +327,13 @@ window.Cloud = (function () {
 
   function listOpenVentures() {
     if (!enabled) return Promise.resolve([]);
-    return db.collection('ventures').where('status', '==', 'open').orderBy('createdAt', 'desc').limit(20).get().then((snap) => {
+    // См. комментарий в listOpenDuels — без orderBy, чтобы не требовался
+    // составной индекс; сортируем на клиенте.
+    return db.collection('ventures').where('status', '==', 'open').limit(50).get().then((snap) => {
       const rows = [];
       snap.forEach((doc) => rows.push(Object.assign({ id: doc.id }, doc.data())));
-      return rows;
+      rows.sort((a, b) => toMillis(b.createdAt) - toMillis(a.createdAt));
+      return rows.slice(0, 20);
     });
   }
 

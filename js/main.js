@@ -413,17 +413,19 @@
 
   function runPresidentElection(idx) {
     const won = chance(0.25);
-    const finish = (outcome, termEndsAtMs) => {
+    const finish = (outcome, termEndsAtMs, errorMessage) => {
       state._presidentElectionResult = outcome;
       state._presidentElectionTermEndsAtMs = termEndsAtMs || 0;
+      state._presidentElectionError = errorMessage || '';
       handleChoice(idx);
       delete state._presidentElectionResult;
       delete state._presidentElectionTermEndsAtMs;
+      delete state._presidentElectionError;
     };
     if (window.Cloud.enabled && window.Cloud.currentUser) {
       window.Cloud.runForPresident(state.name, won).then((r) => {
         finish(r.elected ? 'won' : (r.reason === 'occupied' ? 'occupied' : 'lost'), r.elected ? Date.now() + PRESIDENCY_TERM_MS : 0);
-      }).catch(() => finish('lost', 0));
+      }).catch((e) => finish('error', 0, e.message));
     } else {
       finish(won ? 'won' : 'lost', won ? Date.now() + PRESIDENCY_TERM_MS : 0);
     }

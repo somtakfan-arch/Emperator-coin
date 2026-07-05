@@ -139,7 +139,7 @@ window.BankUI = (function () {
         }
         host.appendChild(card);
       });
-    });
+    }).catch((e) => { host.innerHTML = `<p class="tab-hint">Не удалось загрузить: ${e.message}</p>`; });
   }
 
   function renderOpenVentures() {
@@ -184,7 +184,7 @@ window.BankUI = (function () {
         card.querySelector('.item-actions').appendChild(joinBtn);
         host.appendChild(card);
       });
-    });
+    }).catch((e) => { host.innerHTML = `<p class="tab-hint">Не удалось загрузить: ${e.message}</p>`; });
   }
 
   document.getElementById('venture-create-btn').addEventListener('click', () => {

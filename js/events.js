@@ -937,6 +937,10 @@
           effect: (state) => {
             const cost = 10000000000;
             const outcome = state._presidentElectionResult;
+            if (outcome === 'error') {
+              const detail = state._presidentElectionError ? ` (${state._presidentElectionError})` : '';
+              return { message: `Не удалось провести выборы — не получилось связаться с сервером${detail}. Деньги не списаны, попробуй ещё раз.` };
+            }
             if (outcome === 'won') {
               return {
                 money: -cost,
