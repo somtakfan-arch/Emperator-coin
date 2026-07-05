@@ -23,12 +23,12 @@ public final class ThornsWardShop {
             .color(NamedTextColor.GOLD)
             .decoration(TextDecoration.ITALIC, false);
 
-    // 25 inner slots across rows 1-4 of a 54-slot chest
+    // 26 inner slots across rows 1-4 of a 54-slot chest
     private static final int[] INNER_SLOTS = {
             10, 11, 12, 13, 14, 15, 16,
             19, 20, 21, 22, 23, 24, 25,
             28, 29, 30, 31, 32, 33, 34,
-            37, 38, 39, 40
+            37, 38, 39, 40, 41
     };
 
     private record Entry(Supplier<ItemStack> creator, String configKey) {}
@@ -66,6 +66,7 @@ public final class ThornsWardShop {
         entries.add(new Entry(new ServerHeartItem(plugin)::create,     "shop.serverheart"));
         entries.add(new Entry(new VoodooDollItem(plugin)::create,      "shop.voodoodoll"));
         entries.add(new Entry(new ChaosFeatherItem(plugin)::create,    "shop.chaosfeather"));
+        entries.add(new Entry(new SuperTntItem(plugin)::create,        "shop.supertnt"));
     }
 
     public Inventory buildInventory() {

@@ -30,6 +30,7 @@ public final class ThornsWardPlugin extends JavaPlugin {
     private ServerHeartItem     serverHeartItem;
     private VoodooDollItem      voodooDollItem;
     private ChaosFeatherItem    chaosFeatherItem;
+    private SuperTntItem        superTntItem;
 
     @Override
     public void onEnable() {
@@ -60,6 +61,7 @@ public final class ThornsWardPlugin extends JavaPlugin {
         serverHeartItem     = new ServerHeartItem(this);
         voodooDollItem      = new VoodooDollItem(this);
         chaosFeatherItem    = new ChaosFeatherItem(this);
+        superTntItem        = new SuperTntItem(this);
 
         getServer().getPluginManager().registerEvents(new ThornsWardListener(this, thornsWardItem), this);
         getServer().getPluginManager().registerEvents(new CrystallerSwordListener(this, crystallerSwordItem), this);
@@ -86,6 +88,7 @@ public final class ThornsWardPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(new ServerHeartListener(this, serverHeartItem), this);
         getServer().getPluginManager().registerEvents(new VoodooDollListener(this, voodooDollItem), this);
         getServer().getPluginManager().registerEvents(new ChaosFeatherListener(this, chaosFeatherItem), this);
+        getServer().getPluginManager().registerEvents(new SuperTntListener(this, superTntItem), this);
 
         ThornsWardCommand thornsWardCommand = new ThornsWardCommand(thornsWardItem);
         registerCommand("thornsward", thornsWardCommand, thornsWardCommand);
@@ -161,6 +164,9 @@ public final class ThornsWardPlugin extends JavaPlugin {
 
         ChaosFeatherCommand chaosFeatherCommand = new ChaosFeatherCommand(chaosFeatherItem);
         registerCommand("chaosfeather", chaosFeatherCommand, chaosFeatherCommand);
+
+        SuperTntCommand superTntCommand = new SuperTntCommand(superTntItem);
+        registerCommand("supertnt", superTntCommand, superTntCommand);
 
         ThornsWardShop shop = new ThornsWardShop(this);
         getServer().getPluginManager().registerEvents(new ThornsWardShopListener(shop), this);
