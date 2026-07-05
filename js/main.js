@@ -51,7 +51,7 @@
       renderStats();
       if (barrierResult && barrierResult.barrierMessage) showToast(barrierResult.barrierMessage);
       else if (message) showToast(message);
-      if (window.Cloud.enabled) window.Cloud.saveState(state);
+      if (window.Cloud.enabled) window.Cloud.saveState(state, currentSlotIndex);
       saveCurrentSlot();
     },
     confirmBigSpend: (cost) => {
@@ -252,7 +252,7 @@
     showScreen('game');
     switchTab('story');
     renderNextEvent();
-    if (window.Cloud.enabled) window.Cloud.saveState(state);
+    if (window.Cloud.enabled) window.Cloud.saveState(state, currentSlotIndex);
     saveCurrentSlot();
   });
 
@@ -503,7 +503,7 @@
       nextBtn.textContent = 'Далее →';
     }
 
-    if (window.Cloud.enabled) window.Cloud.saveState(state);
+    if (window.Cloud.enabled) window.Cloud.saveState(state, currentSlotIndex);
     saveCurrentSlot();
     renderHistoryLog();
     renderNetWorthChart();

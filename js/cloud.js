@@ -106,8 +106,11 @@ window.Cloud = (function () {
   const TIER_ORDER_FOR_BEST = ['homeless', 'poor', 'middle', 'rich', 'millionaire', 'billionaire'];
 
   /** Синхронизирует постоянный кошелёк/инвентарь игрока с Firestore.
-   *  Вызывается после каждого значимого изменения состояния. */
-  function saveState(state) {
+   *  Вызывается после каждого значимого изменения состояния.
+   *  `activeSlotIndex` — какой из 3 слотов сейчас активен, чтобы
+   *  админ-панель могла найти и изменить деньги именно в нём (иначе
+   *  правки видны только в этом снимке, а не в реальном слоте игрока). */
+  function saveState(state, activeSlotIndex) {
     if (!enabled || !currentUser) return Promise.resolve();
     const netWorth = window.ITEMS.computeInventoryNetWorth(state);
     const effectiveWealth = computeEffectiveWealth(state);
@@ -127,6 +130,7 @@ window.Cloud = (function () {
           bestTier,
           age: state.age,
           turn: state.turn,
+          activeSlotIndex: typeof activeSlotIndex === 'number' ? activeSlotIndex : null,
           updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
         },
         { merge: true }
@@ -558,6 +562,11 @@ window.Cloud = (function () {
     });
   }
 
+  /** Выдать/списать деньги игроку. Правит не только верхнеуровневый
+   *  снимок (`money` — по нему считается лидерборд), но и деньги
+   *  ВНУТРИ активного слота персонажа (`slots[activeSlotIndex]`),
+   *  иначе игрок продолжит видеть старую сумму в самой партии, а
+   *  следующее же автосохранение перезапишет снимок обратно. */
   function adminAdjustMoney(uid, delta) {
     if (!enabled) return Promise.reject(new Error('Облако недоступно.'));
     const ref = db.collection('users').doc(uid);
@@ -565,8 +574,21 @@ window.Cloud = (function () {
       tx.get(ref).then((doc) => {
         const data = doc.exists ? doc.data() : { money: 0 };
         const newMoney = Math.round((data.money || 0) + delta);
-        tx.update(ref, { money: newMoney });
-        return newMoney;
+        const update = { money: newMoney };
+        const idx = data.activeSlotIndex;
+        let slotSynced = false;
+        if (typeof idx === 'number' && Array.isArray(data.slots) && data.slots[idx] && data.slots[idx].state) {
+          const slots = data.slots.slice();
+          const entry = Object.assign({}, slots[idx]);
+          const slotState = Object.assign({}, entry.state);
+          slotState.money = Math.round((slotState.money || 0) + delta);
+          entry.state = slotState;
+          slots[idx] = entry;
+          update.slots = slots;
+          slotSynced = true;
+        }
+        tx.update(ref, update);
+        return { newMoney, slotSynced };
       })
     );
   }

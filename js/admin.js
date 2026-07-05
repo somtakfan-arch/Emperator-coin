@@ -41,10 +41,11 @@ window.AdminUI = (function () {
         return;
       }
       rows.forEach((row) => {
+        const isSelf = window.Cloud.currentUser && row.uid === window.Cloud.currentUser.uid;
         const card = document.createElement('div');
         card.className = 'item-card';
         card.innerHTML = `
-          <div class="item-name">${row.name || row.email}</div>
+          <div class="item-name">${row.name || row.email}${isSelf ? ' (это ты)' : ''}</div>
           <div class="item-meta">${row.email} · баланс: <b class="admin-balance">${formatMoney(row.money || 0)}</b></div>
           <div class="admin-adjust-row">
             <input type="number" class="admin-amount-input" placeholder="Сумма, ₽" />
@@ -56,21 +57,38 @@ window.AdminUI = (function () {
         const amountInput = card.querySelector('.admin-amount-input');
         const balanceEl = card.querySelector('.admin-balance');
         const errorEl = card.querySelector('.admin-error');
+
+        function applyDelta(delta) {
+          errorEl.textContent = '';
+          if (isSelf) {
+            // Игрок сейчас в своей партии — правим деньги напрямую в
+            // памяти и пересохраняем, иначе это осядет только в
+            // отдельном снимке для лидерборда, а не в самой игре.
+            const gameState = window.Game.getState();
+            gameState.money = Math.round((gameState.money || 0) + delta);
+            balanceEl.textContent = formatMoney(gameState.money);
+            window.Game.afterSideAction(null, delta > 0 ? `Выдано ${formatMoney(delta)}.` : `Списано ${formatMoney(-delta)}.`);
+            return;
+          }
+          window.Cloud.adminAdjustMoney(row.uid, delta)
+            .then((r) => {
+              balanceEl.textContent = formatMoney(r.newMoney);
+              if (!r.slotSynced) {
+                errorEl.textContent = 'Изменено в общем снимке, но у игрока сейчас нет активного слота — в саму партию сумма попадёт, когда он в следующий раз войдёт в игру.';
+              }
+            })
+            .catch((e) => { errorEl.textContent = e.message; });
+        }
+
         card.querySelector('.admin-give-btn').addEventListener('click', () => {
           const amount = Math.round(Number(amountInput.value));
           if (!amount || amount <= 0) return;
-          errorEl.textContent = '';
-          window.Cloud.adminAdjustMoney(row.uid, amount)
-            .then((newMoney) => { balanceEl.textContent = formatMoney(newMoney); })
-            .catch((e) => { errorEl.textContent = e.message; });
+          applyDelta(amount);
         });
         card.querySelector('.admin-take-btn').addEventListener('click', () => {
           const amount = Math.round(Number(amountInput.value));
           if (!amount || amount <= 0) return;
-          errorEl.textContent = '';
-          window.Cloud.adminAdjustMoney(row.uid, -amount)
-            .then((newMoney) => { balanceEl.textContent = formatMoney(newMoney); })
-            .catch((e) => { errorEl.textContent = e.message; });
+          applyDelta(-amount);
         });
         host.appendChild(card);
       });
