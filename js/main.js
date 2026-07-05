@@ -329,8 +329,11 @@
 
   function setBar(id, value) {
     const el = document.getElementById(id);
-    el.style.width = clampNum(value, 0, 100) + '%';
+    const pct = clampNum(value, 0, 100);
+    el.style.width = pct + '%';
     el.parentElement.setAttribute('aria-valuenow', String(Math.round(value)));
+    const valueEl = document.getElementById(id + '-value');
+    if (valueEl) valueEl.textContent = Math.round(pct) + '%';
   }
 
   function renderTierTrack(currentTierId) {

@@ -172,7 +172,12 @@ window.BankUI = (function () {
           if (!window.Game.confirmBigSpend(stake)) return;
           window.Cloud.joinVenture(venture.id, stake).then(() => {
             state.money -= stake;
-            window.Game.afterSideAction(null, `Присоединился(лась) к «${venture.name}» с вкладом ${formatMoney(stake)}.`);
+            let msg = `Присоединился(лась) к «${venture.name}» с вкладом ${formatMoney(stake)}.`;
+            if (stake >= VENTURE_REPUTATION_MIN_STAKE) {
+              state.reputation = clampNum(state.reputation + VENTURE_REPUTATION_GAIN, 0, 100);
+              msg += ` Крупный вклад поднял репутацию на ${VENTURE_REPUTATION_GAIN}.`;
+            }
+            window.Game.afterSideAction(null, msg);
             render();
           }).catch((e) => { document.getElementById('venture-auth-hint').textContent = e.message; render(); });
         });
@@ -194,11 +199,30 @@ window.BankUI = (function () {
     if (!window.Game.confirmBigSpend(stake)) return;
     window.Cloud.createVenture(name, stake).then(() => {
       state.money -= stake;
-      window.Game.afterSideAction(null, `Предприятие «${name}» создано, вклад ${formatMoney(stake)}. Ждём партнёра.`);
+      let msg = `Предприятие «${name}» создано, вклад ${formatMoney(stake)}. Ждём партнёра.`;
+      if (stake >= VENTURE_REPUTATION_MIN_STAKE) {
+        state.reputation = clampNum(state.reputation + VENTURE_REPUTATION_GAIN, 0, 100);
+        msg += ` Крупный вклад поднял репутацию на ${VENTURE_REPUTATION_GAIN}.`;
+      }
+      window.Game.afterSideAction(null, msg);
       nameInput.value = '';
       stakeInput.value = '';
       render();
     }).catch((e) => { hint.textContent = e.message; });
+  });
+
+  document.getElementById('donation-btn').addEventListener('click', () => {
+    const state = window.Game.getState();
+    const input = document.getElementById('donation-amount-input');
+    const msgEl = document.getElementById('donation-message');
+    const amount = Math.round(Number(input.value));
+    if (!amount || amount <= 0) { msgEl.textContent = 'Укажи сумму пожертвования.'; return; }
+    if (!window.Game.confirmBigSpend(amount)) return;
+    const r = makeDonation(state, amount);
+    window.Game.afterSideAction(r.ok ? r.barrier : null, r.message);
+    msgEl.textContent = r.message;
+    if (r.ok) input.value = '';
+    render();
   });
 
   return { render };

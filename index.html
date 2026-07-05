@@ -148,26 +148,32 @@
           <div class="bar-row">
             <span>🍽️ Еда</span>
             <div class="bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="bar-pantry" class="bar-fill bar-pantry"></div></div>
+            <span id="bar-pantry-value" class="bar-value"></span>
           </div>
           <div class="bar-row">
             <span>❤️ Здоровье</span>
             <div class="bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="bar-health" class="bar-fill bar-health"></div></div>
+            <span id="bar-health-value" class="bar-value"></span>
           </div>
           <div class="bar-row">
             <span>🙂 Счастье</span>
             <div class="bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="bar-happiness" class="bar-fill bar-happiness"></div></div>
+            <span id="bar-happiness-value" class="bar-value"></span>
           </div>
           <div class="bar-row">
             <span>⚡ Энергия</span>
             <div class="bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="bar-energy" class="bar-fill bar-energy"></div></div>
+            <span id="bar-energy-value" class="bar-value"></span>
           </div>
           <div class="bar-row">
             <span>⭐ Репутация</span>
             <div class="bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="bar-reputation" class="bar-fill bar-reputation"></div></div>
+            <span id="bar-reputation-value" class="bar-value"></span>
           </div>
           <div class="bar-row">
             <span>😰 Стресс</span>
             <div class="bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="bar-stress" class="bar-fill bar-stress"></div></div>
+            <span id="bar-stress-value" class="bar-value"></span>
           </div>
         </div>
       </header>
@@ -298,6 +304,13 @@
           <div id="bank-loans" class="item-grid"></div>
           <h3 class="tab-title">Страхование</h3>
           <div id="bank-insurance" class="item-grid"></div>
+          <h3 class="tab-title">💝 Благотворительность</h3>
+          <p class="tab-hint">Крупное пожертвование от 5 000 000 000 ₽ поднимает репутацию на 10.</p>
+          <div class="casino-bet-row">
+            <input id="donation-amount-input" type="number" min="1" step="1" placeholder="Сумма пожертвования, ₽" />
+            <button id="donation-btn" class="btn btn-primary">Пожертвовать</button>
+          </div>
+          <p id="donation-message" class="outcome-message"></p>
           <h3 class="tab-title">🤝 Совместный бизнес</h3>
           <p id="venture-auth-hint" class="tab-hint"></p>
           <div id="venture-body" class="hidden">

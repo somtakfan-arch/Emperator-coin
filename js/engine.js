@@ -190,6 +190,23 @@ function computeRentalIncome(state) {
 
 /* ---------- ремонт дома: покупка недвижимости — только начало ---------- */
 
+/* ---------- крупные денежные жесты: репутация за вклад/пожертвование ---------- */
+
+const VENTURE_REPUTATION_MIN_STAKE = 1000000000; // от 1 млрд вклада в совместный бизнес
+const VENTURE_REPUTATION_GAIN = 5;
+const DONATION_MIN = 5000000000; // от 5 млрд пожертвования
+const DONATION_REPUTATION_GAIN = 10;
+
+function makeDonation(state, amount) {
+  const sum = Math.round(amount);
+  if (!(sum >= DONATION_MIN)) return { ok: false, message: `Минимальное пожертвование — ${formatMoney(DONATION_MIN)}.` };
+  if (state.money < sum) return { ok: false, message: 'Не хватает денег на такое пожертвование.' };
+  state.money -= sum;
+  state.reputation = clampNum(state.reputation + DONATION_REPUTATION_GAIN, 0, 100);
+  const barrier = applyTierBarrier(state);
+  return { ok: true, barrier, message: `Пожертвовано ${formatMoney(sum)} — репутация выросла на ${DONATION_REPUTATION_GAIN}.` };
+}
+
 const PRESIDENCY_TERM_MS = 12 * 60 * 60 * 1000; // "пол дня" реального времени
 
 const HOME_UPGRADES = [
@@ -726,10 +743,17 @@ function buildBirthdayEvent(turn) {
   };
 }
 
+const PRESIDENT_OFFER_CHANCE = 0.4; // при репутации 100 — шанс предложения на КАЖДОМ новом событии
+
 function pickNextEvent(state) {
   if (state.jailed) return JAIL_EVENT;
   if (!hasClothes(state)) return CLOTHES_EVENT;
   if (state.energy <= LOW_ENERGY_THRESHOLD) return REST_EVENT;
+
+  if (state.reputation >= 100 && state.money >= 10000000000 && !state.isPresident && chance(PRESIDENT_OFFER_CHANCE)) {
+    const offer = window.EVENTS.find((ev) => ev.id === 'hand_president_offer');
+    if (offer) return offer;
+  }
 
   if (state.turn > 0 && state.turn % 24 === 0 && !state.usedEventIds.has(`holiday_newyear_${state.turn}`)) {
     return buildNewYearEvent(state.turn);
@@ -832,7 +856,7 @@ function applyChoice(state, event, choiceIndex) {
     state.traits[choice.trait] += 1;
   }
 
-  const EXEMPT_FROM_HISTORY = ['__forced_rest__', 'hand_pantry_empty', '__jailed__', '__no_clothes__'];
+  const EXEMPT_FROM_HISTORY = ['__forced_rest__', 'hand_pantry_empty', '__jailed__', '__no_clothes__', 'hand_president_offer'];
   if (EXEMPT_FROM_HISTORY.indexOf(event.id) === -1) state.usedEventIds.add(event.id);
   if (state.pendingFollowups && state.pendingFollowups.length) {
     state.pendingFollowups = state.pendingFollowups.filter((f) => !(f.id === event.id && f.dueTurn <= state.turn));

@@ -283,7 +283,8 @@ h1, h2 { margin: 0 0 8px; }
 
 .bars { display: flex; flex-direction: column; gap: 8px; }
 .bar-row { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-dim); }
-.bar-row span { width: 100px; flex-shrink: 0; }
+.bar-row span:first-child { width: 100px; flex-shrink: 0; }
+.bar-value { width: 38px !important; flex-shrink: 0; text-align: right; font-variant-numeric: tabular-nums; }
 .bar-track {
   flex: 1;
   height: 8px;
