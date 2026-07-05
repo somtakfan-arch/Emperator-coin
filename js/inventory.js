@@ -63,7 +63,7 @@ window.InventoryUI = (function () {
   function renderShopCategoryTabs() {
     const host = document.getElementById('shop-category-tabs');
     host.innerHTML = '';
-    const cats = ['food', 'clothes', 'cars', 'bags', 'watches', 'electronics', 'jewelry', 'housing'];
+    const cats = ['food', 'clothes', 'cars', 'bags', 'watches', 'electronics', 'jewelry', 'housing', 'pets'];
     cats.forEach((cat) => {
       const chip = document.createElement('button');
       chip.className = 'chip' + (cat === activeShopCategory ? ' active' : '');
@@ -103,6 +103,22 @@ window.InventoryUI = (function () {
         renderInventoryTab();
       });
       actions.appendChild(buyBtn);
+
+      if (item.category === 'cars' || item.category === 'housing') {
+        const downPayment = Math.round(item.price * 0.2);
+        const loanBtn = document.createElement('button');
+        loanBtn.className = 'btn btn-secondary btn-sm';
+        loanBtn.textContent = `В рассрочку (взнос ${formatMoney(downPayment)})`;
+        loanBtn.disabled = state.money < downPayment;
+        loanBtn.addEventListener('click', () => {
+          const r = takeLoan(state, item.id);
+          window.Game.afterSideAction(r.ok ? r.barrier : null, r.message);
+          renderShopList();
+          renderInventoryTab();
+        });
+        actions.appendChild(loanBtn);
+      }
+
       host.appendChild(card);
     });
   }

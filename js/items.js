@@ -147,6 +147,13 @@ window.ITEMS = (function () {
     item('jewel_royal_crown', 'jewelry', 'Коллекционная корона-реплика', null, 40000000, '👑', { happiness: 36, reputation: 48 }),
     item('jewel_vault_collection', 'jewelry', 'Коллекция драгоценностей мирового уровня', null, 100000000, '💎', { happiness: 45, reputation: 55 }),
     item('jewel_studs', 'jewelry', 'Простые серьги-гвоздики', null, 1200, '📿', { happiness: 1 }),
+
+    // ---------------- ПИТОМЦЫ ----------------
+    item('pet_hamster', 'pets', 'Хомяк', null, 800, '🐹', { happiness: 4 }),
+    item('pet_cat', 'pets', 'Кот с улицы', null, 1500, '🐱', { happiness: 8 }),
+    item('pet_dog', 'pets', 'Щенок из приюта', null, 2500, '🐶', { happiness: 10 }),
+    item('pet_parrot', 'pets', 'Попугай', null, 6000, '🦜', { happiness: 7, reputation: 1 }),
+    item('pet_purebred_dog', 'pets', 'Породистый пёс с родословной', null, 80000, '🐕', { happiness: 14, reputation: 4 }),
   ];
 
   /* ---------- НЕДВИЖИМОСТЬ: 10 типов × 5 ЖК = 50 вариантов ---------- */
@@ -183,7 +190,7 @@ window.ITEMS = (function () {
   const byId = {};
   list.forEach((it) => { byId[it.id] = it; });
 
-  const NET_WORTH_CATEGORIES = ['clothes', 'cars', 'bags', 'watches', 'electronics', 'jewelry', 'housing'];
+  const NET_WORTH_CATEGORIES = ['clothes', 'cars', 'bags', 'watches', 'electronics', 'jewelry', 'housing', 'pets'];
 
   const CATEGORY_LABEL = {
     food: '🍽️ Еда',
@@ -194,6 +201,7 @@ window.ITEMS = (function () {
     electronics: '💻 Электроника',
     jewelry: '💎 Ювелирка',
     housing: '🏠 Недвижимость',
+    pets: '🐾 Питомцы',
   };
 
   function byCategory(cat) {

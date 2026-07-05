@@ -150,7 +150,7 @@
           <div class="hud-money" id="stat-money"></div>
         </div>
         <div class="hud-sub">
-          Возраст: <b id="stat-age"></b> · Работа: <b id="stat-job"></b>
+          Возраст: <b id="stat-age"></b> · Работа: <b id="stat-job"></b> · <span id="stat-season"></span>
           <button id="switch-slot-btn" class="btn-switch-slot" title="Сменить персонажа">🔀 Сменить персонажа</button>
         </div>
 
@@ -178,6 +178,10 @@
             <span>⭐ Репутация</span>
             <div class="bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="bar-reputation" class="bar-fill bar-reputation"></div></div>
           </div>
+          <div class="bar-row">
+            <span>😰 Стресс</span>
+            <div class="bar-track" role="progressbar" aria-valuemin="0" aria-valuemax="100"><div id="bar-stress" class="bar-fill bar-stress"></div></div>
+          </div>
         </div>
       </header>
 
@@ -188,6 +192,8 @@
         <button class="tab-btn" data-tab="doctor">💊 Доктор</button>
         <button class="tab-btn" data-tab="casino">🎰 Казино</button>
         <button class="tab-btn" data-tab="crypto">🪙 Крипта</button>
+        <button class="tab-btn" data-tab="bank">🏦 Банк</button>
+        <button class="tab-btn" data-tab="skills">🎓 Обучение</button>
         <button class="tab-btn" data-tab="auction">🏛️ Аукцион</button>
         <button class="tab-btn" data-tab="leaderboard">🏆 Лидеры</button>
       </nav>
@@ -234,6 +240,11 @@
           <div id="doctor-stats" class="reveal-grid"></div>
           <button id="doctor-visit-btn" class="btn btn-primary">Записаться на приём</button>
           <p id="doctor-message" class="outcome-message"></p>
+          <h3 class="tab-title">🧠 Психотерапевт</h3>
+          <p class="tab-hint">Снимает накопленный стресс. Если стресс зашкаливает — энергия перестаёт восстанавливаться сама собой.</p>
+          <div id="therapist-stats" class="reveal-grid"></div>
+          <button id="therapist-visit-btn" class="btn btn-primary">Записаться на сеанс</button>
+          <p id="therapist-message" class="outcome-message"></p>
         </section>
       </div>
 
@@ -268,6 +279,25 @@
             <h3 class="tab-title">Твои позиции</h3>
             <div id="crypto-holdings" class="item-grid"></div>
           </div>
+        </section>
+      </div>
+
+      <div id="tab-bank" class="tab-panel">
+        <section class="card">
+          <h3 class="tab-title">🏦 Банк</h3>
+          <p class="tab-hint">Дорогие машины и недвижимость можно взять в рассрочку прямо в Магазине — первый взнос 20%, остальное с процентом спишется автоматически за 12 ходов. Страховка смягчает последствия несчастных случаев.</p>
+          <h3 class="tab-title">Твои кредиты</h3>
+          <div id="bank-loans" class="item-grid"></div>
+          <h3 class="tab-title">Страхование</h3>
+          <div id="bank-insurance" class="item-grid"></div>
+        </section>
+      </div>
+
+      <div id="tab-skills" class="tab-panel">
+        <section class="card">
+          <h3 class="tab-title">🎓 Обучение</h3>
+          <p class="tab-hint">Прокачанные навыки дают постоянные бонусы: переговоры облегчают проверки репутации, физподготовка — проверки здоровья, финансы и IT помогают в крипте и бизнесе.</p>
+          <div id="skills-list" class="item-grid"></div>
         </section>
       </div>
 
@@ -336,6 +366,8 @@
   <script src="js/doctor.js"></script>
   <script src="js/casino.js"></script>
   <script src="js/crypto.js"></script>
+  <script src="js/bank.js"></script>
+  <script src="js/skills.js"></script>
   <script src="js/auction.js"></script>
   <script src="js/leaderboard.js"></script>
   <script src="js/admin.js"></script>

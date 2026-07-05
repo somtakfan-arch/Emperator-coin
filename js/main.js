@@ -254,6 +254,8 @@
     doctor: () => window.DoctorUI.render(),
     casino: () => window.CasinoUI.render(),
     crypto: () => window.CryptoUI.render(),
+    bank: () => window.BankUI.render(),
+    skills: () => window.SkillsUI.render(),
     auction: () => window.AuctionUI.render(),
     leaderboard: () => window.LeaderboardUI.render(),
   };
@@ -292,6 +294,8 @@
     setBar('bar-happiness', state.happiness);
     setBar('bar-energy', state.energy);
     setBar('bar-reputation', state.reputation);
+    setBar('bar-stress', state.stress || 0);
+    document.getElementById('stat-season').textContent = getSeason(state);
 
     renderTierTrack(tier.id);
     renderTraitBadges();

@@ -17,6 +17,16 @@ window.DoctorUI = (function () {
     const btn = document.getElementById('doctor-visit-btn');
     btn.disabled = state.money < cost;
     if (!keepMessage) document.getElementById('doctor-message').textContent = '';
+
+    const therapyCost = scaleByWealth(state, THERAPY_BASE_COST);
+    const therapistHost = document.getElementById('therapist-stats');
+    therapistHost.innerHTML = `
+      <div class="reveal-item"><span>Стоимость сеанса</span><b>${formatMoney(therapyCost)}</b></div>
+      <div class="reveal-item"><span>Уровень стресса</span><b>${state.stress || 0}/100</b></div>
+    `;
+    const therapistBtn = document.getElementById('therapist-visit-btn');
+    therapistBtn.disabled = state.money < therapyCost;
+    if (!keepMessage) document.getElementById('therapist-message').textContent = '';
   }
 
   function visit() {
@@ -27,7 +37,16 @@ window.DoctorUI = (function () {
     document.getElementById('doctor-message').textContent = r.message;
   }
 
+  function visitTherapy() {
+    const state = window.Game.getState();
+    const r = visitTherapist(state);
+    window.Game.afterSideAction(r.ok ? r.barrier : null, '');
+    render(true);
+    document.getElementById('therapist-message').textContent = r.message;
+  }
+
   document.getElementById('doctor-visit-btn').addEventListener('click', visit);
+  document.getElementById('therapist-visit-btn').addEventListener('click', visitTherapy);
 
   return { render };
 })();

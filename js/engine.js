@@ -64,6 +64,16 @@ function createGameState(name, character) {
     debtRate: BASE_DEBT_RATE,
     jailed: false,
     jailTurns: 0,
+    loans: [],
+    insurance: { health: false, property: false },
+    hasKids: false,
+    kidsCount: 0,
+    stress: 20,
+    skills: { negotiation: 0, finance: 0, it: 0, fitness: 0 },
+    criminalRecord: 0,
+    emigrated: false,
+    storylineFlags: {},
+    pendingFollowups: [],
     ended: false,
     endingType: null,
     tier: tier.id,
@@ -129,6 +139,27 @@ function computeRentalIncome(state) {
   });
   const rentableValue = Math.max(0, totalValue - maxPrice);
   return Math.round(rentableValue * RENT_YIELD_PER_TURN);
+}
+
+const TAXI_YIELD_PER_TURN = 0.0006; // машины сверх личной можно сдать в такси-парк
+
+/** Такси: личная машина — самая дорогая, остальные приносят доход. */
+function computeTaxiIncome(state) {
+  const carIds = Object.keys(state.inventory || {}).filter((id) => {
+    const it = window.ITEMS.byId[id];
+    return it && it.category === 'cars' && (state.inventory[id] || 0) > 0;
+  });
+  if (carIds.length <= 1) return 0;
+  let totalValue = 0;
+  let maxPrice = 0;
+  carIds.forEach((id) => {
+    const it = window.ITEMS.byId[id];
+    const qty = state.inventory[id];
+    totalValue += it.price * qty;
+    if (it.price > maxPrice) maxPrice = it.price;
+  });
+  const taxiValue = Math.max(0, totalValue - maxPrice);
+  return Math.round(taxiValue * TAXI_YIELD_PER_TURN);
 }
 
 function getInventoryCapacity(state) {
@@ -272,6 +303,97 @@ function openCase(state, caseId, position) {
   return { ok: true, item, message: `Из кейса выпало: ${item.name}!`, barrier };
 }
 
+/* ---------- кредиты/ипотека: первый взнос + автосписание за N ходов ---------- */
+
+const LOAN_RATE_PER_TURN = 0.02;
+const LOAN_TERM_TURNS = 12;
+const LOAN_DOWNPAYMENT_SHARE = 0.2;
+
+/** Покупка машины/недвижимости в рассрочку: сразу отдаёшь 20%,
+ *  остальное с процентом автоматически списывается равными частями
+ *  следующие 12 ходов (см. applyChoice). */
+function takeLoan(state, itemId) {
+  const item = window.ITEMS.byId[itemId];
+  if (!item) return { ok: false, message: 'Такого товара нет.' };
+  if (item.category !== 'cars' && item.category !== 'housing') return { ok: false, message: 'В рассрочку продаются только машины и недвижимость.' };
+  const downPayment = Math.round(item.price * LOAN_DOWNPAYMENT_SHARE);
+  if (state.money < downPayment) return { ok: false, message: `Нужен первый взнос ${formatMoney(downPayment)}.` };
+  state.money -= downPayment;
+  state.inventory[itemId] = (state.inventory[itemId] || 0) + 1;
+  const fx = item.effects || {};
+  if (fx.happiness) state.happiness = clampNum(state.happiness + fx.happiness, 0, 100);
+  if (fx.reputation) state.reputation = clampNum(state.reputation + fx.reputation, 0, 100);
+  if (fx.health) state.health = clampNum(state.health + fx.health, 0, 100);
+  const financed = item.price - downPayment;
+  const totalToRepay = Math.round(financed * (1 + LOAN_RATE_PER_TURN * LOAN_TERM_TURNS));
+  const perTurn = Math.ceil(totalToRepay / LOAN_TERM_TURNS);
+  state.loans = state.loans || [];
+  state.loans.push({
+    id: `loan_${state.turn}_${state.loans.length}`,
+    itemName: item.name,
+    remaining: totalToRepay,
+    perTurn,
+    turnsLeft: LOAN_TERM_TURNS,
+  });
+  const barrier = applyTierBarrier(state);
+  return {
+    ok: true,
+    barrier,
+    message: `Куплено в рассрочку: ${item.name}. Взнос ${formatMoney(downPayment)}, дальше ${formatMoney(perTurn)}/ход ещё ${LOAN_TERM_TURNS} ходов.`,
+  };
+}
+
+/* ---------- страхование: разовый полис смягчает несчастные случаи ---------- */
+
+const INSURANCE_BASE_COST = 3500;
+
+function buyInsurance(state, kind) {
+  state.insurance = state.insurance || { health: false, property: false };
+  if (state.insurance[kind]) return { ok: false, message: 'Такая страховка уже оформлена.' };
+  const cost = scaleByWealth(state, INSURANCE_BASE_COST);
+  if (state.money < cost) return { ok: false, message: 'Не хватает денег на полис.' };
+  state.money -= cost;
+  state.insurance[kind] = true;
+  const barrier = applyTierBarrier(state);
+  return {
+    ok: true,
+    barrier,
+    message: `Оформлена страховка (${kind === 'health' ? 'здоровье' : 'имущество'}) за ${formatMoney(cost)}.`,
+  };
+}
+
+/* ---------- навыки: постоянные бонусы к проверкам ---------- */
+
+const SKILL_MAX = 10;
+const SKILL_LABELS = {
+  negotiation: '🤝 Переговоры',
+  finance: '💹 Финансы',
+  it: '💻 IT',
+  fitness: '🏋️ Физподготовка',
+};
+
+function trainSkill(state, key) {
+  state.skills = state.skills || { negotiation: 0, finance: 0, it: 0, fitness: 0 };
+  const level = state.skills[key] || 0;
+  if (level >= SKILL_MAX) return { ok: false, message: 'Этот навык уже прокачан до предела.' };
+  const cost = scaleByWealth(state, 2000 * (level + 1));
+  if (state.money < cost) return { ok: false, message: 'Не хватает денег на тренировку.' };
+  if (state.energy < 15) return { ok: false, message: 'Слишком мало энергии для тренировки.' };
+  state.money -= cost;
+  state.energy = clampNum(state.energy - 15, 0, 100);
+  state.skills[key] = level + 1;
+  const barrier = applyTierBarrier(state);
+  return { ok: true, barrier, message: `${SKILL_LABELS[key] || key}: уровень ${level + 1}.` };
+}
+
+/* ---------- времена года: чисто детерминированная смена по ходам ---------- */
+
+const SEASON_LABELS = ['❄️ Зима', '🌱 Весна', '☀️ Лето', '🍂 Осень'];
+
+function getSeason(state) {
+  return SEASON_LABELS[Math.floor(state.turn / 6) % 4];
+}
+
 /* ---------- доктор: платное лечение продлевает жизнь ---------- */
 
 const DOCTOR_BASE_COST = 4000;
@@ -287,6 +409,19 @@ function visitDoctor(state) {
   state.doctorVisits = (state.doctorVisits || 0) + 1;
   const barrier = applyTierBarrier(state);
   return { ok: true, cost, message: `Приём оплачен (${formatMoney(cost)}). Врач продлил жизнь ещё на ${DOCTOR_CHARGES_PER_VISIT} циклов старения.`, barrier };
+}
+
+const THERAPY_BASE_COST = 3000;
+
+/** Психотерапевт — отдельно от физического здоровья снимает стресс. */
+function visitTherapist(state) {
+  const cost = scaleByWealth(state, THERAPY_BASE_COST);
+  if (state.money < cost) return { ok: false, message: 'Не хватает денег на сеанс.' };
+  state.money -= cost;
+  state.stress = clampNum((state.stress || 0) - 25, 0, 100);
+  state.happiness = clampNum(state.happiness + 6, 0, 100);
+  const barrier = applyTierBarrier(state);
+  return { ok: true, cost, message: `Сеанс оплачен (${formatMoney(cost)}). Стало заметно спокойнее на душе.`, barrier };
 }
 
 /* ---------- казино отдельной вкладкой: ставка + мини-игра ---------- */
@@ -375,7 +510,7 @@ const REST_EVENT = {
   text: 'Ты вымотан до предела. Организм требует отдыха, иначе будут последствия.',
   conditions: () => true,
   choices: [
-    { label: 'Отдохнуть весь день', risk: 'safe', effect: () => ({ energy: 35, happiness: 4, message: 'Отдых пошёл на пользу, силы восстановлены.' }) },
+    { label: 'Отдохнуть весь день', risk: 'safe', effect: () => ({ energy: 35, happiness: 4, stress: -8, message: 'Отдых пошёл на пользу, силы восстановлены.' }) },
     { label: 'Продолжать через силу', trait: 'hardworker', risk: 'risky', effect: () => ({ health: -14, happiness: -8, message: 'Организм на пределе, здоровье пошатнулось.' }) },
   ],
 };
@@ -442,10 +577,79 @@ const CLOTHES_EVENT = {
   ],
 };
 
+/* ---------- сезонные праздники: детерминированные события раз в игровой год (24 хода) ---------- */
+
+function buildNewYearEvent(turn) {
+  return {
+    id: `holiday_newyear_${turn}`,
+    text: 'Наступает Новый год — самое время подвести итоги и отдохнуть от забот.',
+    conditions: () => true,
+    choices: [
+      {
+        label: (state) => `Устроить праздничный стол (${formatMoney(scaleByWealth(state, 4000))})`,
+        risk: 'balanced',
+        effect: (state) => {
+          const cost = scaleByWealth(state, 4000);
+          return { money: -cost, happiness: 14, stress: -10, message: `Новый год отметили с размахом — потрачено ${formatMoney(cost)}.` };
+        },
+      },
+      {
+        label: 'Скромно встретить дома',
+        trait: 'cautious',
+        risk: 'safe',
+        effect: () => ({ happiness: 5, stress: -6, message: 'Тихий домашний праздник — тоже неплохо.' }),
+      },
+    ],
+  };
+}
+
+function buildBirthdayEvent(turn) {
+  return {
+    id: `holiday_birthday_${turn}`,
+    text: (state) => `Сегодня твой день рождения — тебе исполняется ${state.age + 1}.`,
+    conditions: () => true,
+    choices: [
+      {
+        label: (state) => `Собрать гостей (${formatMoney(scaleByWealth(state, 3000))})`,
+        risk: 'balanced',
+        effect: (state) => {
+          const cost = scaleByWealth(state, 3000);
+          const gift = state.hasFamily ? scaleByWealth(state, 1500) : 0;
+          return { money: gift - cost, happiness: 12, reputation: 2, message: gift ? `Праздник удался, а семья подарила ${formatMoney(gift)}.` : `Праздник удался, потрачено ${formatMoney(cost)}.` };
+        },
+      },
+      {
+        label: 'Отметить в тишине',
+        trait: 'cautious',
+        risk: 'safe',
+        effect: (state) => {
+          const gift = state.hasFamily ? scaleByWealth(state, 800) : 0;
+          return { money: gift, happiness: 4, message: gift ? `Скромно, зато семья не забыла — подарили ${formatMoney(gift)}.` : 'Скромный день без суеты.' };
+        },
+      },
+    ],
+  };
+}
+
 function pickNextEvent(state) {
   if (state.jailed) return JAIL_EVENT;
   if (!hasClothes(state)) return CLOTHES_EVENT;
   if (state.energy <= LOW_ENERGY_THRESHOLD) return REST_EVENT;
+
+  if (state.turn > 0 && state.turn % 24 === 0 && !state.usedEventIds.has(`holiday_newyear_${state.turn}`)) {
+    return buildNewYearEvent(state.turn);
+  }
+  const birthdayOffset = 1 + ((state.characterId || 0) % 23);
+  if (state.turn > 0 && state.turn % 24 === birthdayOffset && !state.usedEventIds.has(`holiday_birthday_${state.turn}`)) {
+    return buildBirthdayEvent(state.turn);
+  }
+
+  if (state.pendingFollowups && state.pendingFollowups.length) {
+    const due = state.pendingFollowups.find((f) => f.dueTurn <= state.turn);
+    if (due && window.FOLLOWUP_EVENTS && window.FOLLOWUP_EVENTS[due.id]) {
+      return window.FOLLOWUP_EVENTS[due.id];
+    }
+  }
 
   if (state.pantry <= 15) {
     const groceryPool = window.EVENTS.filter(
@@ -476,6 +680,7 @@ function applyChoice(state, event, choiceIndex) {
   state.happiness = clampNum(state.happiness + (result.happiness || 0), 0, 100);
   state.energy = clampNum(state.energy + (result.energy || 0), 0, 100);
   state.reputation = clampNum(state.reputation + (result.reputation || 0), 0, 100);
+  state.stress = clampNum((state.stress || 0) + (result.stress || 0), 0, 100);
 
   if (result.jobLoss) {
     state.hasJob = false;
@@ -492,7 +697,20 @@ function applyChoice(state, event, choiceIndex) {
   if (typeof result.pantrySet === 'number') state.pantry = clampNum(result.pantrySet, 0, 100);
   if (result.addPossession) state.possessions.add(result.addPossession);
   if (result.addItem) state.inventory[result.addItem] = (state.inventory[result.addItem] || 0) + 1;
-  if (result.jail) { state.jailed = true; state.jailTurns = 0; }
+  if (result.hasKidsUp) { state.hasKids = true; state.kidsCount = (state.kidsCount || 0) + 1; }
+  if (typeof result.emigratedSet === 'boolean') state.emigrated = result.emigratedSet;
+  if (typeof result.setPath !== 'undefined') state.storylineFlags.path = result.setPath;
+  if (result.jail) { state.jailed = true; state.jailTurns = 0; state.stress = clampNum(state.stress + 15, 0, 100); }
+  if (result.criminalRecordUp) state.criminalRecord = (state.criminalRecord || 0) + 1;
+  if (result.scheduleFollowup) {
+    state.pendingFollowups = state.pendingFollowups || [];
+    state.pendingFollowups.push({ id: result.scheduleFollowup.id, dueTurn: state.turn + 1 + (result.scheduleFollowup.afterTurns || 6) });
+  }
+
+  // риск сюжетного выбора двигает уровень стресса — отдельно от счастья
+  if (choice.risk === 'risky') state.stress = clampNum(state.stress + 2, 0, 100);
+  else if (choice.risk === 'balanced') state.stress = clampNum(state.stress + 1, 0, 100);
+  else if (choice.risk === 'safe') state.stress = clampNum(state.stress - 1, 0, 100);
 
   if (choice.trait && state.traits[choice.trait] !== undefined) {
     state.traits[choice.trait] += 1;
@@ -500,12 +718,18 @@ function applyChoice(state, event, choiceIndex) {
 
   const EXEMPT_FROM_HISTORY = ['__forced_rest__', 'hand_pantry_empty', '__jailed__', '__no_clothes__'];
   if (EXEMPT_FROM_HISTORY.indexOf(event.id) === -1) state.usedEventIds.add(event.id);
+  if (state.pendingFollowups && state.pendingFollowups.length) {
+    state.pendingFollowups = state.pendingFollowups.filter((f) => !(f.id === event.id && f.dueTurn <= state.turn));
+  }
   state.turn += 1;
 
   // энергия сама почти не восстанавливается — без нормального сна и отдыха
-  // силы будут заканчиваться по-настоящему, а не бесконечно тлеть на автопилоте
-  state.energy = clampNum(state.energy + 1, 0, 100);
-  if (hasCarItem(state)) state.energy = clampNum(state.energy + 1, 0, 100); // своя машина экономит силы и время
+  // силы будут заканчиваться по-настоящему, а не бесконечно тлеть на автопилоте;
+  // при высоком стрессе (выгорание) даже эта крупица не восстанавливается
+  if (state.stress < 70) {
+    state.energy = clampNum(state.energy + 1, 0, 100);
+    if (hasCarItem(state)) state.energy = clampNum(state.energy + 1, 0, 100); // своя машина экономит силы и время
+  }
   if (state.happiness > 60) state.health = clampNum(state.health + 1, 0, 100);
   if (state.turn % 2 === 0) {
     // регулярные визиты к врачу останавливают старение — можно жить бесконечно
@@ -541,6 +765,30 @@ function applyChoice(state, event, choiceIndex) {
     rentMessage = `🏠 Доход от аренды: +${formatMoney(rent)}.`;
   }
 
+  // доход от такси-парка со "лишних" машин
+  let taxiMessage = '';
+  const taxiIncome = computeTaxiIncome(state);
+  if (taxiIncome > 0) {
+    state.money += taxiIncome;
+    taxiMessage = `🚕 Доход от такси-парка: +${formatMoney(taxiIncome)}.`;
+  }
+
+  // автосписание по кредитам/ипотеке
+  let loanMessage = '';
+  if (state.loans && state.loans.length) {
+    let totalDue = 0;
+    state.loans.forEach((loan) => { totalDue += loan.perTurn; });
+    if (totalDue > 0) {
+      state.money -= totalDue;
+      state.loans.forEach((loan) => {
+        loan.remaining -= loan.perTurn;
+        loan.turnsLeft -= 1;
+      });
+      state.loans = state.loans.filter((loan) => loan.turnsLeft > 0 && loan.remaining > 0);
+      loanMessage = `🏦 Списано по кредитам: ${formatMoney(totalDue)}.`;
+    }
+  }
+
   // репутация не копится вечно сама по себе — её нужно поддерживать
   let reputationDecayMessage = '';
   if (state.turn % 3 === 0 && state.reputation > 0) {
@@ -566,7 +814,7 @@ function applyChoice(state, event, choiceIndex) {
 
   return {
     message: result.message || '',
-    interestMessage: [barrierMessage, interestMessage, pantryMessage, rentMessage, reputationDecayMessage].filter(Boolean).join(' '),
+    interestMessage: [barrierMessage, interestMessage, pantryMessage, rentMessage, taxiMessage, loanMessage, reputationDecayMessage].filter(Boolean).join(' '),
     tierChanged,
     newTier: state.tier,
     newTrait: getFreshlyUnlockedTrait(state, choice.trait),
