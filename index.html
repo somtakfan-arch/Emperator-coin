@@ -7,6 +7,12 @@
   <meta name="description" content="Текстовая игра-симулятор жизни: пройди путь от бомжа или обычного человека до миллиардера, переживая сотни неожиданных поворотов судьбы." />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>👑</text></svg>" />
   <link rel="stylesheet" href="css/style.css" />
+  <script>
+    (function () {
+      var saved = localStorage.getItem('empc_theme');
+      if (saved === 'light' || saved === 'dark') document.documentElement.dataset.theme = saved;
+    })();
+  </script>
 </head>
 <body>
 
@@ -151,6 +157,7 @@
         </div>
         <div class="hud-sub">
           Возраст: <b id="stat-age"></b> · Работа: <b id="stat-job"></b> · <span id="stat-season"></span>
+          <button id="theme-toggle-btn" class="btn-switch-slot" title="Сменить тему">🌗 Тема</button>
           <button id="switch-slot-btn" class="btn-switch-slot" title="Сменить персонажа">🔀 Сменить персонажа</button>
         </div>
 
@@ -194,6 +201,9 @@
         <button class="tab-btn" data-tab="crypto">🪙 Крипта</button>
         <button class="tab-btn" data-tab="bank">🏦 Банк</button>
         <button class="tab-btn" data-tab="skills">🎓 Обучение</button>
+        <button class="tab-btn" data-tab="achievements">🏅 Достижения</button>
+        <button class="tab-btn" data-tab="duels">⚔️ Дуэли</button>
+        <button class="tab-btn" data-tab="president">🏛️ Президент</button>
         <button class="tab-btn" data-tab="auction">🏛️ Аукцион</button>
         <button class="tab-btn" data-tab="leaderboard">🏆 Лидеры</button>
       </nav>
@@ -211,6 +221,16 @@
           <p id="outcome-interest" class="outcome-interest hidden"></p>
           <button id="next-btn" class="btn btn-primary">Далее →</button>
         </section>
+
+        <section class="card">
+          <h3 class="tab-title">📈 Капитал по ходам</h3>
+          <div id="networth-chart"></div>
+        </section>
+
+        <section class="card">
+          <button id="history-toggle-btn" class="btn btn-link">📜 История партии</button>
+          <div id="history-log" class="history-log hidden"></div>
+        </section>
       </div>
 
       <div id="tab-inventory" class="tab-panel">
@@ -226,6 +246,12 @@
         <section class="card">
           <h3 class="tab-title">Магазин</h3>
           <div id="shop-category-tabs" class="chip-row"></div>
+          <select id="shop-sort-select" class="shop-sort-select">
+            <option value="default">Сортировка: по умолчанию</option>
+            <option value="price_asc">Цена: сначала дешёвые</option>
+            <option value="price_desc">Цена: сначала дорогие</option>
+            <option value="effect_desc">Сначала лучший эффект</option>
+          </select>
           <div id="shop-list" class="item-grid"></div>
           <h3 class="tab-title">Кейсы</h3>
           <p class="tab-hint">Кейс открывается мини-игрой "Поймай момент" — точность решает, какая вещь достанется, а не удача.</p>
@@ -276,6 +302,7 @@
               <button id="crypto-buy-btn" class="btn btn-primary">Купить</button>
             </div>
             <p id="crypto-message" class="outcome-message"></p>
+            <p id="crypto-diversify-hint" class="tab-hint"></p>
             <h3 class="tab-title">Твои позиции</h3>
             <div id="crypto-holdings" class="item-grid"></div>
           </div>
@@ -290,6 +317,20 @@
           <div id="bank-loans" class="item-grid"></div>
           <h3 class="tab-title">Страхование</h3>
           <div id="bank-insurance" class="item-grid"></div>
+          <h3 class="tab-title">🤝 Совместный бизнес</h3>
+          <p id="venture-auth-hint" class="tab-hint"></p>
+          <div id="venture-body" class="hidden">
+            <p class="tab-hint">Создай предприятие и жди партнёра, либо присоединись к чужому — доход капает от общего пула и делится по доле вклада, собрать его может любой из партнёров.</p>
+            <div class="casino-bet-row">
+              <input id="venture-name-input" type="text" placeholder="Название дела" />
+              <input id="venture-stake-input" type="number" min="1" step="1" placeholder="Вклад, ₽" />
+              <button id="venture-create-btn" class="btn btn-primary">Создать предприятие</button>
+            </div>
+            <h3 class="tab-title">Мои предприятия</h3>
+            <div id="venture-my-list" class="item-grid"></div>
+            <h3 class="tab-title">Открытые предложения</h3>
+            <div id="venture-open-list" class="item-grid"></div>
+          </div>
         </section>
       </div>
 
@@ -301,11 +342,53 @@
         </section>
       </div>
 
+      <div id="tab-achievements" class="tab-panel">
+        <section class="card">
+          <h3 class="tab-title">🏅 Достижения</h3>
+          <p id="achievements-progress" class="tab-hint"></p>
+          <div id="achievements-list" class="item-grid"></div>
+        </section>
+      </div>
+
+      <div id="tab-duels" class="tab-panel">
+        <section class="card">
+          <h3 class="tab-title">⚔️ Дуэли</h3>
+          <p id="duels-auth-hint" class="tab-hint"></p>
+          <div id="duels-body" class="hidden">
+            <p class="tab-hint">Брось вызов другому игроку: обе стороны играют в одну и ту же мини-игру "Поймай момент", ставку забирает точнейший.</p>
+            <div class="casino-bet-row">
+              <label for="duel-stake-input">Ставка, ₽:</label>
+              <input id="duel-stake-input" type="number" min="1" step="1" />
+              <button id="duel-create-btn" class="btn btn-primary">Бросить вызов</button>
+            </div>
+            <h3 class="tab-title">Открытые вызовы</h3>
+            <div id="duels-list" class="item-grid"></div>
+          </div>
+        </section>
+      </div>
+
+      <div id="tab-president" class="tab-panel">
+        <section class="card">
+          <h3 class="tab-title">🏛️ Президент</h3>
+          <p id="president-hint" class="tab-hint"></p>
+          <div id="president-body" class="hidden">
+            <p id="president-term" class="tab-hint"></p>
+            <h3 class="tab-title">Налоговая политика</h3>
+            <div id="president-tax-control"></div>
+            <h3 class="tab-title">Указы (по одному разу за срок)</h3>
+            <div id="president-actions" class="item-grid"></div>
+            <h3 class="tab-title">Указы в отношении игроков</h3>
+            <div id="president-target-section"></div>
+          </div>
+        </section>
+      </div>
+
       <div id="tab-auction" class="tab-panel">
         <section class="card">
           <h3 class="tab-title">🏛️ Аукцион</h3>
           <p id="auction-auth-hint" class="tab-hint"></p>
           <div id="auction-authed" class="hidden">
+            <p class="tab-hint">Аукцион берёт комиссию 8% с продавца при продаже — покупатель платит полную цену, продавец получает цену за вычетом комиссии.</p>
             <div class="auction-sell-row">
               <select id="auction-item-select"></select>
               <input id="auction-price-input" type="number" min="1" step="1" placeholder="Цена, ₽" />
@@ -321,6 +404,8 @@
           <h3 class="tab-title">🏆 Таблица лидеров</h3>
           <p id="leaderboard-auth-hint" class="tab-hint"></p>
           <div id="leaderboard-list" class="leaderboard-list"></div>
+          <h3 class="tab-title">📰 Лента активности</h3>
+          <div id="activity-feed" class="activity-feed"></div>
         </section>
       </div>
 
@@ -368,6 +453,9 @@
   <script src="js/crypto.js"></script>
   <script src="js/bank.js"></script>
   <script src="js/skills.js"></script>
+  <script src="js/achievements.js"></script>
+  <script src="js/duels.js"></script>
+  <script src="js/president.js"></script>
   <script src="js/auction.js"></script>
   <script src="js/leaderboard.js"></script>
   <script src="js/admin.js"></script>

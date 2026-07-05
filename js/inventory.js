@@ -5,6 +5,20 @@
 
 window.InventoryUI = (function () {
   let activeShopCategory = 'food';
+  let activeShopSort = 'default';
+
+  function effectScore(item) {
+    const fx = item.effects || {};
+    return Object.keys(fx).reduce((sum, key) => sum + (key === 'pantry' ? fx[key] * 0.1 : fx[key]), 0);
+  }
+
+  function sortShopItems(items) {
+    const list = items.slice();
+    if (activeShopSort === 'price_asc') return list.sort((a, b) => a.price - b.price);
+    if (activeShopSort === 'price_desc') return list.sort((a, b) => b.price - a.price);
+    if (activeShopSort === 'effect_desc') return list.sort((a, b) => effectScore(b) - effectScore(a));
+    return list;
+  }
 
   function renderInventoryTab() {
     const state = window.Game.getState();
@@ -56,6 +70,27 @@ window.InventoryUI = (function () {
         });
         actions.appendChild(sellBtn);
       }
+      if (item.category === 'housing') {
+        const upgradeRow = document.createElement('div');
+        upgradeRow.className = 'home-upgrade-row';
+        const installed = (state.homeUpgrades && state.homeUpgrades[id]) || {};
+        HOME_UPGRADES.forEach((upg) => {
+          const done = !!installed[upg.id];
+          const cost = scaleByWealth(state, upg.baseCost);
+          const btn = document.createElement('button');
+          btn.className = 'chip home-upgrade-chip' + (done ? ' active' : '');
+          btn.textContent = done ? `${upg.icon} ${upg.label} ✓` : `${upg.icon} ${upg.label} (${formatMoney(cost)})`;
+          btn.disabled = done || state.money < cost;
+          btn.addEventListener('click', () => {
+            if (!window.Game.confirmBigSpend(cost)) return;
+            const r = buyHomeUpgrade(state, id, upg.id);
+            window.Game.afterSideAction(r.ok ? r.barrier : null, r.message);
+            renderInventoryTab();
+          });
+          upgradeRow.appendChild(btn);
+        });
+        card.appendChild(upgradeRow);
+      }
       host.appendChild(card);
     });
   }
@@ -81,7 +116,9 @@ window.InventoryUI = (function () {
     const state = window.Game.getState();
     const host = document.getElementById('shop-list');
     host.innerHTML = '';
-    window.ITEMS.byCategory(activeShopCategory).forEach((item) => {
+    const sortSelect = document.getElementById('shop-sort-select');
+    if (sortSelect) sortSelect.value = activeShopSort;
+    sortShopItems(window.ITEMS.byCategory(activeShopCategory)).forEach((item) => {
       const card = document.createElement('div');
       card.className = 'item-card';
       card.innerHTML = `
@@ -97,6 +134,7 @@ window.InventoryUI = (function () {
       buyBtn.textContent = isFull ? 'Инвентарь полон' : 'Купить';
       buyBtn.disabled = state.money < item.price || isFull;
       buyBtn.addEventListener('click', () => {
+        if (!window.Game.confirmBigSpend(item.price)) return;
         const r = buyItem(state, item.id);
         window.Game.afterSideAction(r.ok ? r.barrier : null, r.message);
         renderShopList();
@@ -111,6 +149,7 @@ window.InventoryUI = (function () {
         loanBtn.textContent = `В рассрочку (взнос ${formatMoney(downPayment)})`;
         loanBtn.disabled = state.money < downPayment;
         loanBtn.addEventListener('click', () => {
+          if (!window.Game.confirmBigSpend(downPayment)) return;
           const r = takeLoan(state, item.id);
           window.Game.afterSideAction(r.ok ? r.barrier : null, r.message);
           renderShopList();
@@ -188,6 +227,11 @@ window.InventoryUI = (function () {
       }
     );
   }
+
+  document.getElementById('shop-sort-select').addEventListener('change', (e) => {
+    activeShopSort = e.target.value;
+    renderShopList();
+  });
 
   function renderAll() {
     renderInventoryTab();

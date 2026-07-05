@@ -45,6 +45,7 @@
     toastTimer = setTimeout(() => globalToast.classList.remove('active'), 3200);
   }
 
+  const BIG_SPEND_SHARE = 0.4;
   window.Game = {
     getState: () => state,
     afterSideAction: (barrierResult, message) => {
@@ -53,6 +54,12 @@
       else if (message) showToast(message);
       if (window.Cloud.enabled) window.Cloud.saveState(state);
       saveCurrentSlot();
+    },
+    confirmBigSpend: (cost) => {
+      if (!(cost > 0) || state.money <= 0) return true;
+      const share = cost / state.money;
+      if (share < BIG_SPEND_SHARE) return true;
+      return window.confirm(`Это ${Math.round(share * 100)}% всего капитала (${formatMoney(cost)} из ${formatMoney(state.money)}). Точно потратить?`);
     },
   };
 
@@ -256,6 +263,9 @@
     crypto: () => window.CryptoUI.render(),
     bank: () => window.BankUI.render(),
     skills: () => window.SkillsUI.render(),
+    achievements: () => window.AchievementsUI.render(),
+    duels: () => window.DuelsUI.render(),
+    president: () => window.PresidentUI.render(),
     auction: () => window.AuctionUI.render(),
     leaderboard: () => window.LeaderboardUI.render(),
   };
@@ -338,6 +348,8 @@
     outcomeEl.classList.remove('active');
     currentEvent = pickNextEvent(state);
     renderStats();
+    renderHistoryLog();
+    renderNetWorthChart();
 
     if (!currentEvent) {
       finishGame();
@@ -361,6 +373,8 @@
           startMiniGame(choice, idx);
         } else if (choice.shopCategory) {
           openQuickShopForChoice(choice, idx);
+        } else if (choice.presidentRun) {
+          runPresidentElection(idx);
         } else {
           handleChoice(idx);
         }
@@ -388,6 +402,24 @@
       handleChoice(idx);
       delete state._quickShopItem;
     });
+  }
+
+  function runPresidentElection(idx) {
+    const won = chance(0.25);
+    const finish = (outcome, termEndsAtMs) => {
+      state._presidentElectionResult = outcome;
+      state._presidentElectionTermEndsAtMs = termEndsAtMs || 0;
+      handleChoice(idx);
+      delete state._presidentElectionResult;
+      delete state._presidentElectionTermEndsAtMs;
+    };
+    if (window.Cloud.enabled && window.Cloud.currentUser) {
+      window.Cloud.runForPresident(state.name, won).then((r) => {
+        finish(r.elected ? 'won' : (r.reason === 'occupied' ? 'occupied' : 'lost'), r.elected ? Date.now() + PRESIDENCY_TERM_MS : 0);
+      }).catch(() => finish('lost', 0));
+    } else {
+      finish(won ? 'won' : 'lost', won ? Date.now() + PRESIDENCY_TERM_MS : 0);
+    }
   }
 
   function startMiniGame(choice, idx) {
@@ -441,9 +473,16 @@
         text: wentUp ? `${TIER_ICON[tier.id] || ''} Новый статус: ${tier.label}!` : `${TIER_ICON[tier.id] || ''} Статус понижен: ${tier.label}...`,
         cls: wentUp ? 'up' : 'down',
       });
+      if (wentUp && window.Cloud.enabled) window.Cloud.postActivity(`${state.name} поднялся(лась) до уровня «${tier.label}»!`);
     }
     if (result.newTrait) {
       banners.push({ text: `${result.newTrait.icon} Новая черта характера: «${result.newTrait.label}»`, cls: 'up' });
+    }
+    if (result.newAchievements && result.newAchievements.length) {
+      result.newAchievements.forEach((a) => {
+        banners.push({ text: `${a.icon} Достижение: «${a.label}»`, cls: 'up' });
+        if (window.Cloud.enabled) window.Cloud.postActivity(`${state.name} получил(а) достижение «${a.label}» ${a.icon}`);
+      });
     }
 
     if (banners.length) {
@@ -462,7 +501,66 @@
 
     if (window.Cloud.enabled) window.Cloud.saveState(state);
     saveCurrentSlot();
+    renderHistoryLog();
+    renderNetWorthChart();
   }
+
+  const historyLogEl = document.getElementById('history-log');
+  const historyToggleBtn = document.getElementById('history-toggle-btn');
+
+  function renderNetWorthChart() {
+    const chartEl = document.getElementById('networth-chart');
+    const points = (state.history || []).slice(-40);
+    if (points.length < 2) {
+      chartEl.innerHTML = '<p class="tab-hint">Пока недостаточно ходов для графика.</p>';
+      return;
+    }
+    const values = points.map((p) => p.money);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = Math.max(1, max - min);
+    const w = 320;
+    const h = 80;
+    const pad = 4;
+    const coords = points.map((p, i) => {
+      const x = pad + (i / (points.length - 1)) * (w - pad * 2);
+      const y = h - pad - ((p.money - min) / range) * (h - pad * 2);
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    const trendUp = values[values.length - 1] >= values[0];
+    chartEl.innerHTML = `
+      <svg viewBox="0 0 ${w} ${h}" class="networth-svg ${trendUp ? 'up' : 'down'}" preserveAspectRatio="none">
+        <polyline points="${coords}" fill="none" stroke="currentColor" stroke-width="2" />
+      </svg>
+      <div class="networth-range"><span>${formatMoney(min)}</span><span>${formatMoney(max)}</span></div>
+    `;
+  }
+
+  function renderHistoryLog() {
+    if (historyLogEl.classList.contains('hidden')) return;
+    const entries = (state.history || []).slice().reverse();
+    historyLogEl.innerHTML = entries.map((h) => `
+      <div class="history-entry">
+        <div class="history-entry-turn">Ход ${h.turn} · ${formatMoney(h.money)}</div>
+        <div class="history-entry-event">${h.eventText}</div>
+        <div class="history-entry-choice">→ ${h.choiceLabel}</div>
+        <div class="history-entry-message">${h.message}</div>
+      </div>
+    `).join('') || '<p class="tab-hint">История пока пуста.</p>';
+  }
+
+  historyToggleBtn.addEventListener('click', () => {
+    historyLogEl.classList.toggle('hidden');
+    historyToggleBtn.textContent = historyLogEl.classList.contains('hidden') ? '📜 История партии' : '📜 Скрыть историю';
+    renderHistoryLog();
+  });
+
+  document.getElementById('theme-toggle-btn').addEventListener('click', () => {
+    const current = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+    const next = current === 'light' ? 'dark' : 'light';
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem('empc_theme', next);
+  });
 
   document.getElementById('switch-slot-btn').addEventListener('click', () => {
     saveCurrentSlot();

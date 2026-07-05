@@ -31,6 +31,7 @@ window.CasinoUI = (function () {
     const msgEl = document.getElementById('casino-message');
     if (!stake || stake <= 0) { msgEl.textContent = 'Укажи размер ставки.'; return; }
     if (stake > state.money) { msgEl.textContent = 'Не хватает денег на такую ставку.'; return; }
+    if (!window.Game.confirmBigSpend(stake)) return;
 
     const modal = document.getElementById('minigame-modal');
     document.getElementById('minigame-title').textContent = GAMES[activeGame].label;

@@ -80,6 +80,7 @@ window.AuctionUI = (function () {
           buyBtn.className = 'btn btn-primary btn-sm';
           buyBtn.textContent = 'Купить';
           buyBtn.addEventListener('click', () => {
+            if (!window.Game.confirmBigSpend(listing.price)) return;
             window.Cloud.buyAuctionListing(listing.id).then(() => {
               const state = window.Game.getState();
               state.money -= listing.price;

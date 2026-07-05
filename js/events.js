@@ -923,6 +923,41 @@
     },
   ];
 
+  const HAND_PRESIDENCY_EVENTS = [
+    {
+      id: 'hand_president_offer',
+      text: 'Твоя репутация достигла таких высот, что влиятельные люди предлагают выдвинуть твою кандидатуру на пост президента страны. Кампания встанет в ₽10 000 000 000, а победа далеко не гарантирована.',
+      conditions: (s) => s.reputation >= 100 && s.money >= 10000000000 && !s.isPresident,
+      choices: [
+        {
+          label: 'Баллотироваться в президенты (₽10 000 000 000)',
+          trait: 'riskTaker',
+          risk: 'risky',
+          presidentRun: true,
+          effect: (state) => {
+            const cost = 10000000000;
+            const outcome = state._presidentElectionResult;
+            if (outcome === 'won') {
+              return {
+                money: -cost,
+                reputation: 5,
+                happiness: 12,
+                becomePresident: true,
+                presidentTermEndsAtMs: state._presidentElectionTermEndsAtMs,
+                message: 'Выборы выиграны! Отныне ты — президент страны, но полномочия ограничены по времени.',
+              };
+            }
+            if (outcome === 'occupied') {
+              return { money: -cost, happiness: -6, message: 'Кампания проведена, но действующий президент ещё не сложил полномочия — выборы не состоялись, деньги потрачены впустую.' };
+            }
+            return { money: -cost, happiness: -8, reputation: -3, message: 'Выборы проиграны — соперник оказался убедительнее, а кампания влетела в копеечку.' };
+          },
+        },
+        { label: 'Отказаться от политических амбиций', trait: 'cautious', risk: 'safe', effect: () => ({ happiness: 1, message: 'Решил остаться в тени большой политики.' }) },
+      ],
+    },
+  ];
+
   /* ============ 3. АВТОРСКИЕ СОБЫТИЯ (≈32) ============ */
 
   const HAND_EVENTS = [
@@ -1259,6 +1294,14 @@
         { label: 'Решить, что работа сейчас важнее', trait: 'hardworker', risk: 'balanced', effect: () => ({ reputation: 2, message: 'Сосредоточился на карьере, семья подождёт.', scheduleFollowup: { id: 'arc_family_checkin', afterTurns: 14 } }) },
       ],
     },
+    {
+      id: 'arc_wealth_tax_start',
+      text: () => `Налоговая служба уведомляет: при таком капитале ты теперь попадаешь под особый режим налогообложения для миллионеров — периодические отчисления неизбежны.`,
+      conditions: (s) => s.tier === 'millionaire',
+      choices: [
+        { label: 'Принять к сведению', trait: 'cautious', risk: 'safe', effect: () => ({ message: 'Отныне налоговая будет периодически напоминать о себе.', scheduleFollowup: { id: 'arc_wealth_tax_checkin', afterTurns: 10 } }) },
+      ],
+    },
   ];
 
   window.FOLLOWUP_EVENTS = window.FOLLOWUP_EVENTS || {};
@@ -1280,6 +1323,24 @@
     choices: [
       { label: (state) => `Устроить тёплую встречу (${formatMoney(scaleByWealth(state, 2500))})`, trait: 'familyFirst', risk: 'safe', effect: (state) => { const cost = scaleByWealth(state, 2500); return { money: -cost, happiness: 8, message: `Потратил ${formatMoney(cost)} на встречу — стало теплее на душе.`, scheduleFollowup: { id: 'arc_family_checkin', afterTurns: 18 } }; } },
       { label: 'Отложить до лучших времён', trait: 'hardworker', risk: 'balanced', effect: () => ({ happiness: -3, reputation: 1, message: 'Работа опять победила, но семья это заметила.', scheduleFollowup: { id: 'arc_family_checkin', afterTurns: 18 } }) },
+    ],
+  };
+
+  const WEALTH_TAX_RATE = 0.04;
+  window.FOLLOWUP_EVENTS.arc_wealth_tax_checkin = {
+    id: 'arc_wealth_tax_checkin',
+    conditions: always,
+    text: (state) => (state.tier === 'millionaire' ? `Пришло время очередных отчислений по налогу для миллионеров — ${formatMoney(Math.round(Math.max(0, state.money) * WEALTH_TAX_RATE))}.` : 'Пока налоговый статус миллионера неактуален — служба на всякий случай напомнила о себе.'),
+    choices: [
+      {
+        label: (state) => (state.tier === 'millionaire' ? `Оплатить налог (${formatMoney(Math.round(Math.max(0, state.money) * WEALTH_TAX_RATE))})` : 'Понятно'),
+        risk: 'safe',
+        effect: (state) => {
+          if (state.tier !== 'millionaire') return { message: 'Налоговая служба пока молчит.', scheduleFollowup: { id: 'arc_wealth_tax_checkin', afterTurns: 10 } };
+          const tax = Math.round(Math.max(0, state.money) * WEALTH_TAX_RATE);
+          return { money: -tax, message: `Налог для миллионеров списан — ${formatMoney(tax)}.`, scheduleFollowup: { id: 'arc_wealth_tax_checkin', afterTurns: 10 } };
+        },
+      },
     ],
   };
 
@@ -1927,7 +1988,7 @@
     invest, shopping, health, housing, transport, selfdev, gambling, business,
     survival, luxury, family, kids, crime, weather, tech, general, work, selfEmployed, startupLife, abroad,
     politicianLife, celebrityLife, crimebossLife,
-    HAND_EVENTS, HAND_KIDS_EVENTS, HAND_ARC_EVENTS, HAND_EMIGRATION_EVENTS, HAND_FATEFUL_EVENTS,
+    HAND_EVENTS, HAND_KIDS_EVENTS, HAND_ARC_EVENTS, HAND_EMIGRATION_EVENTS, HAND_FATEFUL_EVENTS, HAND_PRESIDENCY_EVENTS,
     neighborsHome, gadgetsBreak, wardrobeWear, petcare, civicDuty, hobbyCost, socialEvents, selfcare,
     education, travel, romance, charity, vices, sidehustle, carlife, remoteWork,
     crypto, richEvents,

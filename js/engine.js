@@ -72,8 +72,18 @@ function createGameState(name, character) {
     skills: { negotiation: 0, finance: 0, it: 0, fitness: 0 },
     criminalRecord: 0,
     emigrated: false,
+    everEmigrated: false,
+    jailIncidentsTotal: 0,
+    homeUpgrades: {},
+    isPresident: false,
+    presidentTermEndsAtMs: 0,
+    everPresident: false,
+    presidencyActionsUsed: [],
+    localLaws: {},
     storylineFlags: {},
     pendingFollowups: [],
+    history: [],
+    achievements: {},
     ended: false,
     endingType: null,
     tier: tier.id,
@@ -119,26 +129,102 @@ function hasCarItem(state) {
   return ownsCategory(state, 'cars');
 }
 
+/* ---------- репутация: намеренно трудно набрать, требует инвестиций
+   сразу в несколько категорий (техника, машины, дома, одежда, часы,
+   ювелирка), а не только сюжетных выборов ---------- */
+
+const REPUTATION_INVESTMENT_CATEGORIES = ['clothes', 'cars', 'watches', 'electronics', 'jewelry', 'housing'];
+const REPUTATION_TOP_TIER_FRACTION = 0.55; // доля от самой дорогой вещи в категории, чтобы считаться "топовой"
+const REPUTATION_BASE_MULTIPLIER = 0.25; // без топового имущества репутация растёт медленно
+const REPUTATION_MAX_MULTIPLIER = 1.1; // топ во всех категориях — репутация растёт быстрее обычного
+
+function ownsTopTierInCategory(state, category) {
+  const items = window.ITEMS.byCategory(category);
+  if (!items.length) return false;
+  const maxPrice = items.reduce((max, it) => Math.max(max, it.price), 0);
+  const threshold = maxPrice * REPUTATION_TOP_TIER_FRACTION;
+  return Object.keys(state.inventory || {}).some((id) => {
+    const it = window.ITEMS.byId[id];
+    return it && it.category === category && it.price >= threshold && (state.inventory[id] || 0) > 0;
+  });
+}
+
+function computeReputationGainMultiplier(state) {
+  const qualifying = REPUTATION_INVESTMENT_CATEGORIES.filter((cat) => ownsTopTierInCategory(state, cat)).length;
+  const share = qualifying / REPUTATION_INVESTMENT_CATEGORIES.length;
+  return REPUTATION_BASE_MULTIPLIER + (REPUTATION_MAX_MULTIPLIER - REPUTATION_BASE_MULTIPLIER) * share;
+}
+
 const RENT_YIELD_PER_TURN = 0.0004; // ~0.04% от стоимости "лишней" недвижимости за ход
 
 /** Аренда: первая (самая дорогая) объект недвижимости — это дом, где
  *  живёшь, остальные можно сдавать. Доход капает каждый ход. */
+const RENTAL_DIMINISH_AFTER = 2; // первые 2 сдаваемых объекта (т.е. 2-й и 3-й дом всего) — полная ставка
+const RENTAL_DIMINISH_FACTOR = 0.6; // с 4-го дома всего доходность падает
+
+const HOME_RENOVATION_RENT_BONUS = 1.15; // полностью отремонтированный объект сдаётся дороже
+
 function computeRentalIncome(state) {
   const housingIds = Object.keys(state.inventory || {}).filter((id) => {
     const it = window.ITEMS.byId[id];
     return it && it.category === 'housing' && (state.inventory[id] || 0) > 0;
   });
   if (housingIds.length === 0) return 0;
-  let totalValue = 0;
-  let maxPrice = 0;
+  const units = [];
   housingIds.forEach((id) => {
     const it = window.ITEMS.byId[id];
     const qty = state.inventory[id];
-    totalValue += it.price * qty;
-    if (it.price > maxPrice) maxPrice = it.price;
+    for (let i = 0; i < qty; i++) units.push({ price: it.price, id });
   });
-  const rentableValue = Math.max(0, totalValue - maxPrice);
-  return Math.round(rentableValue * RENT_YIELD_PER_TURN);
+  units.sort((a, b) => b.price - a.price);
+  const rentableUnits = units.slice(1); // самый дорогой дом — это твоё жильё, не сдаётся
+  let total = 0;
+  rentableUnits.forEach((unit, idx) => {
+    const extra = Math.max(0, idx - RENTAL_DIMINISH_AFTER + 1);
+    const yieldRate = RENT_YIELD_PER_TURN * Math.pow(RENTAL_DIMINISH_FACTOR, extra);
+    const renovationBonus = isFullyRenovated(state, unit.id) ? HOME_RENOVATION_RENT_BONUS : 1;
+    total += unit.price * yieldRate * renovationBonus;
+  });
+  return Math.round(total);
+}
+
+/* ---------- ремонт дома: покупка недвижимости — только начало ---------- */
+
+const PRESIDENCY_TERM_MS = 12 * 60 * 60 * 1000; // "пол дня" реального времени
+
+const HOME_UPGRADES = [
+  { id: 'windows', icon: '🪟', label: 'Стеклопакеты', baseCost: 8000, effects: { happiness: 3, health: 2 } },
+  { id: 'door', icon: '🚪', label: 'Входная дверь', baseCost: 6000, effects: { happiness: 1, reputation: 1 } },
+  { id: 'furniture', icon: '🛋️', label: 'Мебель', baseCost: 15000, effects: { happiness: 6 } },
+  { id: 'renovation', icon: '🛠️', label: 'Косметический ремонт', baseCost: 25000, effects: { happiness: 5, reputation: 2 } },
+  { id: 'appliances', icon: '🔌', label: 'Бытовая техника', baseCost: 18000, effects: { happiness: 4, energy: 3 } },
+];
+
+function isFullyRenovated(state, housingItemId) {
+  const upgrades = (state.homeUpgrades && state.homeUpgrades[housingItemId]) || {};
+  return HOME_UPGRADES.every((u) => upgrades[u.id]);
+}
+
+function buyHomeUpgrade(state, housingItemId, upgradeId) {
+  const item = window.ITEMS.byId[housingItemId];
+  if (!item || item.category !== 'housing') return { ok: false, message: 'Это не недвижимость.' };
+  if (!(state.inventory[housingItemId] > 0)) return { ok: false, message: 'У тебя нет такой недвижимости.' };
+  const upg = HOME_UPGRADES.find((u) => u.id === upgradeId);
+  if (!upg) return { ok: false, message: 'Такого улучшения нет.' };
+  state.homeUpgrades = state.homeUpgrades || {};
+  state.homeUpgrades[housingItemId] = state.homeUpgrades[housingItemId] || {};
+  if (state.homeUpgrades[housingItemId][upgradeId]) return { ok: false, message: 'Уже установлено.' };
+  const cost = scaleByWealth(state, upg.baseCost);
+  if (state.money < cost) return { ok: false, message: 'Не хватает денег.' };
+  state.money -= cost;
+  state.homeUpgrades[housingItemId][upgradeId] = true;
+  const fx = upg.effects;
+  if (fx.happiness) state.happiness = clampNum(state.happiness + fx.happiness, 0, 100);
+  if (fx.health) state.health = clampNum(state.health + fx.health, 0, 100);
+  if (fx.reputation) state.reputation = clampNum(state.reputation + fx.reputation, 0, 100);
+  if (fx.energy) state.energy = clampNum(state.energy + fx.energy, 0, 100);
+  const barrier = applyTierBarrier(state);
+  return { ok: true, barrier, message: `Улучшение «${upg.label}» установлено в «${item.name}» за ${formatMoney(cost)}.` };
 }
 
 const TAXI_YIELD_PER_TURN = 0.0006; // машины сверх личной можно сдать в такси-парк
@@ -486,12 +572,21 @@ function buyCrypto(state, coinIdx, stake, success) {
   };
 }
 
+/** Портфельный бонус: держишь 3+ разных монеты одновременно —
+ *  диверсификация даёт +8% к стоимости позиции при продаже. */
+const DIVERSIFICATION_MIN_COINS = 3;
+const DIVERSIFICATION_BONUS = 1.08;
+function hasDiversifiedPortfolio(state) {
+  return Object.keys(state.cryptoHoldings || {}).length >= DIVERSIFICATION_MIN_COINS;
+}
+
 function sellCrypto(state, coinIdx) {
   const key = String(coinIdx);
   const holding = state.cryptoHoldings && state.cryptoHoldings[key];
   if (!holding) return { ok: false, message: 'Нечего продавать.' };
+  const diversified = hasDiversifiedPortfolio(state);
   const price = cryptoPriceIndex(state, coinIdx);
-  const value = Math.round(holding.invested * (price / holding.entryPrice));
+  const value = Math.round(holding.invested * (price / holding.entryPrice) * (diversified ? DIVERSIFICATION_BONUS : 1));
   state.money += value;
   delete state.cryptoHoldings[key];
   const barrier = applyTierBarrier(state);
@@ -501,7 +596,7 @@ function sellCrypto(state, coinIdx) {
     value,
     profit,
     barrier,
-    message: profit >= 0 ? `Продано с прибылью ${formatMoney(profit)}.` : `Продано в убыток ${formatMoney(Math.abs(profit))}.`,
+    message: (profit >= 0 ? `Продано с прибылью ${formatMoney(profit)}.` : `Продано в убыток ${formatMoney(Math.abs(profit))}.`) + (diversified ? ' 📊 Диверсификация портфеля (3+ монеты) добавила бонус к сумме.' : ''),
   };
 }
 
@@ -667,8 +762,13 @@ function pickNextEvent(state) {
   return pool[randInt(0, pool.length - 1)];
 }
 
+const HISTORY_MAX_LENGTH = 200;
+
 function applyChoice(state, event, choiceIndex) {
   const choice = event.choices[choiceIndex];
+  const eventTextSnapshot = typeof event.text === 'function' ? event.text(state) : event.text;
+  const choiceLabelSnapshot = typeof choice.label === 'function' ? choice.label(state) : choice.label;
+  const turnSnapshot = state.turn;
   const result = choice.effect(state) || {};
 
   // низкое здоровье бьёт по способности зарабатывать
@@ -679,7 +779,9 @@ function applyChoice(state, event, choiceIndex) {
   state.health = clampNum(state.health + (result.health || 0), 0, 100);
   state.happiness = clampNum(state.happiness + (result.happiness || 0), 0, 100);
   state.energy = clampNum(state.energy + (result.energy || 0), 0, 100);
-  state.reputation = clampNum(state.reputation + (result.reputation || 0), 0, 100);
+  const repDelta = result.reputation || 0;
+  const repGain = repDelta > 0 ? repDelta * computeReputationGainMultiplier(state) : repDelta;
+  state.reputation = clampNum(state.reputation + repGain, 0, 100);
   state.stress = clampNum((state.stress || 0) + (result.stress || 0), 0, 100);
 
   if (result.jobLoss) {
@@ -698,9 +800,23 @@ function applyChoice(state, event, choiceIndex) {
   if (result.addPossession) state.possessions.add(result.addPossession);
   if (result.addItem) state.inventory[result.addItem] = (state.inventory[result.addItem] || 0) + 1;
   if (result.hasKidsUp) { state.hasKids = true; state.kidsCount = (state.kidsCount || 0) + 1; }
-  if (typeof result.emigratedSet === 'boolean') state.emigrated = result.emigratedSet;
+  if (typeof result.emigratedSet === 'boolean') {
+    state.emigrated = result.emigratedSet;
+    if (result.emigratedSet) state.everEmigrated = true;
+  }
   if (typeof result.setPath !== 'undefined') state.storylineFlags.path = result.setPath;
-  if (result.jail) { state.jailed = true; state.jailTurns = 0; state.stress = clampNum(state.stress + 15, 0, 100); }
+  if (result.becomePresident) {
+    state.isPresident = true;
+    state.everPresident = true;
+    state.presidentTermEndsAtMs = result.presidentTermEndsAtMs || (Date.now() + PRESIDENCY_TERM_MS);
+    state.presidencyActionsUsed = [];
+  }
+  if (result.jail) {
+    state.jailed = true;
+    state.jailTurns = 0;
+    state.jailIncidentsTotal = (state.jailIncidentsTotal || 0) + 1;
+    state.stress = clampNum(state.stress + 15, 0, 100);
+  }
   if (result.criminalRecordUp) state.criminalRecord = (state.criminalRecord || 0) + 1;
   if (result.scheduleFollowup) {
     state.pendingFollowups = state.pendingFollowups || [];
@@ -796,6 +912,22 @@ function applyChoice(state, event, choiceIndex) {
     reputationDecayMessage = '⭐ Репутация слегка поблёкла без новых поводов её подтверждать.';
   }
 
+  // штраф за почти пустой инвентарь — стимул хоть что-то купить
+  let emptyInventoryMessage = '';
+  const distinctItemsOwned = Object.keys(state.inventory || {}).filter((id) => (state.inventory[id] || 0) > 0).length;
+  if (state.turn % 5 === 0 && distinctItemsOwned <= 1) {
+    state.reputation = clampNum(state.reputation - 1, 0, 100);
+    state.happiness = clampNum(state.happiness - 1, 0, 100);
+    emptyInventoryMessage = '📦 Совсем пустой инвентарь бросается в глаза — не помешало бы обзавестись хоть чем-то помимо самого необходимого.';
+  }
+
+  // срок президентских полномочий истекает через "пол дня" реального времени
+  let presidencyEndedMessage = '';
+  if (state.isPresident && state.presidentTermEndsAtMs && Date.now() > state.presidentTermEndsAtMs) {
+    state.isPresident = false;
+    presidencyEndedMessage = '🏛️ Твой президентский срок истёк — полномочия сложены, но изданные законы останутся в силе до следующего президента.';
+  }
+
   const { tierChanged, barrierMessage } = applyTierBarrier(state);
 
   // Путь не обрывается ни по возрасту, ни по числу ходов — пока здоровье
@@ -812,13 +944,58 @@ function applyChoice(state, event, choiceIndex) {
     state.endingType = 'bankrupt';
   }
 
+  const fullMessage = [result.message, barrierMessage, interestMessage, pantryMessage, rentMessage, taxiMessage, loanMessage, reputationDecayMessage, emptyInventoryMessage, presidencyEndedMessage].filter(Boolean).join(' ');
+  state.history = state.history || [];
+  state.history.push({ turn: turnSnapshot, eventText: eventTextSnapshot, choiceLabel: choiceLabelSnapshot, message: fullMessage, money: state.money });
+  if (state.history.length > HISTORY_MAX_LENGTH) state.history.shift();
+
+  const newAchievements = checkAchievements(state);
+
   return {
     message: result.message || '',
-    interestMessage: [barrierMessage, interestMessage, pantryMessage, rentMessage, taxiMessage, loanMessage, reputationDecayMessage].filter(Boolean).join(' '),
+    interestMessage: [barrierMessage, interestMessage, pantryMessage, rentMessage, taxiMessage, loanMessage, reputationDecayMessage, emptyInventoryMessage, presidencyEndedMessage].filter(Boolean).join(' '),
     tierChanged,
     newTier: state.tier,
     newTrait: getFreshlyUnlockedTrait(state, choice.trait),
+    newAchievements,
   };
+}
+
+/* ---------- достижения ---------- */
+
+const ACHIEVEMENTS = [
+  { id: 'first_million', icon: '💰', label: 'Первый миллион', desc: 'Скопить 1 000 000 ₽ наличными.', check: (s) => s.money >= 1000000 },
+  { id: 'billionaire_cash', icon: '🤑', label: 'Миллиардер', desc: 'Скопить 1 000 000 000 ₽ наличными.', check: (s) => s.money >= 1000000000 },
+  { id: 'survived_jail_3', icon: '⛓️', label: 'Тюремный старожил', desc: 'Побывать за решёткой 3 раза.', check: (s) => (s.jailIncidentsTotal || 0) >= 3 },
+  { id: 'trait_master', icon: '🌟', label: 'Яркая личность', desc: 'Довести любую черту характера до максимума.', check: (s) => Object.keys(TRAIT_INFO).some((k) => s.traits[k] >= TRAIT_INFO[k].threshold) },
+  { id: 'skill_master', icon: '🎓', label: 'Мастер своего дела', desc: 'Прокачать любой навык до максимума.', check: (s) => Object.values(s.skills || {}).some((lvl) => lvl >= SKILL_MAX) },
+  { id: 'criminal_legend', icon: '🕶️', label: 'Тёмная легенда', desc: 'Накопить судимость 5+.', check: (s) => (s.criminalRecord || 0) >= 5 },
+  { id: 'globe_trotter', icon: '🌍', label: 'Гражданин мира', desc: 'Хотя бы раз эмигрировать за границу.', check: (s) => !!s.everEmigrated },
+  { id: 'big_family', icon: '👨‍👩‍👧‍👦', label: 'Многодетный родитель', desc: 'Завести троих детей.', check: (s) => (s.kidsCount || 0) >= 3 },
+  { id: 'crypto_diversified', icon: '📊', label: 'Крипто-инвестор', desc: 'Держать 3+ разные монеты одновременно.', check: (s) => hasDiversifiedPortfolio(s) },
+  { id: 'fateful_path', icon: '🎭', label: 'Смена судьбы', desc: 'Выбрать один из судьбоносных путей.', check: (s) => !!(s.storylineFlags && s.storylineFlags.path) },
+  { id: 'fully_insured', icon: '🛡️', label: 'Всё под контролем', desc: 'Оформить оба вида страховки.', check: (s) => s.insurance && s.insurance.health && s.insurance.property },
+  {
+    id: 'landlord',
+    icon: '🏘️',
+    label: 'Рантье',
+    desc: 'Владеть 4+ объектами недвижимости одновременно.',
+    check: (s) => Object.keys(s.inventory || {})
+      .filter((id) => { const it = window.ITEMS.byId[id]; return it && it.category === 'housing' && (s.inventory[id] || 0) > 0; })
+      .reduce((sum, id) => sum + s.inventory[id], 0) >= 4,
+  },
+];
+
+function checkAchievements(state) {
+  state.achievements = state.achievements || {};
+  const freshlyUnlocked = [];
+  ACHIEVEMENTS.forEach((a) => {
+    if (!state.achievements[a.id] && a.check(state)) {
+      state.achievements[a.id] = true;
+      freshlyUnlocked.push(a);
+    }
+  });
+  return freshlyUnlocked;
 }
 
 function getFreshlyUnlockedTrait(state, traitKey) {

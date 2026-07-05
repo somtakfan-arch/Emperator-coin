@@ -49,6 +49,12 @@ window.CryptoUI = (function () {
     host.innerHTML = '';
     const holdings = state.cryptoHoldings || {};
     const keys = Object.keys(holdings);
+    const diversifyEl = document.getElementById('crypto-diversify-hint');
+    if (diversifyEl) {
+      diversifyEl.textContent = hasDiversifiedPortfolio(state)
+        ? '📊 Портфель диверсифицирован (3+ монеты) — при продаже позиций действует бонус +8% к сумме.'
+        : '📊 Держи одновременно 3+ разные монеты, чтобы получить бонус диверсификации +8% при продаже.';
+    }
     if (!keys.length) {
       host.innerHTML = '<p class="tab-hint">Пока нет открытых позиций.</p>';
       return;
@@ -87,6 +93,7 @@ window.CryptoUI = (function () {
     const msgEl = document.getElementById('crypto-message');
     if (!stake || stake <= 0) { msgEl.textContent = 'Укажи сумму инвестиции.'; return; }
     if (stake > state.money) { msgEl.textContent = 'Не хватает денег на такую сумму.'; return; }
+    if (!window.Game.confirmBigSpend(stake)) return;
 
     const modal = document.getElementById('minigame-modal');
     document.getElementById('minigame-title').textContent = 'Поймай момент для сделки';

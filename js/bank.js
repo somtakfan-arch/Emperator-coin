@@ -14,6 +14,7 @@ window.BankUI = (function () {
   function render() {
     renderLoans();
     renderInsurance();
+    renderVentures();
   }
 
   function renderLoans() {
@@ -66,6 +67,139 @@ window.BankUI = (function () {
       host.appendChild(card);
     });
   }
+
+  function renderVentures() {
+    const hint = document.getElementById('venture-auth-hint');
+    const body = document.getElementById('venture-body');
+    if (!hint || !body) return;
+    if (!window.Cloud.enabled) {
+      hint.textContent = 'Совместный бизнес работает только с облаком Firestore. Настрой js/firebase-config.js (см. README).';
+      body.classList.add('hidden');
+      return;
+    }
+    if (!window.Cloud.currentUser) {
+      hint.textContent = 'Войди в аккаунт, чтобы вести совместный бизнес с другим игроком.';
+      body.classList.add('hidden');
+      return;
+    }
+    hint.textContent = '';
+    body.classList.remove('hidden');
+    renderMyVentures();
+    renderOpenVentures();
+  }
+
+  function renderMyVentures() {
+    const host = document.getElementById('venture-my-list');
+    host.innerHTML = '<p class="tab-hint">Загрузка...</p>';
+    window.Cloud.listMyVentures().then((rows) => {
+      host.innerHTML = '';
+      if (!rows.length) {
+        host.innerHTML = '<p class="tab-hint">У тебя пока нет совместных предприятий.</p>';
+        return;
+      }
+      const myUid = window.Cloud.currentUser.uid;
+      rows.forEach((venture) => {
+        const isFounder = venture.founderUid === myUid;
+        const partnerLabel = venture.status === 'open' ? 'ждём партнёра' : (isFounder ? venture.partnerName : venture.founderName);
+        const card = document.createElement('div');
+        card.className = 'item-card';
+        card.innerHTML = `
+          <div class="item-icon">🤝</div>
+          <div class="item-name">${venture.name}</div>
+          <div class="item-meta">Пул: ${formatMoney(venture.pool)} · партнёр: ${partnerLabel}</div>
+          <div class="item-actions"></div>
+        `;
+        const actions = card.querySelector('.item-actions');
+        if (venture.status === 'active') {
+          const collectBtn = document.createElement('button');
+          collectBtn.className = 'btn btn-primary btn-sm';
+          collectBtn.textContent = 'Собрать доход';
+          collectBtn.addEventListener('click', () => {
+            window.Cloud.collectVentureIncome(venture.id).then((r) => {
+              const state = window.Game.getState();
+              state.money += r.myShare;
+              window.Game.afterSideAction(null, `Собрано ${formatMoney(r.myShare)} с предприятия «${venture.name}».`);
+              render();
+            }).catch((e) => { document.getElementById('venture-auth-hint').textContent = e.message; });
+          });
+          actions.appendChild(collectBtn);
+        } else if (isFounder) {
+          const dissolveBtn = document.createElement('button');
+          dissolveBtn.className = 'btn btn-secondary btn-sm';
+          dissolveBtn.textContent = 'Закрыть и вернуть вклад';
+          dissolveBtn.addEventListener('click', () => {
+            window.Cloud.dissolveVenture(venture.id).then(() => {
+              const state = window.Game.getState();
+              state.money += venture.founderStake;
+              window.Game.afterSideAction(null, 'Предприятие закрыто, вклад возвращён.');
+              render();
+            }).catch((e) => { document.getElementById('venture-auth-hint').textContent = e.message; });
+          });
+          actions.appendChild(dissolveBtn);
+        }
+        host.appendChild(card);
+      });
+    });
+  }
+
+  function renderOpenVentures() {
+    const host = document.getElementById('venture-open-list');
+    host.innerHTML = '<p class="tab-hint">Загрузка...</p>';
+    window.Cloud.listOpenVentures().then((rows) => {
+      host.innerHTML = '';
+      const myUid = window.Cloud.currentUser.uid;
+      const joinable = rows.filter((v) => v.founderUid !== myUid);
+      if (!joinable.length) {
+        host.innerHTML = '<p class="tab-hint">Открытых предложений от других игроков пока нет.</p>';
+        return;
+      }
+      joinable.forEach((venture) => {
+        const card = document.createElement('div');
+        card.className = 'item-card';
+        card.innerHTML = `
+          <div class="item-icon">🏢</div>
+          <div class="item-name">${venture.name}</div>
+          <div class="item-meta">${venture.founderName} вложил(а) ${formatMoney(venture.founderStake)}</div>
+          <div class="item-actions"></div>
+        `;
+        const joinBtn = document.createElement('button');
+        joinBtn.className = 'btn btn-primary btn-sm';
+        joinBtn.textContent = `Присоединиться (вклад ${formatMoney(venture.founderStake)})`;
+        joinBtn.addEventListener('click', () => {
+          const state = window.Game.getState();
+          const stake = venture.founderStake;
+          if (state.money < stake) { document.getElementById('venture-auth-hint').textContent = 'Не хватает денег на вклад.'; return; }
+          if (!window.Game.confirmBigSpend(stake)) return;
+          window.Cloud.joinVenture(venture.id, stake).then(() => {
+            state.money -= stake;
+            window.Game.afterSideAction(null, `Присоединился(лась) к «${venture.name}» с вкладом ${formatMoney(stake)}.`);
+            render();
+          }).catch((e) => { document.getElementById('venture-auth-hint').textContent = e.message; render(); });
+        });
+        card.querySelector('.item-actions').appendChild(joinBtn);
+        host.appendChild(card);
+      });
+    });
+  }
+
+  document.getElementById('venture-create-btn').addEventListener('click', () => {
+    const state = window.Game.getState();
+    const nameInput = document.getElementById('venture-name-input');
+    const stakeInput = document.getElementById('venture-stake-input');
+    const name = nameInput.value.trim() || 'Совместное дело';
+    const stake = Math.round(Number(stakeInput.value));
+    const hint = document.getElementById('venture-auth-hint');
+    if (!stake || stake <= 0) { hint.textContent = 'Укажи размер вклада.'; return; }
+    if (stake > state.money) { hint.textContent = 'Не хватает денег на такой вклад.'; return; }
+    if (!window.Game.confirmBigSpend(stake)) return;
+    window.Cloud.createVenture(name, stake).then(() => {
+      state.money -= stake;
+      window.Game.afterSideAction(null, `Предприятие «${name}» создано, вклад ${formatMoney(stake)}. Ждём партнёра.`);
+      nameInput.value = '';
+      stakeInput.value = '';
+      render();
+    }).catch((e) => { hint.textContent = e.message; });
+  });
 
   return { render };
 })();
