@@ -1,32 +1,36 @@
 /* =========================================================
    ЭМПЕРАТОР: ОТ БОМЖА ДО МИЛЛИАРДЕРА
-   Админ-панель: пароль "empc", поиск игрока, выдача/списание денег.
+   Админ-панель: вкладка внутри игры, доступна только тому аккаунту,
+   чей email совпадает с ADMIN_EMAIL. Поиск игрока, выдача/списание
+   денег.
 
-   Это клиентский пароль-заглушка для защиты от случайных заходов,
-   а не настоящая авторизация — см. предупреждение в js/cloud.js.
+   Это проверка на клиенте, а не настоящая серверная авторизация —
+   см. предупреждение в js/cloud.js про Firestore-правила.
    ========================================================= */
 
 window.AdminUI = (function () {
-  const PASSWORD = 'empc';
-  let unlocked = false;
+  const ADMIN_EMAIL = 'bedsmp.pro@gmail.com';
 
-  function tryUnlock() {
-    const input = document.getElementById('admin-password');
-    const msg = document.getElementById('admin-gate-message');
-    if (input.value === PASSWORD) {
-      unlocked = true;
-      document.getElementById('admin-gate').classList.add('hidden');
-      document.getElementById('admin-panel').classList.remove('hidden');
-      msg.textContent = '';
-      const hint = document.getElementById('admin-cloud-hint');
-      hint.textContent = window.Cloud.enabled ? '' : 'Облако не настроено (js/firebase-config.js) — искать и менять игроков нельзя, пока не подключишь Firestore.';
-    } else {
-      msg.textContent = 'Неверный пароль.';
+  function isAdmin() {
+    return !!(window.Cloud.enabled && window.Cloud.currentUser && window.Cloud.currentUser.email === ADMIN_EMAIL);
+  }
+
+  function render() {
+    const hint = document.getElementById('admin-hint');
+    const body = document.getElementById('admin-body');
+    if (!isAdmin()) {
+      hint.textContent = window.Cloud.enabled
+        ? 'Админ-панель доступна только определённому аккаунту.'
+        : 'Облако не настроено (js/firebase-config.js) — админ-панель недоступна.';
+      body.classList.add('hidden');
+      return;
     }
+    hint.textContent = '';
+    body.classList.remove('hidden');
   }
 
   function search() {
-    if (!window.Cloud.enabled) return;
+    if (!isAdmin()) return;
     const query = document.getElementById('admin-search-input').value;
     const host = document.getElementById('admin-results');
     host.innerHTML = '<p class="tab-hint">Поиск...</p>';
@@ -47,27 +51,34 @@ window.AdminUI = (function () {
             <button class="btn btn-primary btn-sm admin-give-btn">Выдать</button>
             <button class="btn btn-secondary btn-sm admin-take-btn">Забрать</button>
           </div>
+          <p class="admin-error tab-hint"></p>
         `;
         const amountInput = card.querySelector('.admin-amount-input');
         const balanceEl = card.querySelector('.admin-balance');
+        const errorEl = card.querySelector('.admin-error');
         card.querySelector('.admin-give-btn').addEventListener('click', () => {
           const amount = Math.round(Number(amountInput.value));
           if (!amount || amount <= 0) return;
-          window.Cloud.adminAdjustMoney(row.uid, amount).then((newMoney) => { balanceEl.textContent = formatMoney(newMoney); });
+          errorEl.textContent = '';
+          window.Cloud.adminAdjustMoney(row.uid, amount)
+            .then((newMoney) => { balanceEl.textContent = formatMoney(newMoney); })
+            .catch((e) => { errorEl.textContent = e.message; });
         });
         card.querySelector('.admin-take-btn').addEventListener('click', () => {
           const amount = Math.round(Number(amountInput.value));
           if (!amount || amount <= 0) return;
-          window.Cloud.adminAdjustMoney(row.uid, -amount).then((newMoney) => { balanceEl.textContent = formatMoney(newMoney); });
+          errorEl.textContent = '';
+          window.Cloud.adminAdjustMoney(row.uid, -amount)
+            .then((newMoney) => { balanceEl.textContent = formatMoney(newMoney); })
+            .catch((e) => { errorEl.textContent = e.message; });
         });
         host.appendChild(card);
       });
     });
   }
 
-  document.getElementById('admin-unlock-btn').addEventListener('click', tryUnlock);
-  document.getElementById('admin-password').addEventListener('keydown', (e) => { if (e.key === 'Enter') tryUnlock(); });
   document.getElementById('admin-search-btn').addEventListener('click', search);
+  document.getElementById('admin-search-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
 
-  return {};
+  return { render, isAdmin };
 })();

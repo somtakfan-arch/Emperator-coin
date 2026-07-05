@@ -33,26 +33,6 @@
       </div>
 
       <button id="auth-guest-btn" class="btn btn-link">Играть без аккаунта (без лидеров и аукциона)</button>
-      <button id="auth-admin-btn" class="btn btn-link admin-link">⚙ Админ-панель</button>
-    </div>
-  </main>
-
-  <!-- ЭКРАН АДМИН-ПАНЕЛИ -->
-  <main id="screen-admin" class="screen">
-    <div class="card intro-card">
-      <h2>⚙ Админ-панель</h2>
-      <div id="admin-gate">
-        <input id="admin-password" type="password" placeholder="Пароль" autocomplete="off" />
-        <button id="admin-unlock-btn" class="btn btn-primary">Войти</button>
-        <p id="admin-gate-message" class="auth-message"></p>
-      </div>
-      <div id="admin-panel" class="hidden">
-        <p id="admin-cloud-hint" class="tab-hint"></p>
-        <input id="admin-search-input" type="text" placeholder="Email или имя игрока..." />
-        <button id="admin-search-btn" class="btn btn-secondary">Найти</button>
-        <div id="admin-results" class="item-grid"></div>
-      </div>
-      <button id="admin-back-btn" class="btn btn-link">← Назад</button>
     </div>
   </main>
 
@@ -206,6 +186,7 @@
         <button class="tab-btn" data-tab="president">🏛️ Президент</button>
         <button class="tab-btn" data-tab="auction">🏛️ Аукцион</button>
         <button class="tab-btn" data-tab="leaderboard">🏆 Лидеры</button>
+        <button class="tab-btn hidden" data-tab="admin" id="admin-tab-btn">⚙ Админ</button>
       </nav>
 
       <div id="tab-story" class="tab-panel active">
@@ -406,6 +387,20 @@
           <div id="leaderboard-list" class="leaderboard-list"></div>
           <h3 class="tab-title">📰 Лента активности</h3>
           <div id="activity-feed" class="activity-feed"></div>
+        </section>
+      </div>
+
+      <div id="tab-admin" class="tab-panel">
+        <section class="card">
+          <h3 class="tab-title">⚙ Админ-панель</h3>
+          <p id="admin-hint" class="tab-hint"></p>
+          <div id="admin-body" class="hidden">
+            <div class="casino-bet-row">
+              <input id="admin-search-input" type="text" placeholder="Email или имя игрока..." />
+              <button id="admin-search-btn" class="btn btn-secondary">Найти</button>
+            </div>
+            <div id="admin-results" class="item-grid"></div>
+          </div>
         </section>
       </div>
 

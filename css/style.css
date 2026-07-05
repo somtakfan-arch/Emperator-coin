@@ -600,20 +600,8 @@ h1, h2 { margin: 0 0 8px; }
   font-size: 15px;
 }
 .auth-message { color: var(--red); font-size: 13px; min-height: 18px; }
-.admin-link { color: var(--text-dim); opacity: 0.6; font-size: 12px; }
 
-#admin-gate { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
-#admin-gate input, #admin-search-input {
-  padding: 14px 16px;
-  border-radius: 12px;
-  border: 1px solid var(--border);
-  background: var(--bg-alt);
-  color: var(--text);
-  font-size: 15px;
-  width: 100%;
-  margin-bottom: 8px;
-}
-.admin-adjust-row { display: flex; gap: 6px; align-items: center; }
+.admin-adjust-row { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
 .admin-amount-input {
   flex: 1;
   padding: 8px;

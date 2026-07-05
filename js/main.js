@@ -15,7 +15,6 @@
 
   const screens = {
     auth: document.getElementById('screen-auth'),
-    admin: document.getElementById('screen-admin'),
     slots: document.getElementById('screen-slots'),
     intro: document.getElementById('screen-intro'),
     reveal: document.getElementById('screen-reveal'),
@@ -99,10 +98,14 @@
   });
 
   document.getElementById('auth-guest-btn').addEventListener('click', () => enterSlotsScreen());
-  document.getElementById('auth-admin-btn').addEventListener('click', () => showScreen('admin'));
-  document.getElementById('admin-back-btn').addEventListener('click', () => showScreen('auth'));
+
+  function updateAdminTabVisibility() {
+    const btn = document.getElementById('admin-tab-btn');
+    if (btn) btn.classList.toggle('hidden', !window.AdminUI.isAdmin());
+  }
 
   function enterSlotsScreen() {
+    updateAdminTabVisibility();
     if (window.Cloud.enabled && window.Cloud.currentUser) {
       window.Slots.syncFromCloud().then(renderSlotsScreen).catch(renderSlotsScreen);
     } else {
@@ -268,6 +271,7 @@
     president: () => window.PresidentUI.render(),
     auction: () => window.AuctionUI.render(),
     leaderboard: () => window.LeaderboardUI.render(),
+    admin: () => window.AdminUI.render(),
   };
 
   function switchTab(tabName) {
