@@ -1,0 +1,18 @@
+name: BedRegen
+version: ${project.version}
+main: com.bedregen.BedRegenPlugin
+api-version: "1.21"
+depend: [FastAsyncWorldEdit]
+author: BedRegen
+description: Region selection between two points, saving and full regeneration via FastAsyncWorldEdit
+
+commands:
+  bedreg:
+    description: BedRegen commands
+    usage: "/<command> <pos1|pos2|save|regen|list|delete> [name]"
+    permission: bedreg.admin
+
+permissions:
+  bedreg.admin:
+    description: Allows use of all BedRegen commands
+    default: op
