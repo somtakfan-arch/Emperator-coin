@@ -94,9 +94,13 @@ const models = {
   },
 
   async listTransactionsForUser(userId, limit = 100) {
+    // No orderBy here on purpose: combining an equality filter with a sort on
+    // a different field needs a Firestore composite index. Sorting happens
+    // in memory below instead, on a generously capped fetch.
+    const FETCH_CAP = 1000;
     const [outSnap, inSnap] = await Promise.all([
-      transactionsCol().where('fromUserId', '==', userId).orderBy('createdAt', 'desc').limit(limit).get(),
-      transactionsCol().where('toUserId', '==', userId).orderBy('createdAt', 'desc').limit(limit).get(),
+      transactionsCol().where('fromUserId', '==', userId).limit(FETCH_CAP).get(),
+      transactionsCol().where('toUserId', '==', userId).limit(FETCH_CAP).get(),
     ]);
     const seen = new Map();
     for (const d of [...outSnap.docs, ...inSnap.docs]) {
