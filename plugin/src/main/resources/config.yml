@@ -1,8 +1,8 @@
 # Base URL of the Emperator Bank backend, no trailing slash.
-api-base-url: "http://localhost:3000/api/plugin"
+api-base-url: "https://bedbank.netlify.app/api/plugin"
 
-# Must match PLUGIN_API_KEY in the backend's .env file.
-api-key: "change_me_to_a_long_random_string"
+# Must match PLUGIN_API_KEY in Netlify's environment variables.
+api-key: "d73db93461d393a87f9b230066e92dab4b8ca62f61be7e8092607185715fd082"
 
 # HTTP request timeout in milliseconds.
 timeout-ms: 5000
