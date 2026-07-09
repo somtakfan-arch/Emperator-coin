@@ -10,6 +10,7 @@ backend/.env
 
 # Java / plugin
 plugin/target/
+plugin/dependency-reduced-pom.xml
 *.class
 
 # OS
