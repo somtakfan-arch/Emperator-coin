@@ -3,6 +3,7 @@ package com.emperator.bank;
 import net.milkbowl.vault.economy.Economy;
 import org.bukkit.ChatColor;
 import org.bukkit.Bukkit;
+import org.bukkit.OfflinePlayer;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -12,6 +13,7 @@ import org.json.JSONObject;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 public class BankCommand implements CommandExecutor, TabCompleter {
 
@@ -27,40 +29,77 @@ public class BankCommand implements CommandExecutor, TabCompleter {
 
   @Override
   public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
-    if (!(sender instanceof Player player)) {
-      sender.sendMessage(PREFIX + "Эта команда доступна только игрокам.");
-      return true;
-    }
-
     if (args.length == 0) {
-      sendUsage(player);
+      sendUsage(sender);
       return true;
     }
 
     switch (args[0].toLowerCase()) {
-      case "link" -> handleLink(player, args);
-      case "balance", "bal" -> handleBalance(player);
-      case "deposit" -> handleDeposit(player, args);
-      case "withdraw" -> handleWithdraw(player, args);
-      default -> sendUsage(player);
+      case "link" -> handleLink(sender, args);
+      case "balance", "bal" -> requirePlayer(sender, this::handleBalance);
+      case "deposit" -> requirePlayer(sender, p -> handleDeposit(p, args));
+      case "withdraw" -> requirePlayer(sender, p -> handleWithdraw(p, args));
+      default -> sendUsage(sender);
     }
     return true;
   }
 
-  private void sendUsage(Player player) {
-    player.sendMessage(PREFIX + "Команды: /bank link <код>, /bank balance, /bank deposit <сумма>, /bank withdraw <сумма>");
+  private interface PlayerAction {
+    void run(Player player);
   }
 
-  private void handleLink(Player player, String[] args) {
-    if (args.length < 2) {
-      player.sendMessage(PREFIX + "Использование: /bank link <код с сайта>");
+  private void requirePlayer(CommandSender sender, PlayerAction action) {
+    if (sender instanceof Player player) {
+      action.run(player);
+    } else {
+      sender.sendMessage(PREFIX + "Эта команда доступна только игрокам в игре.");
+    }
+  }
+
+  private void sendUsage(CommandSender sender) {
+    sender.sendMessage(PREFIX + "Команды: /bank link <код> (для себя), " +
+        "/bank link <ник> <код> (привязать другого игрока, нужны права или консоль), " +
+        "/bank balance, /bank deposit <сумма>, /bank withdraw <сумма>");
+  }
+
+  // /bank link <code>          -> player links their own account
+  // /bank link <nickname> <code> -> console or a permitted player links someone else's account,
+  //                                  knowing only the code shown on the website
+  private void handleLink(CommandSender sender, String[] args) {
+    if (args.length == 2) {
+      if (!(sender instanceof Player player)) {
+        sender.sendMessage(PREFIX + "Из консоли укажи ник: /bank link <ник> <код>");
+        return;
+      }
+      linkAccount(sender, player.getUniqueId(), player.getName(), args[1]);
       return;
     }
-    String code = args[1];
-    runAsync(player, () -> {
-      JSONObject result = api.linkAccount(code, player.getUniqueId(), player.getName());
-      return PREFIX + "Аккаунт привязан к банковскому счёту " + result.optString("username") +
-          ". Баланс: " + result.optLong("balance") + " EMP";
+
+    if (args.length == 3) {
+      if (!sender.hasPermission("emperatorbank.admin.link")) {
+        sender.sendMessage(PREFIX + "Нет прав для привязки чужого аккаунта (emperatorbank.admin.link).");
+        return;
+      }
+      String targetName = args[1];
+      String code = args[2];
+      OfflinePlayer target = Bukkit.getOfflinePlayer(targetName);
+      if (!target.isOnline() && !target.hasPlayedBefore()) {
+        sender.sendMessage(PREFIX + "Игрок \"" + targetName + "\" ни разу не заходил на сервер — его UUID неизвестен.");
+        return;
+      }
+      String resolvedName = target.getName() != null ? target.getName() : targetName;
+      linkAccount(sender, target.getUniqueId(), resolvedName, code);
+      return;
+    }
+
+    sender.sendMessage(PREFIX + "Использование: /bank link <код> или /bank link <ник> <код>");
+  }
+
+  private void linkAccount(CommandSender sender, UUID mcUuid, String mcUsername, String code) {
+    runAsync(sender, () -> {
+      JSONObject result = api.linkAccount(code, mcUuid, mcUsername);
+      return PREFIX + "Аккаунт " + mcUsername + " привязан к банковскому счёту " +
+          result.optString("username") + ". Баланс: " + result.optLong("balance") + " EMP";
     });
   }
 
@@ -141,7 +180,7 @@ public class BankCommand implements CommandExecutor, TabCompleter {
     String call() throws BankApiClient.ApiException;
   }
 
-  private void runAsync(Player player, ApiCall call) {
+  private void runAsync(CommandSender sender, ApiCall call) {
     var plugin = Bukkit.getPluginManager().getPlugin("EmperatorBank");
     Bukkit.getScheduler().runTaskAsynchronously(plugin, () -> {
       String message;
@@ -151,7 +190,7 @@ public class BankCommand implements CommandExecutor, TabCompleter {
         message = PREFIX + ChatColor.RED + e.getMessage();
       }
       String finalMessage = message;
-      Bukkit.getScheduler().runTask(plugin, () -> player.sendMessage(finalMessage));
+      Bukkit.getScheduler().runTask(plugin, () -> sender.sendMessage(finalMessage));
     });
   }
 
@@ -159,6 +198,9 @@ public class BankCommand implements CommandExecutor, TabCompleter {
   public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
     if (args.length == 1) {
       return List.of("link", "balance", "deposit", "withdraw");
+    }
+    if (args.length == 2 && "link".equalsIgnoreCase(args[0]) && !(sender instanceof Player)) {
+      return null; // let Bukkit suggest online player names
     }
     return Collections.emptyList();
   }

@@ -11,6 +11,12 @@ commands:
     description: Emperator Bank commands
     usage: |
       /bank link <code> - link your Minecraft account to your bank account
+      /bank link <nickname> <code> - (console, or with permission) link another player's account
       /bank balance - show your bank balance
       /bank deposit <amount> - move in-game money into the bank
       /bank withdraw <amount> - move bank money into the game
+
+permissions:
+  emperatorbank.admin.link:
+    description: Link another player's Minecraft account to a bank account using a site code
+    default: op
