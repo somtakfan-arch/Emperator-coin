@@ -1,5 +1,6 @@
 package com.emperator.bank;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 import java.io.IOException;
@@ -34,15 +35,7 @@ public class BankApiClient {
     }
   }
 
-  private JSONObject post(String path, JSONObject body) throws ApiException {
-    return send("POST", path, body);
-  }
-
-  private JSONObject get(String path) throws ApiException {
-    return send("GET", path, null);
-  }
-
-  private JSONObject send(String method, String path, JSONObject body) throws ApiException {
+  private String sendRaw(String method, String path, JSONObject body) throws ApiException {
     try {
       HttpRequest.Builder builder = HttpRequest.newBuilder()
           .uri(URI.create(baseUrl + path))
@@ -58,18 +51,35 @@ public class BankApiClient {
       }
 
       HttpResponse<String> response = http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
-      JSONObject json = response.body() == null || response.body().isBlank()
-          ? new JSONObject()
-          : new JSONObject(response.body());
+      String responseBody = response.body();
 
       if (response.statusCode() >= 400) {
-        throw new ApiException(json.optString("error", "Ошибка банка (код " + response.statusCode() + ")"));
+        String errorMsg = "Ошибка банка (код " + response.statusCode() + ")";
+        try {
+          errorMsg = new JSONObject(responseBody).optString("error", errorMsg);
+        } catch (Exception ignored) {
+          // response wasn't a JSON object; fall back to the generic message
+        }
+        throw new ApiException(errorMsg);
       }
-      return json;
+      return (responseBody == null || responseBody.isBlank()) ? "{}" : responseBody;
     } catch (IOException | InterruptedException e) {
       logger.warning("Не удалось связаться с Emperator Bank API: " + e.getMessage());
       throw new ApiException("Банк временно недоступен, попробуйте позже");
     }
+  }
+
+  private JSONObject post(String path, JSONObject body) throws ApiException {
+    return new JSONObject(sendRaw("POST", path, body));
+  }
+
+  private JSONObject get(String path) throws ApiException {
+    return new JSONObject(sendRaw("GET", path, null));
+  }
+
+  private JSONArray getArray(String path) throws ApiException {
+    String raw = sendRaw("GET", path, null);
+    return raw.isBlank() ? new JSONArray() : new JSONArray(raw);
   }
 
   public JSONObject linkAccount(String code, UUID mcUuid, String mcUsername) throws ApiException {
@@ -96,5 +106,26 @@ public class BankApiClient {
     body.put("mcUuid", mcUuid.toString());
     body.put("amount", amount);
     return post("/withdraw", body);
+  }
+
+  public JSONObject pay(UUID mcUuid, UUID toMcUuid, long amount) throws ApiException {
+    JSONObject body = new JSONObject();
+    body.put("mcUuid", mcUuid.toString());
+    body.put("toMcUuid", toMcUuid.toString());
+    body.put("amount", amount);
+    return post("/pay", body);
+  }
+
+  public JSONArray top(int limit) throws ApiException {
+    return getArray("/top?limit=" + limit);
+  }
+
+  public JSONObject claimDaily(UUID mcUuid) throws ApiException {
+    return post("/daily/" + mcUuid, new JSONObject());
+  }
+
+  public JSONArray recentIncoming(UUID mcUuid, String sinceIso) throws ApiException {
+    String path = "/recent/" + mcUuid + (sinceIso != null ? "?since=" + java.net.URLEncoder.encode(sinceIso, java.nio.charset.StandardCharsets.UTF_8) : "");
+    return getArray(path);
   }
 }

@@ -16,6 +16,13 @@
   </header>
   <main>
     <div class="panel">
+      <h2>Экономика банка</h2>
+      <table>
+        <tbody id="stats-body"></tbody>
+      </table>
+    </div>
+
+    <div class="panel">
       <h2>Эмиссия / списание монет</h2>
       <form id="mint-form">
         <div>
@@ -36,12 +43,106 @@
     </div>
 
     <div class="panel">
+      <h2>Массовая раздача (airdrop)</h2>
+      <p class="muted">Начислить одинаковую сумму всем зарегистрированным пользователям — для ивентов.</p>
+      <form id="airdrop-form">
+        <div>
+          <label for="airdrop-amount">Сумма каждому (EMP)</label>
+          <input id="airdrop-amount" type="number" min="1" step="1" required />
+        </div>
+        <div>
+          <label for="airdrop-note">Комментарий</label>
+          <input id="airdrop-note" type="text" maxlength="200" />
+        </div>
+        <p id="airdrop-error" class="error" style="display:none"></p>
+        <p id="airdrop-success" class="success-msg" style="display:none"></p>
+        <button type="submit" class="secondary">Раздать всем</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Настройки банка</h2>
+      <form id="config-form">
+        <div>
+          <label for="cfg-fee">Комиссия за перевод (базисные пункты, 100 = 1%)</label>
+          <input id="cfg-fee" type="number" min="0" step="1" />
+        </div>
+        <div>
+          <label for="cfg-min">Минимальная сумма перевода</label>
+          <input id="cfg-min" type="number" min="0" step="1" />
+        </div>
+        <div>
+          <label for="cfg-max">Максимальная сумма перевода (0 = без лимита)</label>
+          <input id="cfg-max" type="number" min="0" step="1" />
+        </div>
+        <div>
+          <label for="cfg-daily-limit">Дневной лимит переводов на игрока (0 = без лимита)</label>
+          <input id="cfg-daily-limit" type="number" min="0" step="1" />
+        </div>
+        <div>
+          <label for="cfg-large-threshold">Порог подтверждения крупных переводов (0 = выключено)</label>
+          <input id="cfg-large-threshold" type="number" min="0" step="1" />
+        </div>
+        <div>
+          <label for="cfg-daily-bonus">Ежедневный бонус (0 = выключен)</label>
+          <input id="cfg-daily-bonus" type="number" min="0" step="1" />
+        </div>
+        <div>
+          <label for="cfg-savings-rate">Ставка по вкладам (базисные пункты, 500 = 5%)</label>
+          <input id="cfg-savings-rate" type="number" min="0" step="1" />
+        </div>
+        <div>
+          <label for="cfg-savings-days">Срок вклада (дней)</label>
+          <input id="cfg-savings-days" type="number" min="1" step="1" />
+        </div>
+        <p id="config-error" class="error" style="display:none"></p>
+        <p id="config-success" class="success-msg" style="display:none"></p>
+        <button type="submit" class="secondary">Сохранить настройки</button>
+      </form>
+    </div>
+
+    <div class="panel">
       <h2>Пользователи</h2>
       <table>
         <thead>
           <tr><th>ID</th><th>Ник</th><th>Роль</th><th>Баланс</th><th>Статус</th><th>Действие</th></tr>
         </thead>
         <tbody id="users-body"></tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>Транзакции (поиск)</h2>
+      <div style="display:flex; gap:0.75rem; flex-wrap:wrap; margin-bottom:1rem;">
+        <input id="tx-search-username" type="text" placeholder="Ник участника" />
+        <select id="tx-search-type">
+          <option value="">Все типы</option>
+          <option value="transfer">Переводы</option>
+          <option value="mint">Эмиссия</option>
+          <option value="burn">Списание</option>
+          <option value="mc_deposit">Депозит из игры</option>
+          <option value="mc_withdraw">Вывод в игру</option>
+          <option value="daily_bonus">Ежедневный бонус</option>
+          <option value="savings_lock">Вклад открыт</option>
+          <option value="savings_claim">Вклад закрыт</option>
+        </select>
+        <button id="tx-search-btn" class="secondary">Найти</button>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Дата</th><th>Тип</th><th>От</th><th>Кому</th><th>Сумма</th><th>Комментарий</th></tr>
+        </thead>
+        <tbody id="tx-search-body"></tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>Журнал действий администратора</h2>
+      <table>
+        <thead>
+          <tr><th>Дата</th><th>Админ</th><th>Действие</th><th>Цель</th><th>Сумма</th><th>Детали</th></tr>
+        </thead>
+        <tbody id="audit-body"></tbody>
       </table>
     </div>
   </main>

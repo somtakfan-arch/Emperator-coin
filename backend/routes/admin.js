@@ -17,6 +17,11 @@ router.get(
   '/transactions',
   asyncHandler(async (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 200, 1000);
+    if (req.query.type || req.query.username) {
+      return res.json(
+        await models.searchTransactions({ type: req.query.type, username: req.query.username, limit })
+      );
+    }
     res.json(await models.listAllTransactions(limit));
   })
 );
@@ -39,6 +44,13 @@ router.post(
       amount: amountInt,
       type: 'mint',
       note: note ? String(note).slice(0, 200) : `Эмиссия администратором ${req.user.username}`,
+    });
+    await models.recordAuditLog({
+      adminUsername: req.user.username,
+      action: 'mint',
+      targetUsername: target.username,
+      amount: amountInt,
+      note,
     });
     res.json({ balance: await models.getBalance(target.id) });
   })
@@ -70,6 +82,13 @@ router.post(
       }
       throw err;
     }
+    await models.recordAuditLog({
+      adminUsername: req.user.username,
+      action: 'burn',
+      targetUsername: target.username,
+      amount: amountInt,
+      note,
+    });
     res.json({ balance: await models.getBalance(target.id) });
   })
 );
@@ -80,6 +99,11 @@ router.post(
     const target = await models.findUserById(req.params.userId);
     if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
     await models.setFrozen(target.id, true);
+    await models.recordAuditLog({
+      adminUsername: req.user.username,
+      action: 'freeze',
+      targetUsername: target.username,
+    });
     res.json({ ok: true });
   })
 );
@@ -90,7 +114,110 @@ router.post(
     const target = await models.findUserById(req.params.userId);
     if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
     await models.setFrozen(target.id, false);
+    await models.recordAuditLog({
+      adminUsername: req.user.username,
+      action: 'unfreeze',
+      targetUsername: target.username,
+    });
     res.json({ ok: true });
+  })
+);
+
+// --- Bank config ------------------------------------------------------------
+
+router.get(
+  '/config',
+  asyncHandler(async (req, res) => {
+    res.json(await models.getBankConfig());
+  })
+);
+
+router.post(
+  '/config',
+  asyncHandler(async (req, res) => {
+    const allowedKeys = [
+      'transferFeeBps',
+      'minTransfer',
+      'maxTransfer',
+      'dailyTransferLimit',
+      'largeTransferThreshold',
+      'dailyBonusAmount',
+      'savingsInterestRateBps',
+      'savingsLockDays',
+    ];
+    const patch = {};
+    for (const key of allowedKeys) {
+      if (req.body && req.body[key] != null) {
+        const value = Number(req.body[key]);
+        if (!Number.isFinite(value) || value < 0) {
+          return res.status(400).json({ error: `Неверное значение для ${key}` });
+        }
+        patch[key] = value;
+      }
+    }
+    const config = await models.updateBankConfig(patch);
+    await models.recordAuditLog({
+      adminUsername: req.user.username,
+      action: 'config_update',
+      note: JSON.stringify(patch),
+    });
+    res.json(config);
+  })
+);
+
+// --- Treasury & economy stats -----------------------------------------------
+
+router.get(
+  '/treasury',
+  asyncHandler(async (req, res) => {
+    res.json({ balance: await models.getTreasuryBalance() });
+  })
+);
+
+router.get(
+  '/stats',
+  asyncHandler(async (req, res) => {
+    res.json(await models.getEconomyStats());
+  })
+);
+
+// --- Audit log ---------------------------------------------------------------
+
+router.get(
+  '/audit-log',
+  asyncHandler(async (req, res) => {
+    const limit = Math.min(Number(req.query.limit) || 200, 1000);
+    res.json(await models.listAuditLog(limit));
+  })
+);
+
+// --- Bulk airdrop --------------------------------------------------------------
+
+router.post(
+  '/airdrop',
+  asyncHandler(async (req, res) => {
+    const amountInt = Number(req.body?.amount);
+    if (!Number.isInteger(amountInt) || amountInt <= 0) {
+      return res.status(400).json({ error: 'Укажите целую сумму больше 0' });
+    }
+    const note = req.body?.note ? String(req.body.note).slice(0, 200) : `Раздача от администратора ${req.user.username}`;
+    const users = await models.listUsers();
+    for (const user of users) {
+      await models.transferFunds({
+        fromUserId: null,
+        toUserId: user.id,
+        amount: amountInt,
+        type: 'mint',
+        note,
+      });
+    }
+    await models.recordAuditLog({
+      adminUsername: req.user.username,
+      action: 'airdrop',
+      amount: amountInt,
+      note: `${note} (получателей: ${users.length})`,
+    });
+    res.json({ recipients: users.length, amountEach: amountInt });
   })
 );
 

@@ -19,10 +19,15 @@
     <div class="panel">
       <h2>Баланс</h2>
       <div class="balance-display"><span id="balance">—</span><span class="unit">EMP</span></div>
+      <div style="text-align:center">
+        <button id="claim-daily" class="secondary">Забрать ежедневный бонус</button>
+        <p id="daily-msg" class="muted" style="display:none"></p>
+      </div>
     </div>
 
     <div class="panel">
       <h2>Перевод</h2>
+      <p id="transfer-rules" class="muted"></p>
       <form id="transfer-form">
         <div>
           <label for="to-username">Получатель (ник)</label>
@@ -38,8 +43,57 @@
         </div>
         <p id="transfer-error" class="error" style="display:none"></p>
         <p id="transfer-success" class="success-msg" style="display:none"></p>
-        <button type="submit">Перевести</button>
+        <div id="confirm-box" style="display:none">
+          <p class="muted" id="confirm-text"></p>
+          <button type="button" id="confirm-transfer">Подтвердить перевод</button>
+        </div>
+        <button type="submit" id="transfer-submit">Перевести</button>
       </form>
+    </div>
+
+    <div class="panel">
+      <h2>Запросы на перевод</h2>
+      <form id="request-form">
+        <div>
+          <label for="req-username">Запросить у (ник)</label>
+          <input id="req-username" type="text" required />
+        </div>
+        <div>
+          <label for="req-amount">Сумма (EMP)</label>
+          <input id="req-amount" type="number" min="1" step="1" required />
+        </div>
+        <div>
+          <label for="req-note">Комментарий (необязательно)</label>
+          <input id="req-note" type="text" maxlength="200" />
+        </div>
+        <p id="request-error" class="error" style="display:none"></p>
+        <button type="submit" class="secondary">Запросить</button>
+      </form>
+      <table>
+        <thead>
+          <tr><th>Кто/Кому</th><th>Сумма</th><th>Статус</th><th>Действие</th></tr>
+        </thead>
+        <tbody id="requests-body"></tbody>
+      </table>
+    </div>
+
+    <div class="panel">
+      <h2>Вклады под процент</h2>
+      <p id="savings-rules" class="muted"></p>
+      <form id="savings-form">
+        <div>
+          <label for="savings-amount">Сумма вклада (EMP)</label>
+          <input id="savings-amount" type="number" min="1" step="1" required />
+        </div>
+        <p id="savings-error" class="error" style="display:none"></p>
+        <button type="submit" class="secondary">Открыть вклад</button>
+      </form>
+      <table>
+        <thead>
+          <tr><th>Сумма</th><th>Ставка</th><th>Созревает</th><th>Действие</th></tr>
+        </thead>
+        <tbody id="savings-body"></tbody>
+      </table>
     </div>
 
     <div class="panel">
@@ -53,13 +107,41 @@
     </div>
 
     <div class="panel">
+      <h2>Топ игроков банка</h2>
+      <table>
+        <thead>
+          <tr><th>#</th><th>Ник</th><th>Баланс</th></tr>
+        </thead>
+        <tbody id="leaderboard-body"></tbody>
+      </table>
+    </div>
+
+    <div class="panel">
       <h2>История операций</h2>
+      <div style="display:flex; gap:0.75rem; align-items:center; flex-wrap:wrap; margin-bottom:1rem;">
+        <label for="tx-filter" class="muted">Тип:</label>
+        <select id="tx-filter">
+          <option value="">Все</option>
+          <option value="transfer">Переводы</option>
+          <option value="mint">Эмиссия</option>
+          <option value="burn">Списание</option>
+          <option value="mc_deposit">Депозит из игры</option>
+          <option value="mc_withdraw">Вывод в игру</option>
+          <option value="daily_bonus">Ежедневный бонус</option>
+          <option value="savings_lock">Вклад открыт</option>
+          <option value="savings_claim">Вклад закрыт</option>
+        </select>
+        <button id="export-csv" class="secondary">Скачать CSV</button>
+      </div>
       <table>
         <thead>
           <tr><th>Дата</th><th>Тип</th><th>Сумма</th><th>Детали</th></tr>
         </thead>
         <tbody id="tx-body"></tbody>
       </table>
+      <div style="text-align:center; margin-top:1rem;">
+        <button id="tx-load-more" class="secondary" style="display:none">Показать ещё</button>
+      </div>
     </div>
   </main>
   <script src="/js/api.js"></script>

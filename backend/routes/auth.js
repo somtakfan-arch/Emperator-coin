@@ -57,13 +57,28 @@ router.post(
     if (!username || !password) {
       return res.status(400).json({ error: 'Укажите ник и пароль' });
     }
+
+    const lockoutSeconds = await models.getLoginLockoutSeconds(username);
+    if (lockoutSeconds > 0) {
+      return res.status(429).json({
+        error: `Слишком много неудачных попыток входа. Повторите через ${Math.ceil(lockoutSeconds / 60)} мин.`,
+      });
+    }
+
     const user = await models.findUserByUsername(username);
-    if (!user) return res.status(401).json({ error: 'Неверный ник или пароль' });
+    if (!user) {
+      await models.recordFailedLogin(username);
+      return res.status(401).json({ error: 'Неверный ник или пароль' });
+    }
 
     const ok = await bcrypt.compare(password, user.password_hash);
-    if (!ok) return res.status(401).json({ error: 'Неверный ник или пароль' });
+    if (!ok) {
+      await models.recordFailedLogin(username);
+      return res.status(401).json({ error: 'Неверный ник или пароль' });
+    }
     if (user.frozen) return res.status(403).json({ error: 'Счёт заморожен администрацией' });
 
+    await models.resetLoginAttempts(username);
     const token = issueToken(user);
     res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
   })

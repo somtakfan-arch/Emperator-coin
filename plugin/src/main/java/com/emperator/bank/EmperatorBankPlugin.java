@@ -35,6 +35,10 @@ public class EmperatorBankPlugin extends JavaPlugin {
     getCommand("bank").setExecutor(bankCommand);
     getCommand("bank").setTabCompleter(bankCommand);
 
+    NotificationService notifications = new NotificationService(this, apiClient);
+    getServer().getPluginManager().registerEvents(notifications, this);
+    notifications.startPolling(20L * 30); // every 30 seconds
+
     getLogger().info("Emperator Bank подключён к сайту: " + getConfig().getString("api-base-url"));
   }
 }
