@@ -16,20 +16,21 @@ function checkEnv() {
   }
 }
 
-// Builds the API app. Routes are mounted at the root (no /api prefix) so the
-// same app can be reused both locally (server.js adds the /api prefix itself)
-// and as a Netlify Function (Netlify strips the function path prefix, so the
-// function already only sees what comes after /api/).
+// Builds the API app. Routes are mounted under /api because Netlify passes
+// the original request path (e.g. /api/auth/register) through to the
+// function unchanged — it does NOT strip the /.netlify/functions/api prefix,
+// despite what a lot of older tutorials claim. Mounting under /api here
+// keeps local dev (server.js) and the Netlify Function behaving identically.
 function createApiApp() {
   checkEnv();
   const app = express();
   app.use(cors());
   app.use(express.json());
 
-  app.use('/auth', authRoutes);
-  app.use('/bank', bankRoutes);
-  app.use('/admin', adminRoutes);
-  app.use('/plugin', pluginRoutes);
+  app.use('/api/auth', authRoutes);
+  app.use('/api/bank', bankRoutes);
+  app.use('/api/admin', adminRoutes);
+  app.use('/api/plugin', pluginRoutes);
 
   app.use((err, req, res, next) => {
     console.error(err);
