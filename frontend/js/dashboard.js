@@ -34,7 +34,7 @@ function renderTxRow(tx) {
   const sign = isIncoming ? '+' : '-';
   const tr = document.createElement('tr');
   tr.innerHTML = `
-    <td>${new Date(tx.created_at + 'Z').toLocaleString('ru-RU')}</td>
+    <td>${new Date(tx.created_at).toLocaleString('ru-RU')}</td>
     <td>${TYPE_LABELS[tx.type] || tx.type}</td>
     <td class="${amountClass}">${sign}${tx.amount} EMP</td>
     <td class="muted">${detail}</td>

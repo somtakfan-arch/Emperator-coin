@@ -4,8 +4,9 @@ MAlonzo/**
 # Node / backend
 node_modules/
 backend/.env
-backend/data/*.db
-backend/data/*.db-journal
+
+# Netlify
+.netlify/
 
 # Java / plugin
 plugin/target/

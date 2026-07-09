@@ -1,15 +1,27 @@
 // Promotes an existing user to admin. Usage: node scripts/make-admin.js <username>
-const db = require('../db/init');
+require('dotenv').config();
+const models = require('../db/models');
 
-const username = process.argv[2];
-if (!username) {
-  console.error('Использование: node scripts/make-admin.js <username>');
-  process.exit(1);
+async function main() {
+  const username = process.argv[2];
+  if (!username) {
+    console.error('Использование: node scripts/make-admin.js <username>');
+    process.exit(1);
+  }
+
+  const user = await models.findUserByUsername(username);
+  if (!user) {
+    console.error(`Пользователь "${username}" не найден`);
+    process.exit(1);
+  }
+
+  const { db } = require('../db/firestore');
+  await db.collection('users').doc(user.id).update({ role: 'admin' });
+  console.log(`Пользователь "${username}" теперь администратор.`);
+  process.exit(0);
 }
 
-const info = db.prepare("UPDATE users SET role = 'admin' WHERE username = ?").run(username);
-if (info.changes === 0) {
-  console.error(`Пользователь "${username}" не найден`);
+main().catch((err) => {
+  console.error(err);
   process.exit(1);
-}
-console.log(`Пользователь "${username}" теперь администратор.`);
+});

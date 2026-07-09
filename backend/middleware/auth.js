@@ -1,14 +1,14 @@
 const jwt = require('jsonwebtoken');
 const models = require('../db/models');
 
-function requireAuth(req, res, next) {
+async function requireAuth(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
   if (!token) return res.status(401).json({ error: 'Не авторизован' });
 
   try {
     const payload = jwt.verify(token, process.env.JWT_SECRET);
-    const user = models.findUserById(payload.sub);
+    const user = await models.findUserById(payload.sub);
     if (!user) return res.status(401).json({ error: 'Пользователь не найден' });
     if (user.frozen) return res.status(403).json({ error: 'Счёт заморожен' });
     req.user = user;

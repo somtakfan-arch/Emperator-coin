@@ -1,126 +1,220 @@
-const db = require('./init');
+const { admin, db } = require('./firestore');
+
+const usersCol = () => db.collection('users');
+const usernamesCol = () => db.collection('usernames');
+const transactionsCol = () => db.collection('transactions');
+const mcLinksCol = () => db.collection('mcLinks');
+const mcUuidIndexCol = () => db.collection('mcUuidIndex');
+const linkCodesCol = () => db.collection('linkCodes');
+
+// Firestore Timestamp -> ISO string, for JSON responses. Passes through
+// anything that isn't a Timestamp (e.g. null right after a write that hasn't
+// been re-read yet).
+function toIso(value) {
+  return value && typeof value.toDate === 'function' ? value.toDate().toISOString() : value;
+}
+
+// Shapes a Firestore user document into the flat row shape the rest of the
+// backend (routes, middleware) expects to read.
+function toUserRow(id, data) {
+  return {
+    id,
+    username: data.username,
+    password_hash: data.passwordHash,
+    role: data.role,
+    frozen: data.frozen,
+    balance: data.balance,
+    created_at: toIso(data.createdAt),
+  };
+}
+
+function toTxRow(id, data) {
+  return {
+    id,
+    from_user_id: data.fromUserId,
+    to_user_id: data.toUserId,
+    from_username: data.fromUsername,
+    to_username: data.toUsername,
+    amount: data.amount,
+    type: data.type,
+    note: data.note,
+    created_at: toIso(data.createdAt),
+  };
+}
 
 const models = {
-  createUser(username, passwordHash) {
-    const insertUser = db.prepare(
-      'INSERT INTO users (username, password_hash) VALUES (?, ?)'
-    );
-    const insertAccount = db.prepare(
-      'INSERT INTO accounts (user_id, balance) VALUES (?, 0)'
-    );
-    const tx = db.transaction((u, h) => {
-      const info = insertUser.run(u, h);
-      insertAccount.run(info.lastInsertRowid);
-      return info.lastInsertRowid;
-    });
-    return tx(username, passwordHash);
-  },
-
-  findUserByUsername(username) {
-    return db.prepare('SELECT * FROM users WHERE username = ?').get(username);
-  },
-
-  findUserById(id) {
-    return db.prepare('SELECT * FROM users WHERE id = ?').get(id);
-  },
-
-  getBalance(userId) {
-    const row = db.prepare('SELECT balance FROM accounts WHERE user_id = ?').get(userId);
-    return row ? row.balance : 0;
-  },
-
-  listUsers() {
-    return db
-      .prepare(
-        `SELECT u.id, u.username, u.role, u.frozen, u.created_at, a.balance
-         FROM users u JOIN accounts a ON a.user_id = u.id
-         ORDER BY u.id ASC`
-      )
-      .all();
-  },
-
-  listTransactionsForUser(userId, limit = 100) {
-    return db
-      .prepare(
-        `SELECT t.*, fu.username AS from_username, tu.username AS to_username
-         FROM transactions t
-         LEFT JOIN users fu ON fu.id = t.from_user_id
-         LEFT JOIN users tu ON tu.id = t.to_user_id
-         WHERE t.from_user_id = ? OR t.to_user_id = ?
-         ORDER BY t.id DESC LIMIT ?`
-      )
-      .all(userId, userId, limit);
-  },
-
-  // Atomically move `amount` from one account to another and record the transaction.
-  // `fromUserId` or `toUserId` may be null for mint/burn/deposit/withdraw operations.
-  transferFunds({ fromUserId, toUserId, amount, type, note }) {
-    const tx = db.transaction(() => {
-      if (fromUserId != null) {
-        const fromAccount = db
-          .prepare('SELECT balance FROM accounts WHERE user_id = ?')
-          .get(fromUserId);
-        if (!fromAccount || fromAccount.balance < amount) {
-          throw new Error('INSUFFICIENT_FUNDS');
-        }
-        db.prepare('UPDATE accounts SET balance = balance - ? WHERE user_id = ?').run(
-          amount,
-          fromUserId
-        );
+  // Throws Error('USERNAME_TAKEN') if the username is already registered.
+  async createUser(username, passwordHash) {
+    return db.runTransaction(async (tx) => {
+      const usernameRef = usernamesCol().doc(username);
+      const usernameSnap = await tx.get(usernameRef);
+      if (usernameSnap.exists) {
+        throw new Error('USERNAME_TAKEN');
       }
-      if (toUserId != null) {
-        db.prepare('UPDATE accounts SET balance = balance + ? WHERE user_id = ?').run(
-          amount,
-          toUserId
-        );
-      }
-      const info = db
-        .prepare(
-          `INSERT INTO transactions (from_user_id, to_user_id, amount, type, note)
-           VALUES (?, ?, ?, ?, ?)`
-        )
-        .run(fromUserId, toUserId, amount, type, note || null);
-      return info.lastInsertRowid;
+      const userRef = usersCol().doc();
+      tx.set(userRef, {
+        username,
+        passwordHash,
+        role: 'user',
+        frozen: false,
+        balance: 0,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      tx.set(usernameRef, { userId: userRef.id });
+      return userRef.id;
     });
-    return tx();
   },
 
-  setFrozen(userId, frozen) {
-    db.prepare('UPDATE users SET frozen = ? WHERE id = ?').run(frozen ? 1 : 0, userId);
+  async findUserByUsername(username) {
+    const usernameSnap = await usernamesCol().doc(username).get();
+    if (!usernameSnap.exists) return null;
+    return models.findUserById(usernameSnap.data().userId);
   },
 
-  createLinkCode(userId, code, expiresAt) {
-    db.prepare('DELETE FROM link_codes WHERE user_id = ?').run(userId);
-    db.prepare(
-      'INSERT INTO link_codes (code, user_id, expires_at) VALUES (?, ?, ?)'
-    ).run(code, userId, expiresAt);
+  async findUserById(userId) {
+    if (!userId) return null;
+    const snap = await usersCol().doc(userId).get();
+    if (!snap.exists) return null;
+    return toUserRow(snap.id, snap.data());
   },
 
-  consumeLinkCode(code) {
-    const row = db.prepare('SELECT * FROM link_codes WHERE code = ?').get(code);
-    if (!row) return null;
-    if (row.used) return null;
-    if (new Date(row.expires_at) < new Date()) return null;
-    db.prepare('UPDATE link_codes SET used = 1 WHERE code = ?').run(code);
-    return row;
+  async getBalance(userId) {
+    const snap = await usersCol().doc(userId).get();
+    return snap.exists ? snap.data().balance : 0;
   },
 
-  linkMcAccount(userId, mcUuid, mcUsername) {
-    db.prepare(
-      `INSERT INTO mc_links (user_id, mc_uuid, mc_username)
-       VALUES (?, ?, ?)
-       ON CONFLICT(user_id) DO UPDATE SET mc_uuid = excluded.mc_uuid, mc_username = excluded.mc_username`
-    ).run(userId, mcUuid, mcUsername);
+  async listUsers() {
+    const snap = await usersCol().orderBy('createdAt', 'asc').get();
+    return snap.docs.map((d) => toUserRow(d.id, d.data()));
   },
 
-  findUserByMcUuid(mcUuid) {
-    return db
-      .prepare(
-        `SELECT u.*, ml.mc_uuid, ml.mc_username FROM users u
-         JOIN mc_links ml ON ml.user_id = u.id
-         WHERE ml.mc_uuid = ?`
-      )
-      .get(mcUuid);
+  async listAllTransactions(limit = 200) {
+    const snap = await transactionsCol().orderBy('createdAt', 'desc').limit(limit).get();
+    return snap.docs.map((d) => toTxRow(d.id, d.data()));
+  },
+
+  async listTransactionsForUser(userId, limit = 100) {
+    const [outSnap, inSnap] = await Promise.all([
+      transactionsCol().where('fromUserId', '==', userId).orderBy('createdAt', 'desc').limit(limit).get(),
+      transactionsCol().where('toUserId', '==', userId).orderBy('createdAt', 'desc').limit(limit).get(),
+    ]);
+    const seen = new Map();
+    for (const d of [...outSnap.docs, ...inSnap.docs]) {
+      seen.set(d.id, toTxRow(d.id, d.data()));
+    }
+    return [...seen.values()]
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+      .slice(0, limit);
+  },
+
+  // Atomically moves `amount` from one account to another and records the
+  // transaction. `fromUserId` or `toUserId` may be null for mint/burn/deposit/
+  // withdraw operations. Throws Error('INSUFFICIENT_FUNDS') when the source
+  // account can't cover the amount.
+  async transferFunds({ fromUserId, toUserId, amount, type, note }) {
+    return db.runTransaction(async (tx) => {
+      let fromRef = null;
+      let fromData = null;
+      let toRef = null;
+      let toData = null;
+
+      if (fromUserId) {
+        fromRef = usersCol().doc(fromUserId);
+        const fromSnap = await tx.get(fromRef);
+        if (!fromSnap.exists) throw new Error('INSUFFICIENT_FUNDS');
+        fromData = fromSnap.data();
+        if (fromData.balance < amount) throw new Error('INSUFFICIENT_FUNDS');
+      }
+      if (toUserId) {
+        toRef = usersCol().doc(toUserId);
+        const toSnap = await tx.get(toRef);
+        toData = toSnap.exists ? toSnap.data() : null;
+      }
+
+      if (fromRef) {
+        tx.update(fromRef, { balance: admin.firestore.FieldValue.increment(-amount) });
+      }
+      if (toRef) {
+        tx.update(toRef, { balance: admin.firestore.FieldValue.increment(amount) });
+      }
+
+      const txRef = transactionsCol().doc();
+      tx.set(txRef, {
+        fromUserId: fromUserId || null,
+        toUserId: toUserId || null,
+        fromUsername: fromData ? fromData.username : null,
+        toUsername: toData ? toData.username : null,
+        amount,
+        type,
+        note: note || null,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return txRef.id;
+    });
+  },
+
+  async setFrozen(userId, frozen) {
+    await usersCol().doc(userId).update({ frozen: !!frozen });
+  },
+
+  async createLinkCode(userId, code, expiresAt) {
+    await linkCodesCol().doc(code).set({ userId, expiresAt, used: false });
+  },
+
+  // Returns { code, user_id } on success, or null if the code is missing,
+  // already used, or expired.
+  async consumeLinkCode(code) {
+    return db.runTransaction(async (tx) => {
+      const ref = linkCodesCol().doc(code);
+      const snap = await tx.get(ref);
+      if (!snap.exists) return null;
+      const data = snap.data();
+      if (data.used) return null;
+      if (new Date(data.expiresAt) < new Date()) return null;
+      tx.update(ref, { used: true });
+      return { code, user_id: data.userId };
+    });
+  },
+
+  // Throws Error('MC_ACCOUNT_ALREADY_LINKED') if the Minecraft account is
+  // already linked to a different bank account.
+  async linkMcAccount(userId, mcUuid, mcUsername) {
+    await db.runTransaction(async (tx) => {
+      const indexRef = mcUuidIndexCol().doc(mcUuid);
+      const indexSnap = await tx.get(indexRef);
+      if (indexSnap.exists && indexSnap.data().userId !== userId) {
+        throw new Error('MC_ACCOUNT_ALREADY_LINKED');
+      }
+
+      const linkRef = mcLinksCol().doc(userId);
+      const oldLinkSnap = await tx.get(linkRef);
+      if (oldLinkSnap.exists && oldLinkSnap.data().mcUuid !== mcUuid) {
+        tx.delete(mcUuidIndexCol().doc(oldLinkSnap.data().mcUuid));
+      }
+
+      tx.set(linkRef, {
+        mcUuid,
+        mcUsername,
+        linkedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      tx.set(indexRef, { userId });
+    });
+  },
+
+  async findUserByMcUuid(mcUuid) {
+    const indexSnap = await mcUuidIndexCol().doc(mcUuid).get();
+    if (!indexSnap.exists) return null;
+    const userId = indexSnap.data().userId;
+    const [user, linkSnap] = await Promise.all([
+      models.findUserById(userId),
+      mcLinksCol().doc(userId).get(),
+    ]);
+    if (!user) return null;
+    return {
+      ...user,
+      mc_uuid: linkSnap.exists ? linkSnap.data().mcUuid : mcUuid,
+      mc_username: linkSnap.exists ? linkSnap.data().mcUsername : null,
+    };
   },
 };
 
