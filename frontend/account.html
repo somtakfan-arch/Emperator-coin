@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Аккаунт и безопасность — Emperator Bank</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="imperial">
+    <div class="brand"><a href="/index.html" style="text-decoration:none;color:inherit">Emperator Bank</a></div>
+    <nav>
+      <a href="/dashboard.html">Личный кабинет</a>
+      <a href="#" id="logout-link">Выход</a>
+    </nav>
+  </header>
+  <main>
+    <div class="panel">
+      <h2>Смена пароля</h2>
+      <form id="password-form">
+        <div>
+          <label for="current-password">Текущий пароль</label>
+          <input id="current-password" type="password" required />
+        </div>
+        <div>
+          <label for="new-password">Новый пароль (мин. 6 символов)</label>
+          <input id="new-password" type="password" required />
+        </div>
+        <p id="password-error" class="error" style="display:none"></p>
+        <p id="password-success" class="success-msg" style="display:none"></p>
+        <button type="submit" class="secondary">Сменить пароль</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>PIN-код для крупных переводов</h2>
+      <p class="muted">Если банк настроил подтверждение крупных переводов, с PIN не нужно будет нажимать «Подтвердить» вручную — достаточно ввести код.</p>
+      <form id="pin-form">
+        <div>
+          <label for="pin-password">Пароль (для подтверждения)</label>
+          <input id="pin-password" type="password" required />
+        </div>
+        <div>
+          <label for="pin-value">Новый PIN (4-6 цифр)</label>
+          <input id="pin-value" type="text" inputmode="numeric" maxlength="6" required />
+        </div>
+        <p id="pin-error" class="error" style="display:none"></p>
+        <p id="pin-success" class="success-msg" style="display:none"></p>
+        <button type="submit" class="secondary">Установить PIN</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Двухфакторная аутентификация (2FA)</h2>
+      <p id="twofa-status" class="muted"></p>
+      <div id="twofa-setup" style="display:none">
+        <p class="muted">Добавьте этот секретный ключ в приложение-аутентификатор (Google Authenticator, Authy) вручную:</p>
+        <div class="link-code" id="twofa-secret"></div>
+        <form id="twofa-confirm-form">
+          <div>
+            <label for="twofa-code">Код из приложения</label>
+            <input id="twofa-code" type="text" inputmode="numeric" maxlength="6" required />
+          </div>
+          <p id="twofa-confirm-error" class="error" style="display:none"></p>
+          <button type="submit">Подтвердить и включить</button>
+        </form>
+      </div>
+      <button id="twofa-enable-btn" class="secondary">Включить 2FA</button>
+      <form id="twofa-disable-form" style="display:none">
+        <div>
+          <label for="twofa-disable-password">Пароль</label>
+          <input id="twofa-disable-password" type="password" required />
+        </div>
+        <p id="twofa-disable-error" class="error" style="display:none"></p>
+        <button type="submit" class="secondary">Отключить 2FA</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>История входов</h2>
+      <table>
+        <thead><tr><th>Дата</th><th>IP</th><th>Устройство</th><th></th></tr></thead>
+        <tbody id="history-body"></tbody>
+      </table>
+    </div>
+  </main>
+  <script src="/js/api.js"></script>
+  <script src="/js/account.js"></script>
+</body>
+</html>

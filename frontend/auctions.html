@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Аукцион — Emperator Bank</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="imperial">
+    <div class="brand"><a href="/index.html" style="text-decoration:none;color:inherit">Emperator Bank</a></div>
+    <nav>
+      <a href="/dashboard.html">Личный кабинет</a>
+      <a href="#" id="logout-link">Выход</a>
+    </nav>
+  </header>
+  <main>
+    <div class="panel">
+      <h2>Выставить лот</h2>
+      <p class="muted">Предмет передаётся победителю вручную в игре — аукцион только проводит торги в EMP.</p>
+      <form id="create-form">
+        <div>
+          <label for="item-name">Название предмета</label>
+          <input id="item-name" type="text" maxlength="100" required />
+        </div>
+        <div>
+          <label for="item-desc">Описание</label>
+          <input id="item-desc" type="text" maxlength="300" />
+        </div>
+        <div>
+          <label for="starting-bid">Стартовая ставка (EMP)</label>
+          <input id="starting-bid" type="number" min="1" step="1" required />
+        </div>
+        <div>
+          <label for="duration">Длительность (часов)</label>
+          <input id="duration" type="number" min="1" step="1" value="24" />
+        </div>
+        <p id="create-error" class="error" style="display:none"></p>
+        <button type="submit">Выставить</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Активные и завершённые лоты</h2>
+      <table>
+        <thead><tr><th>Предмет</th><th>Продавец</th><th>Ставка</th><th>Кто ведёт</th><th>Окончание</th><th>Действие</th></tr></thead>
+        <tbody id="auctions-body"></tbody>
+      </table>
+    </div>
+  </main>
+  <script src="/js/api.js"></script>
+  <script src="/js/auctions.js"></script>
+</body>
+</html>

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Группы и кланы — Emperator Bank</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="imperial">
+    <div class="brand"><a href="/index.html" style="text-decoration:none;color:inherit">Emperator Bank</a></div>
+    <nav>
+      <a href="/dashboard.html">Личный кабинет</a>
+      <a href="#" id="logout-link">Выход</a>
+    </nav>
+  </header>
+  <main>
+    <div id="no-group-panel" class="panel" style="display:none">
+      <h2>Создать группу / клан</h2>
+      <p class="muted">Общий счёт на несколько игроков: совместные накопления или казна клана с ролями и налогом на переводы участников.</p>
+      <form id="create-group-form">
+        <div>
+          <label for="group-name">Название</label>
+          <input id="group-name" type="text" maxlength="50" required />
+        </div>
+        <p id="create-group-error" class="error" style="display:none"></p>
+        <button type="submit">Создать</button>
+      </form>
+    </div>
+
+    <div id="group-panel" class="panel" style="display:none">
+      <h2 id="group-name-display"></h2>
+      <div class="balance-display"><span id="group-balance">—</span><span class="unit">EMP</span></div>
+
+      <h2>Участники</h2>
+      <table>
+        <thead><tr><th>Ник</th><th>Роль</th></tr></thead>
+        <tbody id="members-body"></tbody>
+      </table>
+
+      <form id="invite-form" style="margin-top:1rem">
+        <div>
+          <label for="invite-username">Пригласить игрока (ник)</label>
+          <input id="invite-username" type="text" required />
+        </div>
+        <p id="invite-error" class="error" style="display:none"></p>
+        <button type="submit" class="secondary">Пригласить</button>
+      </form>
+
+      <h2>Взнос / вывод</h2>
+      <form id="deposit-form">
+        <div>
+          <label for="deposit-amount">Внести в казну (EMP)</label>
+          <input id="deposit-amount" type="number" min="1" step="1" required />
+        </div>
+        <p id="deposit-error" class="error" style="display:none"></p>
+        <button type="submit">Внести</button>
+      </form>
+      <form id="withdraw-form">
+        <div>
+          <label for="withdraw-amount">Вывести из казны (EMP, только лидер/казначей)</label>
+          <input id="withdraw-amount" type="number" min="1" step="1" required />
+        </div>
+        <p id="withdraw-error" class="error" style="display:none"></p>
+        <button type="submit" class="secondary">Вывести</button>
+      </form>
+
+      <h2>Налог на переводы участников</h2>
+      <p class="muted">Ставка (базисные пункты, 100 = 1%) — при переводах участника группы часть суммы автоматически уходит в казну.</p>
+      <form id="tax-form">
+        <div>
+          <label for="tax-bps">Ставка</label>
+          <input id="tax-bps" type="number" min="0" step="1" />
+        </div>
+        <p id="tax-error" class="error" style="display:none"></p>
+        <button type="submit" class="secondary">Сохранить (только лидер)</button>
+      </form>
+
+      <button id="leave-group-btn" class="secondary" style="margin-top:1rem">Покинуть группу</button>
+    </div>
+  </main>
+  <script src="/js/api.js"></script>
+  <script src="/js/groups.js"></script>
+</body>
+</html>

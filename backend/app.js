@@ -6,6 +6,7 @@ const authRoutes = require('./routes/auth');
 const bankRoutes = require('./routes/bank');
 const adminRoutes = require('./routes/admin');
 const pluginRoutes = require('./routes/plugin');
+const publicRoutes = require('./routes/public');
 
 function checkEnv() {
   if (!process.env.JWT_SECRET || !process.env.PLUGIN_API_KEY) {
@@ -31,6 +32,7 @@ function createApiApp() {
   app.use('/api/bank', bankRoutes);
   app.use('/api/admin', adminRoutes);
   app.use('/api/plugin', pluginRoutes);
+  app.use('/api/public', publicRoutes);
 
   app.use((err, req, res, next) => {
     console.error(err);

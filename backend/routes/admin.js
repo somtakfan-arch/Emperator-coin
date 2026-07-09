@@ -1,13 +1,14 @@
 const express = require('express');
 const models = require('../db/models');
-const { requireAuth, requireAdmin } = require('../middleware/auth');
+const { requireAuth, requireAdmin, requireModeratorOrAdmin } = require('../middleware/auth');
 const asyncHandler = require('../util/asyncHandler');
 
 const router = express.Router();
-router.use(requireAuth, requireAdmin);
+router.use(requireAuth);
 
 router.get(
   '/users',
+  requireModeratorOrAdmin,
   asyncHandler(async (req, res) => {
     res.json(await models.listUsers());
   })
@@ -15,6 +16,7 @@ router.get(
 
 router.get(
   '/transactions',
+  requireAdmin,
   asyncHandler(async (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 200, 1000);
     if (req.query.type || req.query.username) {
@@ -29,6 +31,7 @@ router.get(
 // Mint new coins into a user's account (issuance by the bank).
 router.post(
   '/mint',
+  requireAdmin,
   asyncHandler(async (req, res) => {
     const { username, amount, note } = req.body || {};
     const amountInt = Number(amount);
@@ -37,6 +40,15 @@ router.post(
     }
     const target = await models.findUserByUsername(username);
     if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
+
+    try {
+      await models.checkAndRecordAdminMint(req.user.id, amountInt);
+    } catch (err) {
+      if (err.message === 'DAILY_MINT_LIMIT_EXCEEDED') {
+        return res.status(400).json({ error: 'Превышен ваш дневной лимит эмиссии' });
+      }
+      throw err;
+    }
 
     await models.transferFunds({
       fromUserId: null,
@@ -59,6 +71,7 @@ router.post(
 // Burn (remove) coins from a user's account.
 router.post(
   '/burn',
+  requireAdmin,
   asyncHandler(async (req, res) => {
     const { username, amount, note } = req.body || {};
     const amountInt = Number(amount);
@@ -95,6 +108,7 @@ router.post(
 
 router.post(
   '/freeze/:userId',
+  requireModeratorOrAdmin,
   asyncHandler(async (req, res) => {
     const target = await models.findUserById(req.params.userId);
     if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
@@ -110,6 +124,7 @@ router.post(
 
 router.post(
   '/unfreeze/:userId',
+  requireModeratorOrAdmin,
   asyncHandler(async (req, res) => {
     const target = await models.findUserById(req.params.userId);
     if (!target) return res.status(404).json({ error: 'Пользователь не найден' });
@@ -123,10 +138,47 @@ router.post(
   })
 );
 
+// Freeze/unfreeze several accounts at once by username.
+router.post(
+  '/freeze-bulk',
+  requireModeratorOrAdmin,
+  asyncHandler(async (req, res) => {
+    const { usernames, frozen } = req.body || {};
+    if (!Array.isArray(usernames) || usernames.length === 0) {
+      return res.status(400).json({ error: 'Укажите список ников' });
+    }
+    const result = await models.bulkFreeze(usernames, !!frozen);
+    await models.recordAuditLog({
+      adminUsername: req.user.username,
+      action: frozen ? 'freeze' : 'unfreeze',
+      note: `Массово: ${result.updated.join(', ') || 'никого'}${result.notFound.length ? `; не найдены: ${result.notFound.join(', ')}` : ''}`,
+    });
+    res.json(result);
+  })
+);
+
 // --- Bank config ------------------------------------------------------------
+
+const NUMERIC_CONFIG_KEYS = [
+  'transferFeeBps',
+  'minTransfer',
+  'maxTransfer',
+  'dailyTransferLimit',
+  'largeTransferThreshold',
+  'dailyBonusAmount',
+  'savingsInterestRateBps',
+  'savingsLockDays',
+  'pinRequiredAbove',
+  'earlyWithdrawalPenaltyBps',
+  'referralBonusAmount',
+  'dailyMintLimit',
+  'auctionFeeBps',
+];
+const STRUCTURED_CONFIG_KEYS = ['adminIpWhitelist', 'savingsTiers', 'tierThresholds', 'lotteryPrizes'];
 
 router.get(
   '/config',
+  requireAdmin,
   asyncHandler(async (req, res) => {
     res.json(await models.getBankConfig());
   })
@@ -134,19 +186,10 @@ router.get(
 
 router.post(
   '/config',
+  requireAdmin,
   asyncHandler(async (req, res) => {
-    const allowedKeys = [
-      'transferFeeBps',
-      'minTransfer',
-      'maxTransfer',
-      'dailyTransferLimit',
-      'largeTransferThreshold',
-      'dailyBonusAmount',
-      'savingsInterestRateBps',
-      'savingsLockDays',
-    ];
     const patch = {};
-    for (const key of allowedKeys) {
+    for (const key of NUMERIC_CONFIG_KEYS) {
       if (req.body && req.body[key] != null) {
         const value = Number(req.body[key]);
         if (!Number.isFinite(value) || value < 0) {
@@ -155,11 +198,16 @@ router.post(
         patch[key] = value;
       }
     }
-    const config = await models.updateBankConfig(patch);
+    for (const key of STRUCTURED_CONFIG_KEYS) {
+      if (req.body && Array.isArray(req.body[key])) {
+        patch[key] = req.body[key];
+      }
+    }
+    const { config, changes } = await models.updateBankConfig(patch);
     await models.recordAuditLog({
       adminUsername: req.user.username,
       action: 'config_update',
-      note: JSON.stringify(patch),
+      note: changes.map((c) => `${c.key}: ${JSON.stringify(c.before)} -> ${JSON.stringify(c.after)}`).join('; ') || 'без изменений',
     });
     res.json(config);
   })
@@ -169,6 +217,7 @@ router.post(
 
 router.get(
   '/treasury',
+  requireAdmin,
   asyncHandler(async (req, res) => {
     res.json({ balance: await models.getTreasuryBalance() });
   })
@@ -176,6 +225,7 @@ router.get(
 
 router.get(
   '/stats',
+  requireAdmin,
   asyncHandler(async (req, res) => {
     res.json(await models.getEconomyStats());
   })
@@ -185,6 +235,7 @@ router.get(
 
 router.get(
   '/audit-log',
+  requireAdmin,
   asyncHandler(async (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 200, 1000);
     res.json(await models.listAuditLog(limit));
@@ -195,6 +246,7 @@ router.get(
 
 router.post(
   '/airdrop',
+  requireAdmin,
   asyncHandler(async (req, res) => {
     const amountInt = Number(req.body?.amount);
     if (!Number.isInteger(amountInt) || amountInt <= 0) {
@@ -202,6 +254,16 @@ router.post(
     }
     const note = req.body?.note ? String(req.body.note).slice(0, 200) : `Раздача от администратора ${req.user.username}`;
     const users = await models.listUsers();
+
+    try {
+      await models.checkAndRecordAdminMint(req.user.id, amountInt * users.length);
+    } catch (err) {
+      if (err.message === 'DAILY_MINT_LIMIT_EXCEEDED') {
+        return res.status(400).json({ error: 'Раздача превышает ваш дневной лимит эмиссии' });
+      }
+      throw err;
+    }
+
     for (const user of users) {
       await models.transferFunds({
         fromUserId: null,
@@ -218,6 +280,16 @@ router.post(
       note: `${note} (получателей: ${users.length})`,
     });
     res.json({ recipients: users.length, amountEach: amountInt });
+  })
+);
+
+// --- Full data export --------------------------------------------------------
+
+router.get(
+  '/export',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    res.json(await models.exportAllData());
   })
 );
 

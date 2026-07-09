@@ -5,8 +5,19 @@ const ADMIN_TYPE_LABELS = {
   mc_deposit: 'Депозит из игры',
   mc_withdraw: 'Вывод в игру',
   daily_bonus: 'Ежедневный бонус',
+  lottery: 'Лотерея',
   savings_lock: 'Вклад открыт',
   savings_claim: 'Вклад закрыт',
+  savings_early_withdraw: 'Досрочное снятие',
+  group_deposit: 'Взнос в группу',
+  group_withdraw: 'Вывод из группы',
+  loan_disbursement: 'Выдача кредита',
+  loan_repayment: 'Погашение кредита',
+  auction_sale: 'Продажа на аукционе',
+  achievement_reward: 'Награда за достижение',
+  referral_bonus: 'Реферальный бонус',
+  quest_reward: 'Награда за задание',
+  scheduled_transfer: 'Отложенный перевод',
 };
 
 const ADMIN_ACTION_LABELS = {
@@ -130,6 +141,15 @@ async function loadConfigForm() {
   document.getElementById('cfg-daily-bonus').value = config.dailyBonusAmount;
   document.getElementById('cfg-savings-rate').value = config.savingsInterestRateBps;
   document.getElementById('cfg-savings-days').value = config.savingsLockDays;
+  document.getElementById('cfg-pin-threshold').value = config.pinRequiredAbove;
+  document.getElementById('cfg-early-penalty').value = config.earlyWithdrawalPenaltyBps;
+  document.getElementById('cfg-referral-bonus').value = config.referralBonusAmount;
+  document.getElementById('cfg-daily-mint-limit').value = config.dailyMintLimit;
+  document.getElementById('cfg-auction-fee').value = config.auctionFeeBps;
+  document.getElementById('cfg-savings-tiers').value = JSON.stringify(config.savingsTiers);
+  document.getElementById('cfg-tier-thresholds').value = JSON.stringify(config.tierThresholds);
+  document.getElementById('cfg-lottery-prizes').value = JSON.stringify(config.lotteryPrizes);
+  document.getElementById('cfg-ip-whitelist').value = JSON.stringify(config.adminIpWhitelist || []);
 }
 
 document.getElementById('logout-link').addEventListener('click', (e) => {
@@ -196,7 +216,22 @@ document.getElementById('config-form').addEventListener('submit', async (e) => {
     dailyBonusAmount: document.getElementById('cfg-daily-bonus').value,
     savingsInterestRateBps: document.getElementById('cfg-savings-rate').value,
     savingsLockDays: document.getElementById('cfg-savings-days').value,
+    pinRequiredAbove: document.getElementById('cfg-pin-threshold').value,
+    earlyWithdrawalPenaltyBps: document.getElementById('cfg-early-penalty').value,
+    referralBonusAmount: document.getElementById('cfg-referral-bonus').value,
+    dailyMintLimit: document.getElementById('cfg-daily-mint-limit').value,
+    auctionFeeBps: document.getElementById('cfg-auction-fee').value,
   };
+  try {
+    body.savingsTiers = JSON.parse(document.getElementById('cfg-savings-tiers').value || '[]');
+    body.tierThresholds = JSON.parse(document.getElementById('cfg-tier-thresholds').value || '[]');
+    body.lotteryPrizes = JSON.parse(document.getElementById('cfg-lottery-prizes').value || '[]');
+    body.adminIpWhitelist = JSON.parse(document.getElementById('cfg-ip-whitelist').value || '[]');
+  } catch (err) {
+    errorEl.textContent = 'Ошибка в JSON-полях: ' + err.message;
+    errorEl.style.display = 'block';
+    return;
+  }
   try {
     await api('/admin/config', { method: 'POST', body });
     successEl.textContent = 'Настройки сохранены';
@@ -205,6 +240,42 @@ document.getElementById('config-form').addEventListener('submit', async (e) => {
   } catch (err) {
     errorEl.textContent = err.message;
     errorEl.style.display = 'block';
+  }
+});
+
+document.getElementById('bulk-freeze-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const frozen = e.submitter ? e.submitter.getAttribute('data-frozen') === 'true' : true;
+  const usernames = document.getElementById('bulk-usernames').value.split(',').map((s) => s.trim()).filter(Boolean);
+  const errorEl = document.getElementById('bulk-freeze-error');
+  const successEl = document.getElementById('bulk-freeze-success');
+  errorEl.style.display = 'none';
+  successEl.style.display = 'none';
+  try {
+    const result = await api('/admin/freeze-bulk', { method: 'POST', body: { usernames, frozen } });
+    successEl.textContent = `Обновлено: ${result.updated.join(', ') || 'никого'}` +
+      (result.notFound.length ? `; не найдены: ${result.notFound.join(', ')}` : '');
+    successEl.style.display = 'block';
+    document.getElementById('bulk-freeze-form').reset();
+    await Promise.all([loadUsers(), loadAuditLog()]);
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.style.display = 'block';
+  }
+});
+
+document.getElementById('export-btn').addEventListener('click', async () => {
+  try {
+    const data = await api('/admin/export');
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `emperator-bank-export-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    alert(err.message);
   }
 });
 

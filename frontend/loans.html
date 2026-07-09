@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Кредиты — Emperator Bank</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="imperial">
+    <div class="brand"><a href="/index.html" style="text-decoration:none;color:inherit">Emperator Bank</a></div>
+    <nav>
+      <a href="/dashboard.html">Личный кабинет</a>
+      <a href="#" id="logout-link">Выход</a>
+    </nav>
+  </header>
+  <main>
+    <div class="panel">
+      <h2>Мой кредитный рейтинг</h2>
+      <div class="balance-display"><span id="credit-score">—</span></div>
+      <p class="muted" style="text-align:center">От 0 до 1000. Растёт при погашении кредитов, падает при просрочке.</p>
+    </div>
+
+    <div class="panel">
+      <h2>Предложить кредит</h2>
+      <form id="offer-form">
+        <div>
+          <label for="loan-username">Заёмщик (ник)</label>
+          <input id="loan-username" type="text" required />
+        </div>
+        <div>
+          <label for="loan-principal">Сумма (EMP)</label>
+          <input id="loan-principal" type="number" min="1" step="1" required />
+        </div>
+        <div>
+          <label for="loan-rate">Ставка за весь срок (базисные пункты, 1000 = 10%)</label>
+          <input id="loan-rate" type="number" min="0" step="1" value="1000" />
+        </div>
+        <div>
+          <label for="loan-term">Срок (дней)</label>
+          <input id="loan-term" type="number" min="1" step="1" value="7" />
+        </div>
+        <div>
+          <label for="loan-collateral">Залог заёмщика (EMP, необязательно)</label>
+          <input id="loan-collateral" type="number" min="0" step="1" value="0" />
+        </div>
+        <p id="offer-error" class="error" style="display:none"></p>
+        <button type="submit">Предложить</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Мои кредиты</h2>
+      <table>
+        <thead><tr><th>Кредитор</th><th>Заёмщик</th><th>Сумма</th><th>Остаток</th><th>Статус</th><th>Действие</th></tr></thead>
+        <tbody id="loans-body"></tbody>
+      </table>
+    </div>
+  </main>
+  <script src="/js/api.js"></script>
+  <script src="/js/loans.js"></script>
+</body>
+</html>

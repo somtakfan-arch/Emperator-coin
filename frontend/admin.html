@@ -92,13 +92,71 @@
           <input id="cfg-savings-rate" type="number" min="0" step="1" />
         </div>
         <div>
-          <label for="cfg-savings-days">Срок вклада (дней)</label>
+          <label for="cfg-savings-days">Срок вклада по умолчанию (дней, для старой ставки)</label>
           <input id="cfg-savings-days" type="number" min="1" step="1" />
+        </div>
+        <div>
+          <label for="cfg-pin-threshold">Порог для запроса PIN (0 = не требовать отдельно от подтверждения)</label>
+          <input id="cfg-pin-threshold" type="number" min="0" step="1" />
+        </div>
+        <div>
+          <label for="cfg-early-penalty">Штраф за досрочное снятие вклада (базисные пункты, 2000 = 20%)</label>
+          <input id="cfg-early-penalty" type="number" min="0" step="1" />
+        </div>
+        <div>
+          <label for="cfg-referral-bonus">Реферальный бонус (0 = выключен)</label>
+          <input id="cfg-referral-bonus" type="number" min="0" step="1" />
+        </div>
+        <div>
+          <label for="cfg-daily-mint-limit">Дневной лимит эмиссии на админа (0 = без лимита)</label>
+          <input id="cfg-daily-mint-limit" type="number" min="0" step="1" />
+        </div>
+        <div>
+          <label for="cfg-auction-fee">Комиссия аукциона (базисные пункты)</label>
+          <input id="cfg-auction-fee" type="number" min="0" step="1" />
+        </div>
+        <div>
+          <label for="cfg-savings-tiers">Тарифы вкладов (JSON: [{"days":7,"rateBps":500}])</label>
+          <input id="cfg-savings-tiers" type="text" />
+        </div>
+        <div>
+          <label for="cfg-tier-thresholds">Уровни аккаунта (JSON: [{"name":"Bronze","minVolume":0,"feeDiscountBps":0}])</label>
+          <input id="cfg-tier-thresholds" type="text" />
+        </div>
+        <div>
+          <label for="cfg-lottery-prizes">Призы лотереи (JSON: [{"weight":50,"amount":10}])</label>
+          <input id="cfg-lottery-prizes" type="text" />
+        </div>
+        <div>
+          <label for="cfg-ip-whitelist">Белый список IP для админки (JSON-массив строк, пусто = без ограничений)</label>
+          <input id="cfg-ip-whitelist" type="text" placeholder='["1.2.3.4"]' />
         </div>
         <p id="config-error" class="error" style="display:none"></p>
         <p id="config-success" class="success-msg" style="display:none"></p>
         <button type="submit" class="secondary">Сохранить настройки</button>
       </form>
+    </div>
+
+    <div class="panel">
+      <h2>Массовая заморозка</h2>
+      <form id="bulk-freeze-form">
+        <div>
+          <label for="bulk-usernames">Ники через запятую</label>
+          <input id="bulk-usernames" type="text" placeholder="alice, bob, carol" required />
+        </div>
+        <div style="display:flex; gap:0.75rem;">
+          <button type="submit" data-frozen="true">Заморозить всех</button>
+          <button type="submit" data-frozen="false" class="secondary">Разморозить всех</button>
+        </div>
+        <p id="bulk-freeze-error" class="error" style="display:none"></p>
+        <p id="bulk-freeze-success" class="success-msg" style="display:none"></p>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Экспорт данных</h2>
+      <p class="muted">Полная выгрузка пользователей (без паролей), транзакций, вкладов, групп, кредитов, аукционов и журнала — в JSON.</p>
+      <button id="export-btn" class="secondary">Скачать JSON</button>
     </div>
 
     <div class="panel">
@@ -123,8 +181,18 @@
           <option value="mc_deposit">Депозит из игры</option>
           <option value="mc_withdraw">Вывод в игру</option>
           <option value="daily_bonus">Ежедневный бонус</option>
+          <option value="lottery">Лотерея</option>
           <option value="savings_lock">Вклад открыт</option>
           <option value="savings_claim">Вклад закрыт</option>
+          <option value="savings_early_withdraw">Досрочное снятие</option>
+          <option value="group_deposit">Взнос в группу</option>
+          <option value="group_withdraw">Вывод из группы</option>
+          <option value="loan_disbursement">Выдача кредита</option>
+          <option value="loan_repayment">Погашение кредита</option>
+          <option value="auction_sale">Продажа на аукционе</option>
+          <option value="achievement_reward">Награда за достижение</option>
+          <option value="referral_bonus">Реферальный бонус</option>
+          <option value="quest_reward">Награда за задание</option>
         </select>
         <button id="tx-search-btn" class="secondary">Найти</button>
       </div>

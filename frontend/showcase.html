@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Витрина — Emperator Bank</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="imperial">
+    <div class="brand"><a href="/index.html" style="text-decoration:none;color:inherit">Emperator Bank</a></div>
+    <nav>
+      <a href="/login.html">Вход</a>
+      <a href="/register.html">Регистрация</a>
+    </nav>
+  </header>
+  <main>
+    <div class="hero">
+      <h1>Экономика Bedsmp</h1>
+      <p class="muted">Публичная сводка — без входа в аккаунт.</p>
+    </div>
+    <div class="panel">
+      <table>
+        <tbody id="stats-body"></tbody>
+      </table>
+    </div>
+    <div class="panel">
+      <h2>Топ держателей</h2>
+      <table>
+        <thead><tr><th>#</th><th>Ник</th><th>Баланс</th></tr></thead>
+        <tbody id="top-body"></tbody>
+      </table>
+    </div>
+  </main>
+  <script>
+    function fmt(n) { return Number(n || 0).toLocaleString('ru-RU'); }
+
+    (async function init() {
+      const res = await fetch('/api/public/showcase');
+      const data = await res.json();
+      document.getElementById('stats-body').innerHTML = `
+        <tr><td>Всего счетов</td><td>${data.accountCount}</td></tr>
+        <tr><td>Общая денежная масса</td><td>${fmt(data.totalSupply)} EMP</td></tr>
+        <tr><td>Средний баланс</td><td>${fmt(data.averageBalance)} EMP</td></tr>
+      `;
+      const tbody = document.getElementById('top-body');
+      tbody.innerHTML = '';
+      data.topHolders.forEach((h, i) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${i + 1}</td><td>${h.username}</td><td>${fmt(h.balance)} EMP</td>`;
+        tbody.appendChild(tr);
+      });
+    })();
+  </script>
+</body>
+</html>

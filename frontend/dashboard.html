@@ -11,6 +11,10 @@
     <div class="brand"><a href="/index.html" style="text-decoration:none;color:inherit">Emperator Bank</a></div>
     <nav>
       <span id="nav-username" class="muted"></span>
+      <a href="/groups.html">Группы</a>
+      <a href="/loans.html">Кредиты</a>
+      <a href="/auctions.html">Аукцион</a>
+      <a href="/account.html">Аккаунт</a>
       <a href="#" id="admin-link" style="display:none">Админ-панель</a>
       <a href="#" id="logout-link">Выход</a>
     </nav>
@@ -19,15 +23,32 @@
     <div class="panel">
       <h2>Баланс</h2>
       <div class="balance-display"><span id="balance">—</span><span class="unit">EMP</span></div>
-      <div style="text-align:center">
-        <button id="claim-daily" class="secondary">Забрать ежедневный бонус</button>
-        <p id="daily-msg" class="muted" style="display:none"></p>
+      <div style="text-align:center; display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap;">
+        <button id="claim-daily" class="secondary">Ежедневный бонус</button>
+        <button id="spin-lottery" class="secondary">Крутить лотерею</button>
       </div>
+      <p id="daily-msg" class="muted" style="display:none; text-align:center"></p>
+      <p id="lottery-msg" class="muted" style="display:none; text-align:center"></p>
+    </div>
+
+    <div class="panel">
+      <h2>Уровень и достижения</h2>
+      <p id="tier-display" class="muted"></p>
+      <div id="achievements-list" style="display:flex; gap:0.5rem; flex-wrap:wrap;"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Еженедельные задания</h2>
+      <table>
+        <thead><tr><th>Задание</th><th>Прогресс</th><th>Награда</th><th></th></tr></thead>
+        <tbody id="quests-body"></tbody>
+      </table>
     </div>
 
     <div class="panel">
       <h2>Перевод</h2>
       <p id="transfer-rules" class="muted"></p>
+      <p id="favorites-list" class="muted"></p>
       <form id="transfer-form">
         <div>
           <label for="to-username">Получатель (ник)</label>
@@ -41,13 +62,92 @@
           <label for="note">Комментарий (необязательно)</label>
           <input id="note" type="text" maxlength="200" />
         </div>
+        <div>
+          <label for="delay-seconds">Задержка перед отправкой, секунд (0 = мгновенно, макс 86400)</label>
+          <input id="delay-seconds" type="number" min="0" max="86400" step="1" value="0" />
+        </div>
+        <label class="muted"><input type="checkbox" id="add-favorite" /> Добавить в избранные</label>
         <p id="transfer-error" class="error" style="display:none"></p>
         <p id="transfer-success" class="success-msg" style="display:none"></p>
         <div id="confirm-box" style="display:none">
           <p class="muted" id="confirm-text"></p>
+          <div id="pin-box" style="display:none">
+            <label for="confirm-pin">PIN</label>
+            <input id="confirm-pin" type="text" inputmode="numeric" maxlength="6" />
+          </div>
           <button type="button" id="confirm-transfer">Подтвердить перевод</button>
         </div>
         <button type="submit" id="transfer-submit">Перевести</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Разделить перевод между несколькими</h2>
+      <form id="split-form">
+        <div>
+          <label for="split-usernames">Ники через запятую</label>
+          <input id="split-usernames" type="text" placeholder="alice, bob, carol" required />
+        </div>
+        <div>
+          <label for="split-amount">Общая сумма (EMP)</label>
+          <input id="split-amount" type="number" min="1" step="1" required />
+        </div>
+        <p id="split-error" class="error" style="display:none"></p>
+        <p id="split-success" class="success-msg" style="display:none"></p>
+        <button type="submit" class="secondary">Разделить и отправить</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Отложенные и регулярные переводы</h2>
+      <table>
+        <thead><tr><th>Кому</th><th>Сумма</th><th>Когда</th><th>Статус</th><th></th></tr></thead>
+        <tbody id="scheduled-body"></tbody>
+      </table>
+      <h2 style="margin-top:1.5rem">Новый регулярный перевод</h2>
+      <form id="recurring-form">
+        <div>
+          <label for="rec-username">Получатель</label>
+          <input id="rec-username" type="text" required />
+        </div>
+        <div>
+          <label for="rec-amount">Сумма (EMP)</label>
+          <input id="rec-amount" type="number" min="1" step="1" required />
+        </div>
+        <div>
+          <label for="rec-interval">Раз в сколько дней</label>
+          <input id="rec-interval" type="number" min="1" step="1" value="7" />
+        </div>
+        <p id="recurring-error" class="error" style="display:none"></p>
+        <button type="submit" class="secondary">Создать</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Платёжные ссылки («заплати мне»)</h2>
+      <form id="paylink-form">
+        <div>
+          <label for="paylink-amount">Сумма (EMP)</label>
+          <input id="paylink-amount" type="number" min="1" step="1" required />
+        </div>
+        <div>
+          <label for="paylink-note">Комментарий</label>
+          <input id="paylink-note" type="text" maxlength="200" />
+        </div>
+        <p id="paylink-error" class="error" style="display:none"></p>
+        <button type="submit" class="secondary">Создать код</button>
+      </form>
+      <table>
+        <thead><tr><th>Код</th><th>Сумма</th><th>Статус</th></tr></thead>
+        <tbody id="paylinks-body"></tbody>
+      </table>
+      <form id="redeem-form" style="margin-top:1rem">
+        <div>
+          <label for="redeem-code">Оплатить по коду</label>
+          <input id="redeem-code" type="text" required />
+        </div>
+        <p id="redeem-error" class="error" style="display:none"></p>
+        <button type="submit" class="secondary">Оплатить</button>
       </form>
     </div>
 
@@ -79,18 +179,22 @@
 
     <div class="panel">
       <h2>Вклады под процент</h2>
-      <p id="savings-rules" class="muted"></p>
       <form id="savings-form">
         <div>
           <label for="savings-amount">Сумма вклада (EMP)</label>
           <input id="savings-amount" type="number" min="1" step="1" required />
         </div>
+        <div>
+          <label for="savings-tier">Тариф</label>
+          <select id="savings-tier"></select>
+        </div>
+        <label class="muted"><input type="checkbox" id="savings-autorenew" /> Автопродление по истечении срока</label>
         <p id="savings-error" class="error" style="display:none"></p>
         <button type="submit" class="secondary">Открыть вклад</button>
       </form>
       <table>
         <thead>
-          <tr><th>Сумма</th><th>Ставка</th><th>Созревает</th><th>Действие</th></tr>
+          <tr><th>Сумма</th><th>Ставка</th><th>Созревает</th><th>Автопрод.</th><th>Действие</th></tr>
         </thead>
         <tbody id="savings-body"></tbody>
       </table>
@@ -128,8 +232,18 @@
           <option value="mc_deposit">Депозит из игры</option>
           <option value="mc_withdraw">Вывод в игру</option>
           <option value="daily_bonus">Ежедневный бонус</option>
+          <option value="lottery">Лотерея</option>
           <option value="savings_lock">Вклад открыт</option>
           <option value="savings_claim">Вклад закрыт</option>
+          <option value="savings_early_withdraw">Досрочное снятие</option>
+          <option value="group_deposit">Взнос в группу</option>
+          <option value="group_withdraw">Вывод из группы</option>
+          <option value="loan_disbursement">Выдача кредита</option>
+          <option value="loan_repayment">Погашение кредита</option>
+          <option value="auction_sale">Продажа на аукционе</option>
+          <option value="achievement_reward">Награда за достижение</option>
+          <option value="referral_bonus">Реферальный бонус</option>
+          <option value="quest_reward">Награда за задание</option>
         </select>
         <button id="export-csv" class="secondary">Скачать CSV</button>
       </div>

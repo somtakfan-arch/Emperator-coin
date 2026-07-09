@@ -25,6 +25,10 @@
           <label for="password">Пароль (мин. 6 символов)</label>
           <input id="password" type="password" required />
         </div>
+        <div>
+          <label for="ref">Ник пригласившего (необязательно)</label>
+          <input id="ref" type="text" />
+        </div>
         <p id="error" class="error" style="display:none"></p>
         <button type="submit">Создать счёт</button>
       </form>
@@ -32,14 +36,18 @@
   </main>
   <script src="/js/api.js"></script>
   <script>
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('ref')) document.getElementById('ref').value = params.get('ref');
+
     document.getElementById('register-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const username = document.getElementById('username').value.trim();
       const password = document.getElementById('password').value;
+      const ref = document.getElementById('ref').value.trim();
       const errorEl = document.getElementById('error');
       errorEl.style.display = 'none';
       try {
-        const data = await api('/auth/register', { method: 'POST', body: { username, password } });
+        const data = await api('/auth/register', { method: 'POST', body: { username, password, ref: ref || undefined } });
         setToken(data.token);
         window.location.href = '/dashboard.html';
       } catch (err) {

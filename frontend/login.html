@@ -14,7 +14,7 @@
     </nav>
   </header>
   <main>
-    <div class="panel" style="max-width:420px;margin:2rem auto;">
+    <div class="panel" style="max-width:420px;margin:2rem auto;" id="login-panel">
       <h2>Вход в банк</h2>
       <form id="login-form">
         <div>
@@ -29,9 +29,24 @@
         <button type="submit">Войти</button>
       </form>
     </div>
+
+    <div class="panel" style="max-width:420px;margin:2rem auto;display:none;" id="twofa-panel">
+      <h2>Код двухфакторной аутентификации</h2>
+      <p class="muted">Введите 6-значный код из приложения-аутентификатора.</p>
+      <form id="twofa-form">
+        <div>
+          <label for="twofa-code">Код</label>
+          <input id="twofa-code" type="text" inputmode="numeric" maxlength="6" required />
+        </div>
+        <p id="twofa-error" class="error" style="display:none"></p>
+        <button type="submit">Подтвердить</button>
+      </form>
+    </div>
   </main>
   <script src="/js/api.js"></script>
   <script>
+    let pendingTempToken = null;
+
     document.getElementById('login-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const username = document.getElementById('username').value.trim();
@@ -40,6 +55,27 @@
       errorEl.style.display = 'none';
       try {
         const data = await api('/auth/login', { method: 'POST', body: { username, password } });
+        if (data.twoFactorRequired) {
+          pendingTempToken = data.tempToken;
+          document.getElementById('login-panel').style.display = 'none';
+          document.getElementById('twofa-panel').style.display = 'block';
+          return;
+        }
+        setToken(data.token);
+        window.location.href = '/dashboard.html';
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.style.display = 'block';
+      }
+    });
+
+    document.getElementById('twofa-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const code = document.getElementById('twofa-code').value.trim();
+      const errorEl = document.getElementById('twofa-error');
+      errorEl.style.display = 'none';
+      try {
+        const data = await api('/auth/2fa/login', { method: 'POST', body: { tempToken: pendingTempToken, code } });
         setToken(data.token);
         window.location.href = '/dashboard.html';
       } catch (err) {
