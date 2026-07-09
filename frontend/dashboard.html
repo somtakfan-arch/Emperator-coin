@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Личный кабинет — Emperator Bank</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="imperial">
+    <div class="brand"><a href="/index.html" style="text-decoration:none;color:inherit">Emperator Bank</a></div>
+    <nav>
+      <span id="nav-username" class="muted"></span>
+      <a href="#" id="admin-link" style="display:none">Админ-панель</a>
+      <a href="#" id="logout-link">Выход</a>
+    </nav>
+  </header>
+  <main>
+    <div class="panel">
+      <h2>Баланс</h2>
+      <div class="balance-display"><span id="balance">—</span><span class="unit">EMP</span></div>
+    </div>
+
+    <div class="panel">
+      <h2>Перевод</h2>
+      <form id="transfer-form">
+        <div>
+          <label for="to-username">Получатель (ник)</label>
+          <input id="to-username" type="text" required />
+        </div>
+        <div>
+          <label for="amount">Сумма (EMP)</label>
+          <input id="amount" type="number" min="1" step="1" required />
+        </div>
+        <div>
+          <label for="note">Комментарий (необязательно)</label>
+          <input id="note" type="text" maxlength="200" />
+        </div>
+        <p id="transfer-error" class="error" style="display:none"></p>
+        <p id="transfer-success" class="success-msg" style="display:none"></p>
+        <button type="submit">Перевести</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Привязка аккаунта Bedsmp</h2>
+      <p class="muted">
+        Нажмите кнопку, получите 6-значный код и введите на сервере команду
+        <code>/bank link &lt;код&gt;</code>. Код действует 10 минут.
+      </p>
+      <button id="get-link-code" class="secondary">Получить код привязки</button>
+      <div id="link-code-display" class="link-code" style="display:none"></div>
+    </div>
+
+    <div class="panel">
+      <h2>История операций</h2>
+      <table>
+        <thead>
+          <tr><th>Дата</th><th>Тип</th><th>Сумма</th><th>Детали</th></tr>
+        </thead>
+        <tbody id="tx-body"></tbody>
+      </table>
+    </div>
+  </main>
+  <script src="/js/api.js"></script>
+  <script src="/js/dashboard.js"></script>
+</body>
+</html>

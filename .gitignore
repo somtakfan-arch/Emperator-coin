@@ -1,2 +1,15 @@
 *.agdai
 MAlonzo/**
+
+# Node / backend
+node_modules/
+backend/.env
+backend/data/*.db
+backend/data/*.db-journal
+
+# Java / plugin
+plugin/target/
+*.class
+
+# OS
+.DS_Store

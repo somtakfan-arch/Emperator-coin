@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Админ-панель — Emperator Bank</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="imperial">
+    <div class="brand"><a href="/index.html" style="text-decoration:none;color:inherit">Emperator Bank</a></div>
+    <nav>
+      <a href="/dashboard.html">Личный кабинет</a>
+      <a href="#" id="logout-link">Выход</a>
+    </nav>
+  </header>
+  <main>
+    <div class="panel">
+      <h2>Эмиссия / списание монет</h2>
+      <form id="mint-form">
+        <div>
+          <label for="mint-username">Ник пользователя</label>
+          <input id="mint-username" type="text" required />
+        </div>
+        <div>
+          <label for="mint-amount">Сумма (EMP)</label>
+          <input id="mint-amount" type="number" min="1" step="1" required />
+        </div>
+        <div style="display:flex; gap:0.75rem;">
+          <button type="submit" data-action="mint">Начислить</button>
+          <button type="submit" data-action="burn" class="secondary">Списать</button>
+        </div>
+        <p id="mint-error" class="error" style="display:none"></p>
+        <p id="mint-success" class="success-msg" style="display:none"></p>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>Пользователи</h2>
+      <table>
+        <thead>
+          <tr><th>ID</th><th>Ник</th><th>Роль</th><th>Баланс</th><th>Статус</th><th>Действие</th></tr>
+        </thead>
+        <tbody id="users-body"></tbody>
+      </table>
+    </div>
+  </main>
+  <script src="/js/api.js"></script>
+  <script src="/js/admin.js"></script>
+</body>
+</html>

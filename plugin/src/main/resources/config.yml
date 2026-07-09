@@ -1,0 +1,8 @@
+# Base URL of the Emperator Bank backend, no trailing slash.
+api-base-url: "http://localhost:3000/api/plugin"
+
+# Must match PLUGIN_API_KEY in the backend's .env file.
+api-key: "change_me_to_a_long_random_string"
+
+# HTTP request timeout in milliseconds.
+timeout-ms: 5000

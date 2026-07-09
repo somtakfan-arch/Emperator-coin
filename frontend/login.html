@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Вход — Emperator Bank</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="imperial">
+    <div class="brand"><a href="/index.html" style="text-decoration:none;color:inherit">Emperator Bank</a></div>
+    <nav>
+      <a href="/register.html">Регистрация</a>
+    </nav>
+  </header>
+  <main>
+    <div class="panel" style="max-width:420px;margin:2rem auto;">
+      <h2>Вход в банк</h2>
+      <form id="login-form">
+        <div>
+          <label for="username">Ник</label>
+          <input id="username" type="text" required />
+        </div>
+        <div>
+          <label for="password">Пароль</label>
+          <input id="password" type="password" required />
+        </div>
+        <p id="error" class="error" style="display:none"></p>
+        <button type="submit">Войти</button>
+      </form>
+    </div>
+  </main>
+  <script src="/js/api.js"></script>
+  <script>
+    document.getElementById('login-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const errorEl = document.getElementById('error');
+      errorEl.style.display = 'none';
+      try {
+        const data = await api('/auth/login', { method: 'POST', body: { username, password } });
+        setToken(data.token);
+        window.location.href = '/dashboard.html';
+      } catch (err) {
+        errorEl.textContent = err.message;
+        errorEl.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>
