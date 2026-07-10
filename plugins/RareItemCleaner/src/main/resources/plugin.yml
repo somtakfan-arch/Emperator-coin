@@ -1,0 +1,17 @@
+name: RareItemCleaner
+version: 1.0.0
+main: com.bedsmp.cleaner.RareItemCleaner
+api-version: 1.21
+author: BedSMP
+description: Полная зачистка яиц дракона и блоков незерита — онлайн, офлайн, весь мир.
+
+commands:
+  clearrare:
+    description: Удалить все яйца дракона и блоки незерита с сервера
+    usage: /clearrare <world|inventories|all> [confirm]
+    permission: bedsmp.clearrare
+
+permissions:
+  bedsmp.clearrare:
+    description: Доступ к /clearrare
+    default: op
