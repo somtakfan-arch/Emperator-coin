@@ -196,4 +196,31 @@ router.get(
   })
 );
 
+// Polled by the plugin for a specific online, linked player to find
+// site-initiated deposit/withdraw requests waiting to be fulfilled in-game.
+router.get(
+  '/pending-ops/:mcUuid',
+  asyncHandler(async (req, res) => {
+    res.json(await models.listPendingGameOpsForMcUuid(req.params.mcUuid));
+  })
+);
+
+router.post(
+  '/pending-ops/:id/resolve',
+  asyncHandler(async (req, res) => {
+    const { mcUuid, success, note } = req.body || {};
+    if (!mcUuid || typeof success !== 'boolean') {
+      return res.status(400).json({ error: 'mcUuid и success (boolean) обязательны' });
+    }
+    try {
+      await models.resolveGameOpRequest(req.params.id, mcUuid, success, note);
+      res.json({ ok: true });
+    } catch (err) {
+      if (err.message === 'NOT_FOUND') return res.status(404).json({ error: 'Заявка не найдена' });
+      if (err.message === 'ALREADY_RESOLVED') return res.status(400).json({ error: 'Уже обработана' });
+      throw err;
+    }
+  })
+);
+
 module.exports = router;

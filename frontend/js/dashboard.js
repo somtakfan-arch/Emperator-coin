@@ -574,6 +574,76 @@ document.getElementById('get-link-code').addEventListener('click', async () => {
   }
 });
 
+const GAME_OP_STATUS_LABELS = {
+  pending: 'ожидает (зайдите в игру)',
+  fulfilled: 'выполнено',
+  failed: 'не удалось',
+  cancelled: 'отменено',
+};
+
+async function loadGameOps() {
+  const ops = await api('/bank/game-ops');
+  const tbody = document.getElementById('game-ops-body');
+  tbody.innerHTML = '';
+  if (ops.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" class="muted">Нет заявок</td></tr>';
+    return;
+  }
+  ops.forEach((op) => {
+    const tr = document.createElement('tr');
+    const action = op.status === 'pending'
+      ? `<button class="secondary" data-cancel-gameop="${op.id}">Отменить</button>`
+      : op.note ? `<span class="muted">${op.note}</span>` : '';
+    tr.innerHTML = `
+      <td>${op.type === 'deposit' ? 'Депозит из игры' : 'Вывод в игру'}</td>
+      <td>${fmt(op.amount)} EMP</td>
+      <td>${GAME_OP_STATUS_LABELS[op.status] || op.status}</td>
+      <td>${action}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+  tbody.querySelectorAll('[data-cancel-gameop]').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      try {
+        await api(`/bank/game-ops/${btn.getAttribute('data-cancel-gameop')}/cancel`, { method: 'POST' });
+        await loadGameOps();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+  });
+}
+
+document.getElementById('game-deposit-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const amount = parseInt(document.getElementById('game-deposit-amount').value, 10);
+  const errorEl = document.getElementById('game-deposit-error');
+  errorEl.style.display = 'none';
+  try {
+    await api('/bank/game-deposit', { method: 'POST', body: { amount } });
+    document.getElementById('game-deposit-form').reset();
+    await loadGameOps();
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.style.display = 'block';
+  }
+});
+
+document.getElementById('game-withdraw-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const amount = parseInt(document.getElementById('game-withdraw-amount').value, 10);
+  const errorEl = document.getElementById('game-withdraw-error');
+  errorEl.style.display = 'none';
+  try {
+    await api('/bank/game-withdraw', { method: 'POST', body: { amount } });
+    document.getElementById('game-withdraw-form').reset();
+    await loadGameOps();
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.style.display = 'block';
+  }
+});
+
 document.getElementById('tx-filter').addEventListener('change', () => {
   txLimit = 20;
   loadTransactions();
@@ -602,6 +672,7 @@ document.getElementById('export-csv').addEventListener('click', exportCsv);
       loadFavorites(),
       loadScheduled(),
       loadPayLinks(),
+      loadGameOps(),
     ]);
   } catch (err) {
     logout();

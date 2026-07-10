@@ -35,7 +35,7 @@ public class EmperatorBankPlugin extends JavaPlugin {
     getCommand("bank").setExecutor(bankCommand);
     getCommand("bank").setTabCompleter(bankCommand);
 
-    NotificationService notifications = new NotificationService(this, apiClient);
+    NotificationService notifications = new NotificationService(this, apiClient, economy);
     getServer().getPluginManager().registerEvents(notifications, this);
     notifications.startPolling(20L * 30); // every 30 seconds
 

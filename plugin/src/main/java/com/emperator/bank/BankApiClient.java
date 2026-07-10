@@ -128,4 +128,18 @@ public class BankApiClient {
     String path = "/recent/" + mcUuid + (sinceIso != null ? "?since=" + java.net.URLEncoder.encode(sinceIso, java.nio.charset.StandardCharsets.UTF_8) : "");
     return getArray(path);
   }
+
+  // Deposit/withdraw requests the player created on the website, waiting to
+  // be fulfilled the next time they're online in-game.
+  public JSONArray pendingOps(UUID mcUuid) throws ApiException {
+    return getArray("/pending-ops/" + mcUuid);
+  }
+
+  public void resolvePendingOp(String opId, UUID mcUuid, boolean success, String note) throws ApiException {
+    JSONObject body = new JSONObject();
+    body.put("mcUuid", mcUuid.toString());
+    body.put("success", success);
+    if (note != null) body.put("note", note);
+    post("/pending-ops/" + opId + "/resolve", body);
+  }
 }

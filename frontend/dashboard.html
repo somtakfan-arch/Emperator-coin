@@ -211,6 +211,35 @@
     </div>
 
     <div class="panel">
+      <h2>Пополнить / вывести через игру</h2>
+      <p class="muted">
+        Сайт не подключён напрямую к игровому серверу, поэтому заявка выполнится,
+        когда вы в следующий раз будете онлайн на Bedsmp (плагин проверяет заявки каждые 30 секунд).
+        Аккаунт должен быть привязан.
+      </p>
+      <form id="game-deposit-form">
+        <div>
+          <label for="game-deposit-amount">Положить в банк из игры (EMP)</label>
+          <input id="game-deposit-amount" type="number" min="1" step="1" required />
+        </div>
+        <p id="game-deposit-error" class="error" style="display:none"></p>
+        <button type="submit" class="secondary">Создать заявку на депозит</button>
+      </form>
+      <form id="game-withdraw-form">
+        <div>
+          <label for="game-withdraw-amount">Вывести из банка в игру (EMP)</label>
+          <input id="game-withdraw-amount" type="number" min="1" step="1" required />
+        </div>
+        <p id="game-withdraw-error" class="error" style="display:none"></p>
+        <button type="submit" class="secondary">Создать заявку на вывод</button>
+      </form>
+      <table>
+        <thead><tr><th>Тип</th><th>Сумма</th><th>Статус</th><th></th></tr></thead>
+        <tbody id="game-ops-body"></tbody>
+      </table>
+    </div>
+
+    <div class="panel">
       <h2>Топ игроков банка</h2>
       <table>
         <thead>

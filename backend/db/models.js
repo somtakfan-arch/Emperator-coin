@@ -25,6 +25,7 @@ const auctionsCol = () => db.collection('auctions');
 const achievementsCol = () => db.collection('achievements');
 const weeklyQuestCol = () => db.collection('weeklyQuests');
 const adminMintLimitCol = () => db.collection('adminMintLimits');
+const pendingGameOpsCol = () => db.collection('pendingGameOps');
 
 const treasuryRef = () => metaCol().doc('treasury');
 const configRef = () => configCol().doc('bank');
@@ -238,6 +239,18 @@ function toAuctionRow(id, data) {
     ends_at: data.endsAt,
     status: data.status,
     created_at: toIso(data.createdAt),
+  };
+}
+
+function toGameOpRow(id, data) {
+  return {
+    id,
+    type: data.type,
+    amount: data.amount,
+    status: data.status,
+    note: data.note,
+    created_at: toIso(data.createdAt),
+    resolved_at: toIso(data.resolvedAt),
   };
 }
 
@@ -536,6 +549,71 @@ const models = {
       mc_uuid: linkSnap.exists ? linkSnap.data().mcUuid : mcUuid,
       mc_username: linkSnap.exists ? linkSnap.data().mcUsername : null,
     };
+  },
+
+  async getMcLinkForUser(userId) {
+    const snap = await mcLinksCol().doc(userId).get();
+    return snap.exists ? { mc_uuid: snap.data().mcUuid, mc_username: snap.data().mcUsername } : null;
+  },
+
+  // --- Site-initiated deposit/withdraw requests, fulfilled by the plugin ---
+  // when the linked player is next online (the website has no direct line
+  // to the game server's economy, so this is a request queue, not instant).
+
+  // Throws Error('NOT_LINKED').
+  async createGameOpRequest(userId, type, amount) {
+    const link = await models.getMcLinkForUser(userId);
+    if (!link) throw new Error('NOT_LINKED');
+    const ref = pendingGameOpsCol().doc();
+    await ref.set({
+      userId,
+      mcUuid: link.mc_uuid,
+      mcUsername: link.mc_username,
+      type,
+      amount,
+      status: 'pending',
+      note: null,
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return ref.id;
+  },
+
+  async listGameOpRequestsForUser(userId) {
+    const snap = await pendingGameOpsCol().where('userId', '==', userId).limit(200).get();
+    return snap.docs
+      .map((d) => toGameOpRow(d.id, d.data()))
+      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
+  },
+
+  // Throws Error('NOT_FOUND') or Error('ALREADY_RESOLVED').
+  async cancelGameOpRequest(id, userId) {
+    const ref = pendingGameOpsCol().doc(id);
+    const snap = await ref.get();
+    if (!snap.exists || snap.data().userId !== userId) throw new Error('NOT_FOUND');
+    if (snap.data().status !== 'pending') throw new Error('ALREADY_RESOLVED');
+    await ref.update({ status: 'cancelled', resolvedAt: admin.firestore.FieldValue.serverTimestamp() });
+  },
+
+  // Polled by the plugin for a specific online linked player.
+  async listPendingGameOpsForMcUuid(mcUuid) {
+    const snap = await pendingGameOpsCol().where('mcUuid', '==', mcUuid).limit(50).get();
+    return snap.docs
+      .map((d) => toGameOpRow(d.id, d.data()))
+      .filter((r) => r.status === 'pending')
+      .sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
+  },
+
+  // Throws Error('NOT_FOUND') or Error('ALREADY_RESOLVED').
+  async resolveGameOpRequest(id, mcUuid, success, note) {
+    const ref = pendingGameOpsCol().doc(id);
+    const snap = await ref.get();
+    if (!snap.exists || snap.data().mcUuid !== mcUuid) throw new Error('NOT_FOUND');
+    if (snap.data().status !== 'pending') throw new Error('ALREADY_RESOLVED');
+    await ref.update({
+      status: success ? 'fulfilled' : 'failed',
+      note: note || null,
+      resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
   },
 
   // --- Bank config -------------------------------------------------------
