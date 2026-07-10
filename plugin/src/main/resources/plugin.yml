@@ -16,6 +16,7 @@ commands:
       /bank pay <nickname> <amount> - transfer EMP directly to another linked player
       /bank daily - claim the daily bonus (if enabled)
       /bank top [count] - show the richest bank accounts
+      /bank resync <nickname> - (console, or with permission) force the bank balance to match the player's real Vault balance
 
 permissions:
   emperatorbank.admin.link:

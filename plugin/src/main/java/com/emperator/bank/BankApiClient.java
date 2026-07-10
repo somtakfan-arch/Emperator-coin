@@ -133,4 +133,12 @@ public class BankApiClient {
     body.put("appliedDelta", appliedDelta);
     post("/sync-status/" + mcUuid + "/confirm", body);
   }
+
+  // Forcibly resets the bank balance to match the real in-game balance —
+  // fixes drift (e.g. Vault wasn't installed yet at link time).
+  public JSONObject resync(UUID mcUuid, long currentBalance) throws ApiException {
+    JSONObject body = new JSONObject();
+    body.put("currentBalance", currentBalance);
+    return post("/resync/" + mcUuid, body);
+  }
 }

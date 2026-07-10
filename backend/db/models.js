@@ -591,6 +591,17 @@ const models = {
     });
   },
 
+  // Forcibly resets both balance and syncedBalance to match the real
+  // in-game amount — an escape hatch for when they've drifted (e.g. the
+  // initial import missed because Vault wasn't installed yet at link time,
+  // or the real economy changed some other way the site never saw).
+  // Throws Error('NOT_FOUND').
+  async resyncBalance(mcUuid, currentBalance) {
+    const user = await models.findUserByMcUuid(mcUuid);
+    if (!user) throw new Error('NOT_FOUND');
+    await usersCol().doc(user.id).update({ balance: currentBalance, syncedBalance: currentBalance });
+  },
+
   // --- Bank config -------------------------------------------------------
 
   async getBankConfig() {

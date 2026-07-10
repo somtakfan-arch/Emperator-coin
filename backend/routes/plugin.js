@@ -175,4 +175,23 @@ router.post(
   })
 );
 
+// Forcibly resets balance to match reality — used by /bank resync in-game
+// when the two have drifted (e.g. Vault wasn't installed at link time).
+router.post(
+  '/resync/:mcUuid',
+  asyncHandler(async (req, res) => {
+    const currentBalance = Number(req.body?.currentBalance);
+    if (!Number.isInteger(currentBalance) || currentBalance < 0) {
+      return res.status(400).json({ error: 'currentBalance должен быть целым числом >= 0' });
+    }
+    try {
+      await models.resyncBalance(req.params.mcUuid, currentBalance);
+      res.json({ ok: true, balance: currentBalance });
+    } catch (err) {
+      if (err.message === 'NOT_FOUND') return res.status(404).json({ error: 'Аккаунт не привязан к банку' });
+      throw err;
+    }
+  })
+);
+
 module.exports = router;

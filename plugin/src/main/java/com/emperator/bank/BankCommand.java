@@ -46,6 +46,7 @@ public class BankCommand implements CommandExecutor, TabCompleter {
       case "pay" -> requirePlayer(sender, p -> handlePay(p, args));
       case "daily" -> requirePlayer(sender, this::handleDaily);
       case "top" -> handleTop(sender, args);
+      case "resync" -> handleResync(sender, args);
       default -> sendUsage(sender);
     }
     return true;
@@ -65,7 +66,40 @@ public class BankCommand implements CommandExecutor, TabCompleter {
 
   private void sendUsage(CommandSender sender) {
     sender.sendMessage(PREFIX + "Команды: /bank link <код>, /bank link <ник> <код> (админ/консоль), " +
-        "/bank balance, /bank pay <ник> <сумма>, /bank daily, /bank top");
+        "/bank balance, /bank pay <ник> <сумма>, /bank daily, /bank top, " +
+        "/bank resync <ник> (админ/консоль, чинит рассинхронизацию баланса)");
+  }
+
+  // /bank resync <nickname> - forcibly reset the bank balance to match the
+  // player's real Vault balance right now. Fixes drift (e.g. Vault wasn't
+  // installed yet when the account was first linked, so the import at link
+  // time silently produced 0).
+  private void handleResync(CommandSender sender, String[] args) {
+    if (!sender.hasPermission("emperatorbank.admin.link")) {
+      sender.sendMessage(PREFIX + "Нет прав (emperatorbank.admin.link).");
+      return;
+    }
+    if (args.length < 2) {
+      sender.sendMessage(PREFIX + "Использование: /bank resync <ник>");
+      return;
+    }
+    if (economy == null) {
+      sender.sendMessage(PREFIX + "Игровая экономика (Vault) недоступна на этом сервере.");
+      return;
+    }
+    String targetName = args[1];
+    OfflinePlayer target = Bukkit.getOfflinePlayer(targetName);
+    if (!target.isOnline() && !target.hasPlayedBefore()) {
+      sender.sendMessage(PREFIX + "Игрок \"" + targetName + "\" ни разу не заходил на сервер.");
+      return;
+    }
+    long realBalance = Math.round(economy.getBalance(target));
+    UUID uuid = target.getUniqueId();
+
+    runAsync(sender, () -> {
+      JSONObject result = api.resync(uuid, realBalance);
+      return PREFIX + "Баланс " + targetName + " пересинхронизирован: " + fmt(result.optLong("balance")) + " EMP";
+    });
   }
 
   // /bank link <code>          -> player links their own account
@@ -217,7 +251,7 @@ public class BankCommand implements CommandExecutor, TabCompleter {
   @Override
   public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
     if (args.length == 1) {
-      return List.of("link", "balance", "pay", "daily", "top");
+      return List.of("link", "balance", "pay", "daily", "top", "resync");
     }
     if (args.length == 2 && ("link".equalsIgnoreCase(args[0]) || "pay".equalsIgnoreCase(args[0]))
         && !(sender instanceof Player && "link".equalsIgnoreCase(args[0]))) {
