@@ -25,7 +25,6 @@ const auctionsCol = () => db.collection('auctions');
 const achievementsCol = () => db.collection('achievements');
 const weeklyQuestCol = () => db.collection('weeklyQuests');
 const adminMintLimitCol = () => db.collection('adminMintLimits');
-const pendingGameOpsCol = () => db.collection('pendingGameOps');
 
 const treasuryRef = () => metaCol().doc('treasury');
 const configRef = () => configCol().doc('bank');
@@ -84,6 +83,7 @@ function toUserRow(id, data) {
     role: data.role,
     frozen: data.frozen,
     balance: data.balance,
+    synced_balance: data.syncedBalance || 0,
     two_factor_enabled: !!data.twoFactorEnabled,
     group_id: data.groupId || null,
     lifetime_volume: data.lifetimeVolume || 0,
@@ -239,18 +239,6 @@ function toAuctionRow(id, data) {
     ends_at: data.endsAt,
     status: data.status,
     created_at: toIso(data.createdAt),
-  };
-}
-
-function toGameOpRow(id, data) {
-  return {
-    id,
-    type: data.type,
-    amount: data.amount,
-    status: data.status,
-    note: data.note,
-    created_at: toIso(data.createdAt),
-    resolved_at: toIso(data.resolvedAt),
   };
 }
 
@@ -512,16 +500,29 @@ const models = {
 
   // Throws Error('MC_ACCOUNT_ALREADY_LINKED') if the Minecraft account is
   // already linked to a different bank account.
-  async linkMcAccount(userId, mcUuid, mcUsername) {
+  //
+  // `currentGameBalance`, if provided, is imported as the account's starting
+  // bank balance the first time it's linked (fresh account, balance still 0)
+  // — the bank balance IS the player's real money, so linking shouldn't
+  // start them back at zero. Re-links (or accounts that already have a
+  // balance) are left alone; their existing balance just gets pushed out to
+  // the game via the normal sync on the next poll.
+  async linkMcAccount(userId, mcUuid, mcUsername, currentGameBalance) {
     await db.runTransaction(async (tx) => {
       const indexRef = mcUuidIndexCol().doc(mcUuid);
+      const linkRef = mcLinksCol().doc(userId);
+      const userRef = usersCol().doc(userId);
+
+      // All reads first - Firestore transactions require reads before writes.
       const indexSnap = await tx.get(indexRef);
+      const oldLinkSnap = await tx.get(linkRef);
+      const shouldImportBalance = Number.isInteger(currentGameBalance) && currentGameBalance > 0 && !oldLinkSnap.exists;
+      const userSnap = shouldImportBalance ? await tx.get(userRef) : null;
+
       if (indexSnap.exists && indexSnap.data().userId !== userId) {
         throw new Error('MC_ACCOUNT_ALREADY_LINKED');
       }
 
-      const linkRef = mcLinksCol().doc(userId);
-      const oldLinkSnap = await tx.get(linkRef);
       if (oldLinkSnap.exists && oldLinkSnap.data().mcUuid !== mcUuid) {
         tx.delete(mcUuidIndexCol().doc(oldLinkSnap.data().mcUuid));
       }
@@ -532,6 +533,10 @@ const models = {
         linkedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
       tx.set(indexRef, { userId });
+
+      if (userSnap && userSnap.exists && userSnap.data().balance === 0) {
+        tx.update(userRef, { balance: currentGameBalance, syncedBalance: currentGameBalance });
+      }
     });
   },
 
@@ -556,63 +561,33 @@ const models = {
     return snap.exists ? { mc_uuid: snap.data().mcUuid, mc_username: snap.data().mcUsername } : null;
   },
 
-  // --- Site-initiated deposit/withdraw requests, fulfilled by the plugin ---
-  // when the linked player is next online (the website has no direct line
-  // to the game server's economy, so this is a request queue, not instant).
+  // --- Balance <-> real in-game money sync -----------------------------------
+  // The bank balance IS the player's real Vault/Essentials money, not a
+  // separate currency. The site has no live connection to the game server,
+  // so the plugin polls for the gap between `balance` (bank ledger, updated
+  // instantly by every site-side operation) and `syncedBalance` (last value
+  // the plugin confirmed it applied to the real in-game economy), and closes
+  // it by depositing/withdrawing that delta in-game.
 
-  // Throws Error('NOT_LINKED').
-  async createGameOpRequest(userId, type, amount) {
-    const link = await models.getMcLinkForUser(userId);
-    if (!link) throw new Error('NOT_LINKED');
-    const ref = pendingGameOpsCol().doc();
-    await ref.set({
-      userId,
-      mcUuid: link.mc_uuid,
-      mcUsername: link.mc_username,
-      type,
-      amount,
-      status: 'pending',
-      note: null,
-      createdAt: admin.firestore.FieldValue.serverTimestamp(),
-    });
-    return ref.id;
+  // Returns {balance, syncedBalance, delta}. delta > 0 means the plugin
+  // should deposit that much into the player's real balance; delta < 0 means
+  // it should withdraw abs(delta).
+  async getSyncStatus(mcUuid) {
+    const user = await models.findUserByMcUuid(mcUuid);
+    if (!user) return null;
+    const balance = user.balance;
+    const syncedBalance = user.synced_balance || 0;
+    return { balance, syncedBalance, delta: balance - syncedBalance };
   },
 
-  async listGameOpRequestsForUser(userId) {
-    const snap = await pendingGameOpsCol().where('userId', '==', userId).limit(200).get();
-    return snap.docs
-      .map((d) => toGameOpRow(d.id, d.data()))
-      .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime());
-  },
-
-  // Throws Error('NOT_FOUND') or Error('ALREADY_RESOLVED').
-  async cancelGameOpRequest(id, userId) {
-    const ref = pendingGameOpsCol().doc(id);
-    const snap = await ref.get();
-    if (!snap.exists || snap.data().userId !== userId) throw new Error('NOT_FOUND');
-    if (snap.data().status !== 'pending') throw new Error('ALREADY_RESOLVED');
-    await ref.update({ status: 'cancelled', resolvedAt: admin.firestore.FieldValue.serverTimestamp() });
-  },
-
-  // Polled by the plugin for a specific online linked player.
-  async listPendingGameOpsForMcUuid(mcUuid) {
-    const snap = await pendingGameOpsCol().where('mcUuid', '==', mcUuid).limit(50).get();
-    return snap.docs
-      .map((d) => toGameOpRow(d.id, d.data()))
-      .filter((r) => r.status === 'pending')
-      .sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
-  },
-
-  // Throws Error('NOT_FOUND') or Error('ALREADY_RESOLVED').
-  async resolveGameOpRequest(id, mcUuid, success, note) {
-    const ref = pendingGameOpsCol().doc(id);
-    const snap = await ref.get();
-    if (!snap.exists || snap.data().mcUuid !== mcUuid) throw new Error('NOT_FOUND');
-    if (snap.data().status !== 'pending') throw new Error('ALREADY_RESOLVED');
-    await ref.update({
-      status: success ? 'fulfilled' : 'failed',
-      note: note || null,
-      resolvedAt: admin.firestore.FieldValue.serverTimestamp(),
+  // Advances syncedBalance by exactly the amount the plugin actually applied
+  // in-game (a relative increment, not an absolute set, so it's safe even if
+  // `balance` changed again on the site in the meantime).
+  async confirmSync(mcUuid, appliedDelta) {
+    const user = await models.findUserByMcUuid(mcUuid);
+    if (!user) throw new Error('NOT_FOUND');
+    await usersCol().doc(user.id).update({
+      syncedBalance: admin.firestore.FieldValue.increment(appliedDelta),
     });
   },
 

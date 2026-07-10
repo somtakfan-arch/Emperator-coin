@@ -8,10 +8,13 @@ router.use(requirePluginKey);
 
 // Player runs /bank link <code> in-game; the plugin calls this to finish linking
 // their Minecraft UUID to the bank account that generated the code on the website.
+// `currentBalance` (the player's real Vault balance at link time) is imported as
+// the starting bank balance for brand-new accounts, since the bank balance IS
+// the player's real money, not a separate currency.
 router.post(
   '/link',
   asyncHandler(async (req, res) => {
-    const { code, mcUuid, mcUsername } = req.body || {};
+    const { code, mcUuid, mcUsername, currentBalance } = req.body || {};
     if (!code || !mcUuid || !mcUsername) {
       return res.status(400).json({ error: 'code, mcUuid и mcUsername обязательны' });
     }
@@ -20,8 +23,9 @@ router.post(
       return res.status(400).json({ error: 'Код неверный или истёк' });
     }
 
+    const balanceInt = Number.isInteger(Number(currentBalance)) ? Number(currentBalance) : undefined;
     try {
-      await models.linkMcAccount(linkRow.user_id, mcUuid, mcUsername);
+      await models.linkMcAccount(linkRow.user_id, mcUuid, mcUsername, balanceInt);
     } catch (err) {
       if (err.message === 'MC_ACCOUNT_ALREADY_LINKED') {
         return res.status(409).json({ error: 'Этот игровой аккаунт уже привязан к другому счёту' });
@@ -40,62 +44,6 @@ router.get(
     const user = await models.findUserByMcUuid(req.params.mcUuid);
     if (!user) return res.status(404).json({ error: 'Аккаунт не привязан к банку' });
     res.json({ username: user.username, balance: await models.getBalance(user.id) });
-  })
-);
-
-// Player deposits in-game economy money into their bank account.
-// The plugin is responsible for first withdrawing the amount from the
-// server's in-game economy (e.g. Vault) before calling this endpoint.
-router.post(
-  '/deposit',
-  asyncHandler(async (req, res) => {
-    const { mcUuid, amount } = req.body || {};
-    const amountInt = Number(amount);
-    if (!mcUuid || !Number.isInteger(amountInt) || amountInt <= 0) {
-      return res.status(400).json({ error: 'mcUuid и целая amount > 0 обязательны' });
-    }
-    const user = await models.findUserByMcUuid(mcUuid);
-    if (!user) return res.status(404).json({ error: 'Аккаунт не привязан к банку' });
-
-    await models.transferFunds({
-      fromUserId: null,
-      toUserId: user.id,
-      amount: amountInt,
-      type: 'mc_deposit',
-      note: `Депозит с сервера Bedsmp (${user.mc_username})`,
-    });
-    res.json({ balance: await models.getBalance(user.id) });
-  })
-);
-
-// Player withdraws from their bank account back into the in-game economy.
-// The plugin should credit the in-game economy only after this call succeeds.
-router.post(
-  '/withdraw',
-  asyncHandler(async (req, res) => {
-    const { mcUuid, amount } = req.body || {};
-    const amountInt = Number(amount);
-    if (!mcUuid || !Number.isInteger(amountInt) || amountInt <= 0) {
-      return res.status(400).json({ error: 'mcUuid и целая amount > 0 обязательны' });
-    }
-    const user = await models.findUserByMcUuid(mcUuid);
-    if (!user) return res.status(404).json({ error: 'Аккаунт не привязан к банку' });
-
-    try {
-      await models.transferFunds({
-        fromUserId: user.id,
-        toUserId: null,
-        amount: amountInt,
-        type: 'mc_withdraw',
-        note: `Вывод на сервер Bedsmp (${user.mc_username})`,
-      });
-    } catch (err) {
-      if (err.message === 'INSUFFICIENT_FUNDS') {
-        return res.status(400).json({ error: 'Недостаточно средств на банковском счёте' });
-      }
-      throw err;
-    }
-    res.json({ balance: await models.getBalance(user.id) });
   })
 );
 
@@ -196,28 +144,32 @@ router.get(
   })
 );
 
-// Polled by the plugin for a specific online, linked player to find
-// site-initiated deposit/withdraw requests waiting to be fulfilled in-game.
+// --- Balance <-> real money sync -------------------------------------------
+// Polled by the plugin for each online linked player (and once on join) to
+// find the gap between the bank ledger and what's actually been applied to
+// their real in-game balance, and close it.
+
 router.get(
-  '/pending-ops/:mcUuid',
+  '/sync-status/:mcUuid',
   asyncHandler(async (req, res) => {
-    res.json(await models.listPendingGameOpsForMcUuid(req.params.mcUuid));
+    const status = await models.getSyncStatus(req.params.mcUuid);
+    if (!status) return res.status(404).json({ error: 'Аккаунт не привязан к банку' });
+    res.json(status);
   })
 );
 
 router.post(
-  '/pending-ops/:id/resolve',
+  '/sync-status/:mcUuid/confirm',
   asyncHandler(async (req, res) => {
-    const { mcUuid, success, note } = req.body || {};
-    if (!mcUuid || typeof success !== 'boolean') {
-      return res.status(400).json({ error: 'mcUuid и success (boolean) обязательны' });
+    const appliedDelta = Number(req.body?.appliedDelta);
+    if (!Number.isInteger(appliedDelta) || appliedDelta === 0) {
+      return res.status(400).json({ error: 'appliedDelta должен быть ненулевым целым числом' });
     }
     try {
-      await models.resolveGameOpRequest(req.params.id, mcUuid, success, note);
+      await models.confirmSync(req.params.mcUuid, appliedDelta);
       res.json({ ok: true });
     } catch (err) {
-      if (err.message === 'NOT_FOUND') return res.status(404).json({ error: 'Заявка не найдена' });
-      if (err.message === 'ALREADY_RESOLVED') return res.status(400).json({ error: 'Уже обработана' });
+      if (err.message === 'NOT_FOUND') return res.status(404).json({ error: 'Аккаунт не привязан к банку' });
       throw err;
     }
   })

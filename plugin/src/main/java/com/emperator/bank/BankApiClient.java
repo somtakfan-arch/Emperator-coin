@@ -82,30 +82,20 @@ public class BankApiClient {
     return raw.isBlank() ? new JSONArray() : new JSONArray(raw);
   }
 
-  public JSONObject linkAccount(String code, UUID mcUuid, String mcUsername) throws ApiException {
+  // `currentBalance` (the player's real Vault balance right now, or null if
+  // Vault isn't available) is imported as the starting bank balance the
+  // first time this account is linked.
+  public JSONObject linkAccount(String code, UUID mcUuid, String mcUsername, Long currentBalance) throws ApiException {
     JSONObject body = new JSONObject();
     body.put("code", code);
     body.put("mcUuid", mcUuid.toString());
     body.put("mcUsername", mcUsername);
+    if (currentBalance != null) body.put("currentBalance", currentBalance);
     return post("/link", body);
   }
 
   public JSONObject getBalance(UUID mcUuid) throws ApiException {
     return get("/balance/" + mcUuid);
-  }
-
-  public JSONObject deposit(UUID mcUuid, long amount) throws ApiException {
-    JSONObject body = new JSONObject();
-    body.put("mcUuid", mcUuid.toString());
-    body.put("amount", amount);
-    return post("/deposit", body);
-  }
-
-  public JSONObject withdraw(UUID mcUuid, long amount) throws ApiException {
-    JSONObject body = new JSONObject();
-    body.put("mcUuid", mcUuid.toString());
-    body.put("amount", amount);
-    return post("/withdraw", body);
   }
 
   public JSONObject pay(UUID mcUuid, UUID toMcUuid, long amount) throws ApiException {
@@ -129,17 +119,18 @@ public class BankApiClient {
     return getArray(path);
   }
 
-  // Deposit/withdraw requests the player created on the website, waiting to
-  // be fulfilled the next time they're online in-game.
-  public JSONArray pendingOps(UUID mcUuid) throws ApiException {
-    return getArray("/pending-ops/" + mcUuid);
+  // The gap between the bank ledger and what's actually been applied to the
+  // player's real in-game balance. delta > 0 means deposit that much
+  // in-game; delta < 0 means withdraw abs(delta).
+  public JSONObject getSyncStatus(UUID mcUuid) throws ApiException {
+    return get("/sync-status/" + mcUuid);
   }
 
-  public void resolvePendingOp(String opId, UUID mcUuid, boolean success, String note) throws ApiException {
+  // Advances the confirmed-synced balance by exactly the amount actually
+  // applied in-game (positive for a deposit, negative for a withdrawal).
+  public void confirmSync(UUID mcUuid, long appliedDelta) throws ApiException {
     JSONObject body = new JSONObject();
-    body.put("mcUuid", mcUuid.toString());
-    body.put("success", success);
-    if (note != null) body.put("note", note);
-    post("/pending-ops/" + opId + "/resolve", body);
+    body.put("appliedDelta", appliedDelta);
+    post("/sync-status/" + mcUuid + "/confirm", body);
   }
 }

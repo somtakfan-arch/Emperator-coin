@@ -14,8 +14,6 @@ commands:
       /bank link <nickname> <code> - (console, or with permission) link another player's account
       /bank balance - show your bank balance
       /bank pay <nickname> <amount> - transfer EMP directly to another linked player
-      /bank deposit <amount> - move in-game money into the bank
-      /bank withdraw <amount> - move bank money into the game
       /bank daily - claim the daily bonus (if enabled)
       /bank top [count] - show the richest bank accounts
 

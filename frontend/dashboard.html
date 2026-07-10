@@ -23,6 +23,7 @@
     <div class="panel">
       <h2>Баланс</h2>
       <div class="balance-display"><span id="balance">—</span><span class="unit">EMP</span></div>
+      <p id="sync-status" class="muted" style="text-align:center"></p>
       <div style="text-align:center; display:flex; gap:0.75rem; justify-content:center; flex-wrap:wrap;">
         <button id="claim-daily" class="secondary">Ежедневный бонус</button>
         <button id="spin-lottery" class="secondary">Крутить лотерею</button>
@@ -204,39 +205,12 @@
       <h2>Привязка аккаунта Bedsmp</h2>
       <p class="muted">
         Нажмите кнопку, получите 6-значный код и введите на сервере команду
-        <code>/bank link &lt;код&gt;</code>. Код действует 10 минут.
+        <code>/bank link &lt;код&gt;</code>. Код действует 10 минут. При первой привязке
+        текущий игровой баланс станет банковским балансом — дальше они синхронизируются
+        автоматически, пока вы онлайн на сервере.
       </p>
       <button id="get-link-code" class="secondary">Получить код привязки</button>
       <div id="link-code-display" class="link-code" style="display:none"></div>
-    </div>
-
-    <div class="panel">
-      <h2>Пополнить / вывести через игру</h2>
-      <p class="muted">
-        Сайт не подключён напрямую к игровому серверу, поэтому заявка выполнится,
-        когда вы в следующий раз будете онлайн на Bedsmp (плагин проверяет заявки каждые 30 секунд).
-        Аккаунт должен быть привязан.
-      </p>
-      <form id="game-deposit-form">
-        <div>
-          <label for="game-deposit-amount">Положить в банк из игры (EMP)</label>
-          <input id="game-deposit-amount" type="number" min="1" step="1" required />
-        </div>
-        <p id="game-deposit-error" class="error" style="display:none"></p>
-        <button type="submit" class="secondary">Создать заявку на депозит</button>
-      </form>
-      <form id="game-withdraw-form">
-        <div>
-          <label for="game-withdraw-amount">Вывести из банка в игру (EMP)</label>
-          <input id="game-withdraw-amount" type="number" min="1" step="1" required />
-        </div>
-        <p id="game-withdraw-error" class="error" style="display:none"></p>
-        <button type="submit" class="secondary">Создать заявку на вывод</button>
-      </form>
-      <table>
-        <thead><tr><th>Тип</th><th>Сумма</th><th>Статус</th><th></th></tr></thead>
-        <tbody id="game-ops-body"></tbody>
-      </table>
     </div>
 
     <div class="panel">

@@ -16,14 +16,16 @@ router.get(
       models.executeDueRecurringTransfers(req.user.id, (await models.getBankConfig()).transferFeeBps),
       models.checkLoanDefaults(req.user.id),
     ]);
+    const fresh = await models.findUserById(req.user.id);
     res.json({
-      id: req.user.id,
-      username: req.user.username,
-      role: req.user.role,
-      balance: await models.getBalance(req.user.id),
-      twoFactorEnabled: req.user.two_factor_enabled,
-      hasPin: !!req.user.pin_hash,
-      creditScore: req.user.credit_score,
+      id: fresh.id,
+      username: fresh.username,
+      role: fresh.role,
+      balance: fresh.balance,
+      syncedBalance: fresh.synced_balance,
+      twoFactorEnabled: fresh.two_factor_enabled,
+      hasPin: !!fresh.pin_hash,
+      creditScore: fresh.credit_score,
     });
   })
 );
@@ -357,73 +359,6 @@ router.post(
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
     await models.createLinkCode(req.user.id, code, expiresAt);
     res.json({ code, expiresAt });
-  })
-);
-
-// --- Site-initiated in-game deposit/withdraw requests -----------------------
-// The site has no direct line to the game server's economy, so these are
-// requests the plugin picks up and fulfills the next time the linked player
-// is online in-game.
-
-router.get(
-  '/game-ops',
-  asyncHandler(async (req, res) => {
-    res.json(await models.listGameOpRequestsForUser(req.user.id));
-  })
-);
-
-router.post(
-  '/game-deposit',
-  asyncHandler(async (req, res) => {
-    const amountInt = Number(req.body?.amount);
-    if (!Number.isInteger(amountInt) || amountInt <= 0) {
-      return res.status(400).json({ error: 'Укажите целую сумму больше 0' });
-    }
-    try {
-      const id = await models.createGameOpRequest(req.user.id, 'deposit', amountInt);
-      res.status(201).json({ id });
-    } catch (err) {
-      if (err.message === 'NOT_LINKED') {
-        return res.status(400).json({ error: 'Сначала привяжите аккаунт Bedsmp (код привязки выше)' });
-      }
-      throw err;
-    }
-  })
-);
-
-router.post(
-  '/game-withdraw',
-  asyncHandler(async (req, res) => {
-    const amountInt = Number(req.body?.amount);
-    if (!Number.isInteger(amountInt) || amountInt <= 0) {
-      return res.status(400).json({ error: 'Укажите целую сумму больше 0' });
-    }
-    if (amountInt > req.user.balance) {
-      return res.status(400).json({ error: 'Недостаточно средств на банковском счёте' });
-    }
-    try {
-      const id = await models.createGameOpRequest(req.user.id, 'withdraw', amountInt);
-      res.status(201).json({ id });
-    } catch (err) {
-      if (err.message === 'NOT_LINKED') {
-        return res.status(400).json({ error: 'Сначала привяжите аккаунт Bedsmp (код привязки выше)' });
-      }
-      throw err;
-    }
-  })
-);
-
-router.post(
-  '/game-ops/:id/cancel',
-  asyncHandler(async (req, res) => {
-    try {
-      await models.cancelGameOpRequest(req.params.id, req.user.id);
-      res.json({ ok: true });
-    } catch (err) {
-      if (err.message === 'NOT_FOUND') return res.status(404).json({ error: 'Заявка не найдена' });
-      if (err.message === 'ALREADY_RESOLVED') return res.status(400).json({ error: 'Заявка уже обработана' });
-      throw err;
-    }
   })
 );
 

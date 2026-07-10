@@ -43,8 +43,6 @@ public class BankCommand implements CommandExecutor, TabCompleter {
     switch (args[0].toLowerCase()) {
       case "link" -> handleLink(sender, args);
       case "balance", "bal" -> requirePlayer(sender, this::handleBalance);
-      case "deposit" -> requirePlayer(sender, p -> handleDeposit(p, args));
-      case "withdraw" -> requirePlayer(sender, p -> handleWithdraw(p, args));
       case "pay" -> requirePlayer(sender, p -> handlePay(p, args));
       case "daily" -> requirePlayer(sender, this::handleDaily);
       case "top" -> handleTop(sender, args);
@@ -67,8 +65,7 @@ public class BankCommand implements CommandExecutor, TabCompleter {
 
   private void sendUsage(CommandSender sender) {
     sender.sendMessage(PREFIX + "Команды: /bank link <код>, /bank link <ник> <код> (админ/консоль), " +
-        "/bank balance, /bank pay <ник> <сумма>, /bank deposit <сумма>, /bank withdraw <сумма>, " +
-        "/bank daily, /bank top");
+        "/bank balance, /bank pay <ник> <сумма>, /bank daily, /bank top");
   }
 
   // /bank link <code>          -> player links their own account
@@ -80,7 +77,8 @@ public class BankCommand implements CommandExecutor, TabCompleter {
         sender.sendMessage(PREFIX + "Из консоли укажи ник: /bank link <ник> <код>");
         return;
       }
-      linkAccount(sender, player.getUniqueId(), player.getName(), args[1]);
+      Long balance = economy != null ? Math.round(economy.getBalance(player)) : null;
+      linkAccount(sender, player.getUniqueId(), player.getName(), args[1], balance);
       return;
     }
 
@@ -97,18 +95,20 @@ public class BankCommand implements CommandExecutor, TabCompleter {
         return;
       }
       String resolvedName = target.getName() != null ? target.getName() : targetName;
-      linkAccount(sender, target.getUniqueId(), resolvedName, code);
+      Long balance = economy != null ? Math.round(economy.getBalance(target)) : null;
+      linkAccount(sender, target.getUniqueId(), resolvedName, code, balance);
       return;
     }
 
     sender.sendMessage(PREFIX + "Использование: /bank link <код> или /bank link <ник> <код>");
   }
 
-  private void linkAccount(CommandSender sender, UUID mcUuid, String mcUsername, String code) {
+  private void linkAccount(CommandSender sender, UUID mcUuid, String mcUsername, String code, Long currentBalance) {
     runAsync(sender, () -> {
-      JSONObject result = api.linkAccount(code, mcUuid, mcUsername);
+      JSONObject result = api.linkAccount(code, mcUuid, mcUsername, currentBalance);
       return PREFIX + "Аккаунт " + mcUsername + " привязан к банковскому счёту " +
-          result.optString("username") + ". Баланс: " + fmt(result.optLong("balance")) + " EMP";
+          result.optString("username") + ". Баланс: " + fmt(result.optLong("balance")) + " EMP" +
+          (economy != null ? " (это ваши реальные игровые деньги, синхронизируется автоматически)" : "");
     });
   }
 
@@ -117,53 +117,6 @@ public class BankCommand implements CommandExecutor, TabCompleter {
       JSONObject result = api.getBalance(player.getUniqueId());
       return PREFIX + "Баланс счёта " + result.optString("username") + ": " +
           fmt(result.optLong("balance")) + " EMP";
-    });
-  }
-
-  private void handleDeposit(Player player, String[] args) {
-    Long amount = parseAmount(player, args);
-    if (amount == null) return;
-
-    if (economy == null) {
-      player.sendMessage(PREFIX + "Игровая экономика (Vault) недоступна на этом сервере.");
-      return;
-    }
-    if (!economy.has(player, amount)) {
-      player.sendMessage(PREFIX + "Недостаточно игровых денег для депозита.");
-      return;
-    }
-
-    economy.withdrawPlayer(player, amount);
-    runAsync(player, () -> {
-      try {
-        JSONObject result = api.deposit(player.getUniqueId(), amount);
-        return PREFIX + "Депозит выполнен. Баланс банка: " + fmt(result.optLong("balance")) + " EMP";
-      } catch (BankApiClient.ApiException e) {
-        Bukkit.getScheduler().runTask(
-            Bukkit.getPluginManager().getPlugin("EmperatorBank"),
-            () -> economy.depositPlayer(player, amount)
-        );
-        throw e;
-      }
-    });
-  }
-
-  private void handleWithdraw(Player player, String[] args) {
-    Long amount = parseAmount(player, args);
-    if (amount == null) return;
-
-    if (economy == null) {
-      player.sendMessage(PREFIX + "Игровая экономика (Vault) недоступна на этом сервере.");
-      return;
-    }
-
-    runAsync(player, () -> {
-      JSONObject result = api.withdraw(player.getUniqueId(), amount);
-      Bukkit.getScheduler().runTask(
-          Bukkit.getPluginManager().getPlugin("EmperatorBank"),
-          () -> economy.depositPlayer(player, amount)
-      );
-      return PREFIX + "Вывод выполнен. Баланс банка: " + fmt(result.optLong("balance")) + " EMP";
     });
   }
 
@@ -225,10 +178,6 @@ public class BankCommand implements CommandExecutor, TabCompleter {
     });
   }
 
-  private Long parseAmount(Player player, String[] args) {
-    return parseAmountAt(player, args, 1);
-  }
-
   private Long parseAmountAt(Player player, String[] args, int index) {
     if (args.length <= index) {
       player.sendMessage(PREFIX + "Укажите сумму.");
@@ -268,7 +217,7 @@ public class BankCommand implements CommandExecutor, TabCompleter {
   @Override
   public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
     if (args.length == 1) {
-      return List.of("link", "balance", "pay", "deposit", "withdraw", "daily", "top");
+      return List.of("link", "balance", "pay", "daily", "top");
     }
     if (args.length == 2 && ("link".equalsIgnoreCase(args[0]) || "pay".equalsIgnoreCase(args[0]))
         && !(sender instanceof Player && "link".equalsIgnoreCase(args[0]))) {

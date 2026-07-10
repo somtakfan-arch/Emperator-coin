@@ -28,7 +28,7 @@ public class EmperatorBankPlugin extends JavaPlugin {
       }
     }
     if (economy == null) {
-      getLogger().warning("Vault не найден — команды deposit/withdraw в игровую экономику отключены.");
+      getLogger().warning("Vault не найден — банковский баланс не будет синхронизироваться с игровой валютой.");
     }
 
     BankCommand bankCommand = new BankCommand(apiClient, economy);
@@ -37,7 +37,7 @@ public class EmperatorBankPlugin extends JavaPlugin {
 
     NotificationService notifications = new NotificationService(this, apiClient, economy);
     getServer().getPluginManager().registerEvents(notifications, this);
-    notifications.startPolling(20L * 30); // every 30 seconds
+    notifications.startPolling(20L * 10); // every 10 seconds
 
     getLogger().info("Emperator Bank подключён к сайту: " + getConfig().getString("api-base-url"));
   }
