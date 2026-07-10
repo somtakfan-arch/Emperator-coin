@@ -18,6 +18,7 @@ const TYPE_LABELS = {
   referral_bonus: 'Реферальный бонус',
   quest_reward: 'Награда за задание',
   scheduled_transfer: 'Отложенный перевод',
+  donation: 'Донат',
 };
 
 let currentUser = null;

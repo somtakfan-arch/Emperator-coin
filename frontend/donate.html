@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Пополнение — Emperator Bank</title>
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+  <header class="imperial">
+    <div class="brand"><a href="/index.html" style="text-decoration:none;color:inherit">Emperator Bank</a></div>
+    <nav>
+      <a href="/dashboard.html">Личный кабинет</a>
+      <a href="#" id="logout-link">Выход</a>
+    </nav>
+  </header>
+  <main>
+    <div class="panel" id="return-panel" style="display:none">
+      <h2>Проверяем оплату</h2>
+      <p id="return-status" class="muted">Ожидаем подтверждение от ЮKassa...</p>
+      <div style="text-align:center">
+        <button id="check-payment-btn" class="secondary">Проверить сейчас</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Пополнить баланс за реальные деньги</h2>
+      <p class="muted">Курс: <span id="rate-display">—</span>. Оплата через ЮKassa (карта / СБП). EMP зачисляются на счёт сразу после подтверждения оплаты — это ваши реальные игровые деньги, дальше они синхронизируются в игру автоматически.</p>
+      <form id="donate-form">
+        <div>
+          <label for="donate-amount">Сумма (₽)</label>
+          <input id="donate-amount" type="number" min="1" step="1" required />
+        </div>
+        <p class="muted">Вы получите: <span id="emp-preview">0</span> EMP</p>
+        <p id="donate-error" class="error" style="display:none"></p>
+        <button type="submit">Оплатить через ЮKassa</button>
+      </form>
+    </div>
+
+    <div class="panel">
+      <h2>История донатов</h2>
+      <table>
+        <thead><tr><th>Дата</th><th>Сумма</th><th>EMP</th><th>Статус</th></tr></thead>
+        <tbody id="donations-body"></tbody>
+      </table>
+    </div>
+  </main>
+  <script src="/js/api.js"></script>
+  <script src="/js/donate.js"></script>
+</body>
+</html>

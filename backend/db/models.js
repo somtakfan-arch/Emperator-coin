@@ -25,6 +25,7 @@ const auctionsCol = () => db.collection('auctions');
 const achievementsCol = () => db.collection('achievements');
 const weeklyQuestCol = () => db.collection('weeklyQuests');
 const adminMintLimitCol = () => db.collection('adminMintLimits');
+const donationsCol = () => db.collection('donations');
 
 const treasuryRef = () => metaCol().doc('treasury');
 const configRef = () => configCol().doc('bank');
@@ -56,6 +57,8 @@ const DEFAULT_CONFIG = {
   ],
   dailyMintLimit: 0, // 0 = no limit, per-admin per-day
   auctionFeeBps: 0,
+  empPerRub: 100000, // real-money donation conversion rate: 1 RUB -> this many EMP
+  minDonationRub: 10,
 };
 
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -239,6 +242,18 @@ function toAuctionRow(id, data) {
     ends_at: data.endsAt,
     status: data.status,
     created_at: toIso(data.createdAt),
+  };
+}
+
+function toDonationRow(id, data) {
+  return {
+    id,
+    user_id: data.userId,
+    amount_rub: data.amountRub,
+    emp_amount: data.empAmount,
+    status: data.status,
+    created_at: toIso(data.createdAt),
+    confirmed_at: toIso(data.confirmedAt),
   };
 }
 
@@ -600,6 +615,68 @@ const models = {
     const user = await models.findUserByMcUuid(mcUuid);
     if (!user) throw new Error('NOT_FOUND');
     await usersCol().doc(user.id).update({ balance: currentBalance, syncedBalance: currentBalance });
+  },
+
+  // --- Donations (real-money top-ups via YooKassa) ------------------------
+  // The donation doc's ID is the YooKassa payment ID itself, so a webhook or
+  // status check that fires more than once always lands on the same doc and
+  // markDonationSucceeded can safely no-op on a repeat.
+
+  async createPendingDonation({ userId, username, providerPaymentId, amountRub, empAmount }) {
+    await donationsCol().doc(providerPaymentId).set({
+      userId,
+      username,
+      provider: 'yookassa',
+      amountRub,
+      empAmount,
+      status: 'pending',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  },
+
+  async findDonationById(providerPaymentId) {
+    const snap = await donationsCol().doc(providerPaymentId).get();
+    return snap.exists ? toDonationRow(snap.id, snap.data()) : null;
+  },
+
+  async listDonationsForUser(userId) {
+    const snap = await donationsCol().where('userId', '==', userId).get();
+    const rows = snap.docs.map((d) => toDonationRow(d.id, d.data()));
+    rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    return rows;
+  },
+
+  // Credits the donor's balance with the EMP the payment was for. Idempotent:
+  // returns null (no-op) if the donation is unknown or was already credited,
+  // so it's safe to call this from both the webhook and a manual status check
+  // without risking a double credit.
+  async markDonationSucceeded(providerPaymentId) {
+    return db.runTransaction(async (tx) => {
+      const donationRef = donationsCol().doc(providerPaymentId);
+      const donationSnap = await tx.get(donationRef);
+      if (!donationSnap.exists) return null;
+      const data = donationSnap.data();
+      if (data.status === 'succeeded') return null;
+
+      const userRef = usersCol().doc(data.userId);
+      const userSnap = await tx.get(userRef);
+      if (!userSnap.exists) return null;
+
+      tx.update(donationRef, { status: 'succeeded', confirmedAt: admin.firestore.FieldValue.serverTimestamp() });
+      tx.update(userRef, { balance: admin.firestore.FieldValue.increment(data.empAmount) });
+      const txRef = transactionsCol().doc();
+      tx.set(txRef, {
+        fromUserId: null,
+        toUserId: data.userId,
+        fromUsername: null,
+        toUsername: userSnap.data().username,
+        amount: data.empAmount,
+        type: 'donation',
+        note: `Донат ${data.amountRub} ₽`,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return data.empAmount;
+    });
   },
 
   // --- Bank config -------------------------------------------------------

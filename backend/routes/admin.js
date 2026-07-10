@@ -173,6 +173,8 @@ const NUMERIC_CONFIG_KEYS = [
   'referralBonusAmount',
   'dailyMintLimit',
   'auctionFeeBps',
+  'empPerRub',
+  'minDonationRub',
 ];
 const STRUCTURED_CONFIG_KEYS = ['adminIpWhitelist', 'savingsTiers', 'tierThresholds', 'lotteryPrizes'];
 

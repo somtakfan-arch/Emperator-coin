@@ -18,6 +18,7 @@ const ADMIN_TYPE_LABELS = {
   referral_bonus: 'Реферальный бонус',
   quest_reward: 'Награда за задание',
   scheduled_transfer: 'Отложенный перевод',
+  donation: 'Донат',
 };
 
 const ADMIN_ACTION_LABELS = {
@@ -146,6 +147,8 @@ async function loadConfigForm() {
   document.getElementById('cfg-referral-bonus').value = config.referralBonusAmount;
   document.getElementById('cfg-daily-mint-limit').value = config.dailyMintLimit;
   document.getElementById('cfg-auction-fee').value = config.auctionFeeBps;
+  document.getElementById('cfg-emp-per-rub').value = config.empPerRub;
+  document.getElementById('cfg-min-donation').value = config.minDonationRub;
   document.getElementById('cfg-savings-tiers').value = JSON.stringify(config.savingsTiers);
   document.getElementById('cfg-tier-thresholds').value = JSON.stringify(config.tierThresholds);
   document.getElementById('cfg-lottery-prizes').value = JSON.stringify(config.lotteryPrizes);
@@ -221,6 +224,8 @@ document.getElementById('config-form').addEventListener('submit', async (e) => {
     referralBonusAmount: document.getElementById('cfg-referral-bonus').value,
     dailyMintLimit: document.getElementById('cfg-daily-mint-limit').value,
     auctionFeeBps: document.getElementById('cfg-auction-fee').value,
+    empPerRub: document.getElementById('cfg-emp-per-rub').value,
+    minDonationRub: document.getElementById('cfg-min-donation').value,
   };
   try {
     body.savingsTiers = JSON.parse(document.getElementById('cfg-savings-tiers').value || '[]');
