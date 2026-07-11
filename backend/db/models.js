@@ -29,6 +29,7 @@ const donationsCol = () => db.collection('donations');
 
 const treasuryRef = () => metaCol().doc('treasury');
 const configRef = () => configCol().doc('bank');
+const donationAlertsTokensRef = () => metaCol().doc('donationAlertsTokens');
 
 const DEFAULT_CONFIG = {
   transferFeeBps: 0, // basis points (1/100 of a percent), e.g. 250 = 2.5%
@@ -59,6 +60,7 @@ const DEFAULT_CONFIG = {
   auctionFeeBps: 0,
   empPerRub: 100000, // real-money donation conversion rate: 1 RUB -> this many EMP
   minDonationRub: 10,
+  donationAlertsPageUrl: '', // e.g. https://www.donationalerts.com/r/yournick — empty = DonationAlerts donations disabled
 };
 
 const MAX_LOGIN_ATTEMPTS = 5;
@@ -249,8 +251,10 @@ function toDonationRow(id, data) {
   return {
     id,
     user_id: data.userId,
-    amount_rub: data.amountRub,
-    emp_amount: data.empAmount,
+    provider: data.provider,
+    code: data.code || null,
+    amount_rub: data.amountRub != null ? data.amountRub : null,
+    emp_amount: data.empAmount != null ? data.empAmount : null,
     status: data.status,
     created_at: toIso(data.createdAt),
     confirmed_at: toIso(data.confirmedAt),
@@ -677,6 +681,71 @@ const models = {
       });
       return data.empAmount;
     });
+  },
+
+  // --- Donations via DonationAlerts ---------------------------------------
+  // DonationAlerts has no per-transaction webhook we can wire up (the donor
+  // pays on DonationAlerts' own page, not ours), so instead we hand the user
+  // a short code to paste into the donation message, then look for a
+  // matching message when they come back and ask us to check. The claim
+  // doc's ID is the code itself, so a repeat check always lands on the same
+  // doc and can't double-credit.
+
+  async createDonationClaim({ userId, username, code }) {
+    await donationsCol().doc(code).set({
+      userId,
+      username,
+      provider: 'donationalerts',
+      code,
+      status: 'pending',
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  },
+
+  // Idempotent for the same reason as markDonationSucceeded: a repeat check
+  // on an already-succeeded claim is a no-op.
+  async matchDonationClaim({ code, providerDonationId, amountRub, empAmount }) {
+    return db.runTransaction(async (tx) => {
+      const donationRef = donationsCol().doc(code);
+      const donationSnap = await tx.get(donationRef);
+      if (!donationSnap.exists) return null;
+      const data = donationSnap.data();
+      if (data.status === 'succeeded') return null;
+
+      const userRef = usersCol().doc(data.userId);
+      const userSnap = await tx.get(userRef);
+      if (!userSnap.exists) return null;
+
+      tx.update(donationRef, {
+        status: 'succeeded',
+        amountRub,
+        empAmount,
+        providerDonationId,
+        confirmedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      tx.update(userRef, { balance: admin.firestore.FieldValue.increment(empAmount) });
+      const txRef = transactionsCol().doc();
+      tx.set(txRef, {
+        fromUserId: null,
+        toUserId: data.userId,
+        fromUsername: null,
+        toUsername: userSnap.data().username,
+        amount: empAmount,
+        type: 'donation',
+        note: `Донат ${amountRub} ₽ (DonationAlerts)`,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return empAmount;
+    });
+  },
+
+  async getDonationAlertsTokens() {
+    const snap = await donationAlertsTokensRef().get();
+    return snap.exists ? snap.data() : null;
+  },
+
+  async saveDonationAlertsTokens({ accessToken, refreshToken, expiresAt }) {
+    await donationAlertsTokensRef().set({ accessToken, refreshToken, expiresAt });
   },
 
   // --- Bank config -------------------------------------------------------

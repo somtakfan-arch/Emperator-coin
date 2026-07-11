@@ -124,6 +124,10 @@
           <input id="cfg-min-donation" type="number" min="0" step="1" />
         </div>
         <div>
+          <label for="cfg-donationalerts-url">Ссылка на страницу DonationAlerts (например, https://www.donationalerts.com/r/ваш_ник; пусто = выключено)</label>
+          <input id="cfg-donationalerts-url" type="text" placeholder="https://www.donationalerts.com/r/..." />
+        </div>
+        <div>
           <label for="cfg-savings-tiers">Тарифы вкладов (JSON: [{"days":7,"rateBps":500}])</label>
           <input id="cfg-savings-tiers" type="text" />
         </div>
@@ -143,6 +147,15 @@
         <p id="config-success" class="success-msg" style="display:none"></p>
         <button type="submit" class="secondary">Сохранить настройки</button>
       </form>
+    </div>
+
+    <div class="panel">
+      <h2>Приём донатов через DonationAlerts</h2>
+      <p class="muted">Одноразовая привязка вашего аккаунта DonationAlerts, чтобы сайт мог сам проверять новые донаты. Требует настроенных DONATIONALERTS_CLIENT_ID/CLIENT_SECRET/REDIRECT_URI на сервере.</p>
+      <div style="text-align:center">
+        <button id="link-donationalerts-btn" class="secondary">Привязать DonationAlerts</button>
+      </div>
+      <p id="link-donationalerts-error" class="error" style="display:none"></p>
     </div>
 
     <div class="panel">

@@ -177,6 +177,7 @@ const NUMERIC_CONFIG_KEYS = [
   'minDonationRub',
 ];
 const STRUCTURED_CONFIG_KEYS = ['adminIpWhitelist', 'savingsTiers', 'tierThresholds', 'lotteryPrizes'];
+const STRING_CONFIG_KEYS = ['donationAlertsPageUrl'];
 
 router.get(
   '/config',
@@ -203,6 +204,11 @@ router.post(
     for (const key of STRUCTURED_CONFIG_KEYS) {
       if (req.body && Array.isArray(req.body[key])) {
         patch[key] = req.body[key];
+      }
+    }
+    for (const key of STRING_CONFIG_KEYS) {
+      if (req.body && typeof req.body[key] === 'string') {
+        patch[key] = req.body[key].trim();
       }
     }
     const { config, changes } = await models.updateBankConfig(patch);

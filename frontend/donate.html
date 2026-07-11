@@ -24,8 +24,29 @@
     </div>
 
     <div class="panel">
-      <h2>Пополнить баланс за реальные деньги</h2>
-      <p class="muted">Курс: <span id="rate-display">—</span>. Оплата через ЮKassa (карта / СБП). EMP зачисляются на счёт сразу после подтверждения оплаты — это ваши реальные игровые деньги, дальше они синхронизируются в игру автоматически.</p>
+      <h2>Пополнить через DonationAlerts</h2>
+      <p class="muted">Курс: <span id="rate-display-da">—</span>. Работает без карты/банка — донат обычным способом с вашей страницы DonationAlerts.</p>
+      <ol class="muted" style="padding-left:1.2em">
+        <li>Нажмите «Получить код».</li>
+        <li>Перейдите по ссылке на вашу страницу DonationAlerts.</li>
+        <li>Впишите сумму и обязательно вставьте код в поле сообщения.</li>
+        <li>Оплатите, вернитесь сюда и нажмите «Проверить».</li>
+      </ol>
+      <div style="text-align:center">
+        <button id="da-get-code-btn" class="secondary">Получить код</button>
+      </div>
+      <div id="da-code-panel" style="display:none; text-align:center; margin-top:1rem">
+        <p>Ваш код: <strong id="da-code" style="font-size:1.4rem; letter-spacing:0.1em"></strong></p>
+        <p><a id="da-link" href="#" target="_blank" rel="noopener">Перейти на DonationAlerts</a></p>
+        <button id="da-check-btn" class="secondary">Проверить</button>
+        <p id="da-status" class="muted"></p>
+      </div>
+      <p id="da-error" class="error" style="display:none"></p>
+    </div>
+
+    <div class="panel">
+      <h2>Пополнить картой / СБП (ЮKassa)</h2>
+      <p class="muted">Курс: <span id="rate-display">—</span>. EMP зачисляются на счёт сразу после подтверждения оплаты — это ваши реальные игровые деньги, дальше они синхронизируются в игру автоматически.</p>
       <form id="donate-form">
         <div>
           <label for="donate-amount">Сумма (₽)</label>
@@ -40,7 +61,7 @@
     <div class="panel">
       <h2>История донатов</h2>
       <table>
-        <thead><tr><th>Дата</th><th>Сумма</th><th>EMP</th><th>Статус</th></tr></thead>
+        <thead><tr><th>Дата</th><th>Способ</th><th>Сумма</th><th>EMP</th><th>Статус</th></tr></thead>
         <tbody id="donations-body"></tbody>
       </table>
     </div>

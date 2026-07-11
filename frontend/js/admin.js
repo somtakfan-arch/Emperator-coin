@@ -149,6 +149,7 @@ async function loadConfigForm() {
   document.getElementById('cfg-auction-fee').value = config.auctionFeeBps;
   document.getElementById('cfg-emp-per-rub').value = config.empPerRub;
   document.getElementById('cfg-min-donation').value = config.minDonationRub;
+  document.getElementById('cfg-donationalerts-url').value = config.donationAlertsPageUrl || '';
   document.getElementById('cfg-savings-tiers').value = JSON.stringify(config.savingsTiers);
   document.getElementById('cfg-tier-thresholds').value = JSON.stringify(config.tierThresholds);
   document.getElementById('cfg-lottery-prizes').value = JSON.stringify(config.lotteryPrizes);
@@ -226,6 +227,7 @@ document.getElementById('config-form').addEventListener('submit', async (e) => {
     auctionFeeBps: document.getElementById('cfg-auction-fee').value,
     empPerRub: document.getElementById('cfg-emp-per-rub').value,
     minDonationRub: document.getElementById('cfg-min-donation').value,
+    donationAlertsPageUrl: document.getElementById('cfg-donationalerts-url').value.trim(),
   };
   try {
     body.savingsTiers = JSON.parse(document.getElementById('cfg-savings-tiers').value || '[]');
@@ -285,6 +287,18 @@ document.getElementById('export-btn').addEventListener('click', async () => {
 });
 
 document.getElementById('tx-search-btn').addEventListener('click', searchTransactions);
+
+document.getElementById('link-donationalerts-btn').addEventListener('click', async () => {
+  const errorEl = document.getElementById('link-donationalerts-error');
+  errorEl.style.display = 'none';
+  try {
+    const { url } = await api('/donate/da/authorize-url');
+    window.open(url, '_blank');
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.style.display = 'block';
+  }
+});
 
 (async function init() {
   if (!requireLoginOrRedirect()) return;

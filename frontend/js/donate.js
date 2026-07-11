@@ -5,7 +5,9 @@ function fmt(n) {
 }
 
 const STATUS_LABELS = { pending: 'в обработке', succeeded: 'оплачено' };
+const PROVIDER_LABELS = { yookassa: 'ЮKassa', donationalerts: 'DonationAlerts' };
 const LAST_DONATION_KEY = 'emperator_last_donation';
+const LAST_DA_CODE_KEY = 'emperator_last_da_code';
 
 document.getElementById('logout-link').addEventListener('click', (e) => {
   e.preventDefault();
@@ -17,20 +19,23 @@ async function loadHistory() {
   const tbody = document.getElementById('donations-body');
   tbody.innerHTML = '';
   if (donations.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4" class="muted">Пока нет донатов</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" class="muted">Пока нет донатов</td></tr>';
     return;
   }
   donations.forEach((d) => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${new Date(d.created_at).toLocaleString('ru-RU')}</td>
-      <td>${fmt(d.amount_rub)} ₽</td>
-      <td>${fmt(d.emp_amount)} EMP</td>
+      <td>${PROVIDER_LABELS[d.provider] || d.provider}</td>
+      <td>${d.amount_rub != null ? fmt(d.amount_rub) + ' ₽' : '—'}</td>
+      <td>${d.emp_amount != null ? fmt(d.emp_amount) + ' EMP' : '—'}</td>
       <td>${STATUS_LABELS[d.status] || d.status}</td>
     `;
     tbody.appendChild(tr);
   });
 }
+
+// --- ЮKassa (card / SBP) -----------------------------------------------
 
 document.getElementById('donate-amount').addEventListener('input', (e) => {
   const amount = Number(e.target.value) || 0;
@@ -92,12 +97,56 @@ document.getElementById('check-payment-btn').addEventListener('click', async () 
   }
 });
 
+// --- DonationAlerts -------------------------------------------------------
+
+document.getElementById('da-get-code-btn').addEventListener('click', async () => {
+  const errorEl = document.getElementById('da-error');
+  errorEl.style.display = 'none';
+  try {
+    const result = await api('/donate/da/create', { method: 'POST' });
+    localStorage.setItem(LAST_DA_CODE_KEY, result.code);
+    showDaCode(result.code, result.donationAlertsUrl);
+  } catch (err) {
+    errorEl.textContent = err.message;
+    errorEl.style.display = 'block';
+  }
+});
+
+function showDaCode(code, donationAlertsUrl) {
+  document.getElementById('da-code-panel').style.display = 'block';
+  document.getElementById('da-code').textContent = code;
+  document.getElementById('da-link').href = donationAlertsUrl;
+  document.getElementById('da-status').textContent = '';
+}
+
+document.getElementById('da-check-btn').addEventListener('click', async () => {
+  const code = localStorage.getItem(LAST_DA_CODE_KEY);
+  if (!code) return;
+  const statusEl = document.getElementById('da-status');
+  statusEl.textContent = 'Проверяем...';
+  try {
+    const donation = await api(`/donate/da/${code}/check`, { method: 'POST' });
+    if (donation.status === 'succeeded') {
+      statusEl.textContent = `Готово: зачислено ${fmt(donation.emp_amount)} EMP.`;
+      await loadHistory();
+    } else {
+      statusEl.textContent = 'Пока не найдено. Подождите немного и попробуйте снова.';
+    }
+  } catch (err) {
+    statusEl.textContent = 'Ошибка проверки: ' + err.message;
+  }
+});
+
+// --- Init -------------------------------------------------------------
+
 (async function init() {
   if (!requireLoginOrRedirect()) return;
   try {
     const config = await api('/bank/config');
     empPerRub = config.empPerRub;
-    document.getElementById('rate-display').textContent = `1 ₽ = ${fmt(empPerRub)} EMP (мин. сумма ${fmt(config.minDonationRub)} ₽)`;
+    const rateText = `1 ₽ = ${fmt(empPerRub)} EMP (мин. сумма ${fmt(config.minDonationRub)} ₽)`;
+    document.getElementById('rate-display').textContent = rateText;
+    document.getElementById('rate-display-da').textContent = rateText;
     await loadHistory();
 
     const params = new URLSearchParams(window.location.search);
@@ -105,6 +154,11 @@ document.getElementById('check-payment-btn').addEventListener('click', async () 
     if (params.get('status') === 'return' && donationId) {
       document.getElementById('return-panel').style.display = 'block';
       pollReturnStatus(donationId);
+    }
+
+    const lastDaCode = localStorage.getItem(LAST_DA_CODE_KEY);
+    if (lastDaCode && config.donationAlertsPageUrl) {
+      showDaCode(lastDaCode, config.donationAlertsPageUrl);
     }
   } catch (err) {
     logout();
