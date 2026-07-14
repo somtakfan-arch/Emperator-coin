@@ -24,6 +24,36 @@
     "июля", "августа", "сентября", "октября", "ноября", "декабря",
   ];
 
+  const BASE_COINS = 5;
+  const STREAK_TIERS = [
+    [30, 3],
+    [14, 2],
+    [7, 1.5],
+    [3, 1.2],
+    [0, 1],
+  ];
+  function streakMultiplier(count) {
+    for (const [min, mult] of STREAK_TIERS) {
+      if (count >= min) return mult;
+    }
+    return 1;
+  }
+
+  const FREEZE_COST = 30;
+  const CATEGORY_SLOT_BASE_COST = 60;
+  const CATEGORY_SLOT_STEP = 30;
+  const CUSTOM_CATEGORY_CLASSES = ["cat-custom-0", "cat-custom-1", "cat-custom-2", "cat-custom-3"];
+
+  const THEME_DEFS = [
+    { id: "lime", label: "Классика", cost: 0, accent: "#d7ff3a", gradient: "linear-gradient(135deg, #ff4d8d, #ff9a3c 55%, #ffd52e)" },
+    { id: "ocean", label: "Океан", cost: 40, accent: "#4dd9ff", gradient: "linear-gradient(135deg, #4d8dff, #4dd9ff 55%, #6be6d8)" },
+    { id: "violet", label: "Виолет", cost: 40, accent: "#c58bff", gradient: "linear-gradient(135deg, #8a5cff, #c58bff 55%, #ff8ad4)" },
+    { id: "sunset", label: "Закат", cost: 40, accent: "#ff8a3c", gradient: "linear-gradient(135deg, #ff3c5f, #ff8a3c 55%, #ffd52e)" },
+  ];
+  function themeInfo(id) {
+    return THEME_DEFS.find((t) => t.id === id) || THEME_DEFS[0];
+  }
+
   // ---------- date helpers ----------
   function pad(n) { return String(n).padStart(2, "0"); }
   function toDateStr(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
@@ -94,6 +124,13 @@
       streak: { count: 0, lastCompleteDate: null },
       notificationsEnabled: false,
       notifiedLog: {},
+      coins: 0,
+      coinLog: {},
+      streakFreezes: 0,
+      unlockedThemes: ["lime"],
+      activeTheme: "lime",
+      customCategories: [],
+      categorySlotsPurchased: 0,
     };
   }
 
@@ -104,6 +141,13 @@
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed.reminders)) return seedState();
       parsed.notifiedLog = parsed.notifiedLog || {};
+      parsed.coins = parsed.coins ?? 0;
+      parsed.coinLog = parsed.coinLog || {};
+      parsed.streakFreezes = parsed.streakFreezes ?? 0;
+      parsed.unlockedThemes = parsed.unlockedThemes || ["lime"];
+      parsed.activeTheme = parsed.activeTheme || "lime";
+      parsed.customCategories = parsed.customCategories || [];
+      parsed.categorySlotsPurchased = parsed.categorySlotsPurchased ?? 0;
       return parsed;
     } catch {
       return seedState();
@@ -143,8 +187,12 @@
       .sort((a, b) => a.time.localeCompare(b.time));
   }
 
+  function allCategories() {
+    return CATEGORIES.concat(state.customCategories);
+  }
+
   function categoryInfo(id) {
-    return CATEGORIES.find((c) => c.id === id) || CATEGORIES[CATEGORIES.length - 1];
+    return allCategories().find((c) => c.id === id) || CATEGORIES[CATEGORIES.length - 1];
   }
 
   // ---------- streak ----------
@@ -169,13 +217,29 @@
     }
   }
 
+  function daysDiff(fromStr, toStr) {
+    const [fy, fm, fd] = fromStr.split("-").map(Number);
+    const [ty, tm, td] = toStr.split("-").map(Number);
+    const from = new Date(fy, fm - 1, fd);
+    const to = new Date(ty, tm - 1, td);
+    return Math.round((to - from) / 86400000);
+  }
+
   function decayStreakIfMissed() {
     const today = todayStr();
-    const yesterday = addDaysStr(today, -1);
     const last = state.streak.lastCompleteDate;
-    if (last && last !== today && last !== yesterday) {
-      state.streak.count = 0;
+    if (!last) return;
+    const gap = daysDiff(last, today);
+    if (gap <= 1) return;
+    if (gap === 2 && state.streakFreezes > 0) {
+      state.streakFreezes -= 1;
+      state.streak.lastCompleteDate = addDaysStr(today, -1);
+      saveState();
+      toast("Стрик спасён заморозкой 🧊");
+      return;
     }
+    state.streak.count = 0;
+    saveState();
   }
 
   // ---------- rendering ----------
@@ -201,6 +265,17 @@
 
   let currentView = "today";
   let toastTimer = null;
+
+  function applyTheme() {
+    const t = themeInfo(state.activeTheme);
+    document.documentElement.style.setProperty("--lime", t.accent);
+    document.documentElement.style.setProperty("--gradient-cta", t.gradient);
+  }
+
+  function updateCoinBadge() {
+    const el = document.getElementById("coin-count");
+    if (el) el.textContent = state.coins;
+  }
 
   function toast(msg) {
     els.toast.textContent = msg;
@@ -234,8 +309,20 @@
     check.setAttribute("aria-label", "Отметить выполненным");
     check.innerHTML = checkSvg();
     check.addEventListener("click", () => {
-      setDoneOn(reminder, dateStr, !isDoneOn(reminder, dateStr));
+      const wasDone = isDoneOn(reminder, dateStr);
+      setDoneOn(reminder, dateStr, !wasDone);
       recalcStreak();
+      const coinKey = `${reminder.id}|${dateStr}`;
+      if (!wasDone) {
+        const amount = Math.round(BASE_COINS * streakMultiplier(state.streak.count));
+        state.coins += amount;
+        state.coinLog[coinKey] = amount;
+        toast(`+${amount} 🪙`);
+      } else {
+        const amount = state.coinLog[coinKey] || 0;
+        state.coins = Math.max(0, state.coins - amount);
+        delete state.coinLog[coinKey];
+      }
       saveState();
       renderAll();
     });
@@ -421,12 +508,160 @@
       renderProfile();
     });
 
+    const shop = buildShop();
+
     const siteLink = document.createElement("a");
     siteLink.className = "profile-row";
     siteLink.href = "../";
     siteLink.innerHTML = `<span class="left">← На сайт Remindly</span>`;
 
-    container.append(streakCard, statGrid, notifRow, siteLink);
+    container.append(streakCard, statGrid, shop, notifRow, siteLink);
+  }
+
+  function shopHeader(text) {
+    const label = document.createElement("div");
+    label.className = "section-label";
+    label.style.marginTop = "6px";
+    label.textContent = text;
+    return label;
+  }
+
+  function buildShop() {
+    const wrap = document.createElement("div");
+
+    const coinCard = document.createElement("div");
+    coinCard.className = "coin-summary-card";
+    coinCard.innerHTML = `🪙 <span class="coin-summary-num">${state.coins}</span> монет`;
+    wrap.appendChild(coinCard);
+
+    wrap.appendChild(shopHeader("Магазин"));
+
+    // Streak freeze
+    const freezeRow = document.createElement("button");
+    freezeRow.type = "button";
+    freezeRow.className = "profile-row shop-row";
+    freezeRow.innerHTML = `
+      <span class="left">🧊 Заморозка стрика<span class="shop-sub">У вас: ${state.streakFreezes}</span></span>
+      <span class="shop-price">${FREEZE_COST} 🪙</span>
+    `;
+    freezeRow.addEventListener("click", () => {
+      if (state.coins < FREEZE_COST) {
+        toast("Недостаточно монет");
+        return;
+      }
+      state.coins -= FREEZE_COST;
+      state.streakFreezes += 1;
+      saveState();
+      toast("Заморозка куплена");
+      renderAll();
+    });
+    wrap.appendChild(freezeRow);
+
+    // Themes
+    const themeRow = document.createElement("div");
+    themeRow.className = "theme-row";
+    THEME_DEFS.forEach((t) => {
+      const owned = state.unlockedThemes.includes(t.id);
+      const active = state.activeTheme === t.id;
+      const swatch = document.createElement("button");
+      swatch.type = "button";
+      swatch.className = `theme-swatch${active ? " active" : ""}${owned ? "" : " locked"}`;
+      swatch.style.background = t.gradient;
+      swatch.innerHTML = owned
+        ? active
+          ? `<span class="theme-check">${checkSvg()}</span>`
+          : ""
+        : `<span class="theme-lock">${t.cost}🪙</span>`;
+      swatch.title = t.label;
+      swatch.addEventListener("click", () => {
+        if (owned) {
+          state.activeTheme = t.id;
+          saveState();
+          applyTheme();
+          renderAll();
+          return;
+        }
+        if (state.coins < t.cost) {
+          toast("Недостаточно монет");
+          return;
+        }
+        state.coins -= t.cost;
+        state.unlockedThemes.push(t.id);
+        state.activeTheme = t.id;
+        saveState();
+        applyTheme();
+        toast(`Тема «${t.label}» открыта`);
+        renderAll();
+      });
+      themeRow.appendChild(swatch);
+    });
+    wrap.appendChild(shopHeader("Темы оформления"));
+    wrap.appendChild(themeRow);
+
+    // Custom categories
+    const slotCost = CATEGORY_SLOT_BASE_COST + state.categorySlotsPurchased * CATEGORY_SLOT_STEP;
+    const unfilledSlots = state.categorySlotsPurchased - state.customCategories.length;
+
+    wrap.appendChild(shopHeader("Свои категории"));
+
+    if (unfilledSlots > 0) {
+      const addRow = document.createElement("div");
+      addRow.className = "category-add-row";
+      addRow.innerHTML = `
+        <input class="text-input" type="text" placeholder="Название категории" maxlength="20" />
+        <button type="button" class="btn btn-primary">Добавить</button>
+      `;
+      const input = addRow.querySelector("input");
+      const btn = addRow.querySelector("button");
+      btn.addEventListener("click", () => {
+        const name = input.value.trim();
+        if (!name) {
+          toast("Введите название");
+          return;
+        }
+        const cls = CUSTOM_CATEGORY_CLASSES[state.customCategories.length % CUSTOM_CATEGORY_CLASSES.length];
+        state.customCategories.push({ id: `custom-${Date.now()}`, label: name, cls });
+        saveState();
+        toast("Категория добавлена");
+        renderAll();
+      });
+      wrap.appendChild(addRow);
+    }
+
+    const slotRow = document.createElement("button");
+    slotRow.type = "button";
+    slotRow.className = "profile-row shop-row";
+    slotRow.innerHTML = `
+      <span class="left">🏷️ Слот категории<span class="shop-sub">Открыто: ${state.categorySlotsPurchased}</span></span>
+      <span class="shop-price">${slotCost} 🪙</span>
+    `;
+    slotRow.addEventListener("click", () => {
+      if (state.coins < slotCost) {
+        toast("Недостаточно монет");
+        return;
+      }
+      state.coins -= slotCost;
+      state.categorySlotsPurchased += 1;
+      saveState();
+      toast("Слот открыт — придумайте название ниже");
+      renderAll();
+    });
+    wrap.appendChild(slotRow);
+
+    if (state.customCategories.length) {
+      const list = document.createElement("div");
+      list.className = "chip-row";
+      list.style.marginTop = "10px";
+      state.customCategories.forEach((c) => {
+        const chip = document.createElement("span");
+        chip.className = "chip selected";
+        chip.innerHTML = `<span class="dot ${c.cls}"></span>${c.label}`;
+        list.appendChild(chip);
+      });
+      wrap.appendChild(list);
+    }
+
+    return wrap;
   }
 
   function daysWord(n) {
@@ -463,6 +698,7 @@
     renderFavorites();
     renderProfile();
     updateTopbar(currentView);
+    updateCoinBadge();
   }
 
   function switchView(view) {
@@ -485,7 +721,7 @@
   function buildCategoryChips() {
     const row = document.getElementById("f-category");
     row.innerHTML = "";
-    CATEGORIES.forEach((cat) => {
+    allCategories().forEach((cat) => {
       const chip = document.createElement("button");
       chip.type = "button";
       chip.className = `chip${cat.id === selectedCategory ? " selected" : ""}`;
@@ -615,6 +851,7 @@
     });
   }
 
+  applyTheme();
   saveState();
   renderAll();
 })();
