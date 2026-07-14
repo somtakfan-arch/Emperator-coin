@@ -423,7 +423,7 @@
 
     const siteLink = document.createElement("a");
     siteLink.className = "profile-row";
-    siteLink.href = "/";
+    siteLink.href = "../";
     siteLink.innerHTML = `<span class="left">← На сайт Remindly</span>`;
 
     container.append(streakCard, statGrid, notifRow, siteLink);
@@ -603,7 +603,7 @@
       if (state.notifiedLog[key]) return;
       state.notifiedLog[key] = true;
       saveState();
-      new Notification("Remindly", { body: r.title, icon: "/icons/icon-192.png" });
+      new Notification("Remindly", { body: r.title, icon: "../icons/icon-192.png" });
     });
   }
   setInterval(checkDueNotifications, 20000);
@@ -611,7 +611,7 @@
   // ---------- init ----------
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+      navigator.serviceWorker.register("../sw.js").catch(() => {});
     });
   }
 

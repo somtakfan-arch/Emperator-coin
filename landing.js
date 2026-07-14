@@ -54,7 +54,7 @@
   installButtons.forEach((btn) => {
     btn.addEventListener("click", async () => {
       if (isStandalone()) {
-        window.location.href = "/app/";
+        window.location.href = "app/";
         return;
       }
       if (deferredPrompt) {
@@ -68,17 +68,17 @@
       }
       if (isIOS) {
         toast("В Safari: «Поделиться» → «На экран «Домой»»");
-        setTimeout(() => (window.location.href = "/app/"), 2200);
+        setTimeout(() => (window.location.href = "app/"), 2200);
         return;
       }
       toast("Открываем приложение — установите через меню браузера");
-      setTimeout(() => (window.location.href = "/app/"), 1200);
+      setTimeout(() => (window.location.href = "app/"), 1200);
     });
   });
 
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/sw.js").catch(() => {});
+      navigator.serviceWorker.register("sw.js").catch(() => {});
     });
   }
 })();

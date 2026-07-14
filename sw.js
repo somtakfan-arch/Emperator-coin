@@ -1,19 +1,19 @@
 const CACHE_VERSION = "remindly-v1";
 const PRECACHE_URLS = [
-  "/",
-  "/index.html",
-  "/styles.css",
-  "/landing.js",
-  "/manifest.json",
-  "/app/",
-  "/app/index.html",
-  "/app/app.css",
-  "/app/app.js",
-  "/icons/icon-192.png",
-  "/icons/icon-512.png",
-  "/icons/icon-512-maskable.png",
-  "/icons/apple-touch-icon.png",
-  "/icons/favicon.png",
+  "./",
+  "./index.html",
+  "./styles.css",
+  "./landing.js",
+  "./manifest.json",
+  "./app/",
+  "./app/index.html",
+  "./app/app.css",
+  "./app/app.js",
+  "./icons/icon-192.png",
+  "./icons/icon-512.png",
+  "./icons/icon-512-maskable.png",
+  "./icons/apple-touch-icon.png",
+  "./icons/favicon.png",
 ];
 
 self.addEventListener("install", (event) => {
@@ -48,7 +48,7 @@ self.addEventListener("fetch", (event) => {
           }
           return res;
         })
-        .catch(() => cached || caches.match("/app/index.html"));
+        .catch(() => cached || caches.match("./app/index.html"));
       return cached || network;
     })
   );
