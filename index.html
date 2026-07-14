@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Remindly — напоминалка, которую хочется открывать</title>
+<meta name="description" content="Remindly — простые умные напоминания со стриками, избранным и офлайн-режимом. Устанавливается за 5 секунд прямо из браузера, без App Store и Google Play." />
+<meta name="theme-color" content="#0b0b0d" />
+<link rel="manifest" href="/manifest.json" />
+<link rel="icon" href="/icons/favicon.png" />
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Remindly" />
+<link rel="stylesheet" href="/styles.css" />
+<meta property="og:title" content="Remindly — напоминалка, которую хочется открывать" />
+<meta property="og:description" content="Умные напоминания, стрики за регулярность и дизайн уровня любимых музыкальных приложений." />
+<meta property="og:type" content="website" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <div class="logo"><span class="logo-mark"></span>Remindly</div>
+    <nav class="nav-links">
+      <a href="#features">Функции</a>
+      <a href="#demo">Демо</a>
+      <a href="#why">Почему мы</a>
+    </nav>
+    <a class="btn btn-ghost header-cta" href="/app/">Открыть приложение</a>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="container hero-grid">
+      <div>
+        <span class="eyebrow">🔔 Новое приложение</span>
+        <h1>Напоминалка, которую <span class="accent">хочется открывать</span></h1>
+        <p class="lead">Remindly помогает не забывать важное: умные напоминания, стрики за регулярность и дизайн уровня любимых музыкальных приложений — без лишних экранов и настроек.</p>
+        <div class="hero-actions">
+          <button class="btn btn-primary btn-lg" id="install-btn">
+            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg>
+            Установить приложение
+          </button>
+          <a class="btn btn-text" href="/app/">Сначала попробовать →</a>
+        </div>
+        <div class="stat-row">
+          <div class="stat"><span class="num">100%</span><span class="label">офлайн-режим</span></div>
+          <div class="stat"><span class="num">&lt;1 сек</span><span class="label">открытие приложения</span></div>
+          <div class="stat"><span class="num">0 ₽</span><span class="label">без подписок</span></div>
+        </div>
+      </div>
+
+      <div class="phone-frame">
+        <div class="phone-topline">
+          <span class="date">Воскресенье, 13 июля</span>
+        </div>
+        <div class="phone-topline">
+          <span class="title">Сегодня</span>
+          <span class="frac"><span class="done">1</span>/3</span>
+        </div>
+        <div class="progress-track"><div class="progress-fill" style="width:33%"></div></div>
+
+        <div class="reminder-row done">
+          <div class="reminder-dot dot-green"></div>
+          <div class="reminder-info">
+            <div class="title">Выпить воды</div>
+            <div class="meta">09:00</div>
+          </div>
+          <div class="reminder-actions">
+            <button class="icon-btn liked"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7-4.35-9.5-8.5C.6 9 2 5 5.6 5c2 0 3.4 1.1 4.4 2.6C11 6.1 12.4 5 14.4 5 18 5 19.4 9 17.5 12.5 15 16.65 12 21 12 21z"/></svg></button>
+          </div>
+        </div>
+        <div class="reminder-row">
+          <div class="reminder-dot dot-blue"></div>
+          <div class="reminder-info">
+            <div class="title">Созвон с командой</div>
+            <div class="meta">14:30</div>
+          </div>
+          <div class="reminder-actions">
+            <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-4.35-9.5-8.5C.6 9 2 5 5.6 5c2 0 3.4 1.1 4.4 2.6C11 6.1 12.4 5 14.4 5 18 5 19.4 9 17.5 12.5 15 16.65 12 21 12 21z"/></svg></button>
+          </div>
+        </div>
+        <div class="reminder-row">
+          <div class="reminder-dot dot-blue"></div>
+          <div class="reminder-info">
+            <div class="title">Оплатить интернет</div>
+            <div class="meta">18:00</div>
+          </div>
+          <div class="reminder-actions">
+            <button class="icon-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-4.35-9.5-8.5C.6 9 2 5 5.6 5c2 0 3.4 1.1 4.4 2.6C11 6.1 12.4 5 14.4 5 18 5 19.4 9 17.5 12.5 15 16.65 12 21 12 21z"/></svg></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="features">
+    <div class="container">
+      <div class="section-head">
+        <h2>Всё нужное, ничего лишнего</h2>
+        <p>Каждая функция сделана так, чтобы возвращаться в приложение снова — именно это отличает топовые продукты от забытых на второй день.</p>
+      </div>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon" style="background:rgba(255,77,141,0.14)">🔔</div>
+          <h3>Умные напоминания</h3>
+          <p>Повторы по дням и неделям, категории и время — без лишних настроек.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:rgba(107,230,117,0.14)">🔥</div>
+          <h3>Стрики за регулярность</h3>
+          <p>Выполняйте все задачи за день — счётчик стрика мотивирует не бросать.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:rgba(138,92,255,0.14)">🎧</div>
+          <h3>Дизайн как у любимой музыки</h3>
+          <p>Тёмная тема, крупная типографика и градиентные обложки категорий.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:rgba(77,141,255,0.14)">📶</div>
+          <h3>Работает офлайн</h3>
+          <p>Это PWA — данные хранятся на устройстве, интернет не нужен.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:rgba(255,213,46,0.14)">⭐</div>
+          <h3>Избранное в один тап</h3>
+          <p>Сердечко с приятной анимацией закрепляет важное наверху.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:rgba(255,154,60,0.14)">📲</div>
+          <h3>Устанавливается сразу</h3>
+          <p>Без сторов и модерации — иконка на экране «Домой» за 5 секунд.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="demo">
+    <div class="container">
+      <div class="section-head" style="margin-left:auto;margin-right:auto;text-align:center">
+        <h2>Попробуйте прямо здесь</h2>
+        <p style="margin-left:auto;margin-right:auto">Нажмите на кружок, чтобы отметить готово, и на сердечко — чтобы почувствовать анимацию лайка.</p>
+      </div>
+      <div class="demo-shell" id="demo-list">
+        <div class="reminder-row" data-id="1">
+          <button class="reminder-dot dot-green demo-check" aria-label="Отметить выполненным"></button>
+          <div class="reminder-info">
+            <div class="title">Растяжка перед сном</div>
+            <div class="meta">22:30</div>
+          </div>
+          <div class="reminder-actions">
+            <button class="icon-btn demo-like"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-4.35-9.5-8.5C.6 9 2 5 5.6 5c2 0 3.4 1.1 4.4 2.6C11 6.1 12.4 5 14.4 5 18 5 19.4 9 17.5 12.5 15 16.65 12 21 12 21z"/></svg></button>
+          </div>
+        </div>
+        <div class="reminder-row" data-id="2">
+          <button class="reminder-dot dot-pink demo-check" aria-label="Отметить выполненным"></button>
+          <div class="reminder-info">
+            <div class="title">Позвонить маме</div>
+            <div class="meta">19:00</div>
+          </div>
+          <div class="reminder-actions">
+            <button class="icon-btn liked demo-like"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-7-4.35-9.5-8.5C.6 9 2 5 5.6 5c2 0 3.4 1.1 4.4 2.6C11 6.1 12.4 5 14.4 5 18 5 19.4 9 17.5 12.5 15 16.65 12 21 12 21z"/></svg></button>
+          </div>
+        </div>
+        <div class="reminder-row" data-id="3">
+          <button class="reminder-dot dot-blue demo-check" aria-label="Отметить выполненным"></button>
+          <div class="reminder-info">
+            <div class="title">Сдать отчёт</div>
+            <div class="meta">11:00</div>
+          </div>
+          <div class="reminder-actions">
+            <button class="icon-btn demo-like"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-4.35-9.5-8.5C.6 9 2 5 5.6 5c2 0 3.4 1.1 4.4 2.6C11 6.1 12.4 5 14.4 5 18 5 19.4 9 17.5 12.5 15 16.65 12 21 12 21z"/></svg></button>
+          </div>
+        </div>
+      </div>
+      <p class="demo-hint">Это песочница для примера — реальные напоминания сохраняются в самом приложении.</p>
+    </div>
+  </section>
+
+  <section class="section" id="why">
+    <div class="container">
+      <div class="section-head">
+        <h2>Почему это реально может выстрелить</h2>
+        <p>Топ-1 в App Store или Google Play — это не переключатель в коде, а результат месяцев удержания, отзывов и продвижения. Мы закладываем для этого честный фундамент:</p>
+      </div>
+      <div class="why-grid">
+        <div class="why-card">
+          <h3>Ретеншн, а не разовая установка</h3>
+          <p>Стрики и прогресс за день возвращают пользователя каждые 24 часа — именно retention решает место в топе, а не число загрузок.</p>
+        </div>
+        <div class="why-card">
+          <h3>Первые 10 секунд решают всё</h3>
+          <p>Ни регистрации, ни онбординга из десяти экранов — приложение открывается сразу на нужном экране с уже понятным интерфейсом.</p>
+        </div>
+        <div class="why-card">
+          <h3>ASO с самого начала</h3>
+          <p>Название, описание и скриншоты для сторов пишутся под поисковые запросы вроде «напоминалка», «то до список», «планировщик дня».</p>
+        </div>
+        <div class="why-card">
+          <h3>Честные отзывы вместо накруток</h3>
+          <p>Рейтинг растёт за счёт запроса отзыва в удачный момент (после закрытого стрика), а не платных ботов — так магазины не банят аккаунт.</p>
+        </div>
+      </div>
+      <p class="roadmap-note">В разработке: нативные push-уведомления, виджет на главный экран и публикация в App Store / Google Play после сбора первых отзывов.</p>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="cta-banner">
+        <h2>Установите Remindly за 5 секунд</h2>
+        <p>Без App Store и Google Play — приложение ставится прямо из браузера и работает как настоящее нативное приложение.</p>
+        <button class="btn btn-primary btn-lg" id="install-btn-2">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v13"/><path d="m7 11 5 5 5-5"/><path d="M5 21h14"/></svg>
+          Установить приложение
+        </button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="logo"><span class="logo-mark"></span>Remindly</div>
+    <span>© 2026 Remindly. Сделано с заботой о вашем времени.</span>
+    <a href="/app/">Открыть приложение →</a>
+  </div>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script src="/landing.js"></script>
+</body>
+</html>
