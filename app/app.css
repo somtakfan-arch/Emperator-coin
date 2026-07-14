@@ -694,6 +694,134 @@ a { color: inherit; }
 
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+.celebrate-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 90;
+  overflow: hidden;
+}
+
+.confetti-piece {
+  position: absolute;
+  top: -30px;
+  animation: confettiFall 1.5s ease-in forwards;
+}
+
+@keyframes confettiFall {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(360deg); opacity: 0; }
+}
+
+.badge-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.badge-cell {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px 6px;
+  text-align: center;
+  opacity: 0.35;
+}
+
+.badge-cell.unlocked { opacity: 1; border-color: rgba(215, 255, 58, 0.35); }
+.badge-cell .icon { font-size: 22px; margin-bottom: 4px; }
+.badge-cell .label { font-size: 10px; color: var(--text-tertiary); line-height: 1.3; }
+
+.level-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+  margin-bottom: 12px;
+}
+
+.level-card .level-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  font-weight: 800;
+  font-size: 15px;
+}
+
+/* Calendar */
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.calendar-month-label {
+  font-size: 15px;
+  font-weight: 800;
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 6px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-tertiary);
+  font-weight: 700;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.calendar-cell {
+  aspect-ratio: 1;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  cursor: pointer;
+  position: relative;
+}
+
+.calendar-cell.empty {
+  background: transparent;
+  border: none;
+  cursor: default;
+}
+
+.calendar-cell.today {
+  border-color: var(--lime);
+  color: var(--lime);
+  font-weight: 800;
+}
+
+.calendar-cell.selected {
+  background: var(--lime);
+  color: #0b0b0d;
+  font-weight: 800;
+}
+
+.calendar-dot {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
 .update-banner {
   position: fixed;
   left: 0;

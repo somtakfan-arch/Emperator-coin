@@ -63,6 +63,22 @@
     return PRIORITY_DEFS.find((p) => p.id === id) || null;
   }
 
+  const BADGE_DEFS = [
+    { id: "streak3", label: "Стрик 3 дня", icon: "🔥", check: (s) => s.bestStreak >= 3 },
+    { id: "streak7", label: "Стрик 7 дней", icon: "🔥", check: (s) => s.bestStreak >= 7 },
+    { id: "streak30", label: "Стрик 30 дней", icon: "🔥", check: (s) => s.bestStreak >= 30 },
+    { id: "tasks10", label: "10 задач выполнено", icon: "✅", check: (s) => s.totalCompletions >= 10 },
+    { id: "tasks50", label: "50 задач выполнено", icon: "✅", check: (s) => s.totalCompletions >= 50 },
+    { id: "tasks100", label: "100 задач выполнено", icon: "✅", check: (s) => s.totalCompletions >= 100 },
+    { id: "coins500", label: "500 монет заработано", icon: "🪙", check: (s) => s.lifetimeCoins >= 500 },
+    { id: "organizer", label: "Первая папка создана", icon: "📁", check: (s) => s.orgFolders.length >= 1 },
+  ];
+
+  const LEVEL_STEP = 50;
+  function levelForCoins(lifetimeCoins) {
+    return Math.floor(lifetimeCoins / LEVEL_STEP) + 1;
+  }
+
   // ---------- date helpers ----------
   function pad(n) { return String(n).padStart(2, "0"); }
   function toDateStr(d) { return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; }
@@ -154,6 +170,8 @@
     parsed.notes = parsed.notes || [];
     parsed.lifetimeCoins = parsed.lifetimeCoins ?? parsed.coins ?? 0;
     parsed.unlockedBadges = parsed.unlockedBadges || [];
+    parsed.bestStreak = parsed.bestStreak ?? (parsed.streak ? parsed.streak.count : 0);
+    parsed.totalCompletions = parsed.totalCompletions ?? 0;
     parsed.reminders.forEach((r) => {
       if (typeof r.note !== "string") r.note = "";
       if (r.groupId === undefined) r.groupId = null;
@@ -244,8 +262,11 @@
   function groupsInFolder(folderId) {
     return state.orgGroups.filter((g) => g.folderId === folderId).sort((a, b) => a.name.localeCompare(b.name, "ru"));
   }
+  function sortNotes(notes) {
+    return notes.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.updatedAt - a.updatedAt);
+  }
   function notesInGroup(groupId) {
-    return state.notes.filter((n) => n.groupId === groupId).sort((a, b) => b.updatedAt - a.updatedAt);
+    return sortNotes(state.notes.filter((n) => n.groupId === groupId));
   }
   function remindersInGroup(groupId) {
     return state.reminders.filter((r) => r.groupId === groupId);
@@ -269,7 +290,17 @@
   }
 
   function addNote(groupId, title) {
-    const note = { id: genId("note"), groupId, title: title || "Новая заметка", body: "", createdAt: Date.now(), updatedAt: Date.now() };
+    const note = {
+      id: genId("note"),
+      groupId,
+      title: title || "Новая заметка",
+      body: "",
+      pinned: false,
+      color: null,
+      checklist: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
     state.notes.push(note);
     saveState();
     return note;
@@ -312,15 +343,19 @@
     const today = todayStr();
     const yesterday = addDaysStr(today, -1);
     const complete = isDayFullyComplete(today);
+    let justClosed = false;
     if (complete === true) {
       if (state.streak.lastCompleteDate !== today) {
         state.streak.count = state.streak.lastCompleteDate === yesterday ? state.streak.count + 1 : 1;
         state.streak.lastCompleteDate = today;
+        justClosed = true;
       }
     } else if (state.streak.lastCompleteDate === today) {
       state.streak.count = Math.max(0, state.streak.count - 1);
       state.streak.lastCompleteDate = addDaysStr(today, -2);
     }
+    if (state.streak.count > state.bestStreak) state.bestStreak = state.streak.count;
+    return justClosed;
   }
 
   function daysDiff(fromStr, toStr) {
@@ -391,6 +426,37 @@
     toastTimer = setTimeout(() => els.toast.classList.remove("show"), 2400);
   }
 
+  const CONFETTI_EMOJI = ["🎉", "✨", "🎊", "⭐"];
+  function celebrate() {
+    const layer = document.getElementById("celebrate-layer");
+    if (!layer) return;
+    for (let i = 0; i < 20; i++) {
+      const piece = document.createElement("span");
+      piece.className = "confetti-piece";
+      piece.textContent = CONFETTI_EMOJI[Math.floor(Math.random() * CONFETTI_EMOJI.length)];
+      piece.style.left = `${Math.random() * 100}%`;
+      piece.style.animationDelay = `${Math.random() * 200}ms`;
+      piece.style.fontSize = `${16 + Math.random() * 16}px`;
+      layer.appendChild(piece);
+      setTimeout(() => piece.remove(), 1700);
+    }
+  }
+
+  function checkNewBadges() {
+    let unlocked = false;
+    BADGE_DEFS.forEach((b) => {
+      if (!state.unlockedBadges.includes(b.id) && b.check(state)) {
+        state.unlockedBadges.push(b.id);
+        toast(`🏆 Достижение: ${b.label}`);
+        unlocked = true;
+      }
+    });
+    if (unlocked) {
+      celebrate();
+      saveState();
+    }
+  }
+
   function heartSvg(filled) {
     return `<svg viewBox="0 0 24 24" fill="${filled ? "currentColor" : "none"}" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-4.35-9.5-8.5C.6 9 2 5 5.6 5c2 0 3.4 1.1 4.4 2.6C11 6.1 12.4 5 14.4 5 18 5 19.4 9 17.5 12.5 15 16.65 12 21 12 21z"/></svg>`;
   }
@@ -441,11 +507,13 @@
     check.addEventListener("click", () => {
       const wasDone = isDoneOn(reminder, dateStr);
       setDoneOn(reminder, dateStr, !wasDone);
-      recalcStreak();
+      const justClosedStreak = recalcStreak();
       const coinKey = `${reminder.id}|${dateStr}`;
       if (!wasDone) {
         const amount = Math.round(BASE_COINS * streakMultiplier(state.streak.count));
         state.coins += amount;
+        state.lifetimeCoins += amount;
+        state.totalCompletions += 1;
         state.coinLog[coinKey] = amount;
         toast(`+${amount} 🪙`);
       } else {
@@ -455,6 +523,7 @@
       }
       saveState();
       renderAll();
+      if (justClosedStreak) celebrate();
     });
 
     const info = document.createElement("div");
@@ -790,10 +859,9 @@
     due.forEach((r) => container.appendChild(reminderRow(r, today)));
   }
 
-  function renderAllList() {
-    const container = els.views.all;
-    container.innerHTML = "";
+  let allSearchQuery = "";
 
+  function renderDefaultAllList(container) {
     const today = todayStr();
     const tomorrow = addDaysStr(today, 1);
     const todayDue = remindersDueOn(today);
@@ -829,6 +897,187 @@
       container.appendChild(label);
       laterOneOff.forEach((r) => container.appendChild(reminderRow(r, r.date)));
     }
+  }
+
+  function renderSearchResults(container, q) {
+    const matchedReminders = state.reminders.filter(
+      (r) => r.title.toLowerCase().includes(q) || (r.note || "").toLowerCase().includes(q)
+    );
+    const matchedNotes = state.notes.filter(
+      (n) => (n.title || "").toLowerCase().includes(q) || (n.body || "").toLowerCase().includes(q)
+    );
+
+    if (matchedReminders.length === 0 && matchedNotes.length === 0) {
+      container.appendChild(emptyState("🔍", "Ничего не найдено."));
+      return;
+    }
+
+    if (matchedReminders.length) {
+      const label = document.createElement("div");
+      label.className = "section-label";
+      label.textContent = "Задачи";
+      container.appendChild(label);
+      matchedReminders.forEach((r) => container.appendChild(reminderRow(r, contextDateFor(r))));
+    }
+    if (matchedNotes.length) {
+      const label = document.createElement("div");
+      label.className = "section-label";
+      label.textContent = "Заметки";
+      container.appendChild(label);
+      matchedNotes.forEach((n) => {
+        container.appendChild(
+          notesListRow(
+            noteSvg(),
+            n.title || "Без названия",
+            n.body ? n.body.slice(0, 40) : "",
+            () => {
+              notesScreen = { type: "note", id: n.id, back: { type: "root" } };
+              switchView("notes");
+            },
+            null,
+            { pinned: n.pinned, color: n.color }
+          )
+        );
+      });
+    }
+  }
+
+  let allViewMode = "list";
+  let calendarMonthOffset = 0;
+  let selectedCalendarDate = null;
+
+  function renderCalendar(container) {
+    const base = todayDate();
+    const viewDate = new Date(base.getFullYear(), base.getMonth() + calendarMonthOffset, 1);
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+
+    const header = document.createElement("div");
+    header.className = "calendar-header";
+    header.innerHTML = `
+      <button type="button" class="icon-btn" id="cal-prev">${backSvg()}</button>
+      <div class="calendar-month-label">${capitalize(MONTH_LABELS[month])} ${year}</div>
+      <button type="button" class="icon-btn" id="cal-next">${backSvg()}</button>
+    `;
+    container.appendChild(header);
+    header.querySelector("#cal-next").style.transform = "scaleX(-1)";
+
+    const weekdayRow = document.createElement("div");
+    weekdayRow.className = "calendar-weekdays";
+    ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"].forEach((d) => {
+      const el = document.createElement("div");
+      el.textContent = d;
+      weekdayRow.appendChild(el);
+    });
+    container.appendChild(weekdayRow);
+
+    const firstDay = new Date(year, month, 1);
+    const startWeekday = (firstDay.getDay() + 6) % 7;
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const todayStrVal = todayStr();
+
+    const grid = document.createElement("div");
+    grid.className = "calendar-grid";
+    for (let i = 0; i < startWeekday; i++) {
+      const blank = document.createElement("div");
+      blank.className = "calendar-cell empty";
+      grid.appendChild(blank);
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dateStr = `${year}-${pad(month + 1)}-${pad(d)}`;
+      const due = remindersDueOn(dateStr);
+      const cell = document.createElement("button");
+      cell.type = "button";
+      cell.className = `calendar-cell${dateStr === todayStrVal ? " today" : ""}${
+        selectedCalendarDate === dateStr ? " selected" : ""
+      }`;
+      cell.innerHTML = `<span>${d}</span>${due.length ? `<span class="calendar-dot"></span>` : ""}`;
+      cell.addEventListener("click", () => {
+        selectedCalendarDate = dateStr;
+        renderAllList();
+      });
+      grid.appendChild(cell);
+    }
+    container.appendChild(grid);
+
+    header.querySelector("#cal-prev").addEventListener("click", () => {
+      calendarMonthOffset -= 1;
+      renderAllList();
+    });
+    header.querySelector("#cal-next").addEventListener("click", () => {
+      calendarMonthOffset += 1;
+      renderAllList();
+    });
+
+    if (selectedCalendarDate) {
+      const due = remindersDueOn(selectedCalendarDate);
+      const label = document.createElement("div");
+      label.className = "section-label";
+      label.textContent = capitalize(formatFullDate(selectedCalendarDate));
+      container.appendChild(label);
+      if (due.length === 0) {
+        container.appendChild(emptyState("✨", "На этот день ничего не запланировано."));
+      } else {
+        due.forEach((r) => container.appendChild(reminderRow(r, selectedCalendarDate)));
+      }
+    }
+  }
+
+  function renderAllList() {
+    const container = els.views.all;
+    container.innerHTML = "";
+
+    const toggleRow = document.createElement("div");
+    toggleRow.className = "chip-row";
+    toggleRow.style.marginBottom = "12px";
+    const listChip = document.createElement("button");
+    listChip.type = "button";
+    listChip.className = `chip${allViewMode === "list" ? " selected" : ""}`;
+    listChip.textContent = "📋 Список";
+    listChip.addEventListener("click", () => {
+      allViewMode = "list";
+      renderAllList();
+    });
+    const calChip = document.createElement("button");
+    calChip.type = "button";
+    calChip.className = `chip${allViewMode === "calendar" ? " selected" : ""}`;
+    calChip.textContent = "📅 Календарь";
+    calChip.addEventListener("click", () => {
+      allViewMode = "calendar";
+      renderAllList();
+    });
+    toggleRow.append(listChip, calChip);
+    container.appendChild(toggleRow);
+
+    if (allViewMode === "calendar") {
+      renderCalendar(container);
+      return;
+    }
+
+    const searchWrap = document.createElement("div");
+    searchWrap.className = "field";
+    searchWrap.innerHTML = `<input class="text-input" id="all-search-input" type="text" placeholder="Поиск по задачам и заметкам…" />`;
+    container.appendChild(searchWrap);
+
+    const resultsContainer = document.createElement("div");
+    container.appendChild(resultsContainer);
+
+    const input = searchWrap.querySelector("input");
+    input.value = allSearchQuery;
+
+    function renderResults() {
+      resultsContainer.innerHTML = "";
+      const q = allSearchQuery.trim().toLowerCase();
+      if (q) renderSearchResults(resultsContainer, q);
+      else renderDefaultAllList(resultsContainer);
+    }
+
+    input.addEventListener("input", () => {
+      allSearchQuery = input.value;
+      renderResults();
+    });
+
+    renderResults();
   }
 
   function renderFavorites() {
@@ -898,13 +1147,14 @@
     return row;
   }
 
-  function notesListRow(icon, title, subtitle, onOpen, onDelete) {
+  function notesListRow(icon, title, subtitle, onOpen, onDelete, opts) {
     const row = document.createElement("div");
     row.className = "notes-list-row";
+    if (opts && opts.color) row.style.borderLeft = `3px solid ${opts.color}`;
     row.innerHTML = `<span class="notes-list-icon">${icon}</span>`;
     const info = document.createElement("div");
     info.className = "notes-list-info";
-    info.innerHTML = `<div class="title">${title}</div>${subtitle ? `<div class="meta"><span>${subtitle}</span></div>` : ""}`;
+    info.innerHTML = `<div class="title">${opts && opts.pinned ? "📌 " : ""}${title}</div>${subtitle ? `<div class="meta"><span>${subtitle}</span></div>` : ""}`;
     row.appendChild(info);
     row.addEventListener("click", onOpen);
     if (onDelete) {
@@ -922,7 +1172,7 @@
   }
 
   function renderNotesRoot(container) {
-    const unsorted = state.notes.filter((n) => !n.groupId).sort((a, b) => b.updatedAt - a.updatedAt);
+    const unsorted = sortNotes(state.notes.filter((n) => !n.groupId));
     const label1 = document.createElement("div");
     label1.className = "section-label";
     label1.textContent = "Быстрые заметки";
@@ -948,7 +1198,8 @@
               deleteNote(n.id);
               toast("Заметка удалена");
               renderAll();
-            }
+            },
+            { pinned: n.pinned, color: n.color }
           )
         );
       });
@@ -1108,7 +1359,8 @@
               deleteNote(n.id);
               toast("Заметка удалена");
               renderAll();
-            }
+            },
+            { pinned: n.pinned, color: n.color }
           )
         );
       });
@@ -1146,6 +1398,8 @@
   }
 
   let noteSaveTimer = null;
+  const NOTE_COLORS = ["#ff4d8d", "#ffb020", "#4d8dff", "#6be675", "#8a5cff"];
+
   function renderNoteEditor(container, noteId) {
     const note = noteById(noteId);
     if (!note) {
@@ -1154,12 +1408,52 @@
       return;
     }
     const back = notesScreen.back || { type: "root" };
-    container.appendChild(
-      backRow("Заметка", () => {
-        notesScreen = back;
+    const topRow = backRow("Заметка", () => {
+      notesScreen = back;
+      renderAll();
+    });
+
+    const pinBtn = document.createElement("button");
+    pinBtn.type = "button";
+    pinBtn.className = `icon-btn${note.pinned ? " liked" : ""}`;
+    pinBtn.style.marginLeft = "auto";
+    pinBtn.textContent = note.pinned ? "📌" : "📍";
+    pinBtn.setAttribute("aria-label", "Закрепить заметку");
+    pinBtn.addEventListener("click", () => {
+      note.pinned = !note.pinned;
+      saveState();
+      toast(note.pinned ? "Заметка закреплена" : "Заметка откреплена");
+      renderAll();
+    });
+    topRow.appendChild(pinBtn);
+    container.appendChild(topRow);
+
+    const colorRow = document.createElement("div");
+    colorRow.className = "theme-row";
+    const noColorSwatch = document.createElement("button");
+    noColorSwatch.type = "button";
+    noColorSwatch.className = `theme-swatch${!note.color ? " active" : ""}`;
+    noColorSwatch.style.background = "#26262c";
+    noColorSwatch.title = "Без цвета";
+    noColorSwatch.addEventListener("click", () => {
+      note.color = null;
+      saveState();
+      renderAll();
+    });
+    colorRow.appendChild(noColorSwatch);
+    NOTE_COLORS.forEach((c) => {
+      const swatch = document.createElement("button");
+      swatch.type = "button";
+      swatch.className = `theme-swatch${note.color === c ? " active" : ""}`;
+      swatch.style.background = c;
+      swatch.addEventListener("click", () => {
+        note.color = c;
+        saveState();
         renderAll();
-      })
-    );
+      });
+      colorRow.appendChild(swatch);
+    });
+    container.appendChild(colorRow);
 
     const titleInput = document.createElement("input");
     titleInput.className = "text-input note-title-input";
@@ -1170,7 +1464,7 @@
     const body = document.createElement("textarea");
     body.className = "text-input note-textarea note-editor-body";
     body.placeholder = "Текст заметки…";
-    body.rows = 10;
+    body.rows = 7;
     body.value = note.body;
 
     const scheduleSave = () => {
@@ -1184,6 +1478,57 @@
     };
     titleInput.addEventListener("input", scheduleSave);
     body.addEventListener("input", scheduleSave);
+    container.append(titleInput, body);
+
+    const checklistLabel = document.createElement("div");
+    checklistLabel.className = "section-label";
+    checklistLabel.textContent = "Чек-лист";
+    container.appendChild(checklistLabel);
+
+    const checklistWrap = document.createElement("div");
+    container.appendChild(checklistWrap);
+
+    function renderChecklist() {
+      checklistWrap.innerHTML = "";
+      (note.checklist || []).forEach((item) => {
+        const row = document.createElement("div");
+        row.className = `reminder-row subtask-row${item.done ? " done" : ""}`;
+        const check = document.createElement("button");
+        check.className = "reminder-check cat-other";
+        check.innerHTML = checkSvg();
+        check.addEventListener("click", () => {
+          item.done = !item.done;
+          note.updatedAt = Date.now();
+          saveState();
+          renderChecklist();
+        });
+        const info = document.createElement("div");
+        info.className = "reminder-info";
+        info.innerHTML = `<div class="title">${item.text}</div>`;
+        const delBtn = document.createElement("button");
+        delBtn.className = "icon-btn";
+        delBtn.innerHTML = trashSvg();
+        delBtn.addEventListener("click", () => {
+          note.checklist = note.checklist.filter((x) => x.id !== item.id);
+          note.updatedAt = Date.now();
+          saveState();
+          renderChecklist();
+        });
+        row.append(check, info, delBtn);
+        checklistWrap.appendChild(row);
+      });
+    }
+    renderChecklist();
+
+    container.appendChild(
+      inlineAddRow("Новый пункт", "Добавить", (text) => {
+        if (!Array.isArray(note.checklist)) note.checklist = [];
+        note.checklist.push({ id: genId("chk"), text, done: false });
+        note.updatedAt = Date.now();
+        saveState();
+        renderChecklist();
+      })
+    );
 
     const delBtn = document.createElement("button");
     delBtn.type = "button";
@@ -1198,8 +1543,7 @@
       notesScreen = back;
       renderAll();
     });
-
-    container.append(titleInput, body, delBtn);
+    container.append(delBtn);
   }
 
   function renderNotes() {
@@ -1293,7 +1637,39 @@
     siteLink.href = "../";
     siteLink.innerHTML = `<span class="left">← На сайт Remindly</span>`;
 
-    container.append(streakCard, statGrid, shop, notifRow, dataTools, siteLink);
+    const levelCard = buildLevelCard();
+    const badges = buildBadgesSection();
+
+    container.append(streakCard, levelCard, statGrid, badges, shop, notifRow, dataTools, siteLink);
+  }
+
+  function buildLevelCard() {
+    const level = levelForCoins(state.lifetimeCoins);
+    const intoLevel = state.lifetimeCoins % LEVEL_STEP;
+    const pct = Math.round((intoLevel / LEVEL_STEP) * 100);
+    const card = document.createElement("div");
+    card.className = "level-card";
+    card.innerHTML = `
+      <div class="level-row"><span>⭐ Уровень ${level}</span><span>${intoLevel}/${LEVEL_STEP} 🪙</span></div>
+      <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+    `;
+    return card;
+  }
+
+  function buildBadgesSection() {
+    const wrap = document.createElement("div");
+    wrap.appendChild(shopHeader("Достижения"));
+    const grid = document.createElement("div");
+    grid.className = "badge-grid";
+    BADGE_DEFS.forEach((b) => {
+      const unlocked = state.unlockedBadges.includes(b.id);
+      const cell = document.createElement("div");
+      cell.className = `badge-cell${unlocked ? " unlocked" : ""}`;
+      cell.innerHTML = `<div class="icon">${b.icon}</div><div class="label">${b.label}</div>`;
+      grid.appendChild(cell);
+    });
+    wrap.appendChild(grid);
+    return wrap;
   }
 
   function buildDataTools() {
@@ -1526,6 +1902,7 @@
 
   function renderAll() {
     decayStreakIfMissed();
+    checkNewBadges();
     renderToday();
     renderAllList();
     renderFavorites();
