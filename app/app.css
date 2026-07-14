@@ -205,11 +205,17 @@ a { color: inherit; }
   flex-shrink: 0;
 }
 
-.meta-group, .meta-note {
+.meta-group, .meta-note, .meta-priority {
   display: inline-flex;
   align-items: center;
   gap: 3px;
 }
+
+.meta-priority { font-weight: 700; }
+
+.subtask-row { padding: 10px 12px; }
+.subtask-row .reminder-check { width: 26px; height: 26px; }
+.subtask-row .title { font-size: 13.5px; }
 
 .reminder-actions { display: flex; align-items: center; gap: 6px; }
 
@@ -723,21 +729,3 @@ a { color: inherit; }
   white-space: nowrap;
 }
 
-.admin-coin-display {
-  text-align: center;
-  font-size: 32px;
-  font-weight: 800;
-  margin-bottom: 18px;
-}
-
-.admin-adjust-row {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
-  gap: 6px;
-  margin-bottom: 18px;
-}
-
-.admin-adjust-row .btn {
-  padding: 10px 4px;
-  font-size: 12.5px;
-}

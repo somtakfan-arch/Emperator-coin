@@ -44,12 +44,6 @@
   const CATEGORY_SLOT_STEP = 30;
   const CUSTOM_CATEGORY_CLASSES = ["cat-custom-0", "cat-custom-1", "cat-custom-2", "cat-custom-3"];
 
-  const ADMIN_PASSWORD_HASH = "484f8ff3cf2c0c8f8b3de39101e63bdd86e0ed019e7769bfd4d1efe9f82760f9";
-  async function sha256Hex(text) {
-    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-    return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
-  }
-
   const THEME_DEFS = [
     { id: "lime", label: "Классика", cost: 0, accent: "#d7ff3a", gradient: "linear-gradient(135deg, #ff4d8d, #ff9a3c 55%, #ffd52e)" },
     { id: "ocean", label: "Океан", cost: 40, accent: "#4dd9ff", gradient: "linear-gradient(135deg, #4d8dff, #4dd9ff 55%, #6be6d8)" },
@@ -58,6 +52,15 @@
   ];
   function themeInfo(id) {
     return THEME_DEFS.find((t) => t.id === id) || THEME_DEFS[0];
+  }
+
+  const PRIORITY_DEFS = [
+    { id: "high", label: "Высокий", color: "#ff5470" },
+    { id: "medium", label: "Средний", color: "#ffb020" },
+    { id: "low", label: "Низкий", color: "#4d8dff" },
+  ];
+  function priorityInfo(id) {
+    return PRIORITY_DEFS.find((p) => p.id === id) || null;
   }
 
   // ---------- date helpers ----------
@@ -85,7 +88,7 @@
   function seedState() {
     const today = todayStr();
     const tomorrow = addDaysStr(today, 1);
-    return {
+    return migrateState({
       reminders: [
         {
           id: "seed-1",
@@ -98,8 +101,6 @@
           done: false,
           completions: {},
           favorite: true,
-          note: "",
-          groupId: null,
           createdAt: Date.now(),
         },
         {
@@ -113,8 +114,6 @@
           done: false,
           completions: {},
           favorite: false,
-          note: "",
-          groupId: null,
           createdAt: Date.now(),
         },
         {
@@ -128,25 +127,47 @@
           done: false,
           completions: {},
           favorite: false,
-          note: "",
-          groupId: null,
           createdAt: Date.now(),
         },
       ],
       streak: { count: 0, lastCompleteDate: null },
       notificationsEnabled: false,
-      notifiedLog: {},
-      coins: 0,
-      coinLog: {},
-      streakFreezes: 0,
-      unlockedThemes: ["lime"],
-      activeTheme: "lime",
       customCategories: [],
       categorySlotsPurchased: 0,
       orgFolders: [],
       orgGroups: [],
       notes: [],
-    };
+    });
+  }
+
+  function migrateState(parsed) {
+    parsed.notifiedLog = parsed.notifiedLog || {};
+    parsed.coins = parsed.coins ?? 0;
+    parsed.coinLog = parsed.coinLog || {};
+    parsed.streakFreezes = parsed.streakFreezes ?? 0;
+    parsed.unlockedThemes = parsed.unlockedThemes || ["lime"];
+    parsed.activeTheme = parsed.activeTheme || "lime";
+    parsed.customCategories = parsed.customCategories || [];
+    parsed.categorySlotsPurchased = parsed.categorySlotsPurchased ?? 0;
+    parsed.orgFolders = parsed.orgFolders || [];
+    parsed.orgGroups = parsed.orgGroups || [];
+    parsed.notes = parsed.notes || [];
+    parsed.lifetimeCoins = parsed.lifetimeCoins ?? parsed.coins ?? 0;
+    parsed.unlockedBadges = parsed.unlockedBadges || [];
+    parsed.reminders.forEach((r) => {
+      if (typeof r.note !== "string") r.note = "";
+      if (r.groupId === undefined) r.groupId = null;
+      if (r.folderId === undefined) r.folderId = null;
+      if (r.priority === undefined) r.priority = "none";
+      if (!Array.isArray(r.subtasks)) r.subtasks = [];
+      if (r.snoozedUntil === undefined) r.snoozedUntil = null;
+    });
+    parsed.notes.forEach((n) => {
+      if (n.pinned === undefined) n.pinned = false;
+      if (n.color === undefined) n.color = null;
+      if (!Array.isArray(n.checklist)) n.checklist = [];
+    });
+    return parsed;
   }
 
   function loadState() {
@@ -155,22 +176,7 @@
       if (!raw) return seedState();
       const parsed = JSON.parse(raw);
       if (!Array.isArray(parsed.reminders)) return seedState();
-      parsed.notifiedLog = parsed.notifiedLog || {};
-      parsed.coins = parsed.coins ?? 0;
-      parsed.coinLog = parsed.coinLog || {};
-      parsed.streakFreezes = parsed.streakFreezes ?? 0;
-      parsed.unlockedThemes = parsed.unlockedThemes || ["lime"];
-      parsed.activeTheme = parsed.activeTheme || "lime";
-      parsed.customCategories = parsed.customCategories || [];
-      parsed.categorySlotsPurchased = parsed.categorySlotsPurchased ?? 0;
-      parsed.orgFolders = parsed.orgFolders || [];
-      parsed.orgGroups = parsed.orgGroups || [];
-      parsed.notes = parsed.notes || [];
-      parsed.reminders.forEach((r) => {
-        if (typeof r.note !== "string") r.note = "";
-        if (r.groupId === undefined) r.groupId = null;
-      });
-      return parsed;
+      return migrateState(parsed);
     } catch {
       return seedState();
     }
@@ -203,9 +209,13 @@
     }
   }
 
+  function isSnoozed(reminder) {
+    return !!(reminder.snoozedUntil && Date.now() < reminder.snoozedUntil);
+  }
+
   function remindersDueOn(dateStr) {
     return state.reminders
-      .filter((r) => isDueOn(r, dateStr))
+      .filter((r) => isDueOn(r, dateStr) && !(dateStr === todayStr() && isSnoozed(r)))
       .sort((a, b) => a.time.localeCompare(b.time));
   }
 
@@ -240,6 +250,9 @@
   function remindersInGroup(groupId) {
     return state.reminders.filter((r) => r.groupId === groupId);
   }
+  function remindersInFolderDirect(folderId) {
+    return state.reminders.filter((r) => r.folderId === folderId && !r.groupId);
+  }
 
   function addFolder(name) {
     const folder = { id: genId("folder"), name, createdAt: Date.now() };
@@ -267,6 +280,7 @@
     state.notes = state.notes.filter((n) => !groupIds.includes(n.groupId));
     state.reminders.forEach((r) => {
       if (groupIds.includes(r.groupId)) r.groupId = null;
+      if (r.folderId === id) r.folderId = null;
     });
     state.orgGroups = state.orgGroups.filter((g) => g.folderId !== id);
     state.orgFolders = state.orgFolders.filter((f) => f.id !== id);
@@ -404,6 +418,12 @@
   function noteSvg() {
     return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h11l5 5v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M14 4v5h5M8 13h8M8 17h5"/></svg>`;
   }
+  function checklistSvg() {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 7 2 2 3-3"/><path d="M11 7h9"/><path d="m4 15 2 2 3-3"/><path d="M11 15h9"/></svg>`;
+  }
+  function trophySvg() {
+    return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v5a5 5 0 0 1-10 0V4z"/><path d="M17 5h3a3 3 0 0 1-3 5M7 5H4a3 3 0 0 0 3 5"/></svg>`;
+  }
 
   function reminderRow(reminder, dateStr) {
     const done = isDoneOn(reminder, dateStr);
@@ -411,6 +431,8 @@
     const row = document.createElement("div");
     row.className = `reminder-row${done ? " done" : ""}`;
     row.dataset.id = reminder.id;
+    const prio = reminder.priority && reminder.priority !== "none" ? priorityInfo(reminder.priority) : null;
+    if (prio) row.style.borderLeft = `3px solid ${prio.color}`;
 
     const check = document.createElement("button");
     check.className = `reminder-check ${cat.cls}`;
@@ -441,11 +463,18 @@
     title.className = "title";
     title.textContent = reminder.title;
     const group = reminder.groupId ? groupById(reminder.groupId) : null;
+    const directFolder = !group && reminder.folderId ? folderById(reminder.folderId) : null;
+    const subtaskDone = (reminder.subtasks || []).filter((s) => s.done).length;
+    const subtaskTotal = (reminder.subtasks || []).length;
     const meta = document.createElement("div");
     meta.className = "meta";
     meta.innerHTML = `<span>${reminder.time}</span><span>·</span><span>${cat.label}</span>${
       reminder.repeat !== "none" ? `<span class="repeat-icon">${repeatSvg()}</span>` : ""
     }${group ? `<span class="meta-group"><span>·</span>${groupSvg()}${group.name}</span>` : ""}${
+      directFolder ? `<span class="meta-group"><span>·</span>${folderSvg()}${directFolder.name}</span>` : ""
+    }${prio ? `<span class="meta-priority" style="color:${prio.color}">🚩 ${prio.label}</span>` : ""}${
+      subtaskTotal ? `<span class="meta-group"><span>·</span>${checklistSvg()}${subtaskDone}/${subtaskTotal}</span>` : ""
+    }${isSnoozed(reminder) ? `<span class="meta-note">⏰</span>` : ""}${
       reminder.note ? `<span class="meta-note">${noteSvg()}</span>` : ""
     }`;
     info.append(title, meta);
@@ -495,12 +524,24 @@
     noteText: document.getElementById("reminder-note-text"),
     groupSheet: document.getElementById("reminder-group-sheet"),
     groupChips: document.getElementById("reminder-group-chips"),
+    prioritySheet: document.getElementById("reminder-priority-sheet"),
+    priorityChips: document.getElementById("reminder-priority-chips"),
+    subtasksSheet: document.getElementById("reminder-subtasks-sheet"),
+    subtasksList: document.getElementById("reminder-subtasks-list"),
+    snoozeSheet: document.getElementById("reminder-snooze-sheet"),
   };
   let activeReminderForMore = null;
 
   function closeAllMiniSheets() {
     moreEls.overlay.classList.remove("show");
-    [moreEls.moreSheet, moreEls.noteSheet, moreEls.groupSheet].forEach((s) => s.classList.remove("show"));
+    [
+      moreEls.moreSheet,
+      moreEls.noteSheet,
+      moreEls.groupSheet,
+      moreEls.prioritySheet,
+      moreEls.subtasksSheet,
+      moreEls.snoozeSheet,
+    ].forEach((s) => s.classList.remove("show"));
   }
 
   function openReminderMore(reminder) {
@@ -535,10 +576,11 @@
     moreEls.groupChips.innerHTML = "";
     const noneChip = document.createElement("button");
     noneChip.type = "button";
-    noneChip.className = `chip${!activeReminderForMore.groupId ? " selected" : ""}`;
-    noneChip.textContent = "Без группы";
+    noneChip.className = `chip${!activeReminderForMore.groupId && !activeReminderForMore.folderId ? " selected" : ""}`;
+    noneChip.textContent = "Без папки";
     noneChip.addEventListener("click", () => {
       activeReminderForMore.groupId = null;
+      activeReminderForMore.folderId = null;
       saveState();
       buildReminderGroupChips();
       renderAll();
@@ -546,6 +588,19 @@
     moreEls.groupChips.appendChild(noneChip);
 
     state.orgFolders.forEach((folder) => {
+      const folderChip = document.createElement("button");
+      folderChip.type = "button";
+      folderChip.className = `chip${!activeReminderForMore.groupId && activeReminderForMore.folderId === folder.id ? " selected" : ""}`;
+      folderChip.innerHTML = `${folderSvg()} ${folder.name}`;
+      folderChip.addEventListener("click", () => {
+        activeReminderForMore.groupId = null;
+        activeReminderForMore.folderId = folder.id;
+        saveState();
+        buildReminderGroupChips();
+        renderAll();
+      });
+      moreEls.groupChips.appendChild(folderChip);
+
       groupsInFolder(folder.id).forEach((g) => {
         const chip = document.createElement("button");
         chip.type = "button";
@@ -553,6 +608,7 @@
         chip.textContent = `${folder.name} / ${g.name}`;
         chip.addEventListener("click", () => {
           activeReminderForMore.groupId = g.id;
+          activeReminderForMore.folderId = null;
           saveState();
           buildReminderGroupChips();
           renderAll();
@@ -561,11 +617,11 @@
       });
     });
 
-    if (state.orgFolders.length === 0 || state.orgGroups.length === 0) {
+    if (state.orgFolders.length === 0) {
       const hint = document.createElement("p");
       hint.className = "demo-hint";
       hint.style.width = "100%";
-      hint.textContent = "Групп пока нет — создайте их во вкладке «Заметки».";
+      hint.textContent = "Папок пока нет — создайте их во вкладке «Заметки».";
       moreEls.groupChips.appendChild(hint);
     }
   }
@@ -579,11 +635,136 @@
 
   document.getElementById("reminder-group-close").addEventListener("click", closeAllMiniSheets);
 
+  function buildPriorityChips() {
+    moreEls.priorityChips.innerHTML = "";
+    const noneChip = document.createElement("button");
+    noneChip.type = "button";
+    noneChip.className = `chip${!activeReminderForMore.priority || activeReminderForMore.priority === "none" ? " selected" : ""}`;
+    noneChip.textContent = "Без приоритета";
+    noneChip.addEventListener("click", () => {
+      activeReminderForMore.priority = "none";
+      saveState();
+      buildPriorityChips();
+      renderAll();
+    });
+    moreEls.priorityChips.appendChild(noneChip);
+
+    PRIORITY_DEFS.forEach((p) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = `chip${activeReminderForMore.priority === p.id ? " selected" : ""}`;
+      chip.innerHTML = `<span class="dot" style="background:${p.color}"></span>${p.label}`;
+      chip.addEventListener("click", () => {
+        activeReminderForMore.priority = p.id;
+        saveState();
+        buildPriorityChips();
+        renderAll();
+      });
+      moreEls.priorityChips.appendChild(chip);
+    });
+  }
+
+  document.getElementById("more-priority-row").addEventListener("click", () => {
+    if (!activeReminderForMore) return;
+    buildPriorityChips();
+    moreEls.moreSheet.classList.remove("show");
+    moreEls.prioritySheet.classList.add("show");
+  });
+  document.getElementById("reminder-priority-close").addEventListener("click", closeAllMiniSheets);
+
+  function buildSubtasksList() {
+    moreEls.subtasksList.innerHTML = "";
+    const subtasks = activeReminderForMore.subtasks || [];
+    if (subtasks.length === 0) {
+      const p = document.createElement("p");
+      p.className = "demo-hint";
+      p.textContent = "Подзадач пока нет.";
+      moreEls.subtasksList.appendChild(p);
+    }
+    subtasks.forEach((s) => {
+      const row = document.createElement("div");
+      row.className = `reminder-row subtask-row${s.done ? " done" : ""}`;
+      const check = document.createElement("button");
+      check.className = "reminder-check cat-other";
+      check.innerHTML = checkSvg();
+      check.addEventListener("click", () => {
+        s.done = !s.done;
+        saveState();
+        buildSubtasksList();
+        renderAll();
+      });
+      const info = document.createElement("div");
+      info.className = "reminder-info";
+      info.innerHTML = `<div class="title">${s.text}</div>`;
+      const delBtn = document.createElement("button");
+      delBtn.className = "icon-btn";
+      delBtn.innerHTML = trashSvg();
+      delBtn.addEventListener("click", () => {
+        activeReminderForMore.subtasks = subtasks.filter((x) => x.id !== s.id);
+        saveState();
+        buildSubtasksList();
+        renderAll();
+      });
+      row.append(check, info, delBtn);
+      moreEls.subtasksList.appendChild(row);
+    });
+  }
+
+  document.getElementById("more-subtasks-row").addEventListener("click", () => {
+    if (!activeReminderForMore) return;
+    buildSubtasksList();
+    moreEls.moreSheet.classList.remove("show");
+    moreEls.subtasksSheet.classList.add("show");
+  });
+  document.getElementById("reminder-subtasks-close").addEventListener("click", closeAllMiniSheets);
+  document.getElementById("subtask-add-btn").addEventListener("click", () => {
+    const input = document.getElementById("subtask-new-input");
+    const text = input.value.trim();
+    if (!text || !activeReminderForMore) return;
+    if (!Array.isArray(activeReminderForMore.subtasks)) activeReminderForMore.subtasks = [];
+    activeReminderForMore.subtasks.push({ id: genId("sub"), text, done: false });
+    saveState();
+    input.value = "";
+    buildSubtasksList();
+    renderAll();
+  });
+
+  function snoozeUntil(ms) {
+    if (!activeReminderForMore) return;
+    activeReminderForMore.snoozedUntil = Date.now() + ms;
+    saveState();
+    closeAllMiniSheets();
+    toast("Задача отложена");
+    renderAll();
+  }
+
+  document.getElementById("more-snooze-row").addEventListener("click", () => {
+    if (!activeReminderForMore) return;
+    moreEls.moreSheet.classList.remove("show");
+    moreEls.snoozeSheet.classList.add("show");
+  });
+  document.getElementById("snooze-1h").addEventListener("click", () => snoozeUntil(60 * 60 * 1000));
+  document.getElementById("snooze-3h").addEventListener("click", () => snoozeUntil(3 * 60 * 60 * 1000));
+  document.getElementById("snooze-tomorrow").addEventListener("click", () => {
+    if (!activeReminderForMore) return;
+    const now = new Date();
+    const tomorrow9am = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 9, 0, 0);
+    activeReminderForMore.snoozedUntil = tomorrow9am.getTime();
+    saveState();
+    closeAllMiniSheets();
+    toast("Отложено до завтра");
+    renderAll();
+  });
+  document.getElementById("reminder-snooze-close").addEventListener("click", closeAllMiniSheets);
+
   moreEls.overlay.addEventListener("click", () => {
     if (
       moreEls.moreSheet.classList.contains("show") ||
       moreEls.noteSheet.classList.contains("show") ||
-      moreEls.groupSheet.classList.contains("show")
+      moreEls.groupSheet.classList.contains("show") ||
+      moreEls.prioritySheet.classList.contains("show") ||
+      moreEls.subtasksSheet.classList.contains("show") ||
+      moreEls.snoozeSheet.classList.contains("show")
     ) {
       closeAllMiniSheets();
     }
@@ -868,6 +1049,28 @@
         renderAll();
       })
     );
+
+    const label2 = document.createElement("div");
+    label2.className = "section-label";
+    label2.textContent = "Задачи в папке";
+    container.appendChild(label2);
+
+    const directTasks = remindersInFolderDirect(folderId);
+    if (directTasks.length === 0) {
+      const p = document.createElement("p");
+      p.className = "demo-hint";
+      p.textContent = "Задач прямо в папке пока нет.";
+      container.appendChild(p);
+    } else {
+      directTasks.forEach((r) => container.appendChild(reminderRow(r, contextDateFor(r))));
+    }
+    const addTaskBtn = document.createElement("button");
+    addTaskBtn.type = "button";
+    addTaskBtn.className = "btn btn-secondary";
+    addTaskBtn.style.width = "100%";
+    addTaskBtn.textContent = "+ Добавить задачу в папку";
+    addTaskBtn.addEventListener("click", () => openSheet(null, folderId));
+    container.appendChild(addTaskBtn);
   }
 
   function renderNotesGroup(container, groupId, folderId) {
@@ -1083,14 +1286,70 @@
     });
 
     const shop = buildShop();
+    const dataTools = buildDataTools();
 
     const siteLink = document.createElement("a");
     siteLink.className = "profile-row";
     siteLink.href = "../";
     siteLink.innerHTML = `<span class="left">← На сайт Remindly</span>`;
 
-    container.append(streakCard, statGrid, shop, notifRow, siteLink);
+    container.append(streakCard, statGrid, shop, notifRow, dataTools, siteLink);
   }
+
+  function buildDataTools() {
+    const wrap = document.createElement("div");
+    wrap.appendChild(shopHeader("Данные"));
+
+    const exportRow = document.createElement("button");
+    exportRow.type = "button";
+    exportRow.className = "profile-row";
+    exportRow.innerHTML = `<span class="left">⬇️ Экспортировать данные</span>`;
+    exportRow.addEventListener("click", () => {
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `remindly-backup-${todayStr()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast("Файл сохранён");
+    });
+    wrap.appendChild(exportRow);
+
+    const importRow = document.createElement("button");
+    importRow.type = "button";
+    importRow.className = "profile-row";
+    importRow.innerHTML = `<span class="left">⬆️ Импортировать данные</span>`;
+    importRow.addEventListener("click", () => {
+      document.getElementById("import-file-input").click();
+    });
+    wrap.appendChild(importRow);
+
+    return wrap;
+  }
+
+  document.getElementById("import-file-input").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        if (!Array.isArray(parsed.reminders)) throw new Error("bad format");
+        state = migrateState(parsed);
+        saveState();
+        applyTheme();
+        renderAll();
+        toast("Данные восстановлены");
+      } catch {
+        toast("Не удалось прочитать файл");
+      }
+    };
+    reader.readAsText(file);
+  });
 
   function shopHeader(text) {
     const label = document.createElement("div");
@@ -1294,21 +1553,60 @@
   let selectedRepeat = "none";
   let selectedWeekdays = new Set([todayDate().getDay()]);
   let selectedGroupId = null;
+  let selectedFolderId = null;
+  let selectedPriority = "none";
+
+  function buildPriorityFormChips() {
+    const row = document.getElementById("f-priority");
+    row.innerHTML = "";
+    const noneChip = document.createElement("button");
+    noneChip.type = "button";
+    noneChip.className = `chip${selectedPriority === "none" ? " selected" : ""}`;
+    noneChip.textContent = "Нет";
+    noneChip.addEventListener("click", () => {
+      selectedPriority = "none";
+      buildPriorityFormChips();
+    });
+    row.appendChild(noneChip);
+    PRIORITY_DEFS.forEach((p) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = `chip${selectedPriority === p.id ? " selected" : ""}`;
+      chip.innerHTML = `<span class="dot" style="background:${p.color}"></span>${p.label}`;
+      chip.addEventListener("click", () => {
+        selectedPriority = p.id;
+        buildPriorityFormChips();
+      });
+      row.appendChild(chip);
+    });
+  }
 
   function buildGroupChips() {
     const row = document.getElementById("f-group");
     row.innerHTML = "";
     const noneChip = document.createElement("button");
     noneChip.type = "button";
-    noneChip.className = `chip${!selectedGroupId ? " selected" : ""}`;
-    noneChip.textContent = "Без группы";
+    noneChip.className = `chip${!selectedGroupId && !selectedFolderId ? " selected" : ""}`;
+    noneChip.textContent = "Без папки";
     noneChip.addEventListener("click", () => {
       selectedGroupId = null;
+      selectedFolderId = null;
       buildGroupChips();
     });
     row.appendChild(noneChip);
 
     state.orgFolders.forEach((folder) => {
+      const folderChip = document.createElement("button");
+      folderChip.type = "button";
+      folderChip.className = `chip${!selectedGroupId && selectedFolderId === folder.id ? " selected" : ""}`;
+      folderChip.innerHTML = `${folderSvg()} ${folder.name}`;
+      folderChip.addEventListener("click", () => {
+        selectedGroupId = null;
+        selectedFolderId = folder.id;
+        buildGroupChips();
+      });
+      row.appendChild(folderChip);
+
       groupsInFolder(folder.id).forEach((g) => {
         const chip = document.createElement("button");
         chip.type = "button";
@@ -1316,6 +1614,7 @@
         chip.textContent = `${folder.name} / ${g.name}`;
         chip.addEventListener("click", () => {
           selectedGroupId = g.id;
+          selectedFolderId = null;
           buildGroupChips();
         });
         row.appendChild(chip);
@@ -1374,18 +1673,21 @@
     });
   }
 
-  function openSheet(presetGroupId) {
+  function openSheet(presetGroupId, presetFolderId) {
     els.form.reset();
     selectedCategory = "health";
     selectedRepeat = "none";
     selectedWeekdays = new Set([todayDate().getDay()]);
     selectedGroupId = presetGroupId || null;
+    selectedFolderId = presetFolderId || null;
+    selectedPriority = "none";
     document.getElementById("f-date").value = todayStr();
     document.getElementById("f-time").value = "09:00";
     document.getElementById("f-date-field").style.display = "block";
     document.getElementById("f-weekdays-field").style.display = "none";
     buildCategoryChips();
     buildGroupChips();
+    buildPriorityFormChips();
     buildRepeatChips();
     buildWeekdayChips();
     els.overlay.classList.add("show");
@@ -1426,6 +1728,10 @@
       favorite: false,
       note: "",
       groupId: selectedGroupId,
+      folderId: selectedFolderId,
+      priority: selectedPriority,
+      subtasks: [],
+      snoozedUntil: null,
       createdAt: Date.now(),
     };
     state.reminders.push(reminder);
@@ -1434,104 +1740,6 @@
     toast("Напоминание добавлено");
     renderAll();
   });
-
-  // ---------- admin panel ----------
-  let adminUnlocked = false;
-  const adminEls = {
-    overlay: document.getElementById("admin-overlay"),
-    loginSheet: document.getElementById("admin-login-sheet"),
-    panelSheet: document.getElementById("admin-panel-sheet"),
-    passwordInput: document.getElementById("admin-password"),
-    coinNum: document.getElementById("admin-coin-num"),
-    setInput: document.getElementById("admin-set-value"),
-  };
-
-  function closeAdminSheets() {
-    adminEls.overlay.classList.remove("show");
-    adminEls.loginSheet.classList.remove("show");
-    adminEls.panelSheet.classList.remove("show");
-  }
-
-  function openAdminPanel() {
-    adminEls.coinNum.textContent = state.coins;
-    adminEls.setInput.value = state.coins;
-    adminEls.overlay.classList.add("show");
-    adminEls.panelSheet.classList.add("show");
-  }
-
-  function openAdminLogin() {
-    adminEls.passwordInput.value = "";
-    adminEls.overlay.classList.add("show");
-    adminEls.loginSheet.classList.add("show");
-    setTimeout(() => adminEls.passwordInput.focus(), 250);
-  }
-
-  function requestAdmin() {
-    if (adminUnlocked) {
-      openAdminPanel();
-    } else {
-      openAdminLogin();
-    }
-  }
-
-  adminEls.overlay.addEventListener("click", closeAdminSheets);
-  document.getElementById("admin-login-cancel").addEventListener("click", closeAdminSheets);
-  document.getElementById("admin-panel-close").addEventListener("click", closeAdminSheets);
-
-  document.getElementById("admin-login-submit").addEventListener("click", async () => {
-    const value = adminEls.passwordInput.value;
-    const hash = await sha256Hex(value);
-    if (hash === ADMIN_PASSWORD_HASH) {
-      adminUnlocked = true;
-      closeAdminSheets();
-      openAdminPanel();
-    } else {
-      toast("Неверный пароль");
-    }
-  });
-
-  adminEls.passwordInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") document.getElementById("admin-login-submit").click();
-  });
-
-  document.querySelectorAll(".admin-adjust-row [data-delta]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const delta = Number(btn.dataset.delta);
-      state.coins = Math.max(0, state.coins + delta);
-      saveState();
-      adminEls.coinNum.textContent = state.coins;
-      adminEls.setInput.value = state.coins;
-      updateCoinBadge();
-    });
-  });
-
-  document.getElementById("admin-set-submit").addEventListener("click", () => {
-    const value = Math.max(0, Math.round(Number(adminEls.setInput.value) || 0));
-    state.coins = value;
-    saveState();
-    adminEls.coinNum.textContent = state.coins;
-    toast("Баланс обновлён");
-    updateCoinBadge();
-  });
-
-  if (window.location.hash === "#admin") {
-    requestAdmin();
-  }
-
-  let coinBadgeHoldTimer = null;
-  const coinBadgeEl = document.getElementById("coin-badge");
-  if (coinBadgeEl) {
-    const startHold = () => {
-      clearTimeout(coinBadgeHoldTimer);
-      coinBadgeHoldTimer = setTimeout(requestAdmin, 700);
-    };
-    const cancelHold = () => clearTimeout(coinBadgeHoldTimer);
-    coinBadgeEl.addEventListener("mousedown", startHold);
-    coinBadgeEl.addEventListener("touchstart", startHold, { passive: true });
-    ["mouseup", "mouseleave", "touchend", "touchcancel"].forEach((evt) =>
-      coinBadgeEl.addEventListener(evt, cancelHold)
-    );
-  }
 
   // ---------- foreground notifications ----------
   function checkDueNotifications() {
@@ -1586,4 +1794,17 @@
   applyTheme();
   saveState();
   renderAll();
+
+  // ---------- app shortcuts (from manifest) ----------
+  (() => {
+    const params = new URLSearchParams(window.location.search);
+    const view = params.get("view");
+    if (view && els.views[view]) switchView(view);
+    if (params.get("action") === "new") {
+      setTimeout(() => openSheet(), 300);
+    }
+    if (view || params.has("action")) {
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  })();
 })();

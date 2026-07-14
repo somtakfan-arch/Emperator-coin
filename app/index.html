@@ -79,6 +79,10 @@
       <label>Группа (необязательно)</label>
       <div class="chip-row" id="f-group"></div>
     </div>
+    <div class="field">
+      <label>Приоритет</label>
+      <div class="chip-row" id="f-priority"></div>
+    </div>
     <div class="two-col">
       <div class="field">
         <label for="f-time">Время</label>
@@ -111,7 +115,16 @@
     <span class="left">📝 Заметка к задаче</span>
   </button>
   <button type="button" class="profile-row" id="more-group-row">
-    <span class="left">🗂 Группа</span>
+    <span class="left">🗂 Папка / группа</span>
+  </button>
+  <button type="button" class="profile-row" id="more-priority-row">
+    <span class="left">🚩 Приоритет</span>
+  </button>
+  <button type="button" class="profile-row" id="more-subtasks-row">
+    <span class="left">☑️ Подзадачи</span>
+  </button>
+  <button type="button" class="profile-row" id="more-snooze-row">
+    <span class="left">⏰ Отложить</span>
   </button>
   <div class="sheet-actions">
     <button type="button" class="btn btn-secondary" id="more-sheet-close">Закрыть</button>
@@ -132,56 +145,53 @@
 
 <div class="sheet" id="reminder-group-sheet">
   <div class="sheet-handle"></div>
-  <h2>Группа задачи</h2>
+  <h2>Папка / группа задачи</h2>
   <div class="chip-row" id="reminder-group-chips"></div>
   <div class="sheet-actions">
     <button type="button" class="btn btn-secondary" id="reminder-group-close">Готово</button>
   </div>
 </div>
 
+<div class="sheet" id="reminder-priority-sheet">
+  <div class="sheet-handle"></div>
+  <h2>Приоритет задачи</h2>
+  <div class="chip-row" id="reminder-priority-chips"></div>
+  <div class="sheet-actions">
+    <button type="button" class="btn btn-secondary" id="reminder-priority-close">Готово</button>
+  </div>
+</div>
+
+<div class="sheet" id="reminder-subtasks-sheet">
+  <div class="sheet-handle"></div>
+  <h2>Подзадачи</h2>
+  <div id="reminder-subtasks-list"></div>
+  <div class="category-add-row">
+    <input class="text-input" type="text" id="subtask-new-input" placeholder="Новый пункт" maxlength="60" />
+    <button type="button" class="btn btn-primary" id="subtask-add-btn">Добавить</button>
+  </div>
+  <div class="sheet-actions">
+    <button type="button" class="btn btn-secondary" id="reminder-subtasks-close">Готово</button>
+  </div>
+</div>
+
+<div class="sheet" id="reminder-snooze-sheet">
+  <div class="sheet-handle"></div>
+  <h2>Отложить задачу</h2>
+  <div class="sheet-actions" style="flex-direction:column">
+    <button type="button" class="btn btn-secondary" style="width:100%" id="snooze-1h">На 1 час</button>
+    <button type="button" class="btn btn-secondary" style="width:100%" id="snooze-3h">На 3 часа</button>
+    <button type="button" class="btn btn-secondary" style="width:100%" id="snooze-tomorrow">На завтра</button>
+    <button type="button" class="btn btn-primary" style="width:100%" id="reminder-snooze-close">Отмена</button>
+  </div>
+</div>
+
+<input type="file" id="import-file-input" accept="application/json" hidden />
+
 <div class="toast" id="toast"></div>
 
 <div class="update-banner" id="update-banner" hidden>
   <span>Доступна новая версия</span>
   <button type="button" id="update-reload-btn">Обновить</button>
-</div>
-
-<div class="sheet-overlay" id="admin-overlay"></div>
-<div class="sheet" id="admin-login-sheet">
-  <div class="sheet-handle"></div>
-  <h2>Админ-панель</h2>
-  <div class="field">
-    <label for="admin-password">Пароль</label>
-    <input class="text-input" id="admin-password" type="password" placeholder="Пароль" autocomplete="off" />
-  </div>
-  <div class="sheet-actions">
-    <button type="button" class="btn btn-secondary" id="admin-login-cancel">Отмена</button>
-    <button type="button" class="btn btn-primary" id="admin-login-submit">Войти</button>
-  </div>
-</div>
-
-<div class="sheet" id="admin-panel-sheet">
-  <div class="sheet-handle"></div>
-  <h2>Монеты (админ)</h2>
-  <div class="admin-coin-display">
-    🪙 <span id="admin-coin-num">0</span>
-  </div>
-  <div class="admin-adjust-row">
-    <button type="button" class="btn btn-secondary" data-delta="-100">-100</button>
-    <button type="button" class="btn btn-secondary" data-delta="-10">-10</button>
-    <button type="button" class="btn btn-secondary" data-delta="-1">-1</button>
-    <button type="button" class="btn btn-secondary" data-delta="1">+1</button>
-    <button type="button" class="btn btn-secondary" data-delta="10">+10</button>
-    <button type="button" class="btn btn-secondary" data-delta="100">+100</button>
-  </div>
-  <div class="field">
-    <label for="admin-set-value">Установить точное значение</label>
-    <input class="text-input" id="admin-set-value" type="number" min="0" step="1" />
-  </div>
-  <div class="sheet-actions">
-    <button type="button" class="btn btn-secondary" id="admin-panel-close">Закрыть</button>
-    <button type="button" class="btn btn-primary" id="admin-set-submit">Установить</button>
-  </div>
 </div>
 
 <script src="app.js"></script>
