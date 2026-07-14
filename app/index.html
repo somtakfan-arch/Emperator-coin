@@ -97,6 +97,49 @@
 
 <div class="toast" id="toast"></div>
 
+<div class="update-banner" id="update-banner" hidden>
+  <span>Доступна новая версия</span>
+  <button type="button" id="update-reload-btn">Обновить</button>
+</div>
+
+<div class="sheet-overlay" id="admin-overlay"></div>
+<div class="sheet" id="admin-login-sheet">
+  <div class="sheet-handle"></div>
+  <h2>Админ-панель</h2>
+  <div class="field">
+    <label for="admin-password">Пароль</label>
+    <input class="text-input" id="admin-password" type="password" placeholder="Пароль" autocomplete="off" />
+  </div>
+  <div class="sheet-actions">
+    <button type="button" class="btn btn-secondary" id="admin-login-cancel">Отмена</button>
+    <button type="button" class="btn btn-primary" id="admin-login-submit">Войти</button>
+  </div>
+</div>
+
+<div class="sheet" id="admin-panel-sheet">
+  <div class="sheet-handle"></div>
+  <h2>Монеты (админ)</h2>
+  <div class="admin-coin-display">
+    🪙 <span id="admin-coin-num">0</span>
+  </div>
+  <div class="admin-adjust-row">
+    <button type="button" class="btn btn-secondary" data-delta="-100">-100</button>
+    <button type="button" class="btn btn-secondary" data-delta="-10">-10</button>
+    <button type="button" class="btn btn-secondary" data-delta="-1">-1</button>
+    <button type="button" class="btn btn-secondary" data-delta="1">+1</button>
+    <button type="button" class="btn btn-secondary" data-delta="10">+10</button>
+    <button type="button" class="btn btn-secondary" data-delta="100">+100</button>
+  </div>
+  <div class="field">
+    <label for="admin-set-value">Установить точное значение</label>
+    <input class="text-input" id="admin-set-value" type="number" min="0" step="1" />
+  </div>
+  <div class="sheet-actions">
+    <button type="button" class="btn btn-secondary" id="admin-panel-close">Закрыть</button>
+    <button type="button" class="btn btn-primary" id="admin-set-submit">Установить</button>
+  </div>
+</div>
+
 <script src="app.js"></script>
 </body>
 </html>

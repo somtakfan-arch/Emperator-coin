@@ -617,3 +617,36 @@ img {
     text-align: center;
   }
 }
+
+.update-banner {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60;
+  background: var(--lime);
+  color: #0b0b0d;
+  padding: 14px 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.update-banner[hidden] {
+  display: none;
+}
+
+.update-banner button {
+  background: #0b0b0d;
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}

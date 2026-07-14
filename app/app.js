@@ -44,6 +44,12 @@
   const CATEGORY_SLOT_STEP = 30;
   const CUSTOM_CATEGORY_CLASSES = ["cat-custom-0", "cat-custom-1", "cat-custom-2", "cat-custom-3"];
 
+  const ADMIN_PASSWORD_HASH = "484f8ff3cf2c0c8f8b3de39101e63bdd86e0ed019e7769bfd4d1efe9f82760f9";
+  async function sha256Hex(text) {
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
   const THEME_DEFS = [
     { id: "lime", label: "Классика", cost: 0, accent: "#d7ff3a", gradient: "linear-gradient(135deg, #ff4d8d, #ff9a3c 55%, #ffd52e)" },
     { id: "ocean", label: "Океан", cost: 40, accent: "#4dd9ff", gradient: "linear-gradient(135deg, #4d8dff, #4dd9ff 55%, #6be6d8)" },
@@ -826,6 +832,104 @@
     renderAll();
   });
 
+  // ---------- admin panel ----------
+  let adminUnlocked = false;
+  const adminEls = {
+    overlay: document.getElementById("admin-overlay"),
+    loginSheet: document.getElementById("admin-login-sheet"),
+    panelSheet: document.getElementById("admin-panel-sheet"),
+    passwordInput: document.getElementById("admin-password"),
+    coinNum: document.getElementById("admin-coin-num"),
+    setInput: document.getElementById("admin-set-value"),
+  };
+
+  function closeAdminSheets() {
+    adminEls.overlay.classList.remove("show");
+    adminEls.loginSheet.classList.remove("show");
+    adminEls.panelSheet.classList.remove("show");
+  }
+
+  function openAdminPanel() {
+    adminEls.coinNum.textContent = state.coins;
+    adminEls.setInput.value = state.coins;
+    adminEls.overlay.classList.add("show");
+    adminEls.panelSheet.classList.add("show");
+  }
+
+  function openAdminLogin() {
+    adminEls.passwordInput.value = "";
+    adminEls.overlay.classList.add("show");
+    adminEls.loginSheet.classList.add("show");
+    setTimeout(() => adminEls.passwordInput.focus(), 250);
+  }
+
+  function requestAdmin() {
+    if (adminUnlocked) {
+      openAdminPanel();
+    } else {
+      openAdminLogin();
+    }
+  }
+
+  adminEls.overlay.addEventListener("click", closeAdminSheets);
+  document.getElementById("admin-login-cancel").addEventListener("click", closeAdminSheets);
+  document.getElementById("admin-panel-close").addEventListener("click", closeAdminSheets);
+
+  document.getElementById("admin-login-submit").addEventListener("click", async () => {
+    const value = adminEls.passwordInput.value;
+    const hash = await sha256Hex(value);
+    if (hash === ADMIN_PASSWORD_HASH) {
+      adminUnlocked = true;
+      closeAdminSheets();
+      openAdminPanel();
+    } else {
+      toast("Неверный пароль");
+    }
+  });
+
+  adminEls.passwordInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") document.getElementById("admin-login-submit").click();
+  });
+
+  document.querySelectorAll(".admin-adjust-row [data-delta]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const delta = Number(btn.dataset.delta);
+      state.coins = Math.max(0, state.coins + delta);
+      saveState();
+      adminEls.coinNum.textContent = state.coins;
+      adminEls.setInput.value = state.coins;
+      updateCoinBadge();
+    });
+  });
+
+  document.getElementById("admin-set-submit").addEventListener("click", () => {
+    const value = Math.max(0, Math.round(Number(adminEls.setInput.value) || 0));
+    state.coins = value;
+    saveState();
+    adminEls.coinNum.textContent = state.coins;
+    toast("Баланс обновлён");
+    updateCoinBadge();
+  });
+
+  if (window.location.hash === "#admin") {
+    requestAdmin();
+  }
+
+  let coinBadgeHoldTimer = null;
+  const coinBadgeEl = document.getElementById("coin-badge");
+  if (coinBadgeEl) {
+    const startHold = () => {
+      clearTimeout(coinBadgeHoldTimer);
+      coinBadgeHoldTimer = setTimeout(requestAdmin, 700);
+    };
+    const cancelHold = () => clearTimeout(coinBadgeHoldTimer);
+    coinBadgeEl.addEventListener("mousedown", startHold);
+    coinBadgeEl.addEventListener("touchstart", startHold, { passive: true });
+    ["mouseup", "mouseleave", "touchend", "touchcancel"].forEach((evt) =>
+      coinBadgeEl.addEventListener(evt, cancelHold)
+    );
+  }
+
   // ---------- foreground notifications ----------
   function checkDueNotifications() {
     if (!state.notificationsEnabled || !("Notification" in window) || Notification.permission !== "granted") return;
@@ -844,10 +948,35 @@
   }
   setInterval(checkDueNotifications, 20000);
 
+  // ---------- update banner ----------
+  const updateBanner = document.getElementById("update-banner");
+  function showUpdateBanner() {
+    if (!updateBanner) return;
+    updateBanner.hidden = false;
+  }
+  document.getElementById("update-reload-btn")?.addEventListener("click", () => {
+    window.location.reload();
+  });
+
   // ---------- init ----------
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker.register("../sw.js").catch(() => {});
+      navigator.serviceWorker
+        .register("../sw.js")
+        .then((reg) => {
+          if (reg.waiting && navigator.serviceWorker.controller) showUpdateBanner();
+          reg.addEventListener("updatefound", () => {
+            const newWorker = reg.installing;
+            if (!newWorker) return;
+            newWorker.addEventListener("statechange", () => {
+              if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+                showUpdateBanner();
+              }
+            });
+          });
+          setInterval(() => reg.update(), 60000);
+        })
+        .catch(() => {});
     });
   }
 
