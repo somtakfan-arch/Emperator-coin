@@ -196,6 +196,19 @@ a { color: inherit; }
   display: flex;
   align-items: center;
   gap: 5px;
+  flex-wrap: wrap;
+}
+
+.reminder-info .meta svg {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+.meta-group, .meta-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
 }
 
 .reminder-actions { display: flex; align-items: center; gap: 6px; }
@@ -223,6 +236,86 @@ a { color: inherit; }
   0% { transform: scale(1); }
   45% { transform: scale(1.4); }
   100% { transform: scale(1); }
+}
+
+/* Notes tab */
+.notes-back-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.notes-back-title {
+  font-size: 17px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notes-list-row {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 13px 14px;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+
+.notes-list-row:active { background: var(--card-hover); }
+
+.notes-list-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--lime);
+}
+
+.notes-list-icon svg { width: 17px; height: 17px; }
+
+.notes-list-info { flex: 1; min-width: 0; }
+
+.notes-list-info .title {
+  font-size: 14.5px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notes-list-info .meta {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note-title-input {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+
+.note-editor-body {
+  resize: vertical;
+  min-height: 200px;
+  line-height: 1.6;
+}
+
+.note-textarea {
+  resize: vertical;
+  font-family: inherit;
 }
 
 .empty-state {

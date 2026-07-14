@@ -31,6 +31,7 @@
   <section class="view" id="view-today"></section>
   <section class="view" id="view-all" hidden></section>
   <section class="view" id="view-favorites" hidden></section>
+  <section class="view" id="view-notes" hidden></section>
   <section class="view" id="view-profile" hidden></section>
 
   <button class="fab" id="fab-add" aria-label="Добавить напоминание">
@@ -49,6 +50,10 @@
     <button class="nav-btn" data-view="favorites">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 21s-7-4.35-9.5-8.5C.6 9 2 5 5.6 5c2 0 3.4 1.1 4.4 2.6C11 6.1 12.4 5 14.4 5 18 5 19.4 9 17.5 12.5 15 16.65 12 21 12 21z"/></svg>
       Избранное
+    </button>
+    <button class="nav-btn" data-view="notes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h11l5 5v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/><path d="M14 4v5h5M8 13h8M8 17h5"/></svg>
+      Заметки
     </button>
     <button class="nav-btn" data-view="profile">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4.5 5-6 8-6s6.5 1.5 8 6"/></svg>
@@ -69,6 +74,10 @@
     <div class="field">
       <label>Категория</label>
       <div class="chip-row" id="f-category"></div>
+    </div>
+    <div class="field">
+      <label>Группа (необязательно)</label>
+      <div class="chip-row" id="f-group"></div>
     </div>
     <div class="two-col">
       <div class="field">
@@ -93,6 +102,41 @@
       <button type="submit" class="btn btn-primary">Добавить</button>
     </div>
   </form>
+</div>
+
+<div class="sheet" id="reminder-more-sheet">
+  <div class="sheet-handle"></div>
+  <h2 id="more-sheet-title">Задача</h2>
+  <button type="button" class="profile-row" id="more-note-row">
+    <span class="left">📝 Заметка к задаче</span>
+  </button>
+  <button type="button" class="profile-row" id="more-group-row">
+    <span class="left">🗂 Группа</span>
+  </button>
+  <div class="sheet-actions">
+    <button type="button" class="btn btn-secondary" id="more-sheet-close">Закрыть</button>
+  </div>
+</div>
+
+<div class="sheet" id="reminder-note-sheet">
+  <div class="sheet-handle"></div>
+  <h2>Заметка к задаче</h2>
+  <div class="field">
+    <textarea class="text-input note-textarea" id="reminder-note-text" placeholder="Детали, ссылки, что угодно…" rows="5"></textarea>
+  </div>
+  <div class="sheet-actions">
+    <button type="button" class="btn btn-secondary" id="reminder-note-cancel">Отмена</button>
+    <button type="button" class="btn btn-primary" id="reminder-note-save">Сохранить</button>
+  </div>
+</div>
+
+<div class="sheet" id="reminder-group-sheet">
+  <div class="sheet-handle"></div>
+  <h2>Группа задачи</h2>
+  <div class="chip-row" id="reminder-group-chips"></div>
+  <div class="sheet-actions">
+    <button type="button" class="btn btn-secondary" id="reminder-group-close">Готово</button>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
