@@ -3,20 +3,22 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>BedSMP — императорский ванильный сервер Minecraft</title>
-<meta name="description" content="BedSMP (bedsmp.pro) — ванильный SMP-сервер Minecraft в бело-красных императорских цветах. Правила, подключение и жизнь сервера." />
+<title>BedSMP — хаотичный ванильный Minecraft SMP</title>
+<meta name="description" content="BedSMP (bedsmp.pro) — хаотичный ванильный SMP-сервер Minecraft. Гриферство и рейды разрешены, читы — под запретом. Правила и подключение." />
 <meta name="theme-color" content="#0b0909" />
-<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="assets/logo.svg" type="image/svg+xml" />
+<link rel="alternate icon" href="assets/favicon-64.png" />
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
 <link rel="stylesheet" href="styles.css" />
-<meta property="og:title" content="BedSMP — императорский ванильный сервер Minecraft" />
-<meta property="og:description" content="Ванильный SMP без лишнего шума. Адрес: bedsmp.pro" />
+<meta property="og:title" content="BedSMP — хаотичный ванильный Minecraft SMP" />
+<meta property="og:description" content="Гриферство и рейды разрешены. Читы — под запретом. Адрес: bedsmp.pro" />
 <meta property="og:type" content="website" />
 </head>
 <body>
 
 <header class="site-header">
   <div class="container">
-    <div class="logo"><span class="logo-mark">👑</span><span class="bed">Bed</span><span class="smp">SMP</span></div>
+    <div class="logo"><img class="logo-mark" src="assets/logo.svg" alt="" width="32" height="32"><span class="bed">Bed</span><span class="smp">SMP</span></div>
     <nav class="nav-links">
       <a href="#connect">Как подключиться</a>
       <a href="#features">О сервере</a>
@@ -41,24 +43,28 @@
 
 <main>
   <section class="hero">
+    <div class="embers" aria-hidden="true">
+      <span style="left:8%; --drift:24px; animation-duration:9s; animation-delay:0s;"></span>
+      <span style="left:18%; --drift:-16px; animation-duration:12s; animation-delay:1.5s;"></span>
+      <span style="left:28%; --drift:12px; animation-duration:10s; animation-delay:3s;"></span>
+      <span style="left:41%; --drift:-20px; animation-duration:14s; animation-delay:0.8s;"></span>
+      <span style="left:55%; --drift:18px; animation-duration:11s; animation-delay:2.4s;"></span>
+      <span style="left:66%; --drift:-14px; animation-duration:9.5s; animation-delay:4s;"></span>
+      <span style="left:77%; --drift:22px; animation-duration:13s; animation-delay:1s;"></span>
+      <span style="left:88%; --drift:-10px; animation-duration:10.5s; animation-delay:2.8s;"></span>
+      <span style="left:95%; --drift:16px; animation-duration:12.5s; animation-delay:5s;"></span>
+    </div>
     <div class="container">
-      <div class="avatar-row" aria-hidden="true">
-        <div class="block b1"></div>
-        <div class="block b2"></div>
-        <div class="block b3"></div>
-        <div class="block b4"></div>
-        <div class="block b5"></div>
-        <div class="more">+N</div>
-      </div>
+      <img class="hero-icon" src="assets/logo.svg" alt="BedSMP" width="92" height="92">
 
       <span class="status-badge">
         <span class="status-dot" id="status-dot"></span>
         <span id="status-text">Проверяем статус…</span>
       </span>
 
-      <h1 class="hero-logo"><span class="bed">BED</span><span class="smp">SMP</span></h1>
+      <h1 class="hero-logo">BedSMP</h1>
 
-      <p class="lead">Ванильный SMP в бело-красных императорских цветах. Никаких лишних плагинов и доната ради силы — только честная игра, стройка и своя компания на одной карте.</p>
+      <p class="lead">Хаотичный ванильный SMP. Никакой защиты территорий — рейды, ловушки и PvP разрешены везде. Читы, x-ray и дюп — под жёстким запретом: побеждает скилл, а не софт.</p>
 
       <div class="hero-actions">
         <button class="btn btn-primary btn-lg" id="copy-ip-hero">
@@ -106,7 +112,7 @@
         <div class="step-card">
           <div class="step-num">3</div>
           <h3>Введи адрес</h3>
-          <p>В поле адреса впиши <strong>bedsmp.pro</strong> и заходи — добро пожаловать в Империю.</p>
+          <p>В поле адреса впиши <strong>bedsmp.pro</strong> и заходи — дальше выживай сам.</p>
         </div>
       </div>
       <div class="ip-box">
@@ -121,38 +127,38 @@
       <div class="section-head">
         <span class="kicker">О сервере</span>
         <h2>Почему BedSMP</h2>
-        <p>Уже полгода держим сервер живым: без рекламы, без гринда доната и без лишнего шума.</p>
+        <p>Уже полгода держим сервер живым — без нянек, без защиты территорий и без пощады.</p>
       </div>
       <div class="feature-grid">
         <div class="feature-card">
-          <div class="feature-icon" style="background:rgba(232,40,63,0.14)">🧱</div>
-          <h3>Чистый ванильный геймплей</h3>
-          <p>Без пэй-ту-вин плагинов и коммерческих привилегий — все в равных условиях.</p>
+          <div class="feature-icon" style="background:rgba(255,90,37,0.14)">🔥</div>
+          <h3>Полная свобода действий</h3>
+          <p>Гриферство, рейды и ловушки разрешены везде — админы не восстанавливают сожжённое.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon" style="background:rgba(216,173,77,0.16)">👑</div>
-          <h3>Императорский стиль</h3>
-          <p>Своя айдентика, бело-красные цвета и атмосфера, а не безликий сервер из списка.</p>
+          <div class="feature-icon" style="background:rgba(255,179,92,0.14)">⚔️</div>
+          <h3>Выживает сильнейший</h3>
+          <p>Строй союзы, предавай, копи ресурсы — здесь работает только твоя смекалка.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon" style="background:rgba(79,214,122,0.14)">🤝</div>
-          <h3>Дружное комьюнити</h3>
-          <p>Небольшой и постоянный костяк игроков — легко познакомиться и найти союзников.</p>
+          <div class="feature-icon" style="background:rgba(255,90,37,0.14)">🩸</div>
+          <h3>Только честный скилл</h3>
+          <p>Чит-клиенты, x-ray и дюп-баги банятся жёстко и без разговоров.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon" style="background:rgba(232,40,63,0.14)">🛡️</div>
-          <h3>Честные правила</h3>
-          <p>Понятный свод правил без двойных трактовок — прочитать можно за пару минут.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon" style="background:rgba(216,173,77,0.16)">🗺️</div>
+          <div class="feature-icon" style="background:rgba(255,179,92,0.14)">🌋</div>
           <h3>Одна общая карта</h3>
-          <p>Ваниль в чистом виде — стройте города, а не изолированные приватные острова.</p>
+          <p>Без приватных островов и заявок на территорию — все выживают на одной ванильной карте.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-icon" style="background:rgba(79,214,122,0.14)">⏱️</div>
+          <div class="feature-icon" style="background:rgba(255,90,37,0.14)">💀</div>
+          <h3>Без нянек и жалоб</h3>
+          <p>Потерял базу — сам виноват. Это не баг, а суть сервера.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:rgba(255,179,92,0.14)">⏱️</div>
           <h3>На проекте уже полгода</h3>
-          <p>Сервер не однодневка — работает стабильно и развивается с момента запуска.</p>
+          <p>Сервер стабильно живёт с запуска и не собирается закрываться.</p>
         </div>
       </div>
     </div>
@@ -167,10 +173,10 @@
       </div>
       <div class="rules-preview">
         <ul>
-          <li>Не грифь чужие постройки и не воруй из чужих сундуков</li>
-          <li>Читы, х-рей и дюп-баги под полным запретом</li>
-          <li>Уважай других игроков — без токсичности и оскорблений</li>
-          <li>Ники и постройки без нацистской и экстремистской символики</li>
+          <li>Гриферство, рейды и PvP разрешены везде и всегда</li>
+          <li>Чит-клиенты, x-ray и дюп-баги — бан без предупреждения</li>
+          <li>Администрация не восстанавливает постройки и не возвращает вещи</li>
+          <li>Реальные угрозы, доксинг и запрещённый контент в чате — бан</li>
         </ul>
         <a class="btn btn-ghost" href="rules.html">Читать все правила →</a>
       </div>
@@ -180,8 +186,8 @@
   <section class="section">
     <div class="container">
       <div class="cta-banner">
-        <h2>Присоединяйся к Империи</h2>
-        <p>Адрес сервера — bedsmp.pro. Открой Minecraft, добавь сервер и заходи прямо сейчас.</p>
+        <h2>Заходи и выживай</h2>
+        <p>Адрес сервера — bedsmp.pro. Открой Minecraft, добавь сервер и вступай в хаос прямо сейчас.</p>
         <button class="btn btn-primary btn-lg" id="copy-ip-cta">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9V4.5A1.5 1.5 0 0 1 10.5 3h8A1.5 1.5 0 0 1 20 4.5v8a1.5 1.5 0 0 1-1.5 1.5H15"/><rect x="4" y="9" width="11" height="12" rx="1.5"/></svg>
           Скопировать IP
@@ -193,7 +199,7 @@
 
 <footer class="site-footer">
   <div class="container">
-    <div class="logo"><span class="logo-mark">👑</span><span class="bed">Bed</span><span class="smp">SMP</span></div>
+    <div class="logo"><img class="logo-mark" src="assets/logo.svg" alt="" width="22" height="22"><span class="bed">Bed</span><span class="smp">SMP</span></div>
     <span>© 2026 BedSMP. bedsmp.pro</span>
     <div class="footer-links">
       <a href="rules.html">Правила</a>

@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <defs>
+    <linearGradient id="metal" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a4a52"/>
+      <stop offset="0.45" stop-color="#232228"/>
+      <stop offset="1" stop-color="#0b0a0c"/>
+    </linearGradient>
+    <linearGradient id="metalEdge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#77747c"/>
+      <stop offset="1" stop-color="#1a191d"/>
+    </linearGradient>
+    <linearGradient id="lava" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffe3a3"/>
+      <stop offset="0.45" stop-color="#ff8a2e"/>
+      <stop offset="1" stop-color="#c22412"/>
+    </linearGradient>
+    <linearGradient id="bedFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c1a1c"/>
+      <stop offset="1" stop-color="#080708"/>
+    </linearGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <filter id="softShadow" x="-40%" y="-40%" width="180%" height="180%">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000" flood-opacity="0.55"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#softShadow)">
+    <path d="M100 5 L184 54 L184 146 L100 195 L16 146 L16 54 Z" fill="url(#metal)" stroke="#000" stroke-width="3"/>
+    <path d="M100 14 L175 58.5 L175 141.5 L100 186 L25 141.5 L25 58.5 Z" fill="none" stroke="url(#metalEdge)" stroke-width="1.5" opacity="0.7"/>
+  </g>
+
+  <g transform="translate(52,76)">
+    <path d="M0 46 h96 v10 a4 4 0 0 1 -4 4 h-88 a4 4 0 0 1 -4 -4 Z" fill="url(#bedFill)" stroke="#000" stroke-width="2"/>
+    <rect x="-6" y="10" width="10" height="52" rx="2" fill="url(#bedFill)" stroke="#000" stroke-width="2"/>
+    <rect x="92" y="18" width="10" height="44" rx="2" fill="url(#bedFill)" stroke="#000" stroke-width="2"/>
+    <rect x="2" y="22" width="30" height="26" rx="3" fill="#242226" stroke="#000" stroke-width="2"/>
+    <rect x="2" y="32" width="94" height="16" fill="#111013" stroke="#000" stroke-width="2"/>
+  </g>
+
+  <g>
+    <path d="M64 40 L104 92 L82 118 L122 158 L104 190" fill="none" stroke="url(#lava)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
+    <path d="M64 40 L104 92 L82 118 L122 158 L104 190" fill="none" stroke="#ffe9bd" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+  </g>
+
+  <circle cx="100" cy="100" r="2.6" fill="#ffcf8c"/>
+</svg>
