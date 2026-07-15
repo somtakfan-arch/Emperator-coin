@@ -32,7 +32,7 @@ jobs:
       - name: Prepare site directory
         run: |
           mkdir -p _site
-          cp -r index.html styles.css landing.js manifest.json sw.js app icons _site/
+          cp -r index.html styles.css landing.js manifest.json sw.js app icons bedsmp _site/
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:

@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>BedSMP — императорский ванильный сервер Minecraft</title>
+<meta name="description" content="BedSMP (bedsmp.pro) — ванильный SMP-сервер Minecraft в бело-красных императорских цветах. Правила, подключение и жизнь сервера." />
+<meta name="theme-color" content="#0b0909" />
+<link rel="icon" href="favicon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="styles.css" />
+<meta property="og:title" content="BedSMP — императорский ванильный сервер Minecraft" />
+<meta property="og:description" content="Ванильный SMP без лишнего шума. Адрес: bedsmp.pro" />
+<meta property="og:type" content="website" />
+</head>
+<body>
+
+<header class="site-header">
+  <div class="container">
+    <div class="logo"><span class="logo-mark">👑</span><span class="bed">Bed</span><span class="smp">SMP</span></div>
+    <nav class="nav-links">
+      <a href="#connect">Как подключиться</a>
+      <a href="#features">О сервере</a>
+      <a href="rules.html">Правила</a>
+    </nav>
+    <div class="header-actions">
+      <button class="btn btn-ghost header-cta" id="copy-ip-header">bedsmp.pro</button>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Меню" aria-expanded="false">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+    </div>
+  </div>
+  <div class="mobile-menu" id="mobile-menu">
+    <div class="container">
+      <a href="#connect">Как подключиться</a>
+      <a href="#features">О сервере</a>
+      <a href="rules.html">Правила</a>
+      <button type="button" class="link-btn" id="copy-ip-mobile">Скопировать IP — bedsmp.pro</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="hero">
+    <div class="container">
+      <div class="avatar-row" aria-hidden="true">
+        <div class="block b1"></div>
+        <div class="block b2"></div>
+        <div class="block b3"></div>
+        <div class="block b4"></div>
+        <div class="block b5"></div>
+        <div class="more">+N</div>
+      </div>
+
+      <span class="status-badge">
+        <span class="status-dot" id="status-dot"></span>
+        <span id="status-text">Проверяем статус…</span>
+      </span>
+
+      <h1 class="hero-logo"><span class="bed">BED</span><span class="smp">SMP</span></h1>
+
+      <p class="lead">Ванильный SMP в бело-красных императорских цветах. Никаких лишних плагинов и доната ради силы — только честная игра, стройка и своя компания на одной карте.</p>
+
+      <div class="hero-actions">
+        <button class="btn btn-primary btn-lg" id="copy-ip-hero">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9V4.5A1.5 1.5 0 0 1 10.5 3h8A1.5 1.5 0 0 1 20 4.5v8a1.5 1.5 0 0 1-1.5 1.5H15"/><rect x="4" y="9" width="11" height="12" rx="1.5"/></svg>
+          Скопировать IP
+        </button>
+        <a class="btn btn-text" href="rules.html">Правила сервера →</a>
+      </div>
+
+      <div class="stat-bar">
+        <div class="stat-item">
+          <span class="stat-num" id="stat-online">—</span>
+          <span class="stat-label">Онлайн</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-num" id="stat-version">—</span>
+          <span class="stat-label">Версия</span>
+        </div>
+        <div class="stat-item ip" id="copy-ip-stat">
+          <span class="stat-num">bedsmp.pro</span>
+          <span class="stat-label">IP-адрес</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="connect">
+    <div class="container">
+      <div class="section-head">
+        <span class="kicker">Начало</span>
+        <h2>Как подключиться</h2>
+        <p>Заходим за минуту — вайтлиста нет, лаунчер обычный, версия — Java Edition.</p>
+      </div>
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-num">1</div>
+          <h3>Открой Minecraft</h3>
+          <p>Запусти официальный лаунчер, издание Java Edition, актуальная версия клиента.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">2</div>
+          <h3>Мультиплеер → Добавить сервер</h3>
+          <p>В списке серверов нажми «Добавить сервер» и придумай ему любое имя.</p>
+        </div>
+        <div class="step-card">
+          <div class="step-num">3</div>
+          <h3>Введи адрес</h3>
+          <p>В поле адреса впиши <strong>bedsmp.pro</strong> и заходи — добро пожаловать в Империю.</p>
+        </div>
+      </div>
+      <div class="ip-box">
+        <span class="ip-text">bedsmp.pro</span>
+        <button class="btn btn-ghost" id="copy-ip-box">Копировать</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="features">
+    <div class="container">
+      <div class="section-head">
+        <span class="kicker">О сервере</span>
+        <h2>Почему BedSMP</h2>
+        <p>Уже полгода держим сервер живым: без рекламы, без гринда доната и без лишнего шума.</p>
+      </div>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-icon" style="background:rgba(232,40,63,0.14)">🧱</div>
+          <h3>Чистый ванильный геймплей</h3>
+          <p>Без пэй-ту-вин плагинов и коммерческих привилегий — все в равных условиях.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:rgba(216,173,77,0.16)">👑</div>
+          <h3>Императорский стиль</h3>
+          <p>Своя айдентика, бело-красные цвета и атмосфера, а не безликий сервер из списка.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:rgba(79,214,122,0.14)">🤝</div>
+          <h3>Дружное комьюнити</h3>
+          <p>Небольшой и постоянный костяк игроков — легко познакомиться и найти союзников.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:rgba(232,40,63,0.14)">🛡️</div>
+          <h3>Честные правила</h3>
+          <p>Понятный свод правил без двойных трактовок — прочитать можно за пару минут.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:rgba(216,173,77,0.16)">🗺️</div>
+          <h3>Одна общая карта</h3>
+          <p>Ваниль в чистом виде — стройте города, а не изолированные приватные острова.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon" style="background:rgba(79,214,122,0.14)">⏱️</div>
+          <h3>На проекте уже полгода</h3>
+          <p>Сервер не однодневка — работает стабильно и развивается с момента запуска.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="section-head">
+        <span class="kicker">Правила</span>
+        <h2>Коротко о главном</h2>
+        <p>Полный свод правил — на отдельной странице. Вот суть в двух словах:</p>
+      </div>
+      <div class="rules-preview">
+        <ul>
+          <li>Не грифь чужие постройки и не воруй из чужих сундуков</li>
+          <li>Читы, х-рей и дюп-баги под полным запретом</li>
+          <li>Уважай других игроков — без токсичности и оскорблений</li>
+          <li>Ники и постройки без нацистской и экстремистской символики</li>
+        </ul>
+        <a class="btn btn-ghost" href="rules.html">Читать все правила →</a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="container">
+      <div class="cta-banner">
+        <h2>Присоединяйся к Империи</h2>
+        <p>Адрес сервера — bedsmp.pro. Открой Minecraft, добавь сервер и заходи прямо сейчас.</p>
+        <button class="btn btn-primary btn-lg" id="copy-ip-cta">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M9 9V4.5A1.5 1.5 0 0 1 10.5 3h8A1.5 1.5 0 0 1 20 4.5v8a1.5 1.5 0 0 1-1.5 1.5H15"/><rect x="4" y="9" width="11" height="12" rx="1.5"/></svg>
+          Скопировать IP
+        </button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="container">
+    <div class="logo"><span class="logo-mark">👑</span><span class="bed">Bed</span><span class="smp">SMP</span></div>
+    <span>© 2026 BedSMP. bedsmp.pro</span>
+    <div class="footer-links">
+      <a href="rules.html">Правила</a>
+      <a href="#connect">Как зайти</a>
+    </div>
+  </div>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script src="script.js"></script>
+</body>
+</html>
