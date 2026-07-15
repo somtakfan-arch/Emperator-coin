@@ -184,6 +184,11 @@
       if (n.pinned === undefined) n.pinned = false;
       if (n.color === undefined) n.color = null;
       if (!Array.isArray(n.checklist)) n.checklist = [];
+      if (n.folderId === undefined) n.folderId = null;
+      if (n.groupId === undefined) n.groupId = null;
+    });
+    parsed.orgGroups.forEach((g) => {
+      if (g.priority === undefined) g.priority = "none";
     });
     return parsed;
   }
@@ -268,6 +273,9 @@
   function notesInGroup(groupId) {
     return sortNotes(state.notes.filter((n) => n.groupId === groupId));
   }
+  function notesInFolderDirect(folderId) {
+    return sortNotes(state.notes.filter((n) => n.folderId === folderId && !n.groupId));
+  }
   function remindersInGroup(groupId) {
     return state.reminders.filter((r) => r.groupId === groupId);
   }
@@ -282,17 +290,18 @@
     return folder;
   }
 
-  function addGroup(folderId, name) {
-    const group = { id: genId("group"), folderId, name, createdAt: Date.now() };
+  function addGroup(folderId, name, priority) {
+    const group = { id: genId("group"), folderId, name, priority: priority || "none", createdAt: Date.now() };
     state.orgGroups.push(group);
     saveState();
     return group;
   }
 
-  function addNote(groupId, title) {
+  function addNote(groupId, title, folderId) {
     const note = {
       id: genId("note"),
-      groupId,
+      groupId: groupId || null,
+      folderId: folderId || null,
       title: title || "Новая заметка",
       body: "",
       pinned: false,
@@ -308,7 +317,10 @@
 
   function deleteFolder(id) {
     const groupIds = groupsInFolder(id).map((g) => g.id);
-    state.notes = state.notes.filter((n) => !groupIds.includes(n.groupId));
+    state.notes.forEach((n) => {
+      if (groupIds.includes(n.groupId)) n.groupId = null;
+      if (n.folderId === id) n.folderId = null;
+    });
     state.reminders.forEach((r) => {
       if (groupIds.includes(r.groupId)) r.groupId = null;
       if (r.folderId === id) r.folderId = null;
@@ -319,12 +331,42 @@
   }
 
   function deleteGroup(id) {
-    state.notes = state.notes.filter((n) => n.groupId !== id);
+    const group = groupById(id);
+    state.notes.forEach((n) => {
+      if (n.groupId === id) {
+        n.groupId = null;
+        n.folderId = group ? group.folderId : null;
+      }
+    });
     state.reminders.forEach((r) => {
-      if (r.groupId === id) r.groupId = null;
+      if (r.groupId === id) {
+        r.groupId = null;
+        r.folderId = group ? group.folderId : null;
+      }
     });
     state.orgGroups = state.orgGroups.filter((g) => g.id !== id);
     saveState();
+  }
+
+  function groupSelectionIntoGroup(folderId, name, priority, items) {
+    const group = addGroup(folderId, name, priority);
+    items.forEach(({ type, id }) => {
+      if (type === "note") {
+        const n = noteById(id);
+        if (n) {
+          n.groupId = group.id;
+          n.folderId = null;
+        }
+      } else if (type === "reminder") {
+        const r = state.reminders.find((x) => x.id === id);
+        if (r) {
+          r.groupId = group.id;
+          r.folderId = null;
+        }
+      }
+    });
+    saveState();
+    return group;
   }
 
   function deleteNote(id) {
@@ -1120,15 +1162,15 @@
   }
 
   function inlineAddRow(placeholder, buttonLabel, onSubmit) {
-    const row = document.createElement("div");
+    const row = document.createElement("form");
     row.className = "category-add-row";
     row.innerHTML = `
       <input class="text-input" type="text" placeholder="${placeholder}" maxlength="40" />
-      <button type="button" class="btn btn-primary">${buttonLabel}</button>
+      <button type="submit" class="btn btn-primary">${buttonLabel}</button>
     `;
     const input = row.querySelector("input");
-    const btn = row.querySelector("button");
-    const submit = () => {
+    row.addEventListener("submit", (e) => {
+      e.preventDefault();
       const value = input.value.trim();
       if (!value) {
         toast("Введите название");
@@ -1136,13 +1178,6 @@
       }
       onSubmit(value);
       input.value = "";
-    };
-    btn.addEventListener("click", submit);
-    input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        submit();
-      }
     });
     return row;
   }
@@ -1256,6 +1291,109 @@
     );
   }
 
+  let selectionMode = false;
+  let folderSelection = new Set();
+  let groupCreatePriority = "none";
+
+  function selectionKey(type, id) {
+    return `${type}:${id}`;
+  }
+
+  function selectableRow(type, id, icon, title, subtitle) {
+    const key = selectionKey(type, id);
+    const checked = folderSelection.has(key);
+    const row = document.createElement("div");
+    row.className = "notes-list-row selectable-row";
+    row.innerHTML = `<span class="select-checkbox${checked ? " checked" : ""}">${checked ? checkSvg() : ""}</span><span class="notes-list-icon">${icon}</span>`;
+    const info = document.createElement("div");
+    info.className = "notes-list-info";
+    info.innerHTML = `<div class="title">${title}</div>${subtitle ? `<div class="meta"><span>${subtitle}</span></div>` : ""}`;
+    row.appendChild(info);
+    row.addEventListener("click", () => {
+      if (folderSelection.has(key)) folderSelection.delete(key);
+      else folderSelection.add(key);
+      renderAll();
+    });
+    return row;
+  }
+
+  function buildGroupFromSelectionPanel(folderId) {
+    const panel = document.createElement("div");
+    panel.className = "group-create-panel";
+    const label = document.createElement("div");
+    label.className = "section-label";
+    label.textContent = `Сгруппировать (${folderSelection.size})`;
+    panel.appendChild(label);
+
+    const form = document.createElement("form");
+    form.className = "category-add-row";
+    form.innerHTML = `<input class="text-input" type="text" placeholder="Название группы" maxlength="40" />`;
+    const nameInput = form.querySelector("input");
+    panel.appendChild(form);
+
+    const priorityRow = document.createElement("div");
+    priorityRow.className = "chip-row";
+    priorityRow.style.margin = "10px 0";
+
+    function paintPriorityChips() {
+      priorityRow.querySelectorAll(".chip").forEach((chip) => {
+        chip.classList.toggle("selected", chip.dataset.priority === groupCreatePriority);
+      });
+    }
+
+    const noneChip = document.createElement("button");
+    noneChip.type = "button";
+    noneChip.className = "chip";
+    noneChip.dataset.priority = "none";
+    noneChip.textContent = "Без приоритета";
+    noneChip.addEventListener("click", () => {
+      groupCreatePriority = "none";
+      paintPriorityChips();
+    });
+    priorityRow.appendChild(noneChip);
+
+    PRIORITY_DEFS.forEach((p) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chip";
+      chip.dataset.priority = p.id;
+      chip.innerHTML = `<span class="dot" style="background:${p.color}"></span>${p.label}`;
+      chip.addEventListener("click", () => {
+        groupCreatePriority = p.id;
+        paintPriorityChips();
+      });
+      priorityRow.appendChild(chip);
+    });
+    paintPriorityChips();
+    panel.appendChild(priorityRow);
+
+    const submitBtn = document.createElement("button");
+    submitBtn.type = "button";
+    submitBtn.className = "btn btn-primary";
+    submitBtn.style.width = "100%";
+    submitBtn.textContent = "Создать группу";
+    submitBtn.addEventListener("click", () => {
+      const name = nameInput.value.trim();
+      if (!name) {
+        toast("Введите название");
+        return;
+      }
+      const items = Array.from(folderSelection).map((key) => {
+        const idx = key.indexOf(":");
+        return { type: key.slice(0, idx), id: key.slice(idx + 1) };
+      });
+      groupSelectionIntoGroup(folderId, name, groupCreatePriority, items);
+      folderSelection = new Set();
+      selectionMode = false;
+      groupCreatePriority = "none";
+      toast("Группа создана");
+      renderAll();
+    });
+    panel.appendChild(submitBtn);
+
+    return panel;
+  }
+
   function renderNotesFolder(container, folderId) {
     const folder = folderById(folderId);
     if (!folder) {
@@ -1263,65 +1401,126 @@
       renderNotesRoot(container);
       return;
     }
-    container.appendChild(backRow(folder.name, () => { notesScreen = { type: "root" }; renderAll(); }));
+    const headerRow = backRow(folder.name, () => {
+      notesScreen = { type: "root" };
+      selectionMode = false;
+      folderSelection = new Set();
+      renderAll();
+    });
+    const selectBtn = document.createElement("button");
+    selectBtn.type = "button";
+    selectBtn.className = "icon-btn";
+    selectBtn.style.marginLeft = "auto";
+    selectBtn.textContent = selectionMode ? "Отмена" : "Выбрать";
+    selectBtn.addEventListener("click", () => {
+      selectionMode = !selectionMode;
+      folderSelection = new Set();
+      renderAll();
+    });
+    headerRow.appendChild(selectBtn);
+    container.appendChild(headerRow);
 
     const groups = groupsInFolder(folderId);
-    if (groups.length === 0) {
-      const p = document.createElement("p");
-      p.className = "demo-hint";
-      p.textContent = "Групп в этой папке пока нет.";
-      container.appendChild(p);
-    } else {
+    if (groups.length > 0) {
+      const label = document.createElement("div");
+      label.className = "section-label";
+      label.textContent = "Группы";
+      container.appendChild(label);
       groups.forEach((g) => {
         const noteCount = notesInGroup(g.id).length;
         const taskCount = remindersInGroup(g.id).length;
-        container.appendChild(
-          notesListRow(
-            groupSvg(),
-            g.name,
-            `${noteCount} ${noteWord(noteCount)} · ${taskCount} ${taskWord(taskCount)}`,
-            () => {
-              notesScreen = { type: "group", id: g.id, folderId };
-              renderAll();
-            },
-            () => {
-              deleteGroup(g.id);
-              toast("Группа удалена");
-              renderAll();
-            }
-          )
+        const prio = g.priority && g.priority !== "none" ? priorityInfo(g.priority) : null;
+        const row = notesListRow(
+          groupSvg(),
+          g.name,
+          `${noteCount} ${noteWord(noteCount)} · ${taskCount} ${taskWord(taskCount)}`,
+          () => {
+            notesScreen = { type: "group", id: g.id, folderId };
+            renderAll();
+          },
+          () => {
+            deleteGroup(g.id);
+            toast("Группа удалена — содержимое осталось в папке");
+            renderAll();
+          }
         );
+        if (prio) row.style.borderLeft = `3px solid ${prio.color}`;
+        container.appendChild(row);
       });
     }
-    container.appendChild(
-      inlineAddRow("Название группы", "Создать", (name) => {
-        addGroup(folderId, name);
-        toast("Группа создана");
-        renderAll();
-      })
-    );
 
     const label2 = document.createElement("div");
     label2.className = "section-label";
-    label2.textContent = "Задачи в папке";
+    label2.textContent = "В папке";
     container.appendChild(label2);
 
+    const directNotes = notesInFolderDirect(folderId);
     const directTasks = remindersInFolderDirect(folderId);
-    if (directTasks.length === 0) {
+
+    if (directNotes.length === 0 && directTasks.length === 0) {
       const p = document.createElement("p");
       p.className = "demo-hint";
-      p.textContent = "Задач прямо в папке пока нет.";
+      p.textContent = "Пока пусто. Добавьте заметку или задачу ниже.";
       container.appendChild(p);
     } else {
-      directTasks.forEach((r) => container.appendChild(reminderRow(r, contextDateFor(r))));
+      directNotes.forEach((n) => {
+        if (selectionMode) {
+          container.appendChild(
+            selectableRow("note", n.id, noteSvg(), n.title || "Без названия", n.body ? n.body.slice(0, 40) : "")
+          );
+        } else {
+          container.appendChild(
+            notesListRow(
+              noteSvg(),
+              n.title || "Без названия",
+              n.body ? n.body.slice(0, 40) : "",
+              () => {
+                notesScreen = { type: "note", id: n.id, back: { type: "folder", id: folderId } };
+                renderAll();
+              },
+              () => {
+                deleteNote(n.id);
+                toast("Заметка удалена");
+                renderAll();
+              },
+              { pinned: n.pinned, color: n.color }
+            )
+          );
+        }
+      });
+      directTasks.forEach((r) => {
+        if (selectionMode) {
+          container.appendChild(selectableRow("reminder", r.id, checklistSvg(), r.title, r.time));
+        } else {
+          container.appendChild(reminderRow(r, contextDateFor(r)));
+        }
+      });
     }
-    const addTaskBtn = document.createElement("button");
-    addTaskBtn.type = "button";
-    addTaskBtn.className = "btn btn-secondary";
-    addTaskBtn.style.width = "100%";
-    addTaskBtn.textContent = "+ Добавить задачу в папку";
-    addTaskBtn.addEventListener("click", () => openSheet(null, folderId));
-    container.appendChild(addTaskBtn);
+
+    if (!selectionMode) {
+      const addRow = document.createElement("div");
+      addRow.className = "chip-row";
+      const addNoteBtn = document.createElement("button");
+      addNoteBtn.type = "button";
+      addNoteBtn.className = "btn btn-secondary";
+      addNoteBtn.textContent = "+ Заметка";
+      addNoteBtn.addEventListener("click", () => {
+        const n = addNote(null, "Новая заметка", folderId);
+        notesScreen = { type: "note", id: n.id, back: { type: "folder", id: folderId } };
+        renderAll();
+      });
+      const addTaskBtn = document.createElement("button");
+      addTaskBtn.type = "button";
+      addTaskBtn.className = "btn btn-secondary";
+      addTaskBtn.textContent = "+ Задача";
+      addTaskBtn.addEventListener("click", () => openSheet(null, folderId));
+      addRow.append(addNoteBtn, addTaskBtn);
+      container.appendChild(addRow);
+    }
+
+    if (selectionMode && folderSelection.size > 0) {
+      container.appendChild(buildGroupFromSelectionPanel(folderId));
+    }
   }
 
   function renderNotesGroup(container, groupId, folderId) {
@@ -1814,27 +2013,15 @@
     wrap.appendChild(shopHeader("Свои категории"));
 
     if (unfilledSlots > 0) {
-      const addRow = document.createElement("div");
-      addRow.className = "category-add-row";
-      addRow.innerHTML = `
-        <input class="text-input" type="text" placeholder="Название категории" maxlength="20" />
-        <button type="button" class="btn btn-primary">Добавить</button>
-      `;
-      const input = addRow.querySelector("input");
-      const btn = addRow.querySelector("button");
-      btn.addEventListener("click", () => {
-        const name = input.value.trim();
-        if (!name) {
-          toast("Введите название");
-          return;
-        }
-        const cls = CUSTOM_CATEGORY_CLASSES[state.customCategories.length % CUSTOM_CATEGORY_CLASSES.length];
-        state.customCategories.push({ id: `custom-${Date.now()}`, label: name, cls });
-        saveState();
-        toast("Категория добавлена");
-        renderAll();
-      });
-      wrap.appendChild(addRow);
+      wrap.appendChild(
+        inlineAddRow("Название категории", "Добавить", (name) => {
+          const cls = CUSTOM_CATEGORY_CLASSES[state.customCategories.length % CUSTOM_CATEGORY_CLASSES.length];
+          state.customCategories.push({ id: `custom-${Date.now()}`, label: name, cls });
+          saveState();
+          toast("Категория добавлена");
+          renderAll();
+        })
+      );
     }
 
     const slotRow = document.createElement("button");
@@ -2077,8 +2264,51 @@
     els.sheet.classList.remove("show");
   }
 
-  els.fab.addEventListener("click", () => openSheet());
-  els.overlay.addEventListener("click", closeSheet);
+  // ---------- add chooser (FAB) ----------
+  const chooserEls = {
+    overlay: els.overlay,
+    sheet: document.getElementById("add-chooser-sheet"),
+  };
+
+  function openChooser() {
+    chooserEls.overlay.classList.add("show");
+    chooserEls.sheet.classList.add("show");
+  }
+
+  function closeChooser() {
+    chooserEls.overlay.classList.remove("show");
+    chooserEls.sheet.classList.remove("show");
+  }
+
+  function focusNotesRootInput(placeholder) {
+    switchView("notes");
+    notesScreen = { type: "root" };
+    renderAll();
+    setTimeout(() => {
+      const input = document.querySelector(`#view-notes input[placeholder="${placeholder}"]`);
+      if (input) input.focus();
+    }, 250);
+  }
+
+  els.fab.addEventListener("click", () => openChooser());
+  document.getElementById("chooser-close").addEventListener("click", closeChooser);
+  document.getElementById("chooser-task-row").addEventListener("click", () => {
+    closeChooser();
+    openSheet();
+  });
+  document.getElementById("chooser-note-row").addEventListener("click", () => {
+    closeChooser();
+    focusNotesRootInput("Название заметки");
+  });
+  document.getElementById("chooser-folder-row").addEventListener("click", () => {
+    closeChooser();
+    focusNotesRootInput("Название папки");
+  });
+
+  els.overlay.addEventListener("click", () => {
+    closeChooser();
+    closeSheet();
+  });
   document.getElementById("f-cancel").addEventListener("click", closeSheet);
 
   els.form.addEventListener("submit", (e) => {
