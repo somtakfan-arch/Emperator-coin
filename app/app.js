@@ -913,7 +913,17 @@
       .filter((r) => r.repeat === "none" && r.date && r.date > tomorrow)
       .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
 
-    if (todayDue.length === 0 && tomorrowDue.length === 0 && laterOneOff.length === 0) {
+    const folders = state.orgFolders.slice().sort((a, b) => a.name.localeCompare(b.name, "ru"));
+    const unsortedNotes = sortNotes(state.notes.filter((n) => !n.groupId && !n.folderId));
+
+    const nothingAtAll =
+      todayDue.length === 0 &&
+      tomorrowDue.length === 0 &&
+      laterOneOff.length === 0 &&
+      folders.length === 0 &&
+      unsortedNotes.length === 0;
+
+    if (nothingAtAll) {
       container.appendChild(emptyState("🗒️", "Пока нет ни одного напоминания.<br>Нажмите + чтобы создать первое."));
       return;
     }
@@ -939,6 +949,46 @@
       container.appendChild(label);
       laterOneOff.forEach((r) => container.appendChild(reminderRow(r, r.date)));
     }
+
+    if (folders.length) {
+      const label = document.createElement("div");
+      label.className = "section-label";
+      label.textContent = "Папки";
+      container.appendChild(label);
+      folders.forEach((f) => {
+        const groupCount = groupsInFolder(f.id).length;
+        container.appendChild(
+          notesListRow(folderSvg(), f.name, `${groupCount} ${groupWord(groupCount)}`, () => {
+            notesScreen = { type: "folder", id: f.id };
+            switchView("notes");
+            renderAll();
+          })
+        );
+      });
+    }
+
+    if (unsortedNotes.length) {
+      const label = document.createElement("div");
+      label.className = "section-label";
+      label.textContent = "Заметки";
+      container.appendChild(label);
+      unsortedNotes.forEach((n) => {
+        container.appendChild(
+          notesListRow(
+            noteSvg(),
+            n.title || "Без названия",
+            n.body ? n.body.slice(0, 40) : "",
+            () => {
+              notesScreen = { type: "note", id: n.id, back: { type: "root" } };
+              switchView("notes");
+              renderAll();
+            },
+            null,
+            { pinned: n.pinned, color: n.color }
+          )
+        );
+      });
+    }
   }
 
   function renderSearchResults(container, q) {
@@ -948,8 +998,10 @@
     const matchedNotes = state.notes.filter(
       (n) => (n.title || "").toLowerCase().includes(q) || (n.body || "").toLowerCase().includes(q)
     );
+    const matchedFolders = state.orgFolders.filter((f) => (f.name || "").toLowerCase().includes(q));
+    const matchedGroups = state.orgGroups.filter((g) => (g.name || "").toLowerCase().includes(q));
 
-    if (matchedReminders.length === 0 && matchedNotes.length === 0) {
+    if (matchedReminders.length === 0 && matchedNotes.length === 0 && matchedFolders.length === 0 && matchedGroups.length === 0) {
       container.appendChild(emptyState("🔍", "Ничего не найдено."));
       return;
     }
@@ -975,9 +1027,48 @@
             () => {
               notesScreen = { type: "note", id: n.id, back: { type: "root" } };
               switchView("notes");
+              renderAll();
             },
             null,
             { pinned: n.pinned, color: n.color }
+          )
+        );
+      });
+    }
+    if (matchedFolders.length) {
+      const label = document.createElement("div");
+      label.className = "section-label";
+      label.textContent = "Папки";
+      container.appendChild(label);
+      matchedFolders.forEach((f) => {
+        const groupCount = groupsInFolder(f.id).length;
+        container.appendChild(
+          notesListRow(folderSvg(), f.name, `${groupCount} ${groupWord(groupCount)}`, () => {
+            notesScreen = { type: "folder", id: f.id };
+            switchView("notes");
+            renderAll();
+          })
+        );
+      });
+    }
+    if (matchedGroups.length) {
+      const label = document.createElement("div");
+      label.className = "section-label";
+      label.textContent = "Группы";
+      container.appendChild(label);
+      matchedGroups.forEach((g) => {
+        const noteCount = notesInGroup(g.id).length;
+        const taskCount = remindersInGroup(g.id).length;
+        container.appendChild(
+          notesListRow(
+            groupSvg(),
+            g.name,
+            `${noteCount} ${noteWord(noteCount)} · ${taskCount} ${taskWord(taskCount)}`,
+            () => {
+              notesScreen = { type: "group", id: g.id, folderId: g.folderId };
+              switchView("notes");
+              renderAll();
+            }
           )
         );
       });
