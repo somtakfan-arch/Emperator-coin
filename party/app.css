@@ -319,7 +319,7 @@ body {
 .game-grid {
   flex: 1;
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
   align-content: start;
   overflow-y: auto;
@@ -447,3 +447,32 @@ body {
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 ::-webkit-scrollbar { display: none; }
+
+/* ---- tablet / large screens: stop floating a phone-width UI in empty space ---- */
+@media (min-width: 640px) {
+  .mode-list { max-width: 560px; }
+  .mascots .mascot-icon { width: 62px; height: 62px; }
+  .logo-title .l1 { font-size: 30px; }
+  .logo-title .l2 { font-size: 40px; }
+
+  .player-tabs, .skin-grid, .game-grid, .shop-grid { max-width: 720px; margin-left: auto; margin-right: auto; width: 100%; }
+  .skin-grid, .shop-grid { grid-template-columns: repeat(6, 1fr); }
+  .cta-btn { max-width: 560px; margin-left: auto; margin-right: auto; }
+  .tournament-btn { max-width: 720px; }
+
+  .podium { gap: 22px; }
+  .podium-slot .p-bar { width: 84px; }
+  .results-actions { max-width: 560px; margin-left: auto; margin-right: auto; }
+
+  .settings-list { max-width: 480px; margin: 10px auto 0; }
+}
+
+@media (min-width: 960px) {
+  .mode-list { max-width: 680px; }
+  .mode-btn { padding: 20px 24px; }
+  .mode-num { font-size: 34px; }
+  .mode-label { font-size: 17px; }
+
+  .player-tabs, .skin-grid, .game-grid, .shop-grid, .tournament-btn { max-width: 880px; }
+  .skin-grid, .shop-grid { grid-template-columns: repeat(8, 1fr); }
+}
