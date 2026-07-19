@@ -4,18 +4,18 @@
   /* ============================== DATA ============================== */
 
   const SKINS = [
-    { id: "cat", emoji: "🐱", name: "Кот", price: 0, currency: "coins" },
-    { id: "fox", emoji: "🦊", name: "Лис", price: 0, currency: "coins" },
-    { id: "penguin", emoji: "🐧", name: "Пингвин", price: 0, currency: "coins" },
-    { id: "bear", emoji: "🐻", name: "Медведь", price: 0, currency: "coins" },
-    { id: "rabbit", emoji: "🐰", name: "Заяц", price: 300, currency: "coins" },
-    { id: "panda", emoji: "🐼", name: "Панда", price: 500, currency: "coins" },
-    { id: "lion", emoji: "🦁", name: "Лев", price: 800, currency: "coins" },
-    { id: "frog", emoji: "🐸", name: "Лягух", price: 1200, currency: "coins" },
-    { id: "koala", emoji: "🐨", name: "Коала", price: 1800, currency: "coins" },
-    { id: "dragon", emoji: "🐲", name: "Дракон", price: 15, currency: "gems" },
-    { id: "unicorn", emoji: "🦄", name: "Единорог", price: 20, currency: "gems" },
-    { id: "alien", emoji: "👽", name: "Пришелец", price: 25, currency: "gems" },
+    { id: "cat", name: "Кот", price: 0, currency: "coins" },
+    { id: "fox", name: "Лис", price: 0, currency: "coins" },
+    { id: "penguin", name: "Пингвин", price: 0, currency: "coins" },
+    { id: "bear", name: "Медведь", price: 0, currency: "coins" },
+    { id: "rabbit", name: "Заяц", price: 300, currency: "coins" },
+    { id: "panda", name: "Панда", price: 500, currency: "coins" },
+    { id: "lion", name: "Лев", price: 800, currency: "coins" },
+    { id: "frog", name: "Лягух", price: 1200, currency: "coins" },
+    { id: "koala", name: "Коала", price: 1800, currency: "coins" },
+    { id: "dragon", name: "Дракон", price: 15, currency: "gems" },
+    { id: "unicorn", name: "Единорог", price: 20, currency: "gems" },
+    { id: "alien", name: "Пришелец", price: 25, currency: "gems" },
   ];
 
   const GAMES = [
@@ -36,8 +36,378 @@
   ];
 
   const PLAYER_COLORS = ["#ff5a5f", "#4d8dff", "#4de17f", "#ffd166"];
-  const PLAYER_COLORS_DARK = ["#7a1114", "#062252", "#0d3d1f", "#4a3400"];
   const RANK_REWARDS = [100, 60, 30, 10];
+
+  /* ============================== CHARACTER ART ============================== */
+  // Every player avatar is drawn on canvas from simple shapes (no emoji), so each
+  // skin gets a distinct silhouette (ears/horn/beak/etc.) rather than reusing faces.
+
+  const SKIN_VISUALS = {
+    cat: { body: "#ffb454", accent: "#7a4a1e", ear: "triangle" },
+    fox: { body: "#ff8a3d", accent: "#fff3e6", ear: "triangleBig", belly: true },
+    penguin: { body: "#33415c", accent: "#ffffff", ear: "none", belly: true, beak: true },
+    bear: { body: "#a5713f", accent: "#7a4f28", ear: "round", snout: true },
+    rabbit: { body: "#f7d7e3", accent: "#ffffff", ear: "long" },
+    panda: { body: "#ffffff", accent: "#20202a", ear: "roundDark", eyePatch: true },
+    lion: { body: "#f2b23c", accent: "#c9741f", ear: "mane" },
+    frog: { body: "#5fd167", accent: "#2f8f3d", ear: "none", bulgeEyes: true },
+    koala: { body: "#a8adb8", accent: "#e9ebef", ear: "roundBig" },
+    dragon: { body: "#4ec97a", accent: "#1f7a44", ear: "none", horn: true, wings: true },
+    unicorn: { body: "#f6c9ef", accent: "#8ee3ff", ear: "none", horn: true, mane: true },
+    alien: { body: "#8be05a", accent: "#3f7a20", ear: "none", alienEyes: true, antenna: true, tallHead: true },
+  };
+
+  function roundRectPath(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function drawEars(ctx, v, r) {
+    ctx.fillStyle = v.accent;
+    ctx.strokeStyle = "rgba(255,255,255,.5)";
+    ctx.lineWidth = Math.max(2, r * 0.09);
+    const tri = (cx, cy, w2, h2, rot) => {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(rot);
+      ctx.beginPath();
+      ctx.moveTo(-w2, h2);
+      ctx.lineTo(0, -h2);
+      ctx.lineTo(w2, h2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      ctx.restore();
+    };
+    const circleEar = (cx, cy, rr) => {
+      ctx.beginPath();
+      ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    };
+    switch (v.ear) {
+      case "triangle":
+        tri(-r * 0.55, -r * 0.75, r * 0.28, r * 0.4, -0.15);
+        tri(r * 0.55, -r * 0.75, r * 0.28, r * 0.4, 0.15);
+        break;
+      case "triangleBig":
+        tri(-r * 0.62, -r * 0.7, r * 0.34, r * 0.5, -0.2);
+        tri(r * 0.62, -r * 0.7, r * 0.34, r * 0.5, 0.2);
+        break;
+      case "round":
+        circleEar(-r * 0.72, -r * 0.78, r * 0.36);
+        circleEar(r * 0.72, -r * 0.78, r * 0.36);
+        break;
+      case "roundBig":
+        circleEar(-r * 0.8, -r * 0.7, r * 0.46);
+        circleEar(r * 0.8, -r * 0.7, r * 0.46);
+        break;
+      case "roundDark":
+        circleEar(-r * 0.72, -r * 0.78, r * 0.34);
+        circleEar(r * 0.72, -r * 0.78, r * 0.34);
+        break;
+      case "long": {
+        const longEar = (cx, rot) => {
+          ctx.save();
+          ctx.translate(cx, -r * 0.55);
+          ctx.rotate(rot);
+          ctx.beginPath();
+          ctx.ellipse(0, -r * 0.75, r * 0.22, r * 0.78, 0, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.restore();
+        };
+        longEar(-r * 0.4, -0.12);
+        longEar(r * 0.4, 0.12);
+        break;
+      }
+      case "mane":
+        for (let i = 0; i < 12; i++) {
+          const a = (i / 12) * Math.PI * 2;
+          tri(Math.cos(a) * r * 0.92, Math.sin(a) * r * 0.92, r * 0.22, r * 0.34, a + Math.PI / 2);
+        }
+        break;
+    }
+  }
+
+  function drawExtras(ctx, v, r, skinId) {
+    ctx.fillStyle = v.accent;
+    if (v.belly) {
+      ctx.beginPath();
+      ctx.ellipse(0, r * 0.32, r * 0.52, r * 0.48, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (v.snout) {
+      ctx.beginPath();
+      ctx.ellipse(0, r * 0.24, r * 0.36, r * 0.28, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (v.eyePatch) {
+      ctx.beginPath();
+      ctx.ellipse(-r * 0.36, -r * 0.06, r * 0.26, r * 0.32, -0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(r * 0.36, -r * 0.06, r * 0.26, r * 0.32, 0.2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    if (v.beak) {
+      ctx.fillStyle = "#ffb84d";
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.16, r * 0.08);
+      ctx.lineTo(r * 0.16, r * 0.08);
+      ctx.lineTo(0, r * 0.34);
+      ctx.closePath();
+      ctx.fill();
+    }
+    if (v.horn) {
+      ctx.fillStyle = skinId === "unicorn" ? "#ffd166" : v.accent;
+      ctx.beginPath();
+      ctx.moveTo(-r * 0.14, -r * 0.82);
+      ctx.lineTo(r * 0.14, -r * 0.82);
+      ctx.lineTo(0, -r * 1.32);
+      ctx.closePath();
+      ctx.fill();
+    }
+    if (v.wings) {
+      ctx.fillStyle = v.accent;
+      [-1, 1].forEach((side) => {
+        ctx.beginPath();
+        ctx.moveTo(side * r * 0.85, r * 0.05);
+        ctx.quadraticCurveTo(side * r * 1.35, -r * 0.15, side * r * 1.1, r * 0.35);
+        ctx.closePath();
+        ctx.fill();
+      });
+    }
+    if (v.mane) {
+      const colors = ["#ff9fd6", "#8ee3ff", "#c9a4ff"];
+      colors.forEach((c, idx) => {
+        ctx.fillStyle = c;
+        ctx.beginPath();
+        ctx.ellipse(r * 0.5 + idx * r * 0.06, -r * 0.5 + idx * r * 0.3, r * 0.14, r * 0.4, 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+    if (v.antenna) {
+      ctx.strokeStyle = v.accent;
+      ctx.lineWidth = Math.max(2, r * 0.07);
+      ctx.beginPath();
+      ctx.moveTo(0, -r * 0.92);
+      ctx.lineTo(0, -r * 1.28);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(0, -r * 1.34, r * 0.09, 0, Math.PI * 2);
+      ctx.fillStyle = v.accent;
+      ctx.fill();
+    }
+  }
+
+  function drawEyes(ctx, v, r, skinId) {
+    const eyeR = r * (skinId === "frog" ? 0.22 : 0.19);
+    const spacing = r * (skinId === "alien" ? 0.3 : 0.36);
+    const eyeY = skinId === "frog" ? -r * 0.55 : -r * 0.04;
+    [-1, 1].forEach((side) => {
+      const ex = side * spacing;
+      if (v.alienEyes) {
+        ctx.fillStyle = "#0c1a0a";
+        ctx.beginPath();
+        ctx.ellipse(ex, eyeY, eyeR * 0.75, eyeR * 1.2, side * 0.25, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(255,255,255,.55)";
+        ctx.beginPath();
+        ctx.arc(ex - side * eyeR * 0.15, eyeY - eyeR * 0.35, eyeR * 0.22, 0, Math.PI * 2);
+        ctx.fill();
+        return;
+      }
+      if (v.bulgeEyes) {
+        ctx.fillStyle = v.body;
+        ctx.beginPath();
+        ctx.arc(ex, eyeY, eyeR * 1.35, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(20,10,35,.4)";
+        ctx.lineWidth = Math.max(1.5, r * 0.05);
+        ctx.stroke();
+      }
+      ctx.fillStyle = "#fff";
+      ctx.beginPath();
+      ctx.arc(ex, eyeY, eyeR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#1c1130";
+      ctx.beginPath();
+      ctx.arc(ex + side * eyeR * 0.15, eyeY + eyeR * 0.15, eyeR * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.85)";
+      ctx.beginPath();
+      ctx.arc(ex + side * eyeR * 0.02, eyeY + eyeR * 0.02, eyeR * 0.16, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  function drawMouth(ctx, r, skinId) {
+    ctx.strokeStyle = "rgba(20,10,35,.55)";
+    ctx.lineWidth = Math.max(2, r * 0.07);
+    ctx.lineCap = "round";
+    const w = skinId === "frog" ? r * 0.48 : r * 0.26;
+    const y = r * (skinId === "frog" ? 0.14 : 0.3);
+    ctx.beginPath();
+    ctx.moveTo(-w, y);
+    ctx.quadraticCurveTo(0, y + r * 0.22, w, y);
+    ctx.stroke();
+  }
+
+  function drawCharacter(ctx, skinId, size) {
+    const v = SKIN_VISUALS[skinId] || SKIN_VISUALS.cat;
+    const r = size * 0.42;
+    drawEars(ctx, v, r);
+    ctx.beginPath();
+    if (v.tallHead) ctx.ellipse(0, 0, r * 0.82, r * 1.05, 0, 0, Math.PI * 2);
+    else ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.fillStyle = v.body;
+    ctx.fill();
+    ctx.lineWidth = Math.max(2, r * 0.1);
+    ctx.strokeStyle = "rgba(20,10,35,.4)";
+    ctx.stroke();
+    drawExtras(ctx, v, r, skinId);
+    drawEyes(ctx, v, r, skinId);
+    drawMouth(ctx, r, skinId);
+  }
+
+  function paintCharacterAt(ctx, x, y, size, skinId) {
+    ctx.save();
+    ctx.translate(x, y);
+    drawCharacter(ctx, skinId, size);
+    ctx.restore();
+  }
+
+  function numberTag(ctx, x, y, i, isBot) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.beginPath();
+    ctx.arc(0, 0, 13, 0, Math.PI * 2);
+    ctx.fillStyle = PLAYER_COLORS[i];
+    ctx.fill();
+    ctx.lineWidth = isBot ? 2.5 : 2;
+    ctx.strokeStyle = isBot ? "rgba(255,255,255,.9)" : "rgba(20,10,35,.5)";
+    if (isBot) ctx.setLineDash([2, 2]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = "#1c1130";
+    ctx.font = "900 13px sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(i + 1), 0, 1);
+    ctx.restore();
+  }
+
+  function drawBadge(ctx, x, y, text, textColor, bgColor) {
+    ctx.save();
+    ctx.font = "900 14px sans-serif";
+    const padX = 11, padY = 6;
+    const tw = ctx.measureText(text).width;
+    const bw = tw + padX * 2, bh = 15 + padY * 2;
+    ctx.translate(x, y);
+    roundRectPath(ctx, -bw / 2, -bh / 2, bw, bh, bh / 2);
+    ctx.fillStyle = bgColor || "rgba(15,8,28,.85)";
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = "rgba(255,255,255,.25)";
+    ctx.stroke();
+    ctx.fillStyle = textColor || "#fff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(text, 0, 1);
+    ctx.restore();
+  }
+
+  // Cache rendered skin icons (offscreen canvas -> data URL) for use in DOM tiles.
+  const skinIconCache = new Map();
+  function getSkinIconURL(skinId, px) {
+    const key = skinId + ":" + px;
+    if (skinIconCache.has(key)) return skinIconCache.get(key);
+    const c = document.createElement("canvas");
+    c.width = px;
+    c.height = px;
+    const cctx = c.getContext("2d");
+    cctx.translate(px / 2, px / 2 + px * 0.04);
+    drawCharacter(cctx, skinId, px * 0.86);
+    const url = c.toDataURL();
+    skinIconCache.set(key, url);
+    return url;
+  }
+
+  function iconImg(skinId, px, cls) {
+    return `<img class="${cls || "char-icon"}" width="${px}" height="${px}" src="${getSkinIconURL(skinId, px)}" alt="" />`;
+  }
+
+  /* ============================== BACKGROUND ============================== */
+
+  function drawSunburst(ctx, w, h) {
+    const cx = w / 2, cy = h * 0.4;
+    const maxR = Math.hypot(Math.max(cx, w - cx), Math.max(cy, h - cy)) * 1.05;
+    const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, maxR);
+    grad.addColorStop(0, "#4a1fa0");
+    grad.addColorStop(0.65, "#2a1160");
+    grad.addColorStop(1, "#160a38");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+    const rays = 28;
+    ctx.save();
+    ctx.translate(cx, cy);
+    for (let i = 0; i < rays; i++) {
+      if (i % 2 === 0) continue;
+      const a0 = (i / rays) * Math.PI * 2;
+      const a1 = ((i + 1) / rays) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.arc(0, 0, maxR, a0, a1);
+      ctx.closePath();
+      ctx.fillStyle = "rgba(255,255,255,.035)";
+      ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawCenterHub(ctx, w, h, frac) {
+    const cx = w / 2, cy = h / 2;
+    const r = Math.min(w, h) * 0.085;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(20,10,45,.55)";
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "rgba(255,255,255,.2)";
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.arc(cx, cy, r - 5, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.max(0, frac));
+    ctx.closePath();
+    ctx.fillStyle = "#ffd166";
+    ctx.globalAlpha = 0.85;
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function clamp(v, lo, hi) {
+    return Math.max(lo, Math.min(hi, v));
+  }
+
+  function outwardAnchor(zone, cx, cy, minDist, w, h) {
+    const zx = zone.x + zone.w / 2, zy = zone.y + zone.h / 2;
+    const dx = zx - cx, dy = zy - cy;
+    const d = Math.hypot(dx, dy) || 1;
+    let x = zx, y = zy;
+    if (d < minDist) {
+      const scale = minDist / d;
+      x = cx + dx * scale;
+      y = cy + dy * scale;
+    }
+    return { x: clamp(x, 34, w - 34), y: clamp(y, 34, h - 34) };
+  }
 
   /* ============================== STATE ============================== */
 
@@ -117,7 +487,6 @@
 
   /* ============================== SESSION ============================== */
 
-  // The in-progress local-multiplayer setup (not persisted between visits)
   const session = {
     mode: "multi", // 'solo' | 'multi' | 'team'
     humanCount: 2,
@@ -155,7 +524,6 @@
   }
 
   function fillBots() {
-    // Bots occupy slots beyond humanCount up to totalCount (solo mode only)
     const usedSkins = session.players.map((p) => p.skin);
     while (session.players.length < session.totalCount) {
       const pool = SKINS.filter((s) => !usedSkins.includes(s.id));
@@ -172,8 +540,8 @@
     qsa("#home-gems, #char-gems, #shop-gems").forEach((el) => (el.textContent = STATE.gems));
   }
 
-  qs("#btn-multi").addEventListener("click", () => qs("#count-modal").hidden = false);
-  qs("#count-cancel").addEventListener("click", () => qs("#count-modal").hidden = true);
+  qs("#btn-multi").addEventListener("click", () => (qs("#count-modal").hidden = false));
+  qs("#count-cancel").addEventListener("click", () => (qs("#count-modal").hidden = true));
   qsa(".count-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
       qs("#count-modal").hidden = true;
@@ -204,7 +572,7 @@
     session.players.forEach((p, i) => {
       const btn = document.createElement("button");
       btn.className = "player-tab p" + (i + 1) + (i === session.activeTab ? " active" : "");
-      btn.innerHTML = `<span class="tab-emoji">${skinById(p.skin).emoji}</span>Игрок ${i + 1}`;
+      btn.innerHTML = `${iconImg(p.skin, 32, "tab-icon")}Игрок ${i + 1}`;
       btn.addEventListener("click", () => {
         session.activeTab = i;
         renderCharacterScreen();
@@ -223,7 +591,7 @@
       const owned = STATE.ownedSkins.includes(skin.id);
       const tile = document.createElement("div");
       tile.className = "skin-tile" + (current.skin === skin.id ? " selected" : "") + (!owned ? " locked" : "");
-      tile.innerHTML = `${skin.emoji}${owned ? '<span class="check">✓</span>' : `<span class="price-tag">${skin.price} ${skin.currency === "gems" ? "💎" : "🪙"}</span>`}`;
+      tile.innerHTML = `${iconImg(skin.id, 84)}${owned ? '<span class="check">✓</span>' : `<span class="price-tag">${skin.price} ${skin.currency === "gems" ? "💎" : "🪙"}</span>`}`;
       tile.addEventListener("click", () => {
         if (owned) {
           current.skin = skin.id;
@@ -383,11 +751,41 @@
       cancelAnimationFrame(this.rafId);
     },
 
+    // Draws player HUD content rotated 180deg for the far side of the device
+    // (top-half zones), so each player reads their own badge right-side up.
+    hud(zoneIndex, fn) {
+      const z = this.zones[zoneIndex];
+      if (!z) return;
+      const h = canvas.height / dpr;
+      this.hudAt(z.x + z.w / 2, z.y + z.h / 2, z.y + z.h / 2 < h / 2, fn);
+    },
+
+    hudAt(x, y, rotated, fn) {
+      ctx.save();
+      ctx.translate(x, y);
+      if (rotated) ctx.rotate(Math.PI);
+      fn(ctx);
+      ctx.restore();
+    },
+
+    hint(text) {
+      const w = canvas.width / dpr;
+      ctx.save();
+      ctx.fillStyle = "#fff";
+      ctx.font = "900 15px sans-serif";
+      ctx.textAlign = "center";
+      ctx.shadowColor = "rgba(0,0,0,.5)";
+      ctx.shadowBlur = 6;
+      ctx.fillText(text, w / 2, 28);
+      ctx.restore();
+    },
+
     tick(dt, ts, gameId) {
       const w = canvas.width / dpr;
       const h = canvas.height / dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
+      drawSunburst(ctx, w, h);
 
       if (this.phase === "countdown") {
         this.currentGame.draw(ctx, session.players, this.zones, true);
@@ -405,6 +803,10 @@
         this.currentGame.botTick(dt, session.players);
         this.currentGame.update(dt, session.players);
         this.currentGame.draw(ctx, session.players, this.zones, false);
+        if (!this.currentGame.hideHub) {
+          const frac = clamp((this.roundEnd - performance.now()) / this.currentGame.maxDuration, 0, 1);
+          drawCenterHub(ctx, w, h, frac);
+        }
         const timedOut = performance.now() >= this.roundEnd;
         if (this.currentGame.isFinished() || timedOut) {
           this.phase = "done";
@@ -457,15 +859,16 @@
   }
 
   function drawWinnerBanner(ctx, w, h, rankings, players) {
-    const winnerSkin = skinById(players[rankings[0]].skin);
+    const winner = players[rankings[0]];
     ctx.save();
     ctx.fillStyle = "rgba(10,4,30,.55)";
     ctx.fillRect(0, 0, w, h);
+    paintCharacterAt(ctx, w / 2, h / 2 - 48, 84, winner.skin);
     ctx.fillStyle = "#ffd166";
-    ctx.font = "900 40px sans-serif";
+    ctx.font = "900 32px sans-serif";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.fillText(`${winnerSkin.emoji} Игрок ${rankings[0] + 1} побеждает!`, w / 2, h / 2);
+    ctx.fillText(`Игрок ${rankings[0] + 1} побеждает!`, w / 2, h / 2 + 34);
     ctx.restore();
   }
 
@@ -528,35 +931,33 @@
           return players.map((_, i) => i).sort((a, b) => fills[b] - fills[a]);
         },
         draw(ctx, players, zones) {
-          zones.forEach((z, i) => {
-            const p = players[i];
+          players.forEach((p, i) => {
             if (!p) return;
-            const cx = z.x + z.w / 2;
-            const cy = z.y + z.h / 2;
-            ctx.save();
-            ctx.fillStyle = PLAYER_COLORS_DARK[i] + "cc";
-            ctx.fillRect(z.x + 3, z.y + 3, z.w - 6, z.h - 6);
-            const r = 20 + (fills[i] / 100) * Math.min(z.w, z.h) * 0.32;
-            ctx.beginPath();
-            ctx.arc(cx, cy - 10, r, 0, Math.PI * 2);
-            ctx.fillStyle = PLAYER_COLORS[i];
-            ctx.fill();
-            ctx.font = `${Math.max(18, r * 0.6)}px sans-serif`;
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(skinById(p.skin).emoji, cx, cy - 10);
-            ctx.fillStyle = "#fff";
-            ctx.font = "900 15px sans-serif";
-            ctx.fillText(`Игрок ${i + 1} · ${Math.round(fills[i])}%`, cx, cy + r + 22);
-            if (p.isBot) ctx.fillText("🤖", cx, cy + r + 42);
-            ctx.restore();
+            const z = zones[i];
+            const charSize = clamp(Math.min(z.w, z.h) * 0.34, 44, 100);
+            Play.hud(i, (ctx) => {
+              const bR = charSize * 0.32 + (fills[i] / 100) * charSize * 0.46;
+              const balloonY = -charSize * 0.62 - bR * 0.65;
+              ctx.beginPath();
+              ctx.ellipse(0, balloonY, bR * 0.86, bR, 0, 0, Math.PI * 2);
+              ctx.fillStyle = PLAYER_COLORS[i];
+              ctx.fill();
+              ctx.strokeStyle = "rgba(255,255,255,.5)";
+              ctx.lineWidth = 2;
+              ctx.stroke();
+              ctx.beginPath();
+              ctx.moveTo(0, balloonY + bR);
+              ctx.lineTo(0, balloonY + bR + charSize * 0.22);
+              ctx.strokeStyle = "rgba(255,255,255,.5)";
+              ctx.lineWidth = 1.5;
+              ctx.stroke();
+
+              paintCharacterAt(ctx, 0, 0, charSize, p.skin);
+              numberTag(ctx, -charSize * 0.36, -charSize * 0.36, i, p.isBot);
+              drawBadge(ctx, 0, charSize * 0.62, `${Math.round(fills[i])}%`, "#1c1130", PLAYER_COLORS[i]);
+            });
           });
-          ctx.save();
-          ctx.fillStyle = "#fff";
-          ctx.font = "900 16px sans-serif";
-          ctx.textAlign = "center";
-          ctx.fillText("Жми быстрее, чтобы надуть шарик!", canvas.width / dpr / 2, 26);
-          ctx.restore();
+          Play.hint("Жми быстрее — надуй шарик!");
         },
       };
     },
@@ -624,33 +1025,30 @@
         },
         draw(ctx, players, zones) {
           const isGo = this.goTs !== null;
-          zones.forEach((z, i) => {
-            const p = players[i];
+          players.forEach((p, i) => {
             if (!p) return;
+            const z = zones[i];
+            const charSize = clamp(Math.min(z.w, z.h) * 0.34, 44, 100);
             const s = state[i];
-            let bg = isGo ? "#2fbf5e" : "#c53d3d";
-            if (s.falseStart) bg = "#3a3348";
-            if (s.reacted) bg = "#ffd166";
-            ctx.save();
-            ctx.fillStyle = bg;
-            ctx.fillRect(z.x + 3, z.y + 3, z.w - 6, z.h - 6);
-            const cx = z.x + z.w / 2;
-            const cy = z.y + z.h / 2;
-            ctx.font = "34px sans-serif";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(skinById(p.skin).emoji, cx, cy - 20);
-            ctx.fillStyle = s.reacted ? "#3a2a00" : "#fff";
-            ctx.font = "900 16px sans-serif";
+            let statusColor = isGo ? "#2fbf5e" : "#c53d3d";
+            let textColor = "#fff";
             let label = isGo ? "ЖМИ!" : "ЖДИ…";
-            if (s.falseStart) label = "РАНО!";
-            if (s.reacted) label = Math.round(s.time) + " мс";
-            ctx.fillText(label, cx, cy + 20);
-            ctx.font = "800 12px sans-serif";
-            ctx.fillStyle = s.reacted ? "#3a2a00" : "rgba(255,255,255,.85)";
-            ctx.fillText(`Игрок ${i + 1}${p.isBot ? " 🤖" : ""}`, cx, cy + 42);
-            ctx.restore();
+            if (s.falseStart) {
+              statusColor = "#4a4460";
+              label = "РАНО!";
+            }
+            if (s.reacted) {
+              statusColor = "#ffd166";
+              textColor = "#3a2a00";
+              label = Math.round(s.time) + " мс";
+            }
+            Play.hud(i, (ctx) => {
+              paintCharacterAt(ctx, 0, -10, charSize, p.skin);
+              numberTag(ctx, -charSize * 0.36, -charSize * 0.46, i, p.isBot);
+              drawBadge(ctx, 0, charSize * 0.5, label, textColor, statusColor);
+            });
           });
+          Play.hint("Жди сигнал и жми первым!");
         },
       };
     },
@@ -683,6 +1081,7 @@
 
       return {
         maxDuration: duration,
+        hideHub: true,
         balls,
         handleInput(i, type) {
           thrust[i] = type === "down";
@@ -715,7 +1114,6 @@
             b.x += b.vx * dt;
             b.y += b.vy * dt;
           });
-          // collisions
           for (let i = 0; i < balls.length; i++) {
             for (let j = i + 1; j < balls.length; j++) {
               const a = balls[i], c = balls[j];
@@ -738,7 +1136,6 @@
               }
             }
           }
-          // elimination
           balls.forEach((b) => {
             if (!b.alive) return;
             const dist = Math.hypot(b.x - cx, b.y - cy);
@@ -767,41 +1164,33 @@
         draw(ctx, players, zones) {
           const arenaR = this.currentRadius();
           ctx.save();
-          ctx.fillStyle = "#1c1130";
-          ctx.fillRect(0, 0, w, h);
           ctx.beginPath();
           ctx.arc(cx, cy, arenaR, 0, Math.PI * 2);
-          ctx.fillStyle = "#4a2a90";
+          ctx.fillStyle = "rgba(90,48,190,.4)";
           ctx.fill();
           ctx.lineWidth = 5;
           ctx.strokeStyle = "#ffd166";
           ctx.stroke();
+          ctx.restore();
+
+          balls.forEach((b, i) => {
+            if (!b.alive) return;
+            paintCharacterAt(ctx, b.x, b.y, b.radius * 2.3, players[i].skin);
+          });
 
           zones.forEach((z, i) => {
             const p = players[i];
             if (!p) return;
-            ctx.strokeStyle = PLAYER_COLORS[i] + "55";
-            ctx.lineWidth = 4;
-            ctx.strokeRect(z.x + 3, z.y + 3, z.w - 6, z.h - 6);
+            const anchor = outwardAnchor(z, cx, cy, r0 * 1.18, w, h);
+            const rotated = anchor.y < h / 2;
+            Play.hudAt(anchor.x, anchor.y, rotated, (ctx) => {
+              paintCharacterAt(ctx, 0, -20, 42, p.skin);
+              numberTag(ctx, -16, -38, i, p.isBot);
+              drawBadge(ctx, 0, 14, "Держи", "#1c1130", PLAYER_COLORS[i]);
+            });
           });
 
-          balls.forEach((b, i) => {
-            if (!b.alive) return;
-            ctx.beginPath();
-            ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
-            ctx.fillStyle = PLAYER_COLORS[i];
-            ctx.fill();
-            ctx.font = "22px sans-serif";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            ctx.fillText(skinById(players[i].skin).emoji, b.x, b.y);
-          });
-
-          ctx.fillStyle = "#fff";
-          ctx.font = "900 16px sans-serif";
-          ctx.textAlign = "center";
-          ctx.fillText("Держи свою зону, чтобы толкать к центру!", w / 2, 26);
-          ctx.restore();
+          Play.hint("Держи свою зону — толкай к центру!");
         },
       };
     },
@@ -830,10 +1219,9 @@
       const playerIdx = rankings[rankPos];
       if (playerIdx === undefined) return;
       const p = session.players[playerIdx];
-      const skin = skinById(p.skin);
       const slot = document.createElement("div");
       slot.className = "podium-slot rank-" + (rankPos + 1);
-      slot.innerHTML = `<span class="p-emoji">${skin.emoji}</span><span class="p-name">Игрок ${playerIdx + 1}${p.isBot ? " 🤖" : ""}</span><div class="p-bar">${rankPos + 1}</div>`;
+      slot.innerHTML = `${iconImg(p.skin, 56, "p-icon")}<span class="p-name">Игрок ${playerIdx + 1}${p.isBot ? " (бот)" : ""}</span><div class="p-bar">${rankPos + 1}</div>`;
       podium.appendChild(slot);
     });
     qs("#reward-line").textContent = `+${Math.round(reward)} 🪙`;
@@ -866,7 +1254,7 @@
       const owned = STATE.ownedSkins.includes(skin.id);
       const tile = document.createElement("div");
       tile.className = "skin-tile" + (owned ? "" : " locked");
-      tile.innerHTML = `${skin.emoji}<span class="price-tag">${owned ? "Куплено" : skin.price + (skin.currency === "gems" ? " 💎" : " 🪙")}</span>`;
+      tile.innerHTML = `${iconImg(skin.id, 84)}<span class="price-tag">${owned ? "Куплено" : skin.price + (skin.currency === "gems" ? " 💎" : " 🪙")}</span>`;
       if (!owned) {
         tile.addEventListener("click", () => buySkin(skin));
       }
@@ -884,7 +1272,7 @@
     else STATE.coins -= skin.price;
     STATE.ownedSkins.push(skin.id);
     saveState();
-    toast(`Открыт новый скин: ${skin.emoji} ${skin.name}`);
+    toast(`Открыт новый скин: ${skin.name}`);
     renderShop();
   }
 
@@ -947,12 +1335,13 @@
 
   /* ============================== INIT ============================== */
 
-  // Track the last single game played so "Ещё раз" repeats it correctly.
   const originalStartSequence = Play.startSequence.bind(Play);
   Play.startSequence = function (gameIds, tournament) {
     if (!tournament && gameIds.length === 1) Play.lastGameId = gameIds[0];
     originalStartSequence(gameIds, tournament);
   };
+
+  qs("#mascots").innerHTML = ["cat", "fox", "penguin", "unicorn"].map((id) => iconImg(id, 56, "mascot-icon")).join("");
 
   renderCurrencies();
   resizeCanvas();

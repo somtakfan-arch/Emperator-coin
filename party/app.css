@@ -31,7 +31,9 @@ html, body {
 body {
   font-family: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
   color: var(--white);
-  background: radial-gradient(circle at 50% -10%, var(--bg-1), var(--bg-2) 70%);
+  background:
+    repeating-conic-gradient(from 0deg at 50% 32%, rgba(255,255,255,.045) 0deg 9deg, rgba(255,255,255,0) 9deg 18deg),
+    radial-gradient(circle at 50% 8%, var(--bg-1), var(--bg-2) 72%);
   min-height: 100dvh;
   overflow: hidden;
   user-select: none;
@@ -117,7 +119,8 @@ body {
 
 /* ---- home ---- */
 .logo-block { text-align: center; margin-top: 6px; }
-.mascots { font-size: 34px; letter-spacing: 6px; filter: drop-shadow(0 4px 6px rgba(0,0,0,.35)); }
+.mascots { display: flex; justify-content: center; gap: 10px; filter: drop-shadow(0 4px 6px rgba(0,0,0,.35)); }
+.mascots .mascot-icon { width: 52px; height: 52px; }
 .logo-title { margin: 6px 0 0; line-height: 1; }
 .logo-title .l1 {
   display: block;
@@ -250,7 +253,7 @@ body {
   display: flex; flex-direction: column; align-items: center; gap: 4px;
 }
 .player-tab.active { opacity: 1; box-shadow: 0 0 0 3px rgba(255,255,255,.5) inset; }
-.player-tab .tab-emoji { font-size: 20px; }
+.player-tab .tab-icon { width: 30px; height: 30px; display: block; }
 .player-tab.p1 { background: var(--p1); }
 .player-tab.p2 { background: var(--p2); }
 .player-tab.p3 { background: var(--p3); }
@@ -272,9 +275,9 @@ body {
   border-radius: 16px;
   aspect-ratio: 1;
   display: flex; align-items: center; justify-content: center;
-  font-size: 30px;
   cursor: pointer;
 }
+.skin-tile .char-icon { width: 68%; height: 68%; }
 .skin-tile.selected { border-color: var(--gold); }
 .skin-tile.locked { opacity: .55; }
 .skin-tile .price-tag {
@@ -354,7 +357,7 @@ body {
   margin: 24px 0;
 }
 .podium-slot { display: flex; flex-direction: column; align-items: center; gap: 6px; }
-.podium-slot .p-emoji { font-size: 34px; }
+.podium-slot .p-icon { width: 44px; height: 44px; }
 .podium-slot .p-name { font-weight: 800; font-size: 12px; }
 .podium-slot .p-bar {
   width: 64px;
