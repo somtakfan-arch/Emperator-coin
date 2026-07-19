@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>StickAnim — аниматор стикменов</title>
+<meta name="description" content="Анимируй стикменов покадрово: поза, тайминг по кадрам в секунду, несколько персонажей и цветов, сохранение видео без точек суставов." />
+<meta name="theme-color" content="#14151b" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/favicon.png" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="StickAnim" />
+<link rel="stylesheet" href="app.css" />
+</head>
+<body>
+<div class="shell">
+
+  <header class="topbar">
+    <button class="icon-btn" id="btn-scenes" title="Сцены">☰</button>
+    <button class="scene-name" id="scene-name">Сцена 1</button>
+    <div class="fps-box">
+      <label>FPS</label>
+      <input type="number" id="fps-input" min="1" max="60" value="12" />
+    </div>
+    <button class="icon-btn" id="btn-bg" title="Фон">🖼</button>
+  </header>
+
+  <main class="stage-wrap">
+    <canvas id="stage"></canvas>
+    <div class="hint" id="hint" hidden></div>
+  </main>
+
+  <div class="toolbar row1">
+    <button class="tool-btn" id="btn-char-add">👤+ Персонаж</button>
+    <button class="tool-btn" id="btn-char-remove">👤− Персонаж</button>
+    <button class="tool-btn" id="btn-joint-add">＋ Сустав</button>
+    <button class="tool-btn" id="btn-ghost">👻 Онион</button>
+  </div>
+
+  <div class="char-row">
+    <div class="char-strip" id="char-strip"></div>
+    <div class="color-strip" id="color-strip"></div>
+  </div>
+
+  <div class="toolbar row2">
+    <button class="tool-btn" id="btn-undo" title="Отменить">↩︎</button>
+    <button class="tool-btn play-btn" id="btn-play" title="Воспроизвести">▶</button>
+    <div class="hold-box">
+      <label>Держать</label>
+      <input type="number" id="frame-hold" min="1" max="30" value="2" />
+    </div>
+    <button class="tool-btn" id="btn-frame-dup" title="Дублировать кадр">⧉</button>
+    <button class="tool-btn" id="btn-frame-del" title="Удалить кадр">🗑</button>
+    <button class="tool-btn primary" id="btn-frame-add">+ Кадр</button>
+    <button class="tool-btn accent" id="btn-export">⬇ Видео</button>
+  </div>
+
+  <div class="frames-strip" id="frames-strip"></div>
+
+  <div class="panel" id="bg-panel" hidden>
+    <div class="panel-head"><span>Фон / интерьер</span><button id="bg-close">✕</button></div>
+    <div class="bg-strip" id="bg-strip"></div>
+    <p class="panel-note">Больше вариантов интерьера можно будет добавить позже.</p>
+  </div>
+
+  <div class="panel" id="scenes-panel" hidden>
+    <div class="panel-head"><span>Сцены</span><button id="scenes-close">✕</button></div>
+    <div class="scenes-list" id="scenes-list"></div>
+    <button class="tool-btn primary" id="btn-scene-new" style="width:100%;margin-top:10px;">+ Новая сцена</button>
+  </div>
+
+  <div class="export-overlay" id="export-overlay" hidden>
+    <div class="export-box">
+      <div class="spinner"></div>
+      <div>Экспорт видео…</div>
+      <div id="export-progress">0%</div>
+    </div>
+  </div>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>

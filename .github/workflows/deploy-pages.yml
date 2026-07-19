@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - claude/reminder-app-store-vvvqle
+      - claude/stickman-animation-app-m7mn0x
   workflow_dispatch:
 
 permissions:
@@ -33,6 +34,7 @@ jobs:
         run: |
           mkdir -p _site
           cp -r index.html styles.css landing.js manifest.json sw.js app icons _site/
+          cp -r stickman _site/
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
