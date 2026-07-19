@@ -1,0 +1,18 @@
+{
+  "name": "Пати Арена — игры для компании",
+  "short_name": "Пати Арена",
+  "description": "Мини-игры для 1-4 игроков на одном устройстве: шарики, реакция и арена-сумо. Монеты, скины и трек наград.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#230f52",
+  "theme_color": "#2a1160",
+  "lang": "ru",
+  "dir": "ltr",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

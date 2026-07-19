@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>Пати Арена — игры для компании</title>
+<meta name="description" content="Пати Арена — мини-игры для 1-4 игроков на одном устройстве: перетягивание, реакция и арена-сумо. Монеты, скины и трек наград." />
+<meta name="theme-color" content="#2a1160" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/favicon.png" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Пати Арена" />
+<link rel="stylesheet" href="app.css" />
+</head>
+<body>
+<div class="shell">
+
+  <!-- HOME -->
+  <section class="screen" id="screen-home">
+    <div class="topbar">
+      <button class="pill-btn" id="btn-shop">🛒 Магазин</button>
+      <div class="currency">
+        <span class="curr coin"><span id="home-coins">0</span> 🪙</span>
+        <span class="curr gem"><span id="home-gems">0</span> 💎</span>
+      </div>
+      <button class="icon-round" id="btn-settings">⚙️</button>
+    </div>
+
+    <div class="logo-block">
+      <div class="mascots">🐱 🦊 🐧 🐻</div>
+      <h1 class="logo-title"><span class="l1">1·2·3·4</span><span class="l2">PARTY<br/>ARENA</span></h1>
+    </div>
+
+    <div class="mode-list">
+      <button class="mode-btn mode-solo" data-mode="solo" data-count="1">
+        <span class="mode-num">1</span>
+        <span class="mode-label">Игрок<br/><small>против ботов</small></span>
+      </button>
+      <button class="mode-btn mode-multi" id="btn-multi">
+        <span class="mode-num multi-num">2·3·4</span>
+        <span class="mode-label">Игрока<br/><small>на одном устройстве</small></span>
+      </button>
+      <button class="mode-btn mode-team" data-mode="team" data-count="4">
+        <span class="mode-tag">Команда на команду</span>
+        <span class="mode-num">4</span>
+        <span class="mode-label">Игрока</span>
+      </button>
+    </div>
+
+    <button class="progress-link" id="btn-progress">🏅 Трек наград</button>
+  </section>
+
+  <!-- PLAYER COUNT MODAL -->
+  <div class="modal-backdrop" id="count-modal" hidden>
+    <div class="modal-box">
+      <h3>Сколько игроков?</h3>
+      <div class="count-row">
+        <button class="count-btn" data-count="2">2</button>
+        <button class="count-btn" data-count="3">3</button>
+        <button class="count-btn" data-count="4">4</button>
+      </div>
+      <button class="text-btn" id="count-cancel">Отмена</button>
+    </div>
+  </div>
+
+  <!-- CHARACTER SELECT -->
+  <section class="screen" id="screen-characters" hidden>
+    <div class="topbar">
+      <button class="icon-round" id="char-back">←</button>
+      <div class="currency">
+        <span class="curr coin"><span id="char-coins">0</span> 🪙</span>
+        <span class="curr gem"><span id="char-gems">0</span> 💎</span>
+      </div>
+      <span class="spacer"></span>
+    </div>
+    <h2 class="screen-title">Выбери персонажей</h2>
+    <div class="player-tabs" id="player-tabs"></div>
+    <div class="skin-grid" id="skin-grid"></div>
+    <button class="cta-btn" id="btn-to-games">Дальше →</button>
+  </section>
+
+  <!-- GAME PICKER -->
+  <section class="screen" id="screen-games" hidden>
+    <div class="topbar">
+      <button class="icon-round" id="games-back">←</button>
+      <h2 class="screen-title-inline">Выбери игру</h2>
+      <span class="spacer"></span>
+    </div>
+    <div class="game-grid" id="game-grid"></div>
+    <button class="cta-btn tournament-btn" id="btn-tournament">🏆 Турнир (все игры подряд)</button>
+  </section>
+
+  <!-- PLAY -->
+  <section class="screen screen-play" id="screen-play" hidden>
+    <canvas id="game-canvas"></canvas>
+    <button class="icon-round play-exit" id="play-exit">✕</button>
+  </section>
+
+  <!-- RESULTS -->
+  <section class="screen" id="screen-results" hidden>
+    <h2 class="screen-title" id="results-title">Результаты</h2>
+    <div class="podium" id="podium"></div>
+    <div class="reward-line" id="reward-line"></div>
+    <div class="results-actions">
+      <button class="cta-btn secondary" id="btn-again">Ещё раз</button>
+      <button class="cta-btn secondary" id="btn-other-game">Другая игра</button>
+      <button class="cta-btn" id="btn-home">Домой</button>
+    </div>
+  </section>
+
+  <!-- SHOP -->
+  <section class="screen" id="screen-shop" hidden>
+    <div class="topbar">
+      <button class="icon-round" id="shop-back">←</button>
+      <div class="currency">
+        <span class="curr coin"><span id="shop-coins">0</span> 🪙</span>
+        <span class="curr gem"><span id="shop-gems">0</span> 💎</span>
+      </div>
+      <span class="spacer"></span>
+    </div>
+    <h2 class="screen-title">Магазин скинов</h2>
+    <div class="skin-grid shop-grid" id="shop-grid"></div>
+  </section>
+
+  <!-- PROGRESS PATH -->
+  <section class="screen" id="screen-progress" hidden>
+    <div class="topbar">
+      <button class="icon-round" id="progress-back">←</button>
+      <h2 class="screen-title-inline">Трек наград</h2>
+      <span class="spacer"></span>
+    </div>
+    <p class="progress-sub">Сыграно игр: <span id="progress-count">0</span></p>
+    <div class="progress-track-wrap"><div class="progress-track-scroll" id="progress-track-scroll"></div></div>
+  </section>
+
+  <!-- SETTINGS -->
+  <section class="screen" id="screen-settings" hidden>
+    <div class="topbar">
+      <button class="icon-round" id="settings-back">←</button>
+      <h2 class="screen-title-inline">Настройки</h2>
+      <span class="spacer"></span>
+    </div>
+    <div class="settings-list">
+      <label class="settings-row">
+        <span>Звук</span>
+        <input type="checkbox" id="setting-sound" checked />
+      </label>
+      <button class="text-btn danger" id="btn-reset">Сбросить прогресс</button>
+    </div>
+  </section>
+
+  <div class="toast" id="toast"></div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
