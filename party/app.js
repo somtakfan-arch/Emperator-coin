@@ -57,6 +57,43 @@
     alien: { body: "#8be05a", accent: "#3f7a20", ear: "none", alienEyes: true, antenna: true, tallHead: true },
   };
 
+  function shade(hex, percent) {
+    const num = parseInt(hex.slice(1), 16);
+    const r = Math.max(0, Math.min(255, (num >> 16) + Math.round(255 * percent)));
+    const g = Math.max(0, Math.min(255, ((num >> 8) & 0xff) + Math.round(255 * percent)));
+    const b = Math.max(0, Math.min(255, (num & 0xff) + Math.round(255 * percent)));
+    return `rgb(${r},${g},${b})`;
+  }
+
+  function bodyGradient(ctx, r, color) {
+    const g = ctx.createRadialGradient(-r * 0.3, -r * 0.42, r * 0.08, -r * 0.05, -r * 0.05, r * 1.25);
+    g.addColorStop(0, shade(color, 0.34));
+    g.addColorStop(0.55, color);
+    g.addColorStop(1, shade(color, -0.16));
+    return g;
+  }
+
+  // Sticker look: a soft white halo behind a thin dark line keeps every shape
+  // readable whether it sits on a light UI card or the dark game background.
+  function stickerOutline(ctx, r) {
+    ctx.lineWidth = Math.max(2.5, r * 0.16);
+    ctx.strokeStyle = "rgba(255,255,255,.95)";
+    ctx.stroke();
+    ctx.lineWidth = Math.max(1.5, r * 0.05);
+    ctx.strokeStyle = "rgba(22,12,40,.88)";
+    ctx.stroke();
+  }
+
+  function drawShadow(ctx, r) {
+    const g = ctx.createRadialGradient(0, r * 0.9, 1, 0, r * 0.9, r * 0.85);
+    g.addColorStop(0, "rgba(8,3,22,.38)");
+    g.addColorStop(1, "rgba(8,3,22,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.ellipse(0, r * 0.92, r * 0.7, r * 0.22, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   function roundRectPath(ctx, x, y, w, h, r) {
     ctx.beginPath();
     ctx.moveTo(x + r, y);
@@ -68,9 +105,6 @@
   }
 
   function drawEars(ctx, v, r) {
-    ctx.fillStyle = v.accent;
-    ctx.strokeStyle = "rgba(255,255,255,.5)";
-    ctx.lineWidth = Math.max(2, r * 0.09);
     const tri = (cx, cy, w2, h2, rot) => {
       ctx.save();
       ctx.translate(cx, cy);
@@ -80,15 +114,17 @@
       ctx.lineTo(0, -h2);
       ctx.lineTo(w2, h2);
       ctx.closePath();
+      ctx.fillStyle = shade(v.accent, -0.05);
       ctx.fill();
-      ctx.stroke();
+      stickerOutline(ctx, r * 0.55);
       ctx.restore();
     };
     const circleEar = (cx, cy, rr) => {
       ctx.beginPath();
       ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+      ctx.fillStyle = shade(v.accent, -0.05);
       ctx.fill();
-      ctx.stroke();
+      stickerOutline(ctx, r * 0.55);
     };
     switch (v.ear) {
       case "triangle":
@@ -136,18 +172,22 @@
   }
 
   function drawExtras(ctx, v, r, skinId) {
-    ctx.fillStyle = v.accent;
     if (v.belly) {
       ctx.beginPath();
       ctx.ellipse(0, r * 0.32, r * 0.52, r * 0.48, 0, 0, Math.PI * 2);
+      ctx.fillStyle = shade(v.accent, -0.04);
       ctx.fill();
+      stickerOutline(ctx, r * 0.45);
     }
     if (v.snout) {
       ctx.beginPath();
       ctx.ellipse(0, r * 0.24, r * 0.36, r * 0.28, 0, 0, Math.PI * 2);
+      ctx.fillStyle = shade(v.accent, -0.04);
       ctx.fill();
+      stickerOutline(ctx, r * 0.45);
     }
     if (v.eyePatch) {
+      ctx.fillStyle = v.accent;
       ctx.beginPath();
       ctx.ellipse(-r * 0.36, -r * 0.06, r * 0.26, r * 0.32, -0.2, 0, Math.PI * 2);
       ctx.fill();
@@ -156,31 +196,34 @@
       ctx.fill();
     }
     if (v.beak) {
-      ctx.fillStyle = "#ffb84d";
       ctx.beginPath();
       ctx.moveTo(-r * 0.16, r * 0.08);
       ctx.lineTo(r * 0.16, r * 0.08);
       ctx.lineTo(0, r * 0.34);
       ctx.closePath();
+      ctx.fillStyle = "#ffb84d";
       ctx.fill();
+      stickerOutline(ctx, r * 0.35);
     }
     if (v.horn) {
-      ctx.fillStyle = skinId === "unicorn" ? "#ffd166" : v.accent;
       ctx.beginPath();
       ctx.moveTo(-r * 0.14, -r * 0.82);
       ctx.lineTo(r * 0.14, -r * 0.82);
       ctx.lineTo(0, -r * 1.32);
       ctx.closePath();
+      ctx.fillStyle = skinId === "unicorn" ? "#ffd166" : v.accent;
       ctx.fill();
+      stickerOutline(ctx, r * 0.35);
     }
     if (v.wings) {
-      ctx.fillStyle = v.accent;
       [-1, 1].forEach((side) => {
         ctx.beginPath();
         ctx.moveTo(side * r * 0.85, r * 0.05);
         ctx.quadraticCurveTo(side * r * 1.35, -r * 0.15, side * r * 1.1, r * 0.35);
         ctx.closePath();
+        ctx.fillStyle = v.accent;
         ctx.fill();
+        stickerOutline(ctx, r * 0.4);
       });
     }
     if (v.mane) {
@@ -207,19 +250,27 @@
   }
 
   function drawEyes(ctx, v, r, skinId) {
-    const eyeR = r * (skinId === "frog" ? 0.22 : 0.19);
-    const spacing = r * (skinId === "alien" ? 0.3 : 0.36);
-    const eyeY = skinId === "frog" ? -r * 0.55 : -r * 0.04;
+    const eyeR = r * (skinId === "frog" ? 0.24 : 0.21);
+    const spacing = r * (skinId === "alien" ? 0.3 : 0.37);
+    const eyeY = skinId === "frog" ? -r * 0.55 : -r * 0.02;
+    if (!v.alienEyes) {
+      ctx.fillStyle = "rgba(255,110,130,.32)";
+      [-1, 1].forEach((side) => {
+        ctx.beginPath();
+        ctx.ellipse(side * r * 0.6, r * 0.24, r * 0.15, r * 0.09, 0, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
     [-1, 1].forEach((side) => {
       const ex = side * spacing;
       if (v.alienEyes) {
         ctx.fillStyle = "#0c1a0a";
         ctx.beginPath();
-        ctx.ellipse(ex, eyeY, eyeR * 0.75, eyeR * 1.2, side * 0.25, 0, Math.PI * 2);
+        ctx.ellipse(ex, eyeY, eyeR * 0.8, eyeR * 1.25, side * 0.25, 0, Math.PI * 2);
         ctx.fill();
-        ctx.fillStyle = "rgba(255,255,255,.55)";
+        ctx.fillStyle = "rgba(255,255,255,.6)";
         ctx.beginPath();
-        ctx.arc(ex - side * eyeR * 0.15, eyeY - eyeR * 0.35, eyeR * 0.22, 0, Math.PI * 2);
+        ctx.arc(ex - side * eyeR * 0.15, eyeY - eyeR * 0.4, eyeR * 0.24, 0, Math.PI * 2);
         ctx.fill();
         return;
       }
@@ -228,21 +279,26 @@
         ctx.beginPath();
         ctx.arc(ex, eyeY, eyeR * 1.35, 0, Math.PI * 2);
         ctx.fill();
-        ctx.strokeStyle = "rgba(20,10,35,.4)";
-        ctx.lineWidth = Math.max(1.5, r * 0.05);
-        ctx.stroke();
+        stickerOutline(ctx, r * 0.3);
       }
       ctx.fillStyle = "#fff";
       ctx.beginPath();
       ctx.arc(ex, eyeY, eyeR, 0, Math.PI * 2);
       ctx.fill();
+      ctx.lineWidth = Math.max(1, r * 0.02);
+      ctx.strokeStyle = "rgba(20,10,35,.25)";
+      ctx.stroke();
       ctx.fillStyle = "#1c1130";
       ctx.beginPath();
-      ctx.arc(ex + side * eyeR * 0.15, eyeY + eyeR * 0.15, eyeR * 0.5, 0, Math.PI * 2);
+      ctx.arc(ex + side * eyeR * 0.18, eyeY + eyeR * 0.2, eyeR * 0.55, 0, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = "rgba(255,255,255,.85)";
+      ctx.fillStyle = "#fff";
       ctx.beginPath();
-      ctx.arc(ex + side * eyeR * 0.02, eyeY + eyeR * 0.02, eyeR * 0.16, 0, Math.PI * 2);
+      ctx.arc(ex - side * eyeR * 0.12, eyeY - eyeR * 0.14, eyeR * 0.2, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,.7)";
+      ctx.beginPath();
+      ctx.arc(ex + side * eyeR * 0.36, eyeY + eyeR * 0.36, eyeR * 0.1, 0, Math.PI * 2);
       ctx.fill();
     });
   }
@@ -252,7 +308,7 @@
     ctx.lineWidth = Math.max(2, r * 0.07);
     ctx.lineCap = "round";
     const w = skinId === "frog" ? r * 0.48 : r * 0.26;
-    const y = r * (skinId === "frog" ? 0.14 : 0.3);
+    const y = r * (skinId === "frog" ? 0.14 : 0.32);
     ctx.beginPath();
     ctx.moveTo(-w, y);
     ctx.quadraticCurveTo(0, y + r * 0.22, w, y);
@@ -262,15 +318,25 @@
   function drawCharacter(ctx, skinId, size) {
     const v = SKIN_VISUALS[skinId] || SKIN_VISUALS.cat;
     const r = size * 0.42;
+    drawShadow(ctx, r);
     drawEars(ctx, v, r);
-    ctx.beginPath();
-    if (v.tallHead) ctx.ellipse(0, 0, r * 0.82, r * 1.05, 0, 0, Math.PI * 2);
-    else ctx.arc(0, 0, r, 0, Math.PI * 2);
-    ctx.fillStyle = v.body;
+    const headPath = () => {
+      ctx.beginPath();
+      if (v.tallHead) ctx.ellipse(0, 0, r * 0.82, r * 1.05, 0, 0, Math.PI * 2);
+      else ctx.arc(0, 0, r, 0, Math.PI * 2);
+    };
+    headPath();
+    ctx.fillStyle = bodyGradient(ctx, r, v.body);
     ctx.fill();
-    ctx.lineWidth = Math.max(2, r * 0.1);
-    ctx.strokeStyle = "rgba(20,10,35,.4)";
-    ctx.stroke();
+    stickerOutline(ctx, r);
+    ctx.save();
+    headPath();
+    ctx.clip();
+    ctx.fillStyle = "rgba(255,255,255,.3)";
+    ctx.beginPath();
+    ctx.ellipse(-r * 0.32, -r * 0.5, r * 0.42, r * 0.24, -0.4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
     drawExtras(ctx, v, r, skinId);
     drawEyes(ctx, v, r, skinId);
     drawMouth(ctx, r, skinId);
