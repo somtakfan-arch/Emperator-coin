@@ -19,153 +19,278 @@
     margin:0; padding:0; width:100%; height:100%; overflow:hidden; position:fixed;
     background:var(--bg-0); color:var(--ink);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
-    touch-action:none; overscroll-behavior:none; user-select:none;
+    touch-action:none; overscroll-behavior:none; user-select:none; -webkit-user-select:none;
   }
   #app{position:fixed; inset:0; width:100%; height:100%;}
   canvas#game{position:absolute; inset:0; display:block; background:#000;}
 
+  #vignette{
+    position:fixed; inset:0; pointer-events:none; z-index:12;
+    background:radial-gradient(ellipse at center, transparent 52%, rgba(0,0,0,0.45) 100%);
+  }
+
+  /* ---------- экраны меню ---------- */
   .screen{
     position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:22px; padding:24px; text-align:center;
-    background:radial-gradient(1200px 800px at 50% -10%, #23273a 0%, var(--bg-0) 60%);
-    z-index:20;
+    gap:20px; padding:24px; text-align:center; overflow:hidden;
+    background:
+      radial-gradient(1400px 900px at 50% -15%, #232a44 0%, transparent 55%),
+      radial-gradient(900px 700px at 90% 110%, #1b2c22 0%, transparent 55%),
+      var(--bg-0);
+    z-index:20; animation:screenIn .35s ease;
   }
   .screen.hidden{display:none;}
+  @keyframes screenIn{from{opacity:0; transform:scale(1.03);} to{opacity:1; transform:scale(1);}}
+  .screen > *{position:relative; z-index:1;}
+
+  .blob{
+    position:absolute; z-index:0; border-radius:50%; filter:blur(70px); opacity:.32; pointer-events:none;
+    animation:drift 16s ease-in-out infinite alternate;
+  }
+  .blob.b1{width:44vmin;height:44vmin; left:-8vmin; top:-6vmin; background:var(--p0); animation-duration:19s;}
+  .blob.b2{width:38vmin;height:38vmin; right:-6vmin; top:12vmin; background:var(--p1); animation-duration:23s; animation-delay:-6s;}
+  .blob.b3{width:42vmin;height:42vmin; left:6vmin; bottom:-10vmin; background:var(--p2); animation-duration:21s; animation-delay:-11s;}
+  .blob.b4{width:34vmin;height:34vmin; right:4vmin; bottom:-4vmin; background:var(--p3); animation-duration:17s; animation-delay:-3s;}
+  @keyframes drift{
+    from{transform:translate(0,0) scale(1);}
+    to{transform:translate(6vmin,-5vmin) scale(1.18);}
+  }
 
   h1.title{
-    font-size:clamp(28px,7vw,54px); margin:0; letter-spacing:1px; font-weight:900;
-    background:linear-gradient(90deg,var(--p0),var(--p1),var(--p2),var(--p3));
+    font-size:clamp(40px,10vw,86px); margin:0; letter-spacing:2px; font-weight:900; line-height:.95;
+    background:linear-gradient(90deg,var(--p0),var(--p3),var(--p2),var(--p1),var(--p0));
+    background-size:300% 100%;
     -webkit-background-clip:text; background-clip:text; color:transparent;
-    text-shadow:0 2px 24px rgba(255,255,255,0.08);
+    animation:gradShift 7s linear infinite;
+    filter:drop-shadow(0 6px 24px rgba(0,0,0,0.6));
   }
-  h1.title span{display:block; font-size:clamp(14px,3vw,20px); color:var(--ink-dim); -webkit-text-fill-color:var(--ink-dim); letter-spacing:6px; margin-top:6px;}
-  h2.subtitle{margin:0; font-weight:700; color:var(--ink-dim); font-size:clamp(15px,3vw,20px);}
+  @keyframes gradShift{from{background-position:0% 0;} to{background-position:300% 0;}}
+  h1.title span{
+    display:block; font-size:clamp(13px,3vw,20px); color:var(--ink-dim); -webkit-text-fill-color:var(--ink-dim);
+    letter-spacing:10px; margin-top:10px; font-weight:800;
+  }
+  h1.title.small{font-size:clamp(24px,6vw,44px);}
+  h2.subtitle{margin:0; font-weight:700; color:var(--ink-dim); font-size:clamp(14px,3vw,19px); letter-spacing:.5px;}
+  .hint{color:var(--ink-dim); font-size:clamp(12px,2.6vw,14px); opacity:.8; max-width:420px; line-height:1.5;}
+  .hint b{color:var(--ink);}
 
   .menu-grid{display:flex; gap:18px; flex-wrap:wrap; justify-content:center;}
   .menu-btn{
-    width:150px; height:150px; border-radius:24px; border:2px solid rgba(255,255,255,0.08);
-    background:linear-gradient(160deg,var(--panel),var(--bg-1));
-    color:var(--ink); font-size:20px; font-weight:800; cursor:pointer;
-    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px;
-    box-shadow:0 8px 24px rgba(0,0,0,0.4); transition:transform .12s ease, box-shadow .12s ease;
+    width:158px; height:158px; border-radius:26px; border:2px solid rgba(255,255,255,0.09);
+    background:linear-gradient(160deg,rgba(38,42,58,0.9),rgba(20,22,32,0.9));
+    color:var(--ink); font-size:17px; font-weight:900; cursor:pointer; letter-spacing:1px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px;
+    box-shadow:0 12px 32px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.08);
+    transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
   }
-  .menu-btn .num{font-size:44px; font-weight:900;}
-  .menu-btn:active{transform:scale(0.94); box-shadow:0 3px 10px rgba(0,0,0,0.5);}
+  .menu-btn:hover{border-color:rgba(255,255,255,0.25); transform:translateY(-3px);}
+  .menu-btn:active{transform:scale(0.93); box-shadow:0 4px 12px rgba(0,0,0,0.5);}
+  .menu-btn .dots{display:flex; gap:8px;}
+  .menu-btn .dots i{
+    width:24px; height:24px; border-radius:50%; background:var(--c);
+    box-shadow:0 0 14px var(--c), inset 0 -4px 6px rgba(0,0,0,0.35), inset 0 3px 4px rgba(255,255,255,0.4);
+    animation:bounceDot 1.6s ease-in-out infinite;
+  }
+  .menu-btn .dots i:nth-child(2){animation-delay:.15s;}
+  .menu-btn .dots i:nth-child(3){animation-delay:.3s;}
+  .menu-btn .dots i:nth-child(4){animation-delay:.45s;}
+  @keyframes bounceDot{0%,100%{transform:translateY(0);} 50%{transform:translateY(-6px);}}
 
-  .game-grid{display:flex; gap:18px; flex-wrap:wrap; justify-content:center; max-width:820px;}
+  .game-grid{display:flex; gap:20px; flex-wrap:wrap; justify-content:center; max-width:860px;}
   .game-card{
-    width:200px; height:200px; border-radius:22px; border:2px solid rgba(255,255,255,0.08);
-    background:linear-gradient(160deg,var(--panel),var(--bg-1)); color:var(--ink);
-    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
-    cursor:pointer; box-shadow:0 8px 24px rgba(0,0,0,0.4); transition:transform .12s ease;
-    font-size:17px; font-weight:800;
+    --accent:#fff;
+    width:216px; border-radius:24px; border:2px solid rgba(255,255,255,0.09);
+    background:linear-gradient(165deg,rgba(38,42,58,0.92),rgba(18,20,30,0.92));
+    color:var(--ink); padding:16px 14px 18px;
+    display:flex; flex-direction:column; align-items:center; gap:10px;
+    cursor:pointer; box-shadow:0 14px 36px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.07);
+    transition:transform .12s ease, border-color .12s ease, box-shadow .12s ease;
+    font-size:19px; font-weight:900; letter-spacing:1.5px;
   }
+  .game-card:hover{transform:translateY(-4px); border-color:var(--accent); box-shadow:0 18px 44px rgba(0,0,0,0.55), 0 0 24px color-mix(in srgb, var(--accent) 35%, transparent);}
   .game-card:active{transform:scale(0.94);}
-  .game-card canvas.icon{width:110px; height:110px;}
+  .game-card canvas.icon{
+    width:150px; height:150px; border-radius:16px;
+    box-shadow:0 6px 18px rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255,255,255,0.06);
+  }
+  .game-card .desc{font-size:12px; font-weight:600; color:var(--ink-dim); letter-spacing:.3px; line-height:1.35;}
+  .game-card .tag{
+    font-size:11px; font-weight:800; letter-spacing:1px; color:#0b0c10;
+    background:var(--accent); border-radius:999px; padding:3px 10px;
+  }
 
   .back-btn{
-    position:absolute; top:16px; left:16px; z-index:5; background:rgba(255,255,255,0.06);
-    border:1px solid rgba(255,255,255,0.12); color:var(--ink); padding:10px 16px; border-radius:12px;
-    font-weight:700; font-size:14px; cursor:pointer;
+    position:absolute; top:calc(14px + env(safe-area-inset-top)); left:16px; z-index:5;
+    background:rgba(255,255,255,0.06); backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,0.14); color:var(--ink); padding:10px 18px; border-radius:14px;
+    font-weight:800; font-size:14px; cursor:pointer; letter-spacing:.5px;
   }
-  .back-btn:active{background:rgba(255,255,255,0.16);}
+  .back-btn:active{background:rgba(255,255,255,0.16); transform:scale(.95);}
 
+  /* ---------- игровой HUD ---------- */
   #hud{
     position:absolute; top:0; left:0; right:0; height:60px; z-index:15;
     display:flex; align-items:center; justify-content:center; gap:10px;
-    padding:0 90px; pointer-events:none;
+    padding:0 60px; pointer-events:none;
   }
   #hud.hidden{display:none;}
   #scoreboard{display:flex; gap:8px; pointer-events:none; flex-wrap:wrap; justify-content:center;}
   .score-chip{
-    display:flex; align-items:center; gap:6px; background:rgba(20,22,30,0.72); backdrop-filter:blur(6px);
-    border-radius:999px; padding:6px 12px; font-weight:800; font-size:14px; border:1px solid rgba(255,255,255,0.08);
+    display:flex; align-items:center; gap:7px; background:rgba(16,18,26,0.78); backdrop-filter:blur(8px);
+    border-radius:999px; padding:6px 13px; font-weight:900; font-size:15px;
+    border:1px solid rgba(255,255,255,0.09); box-shadow:0 4px 14px rgba(0,0,0,0.35);
+    transition:box-shadow .2s ease, border-color .2s ease;
   }
-  .score-chip .dot{width:10px; height:10px; border-radius:50%;}
+  .score-chip.leader{border-color:var(--pc); box-shadow:0 0 16px color-mix(in srgb, var(--pc) 45%, transparent);}
+  .score-chip .dot{
+    width:11px; height:11px; border-radius:50%; background:var(--pc);
+    box-shadow:0 0 8px var(--pc), inset 0 -2px 3px rgba(0,0,0,0.35);
+  }
+  .score-chip .crown{font-size:12px; margin-left:-2px;}
   #pauseBtn{
-    position:absolute; top:10px; right:10px; width:40px; height:40px; border-radius:12px; z-index:16;
-    background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.14); color:var(--ink);
-    font-size:16px; font-weight:900; cursor:pointer; pointer-events:auto;
+    position:absolute; top:10px; right:10px; width:42px; height:42px; border-radius:14px; z-index:16;
+    background:rgba(255,255,255,0.07); backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,0.15); color:var(--ink);
+    font-size:15px; font-weight:900; cursor:pointer; pointer-events:auto;
   }
+  #pauseBtn:active{transform:scale(.92); background:rgba(255,255,255,0.16);}
 
+  /* ---------- угловые кнопки игроков ---------- */
   #cornerButtons.hidden{display:none;}
   .corner{
-    position:fixed; width:min(22vw,120px); height:min(22vw,120px); border-radius:20px; z-index:14;
+    position:fixed; width:min(23vw,126px); height:min(23vw,126px); border-radius:24px; z-index:14;
     display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
-    border:3px solid rgba(255,255,255,0.25); color:#fff; font-weight:900; cursor:pointer;
-    touch-action:none; box-shadow:0 6px 20px rgba(0,0,0,0.45); transition:transform .06s ease, filter .06s ease;
-    opacity:0.88;
+    border:3px solid rgba(255,255,255,0.3); color:#fff; font-weight:900; cursor:pointer;
+    touch-action:none; transition:transform .07s ease, filter .07s ease, box-shadow .12s ease;
+    opacity:0.92; overflow:hidden;
   }
-  .corner .lbl{font-size:clamp(14px,3.4vw,20px); letter-spacing:1px;}
-  .corner .key{font-size:clamp(10px,2.4vw,13px); opacity:0.8; font-weight:700;}
-  .corner.pressed{transform:scale(0.9); filter:brightness(1.35); opacity:1;}
-  .corner.bot{opacity:0.4; filter:grayscale(0.3); pointer-events:none;}
-  .corner.p0{top:70px; left:10px; background:radial-gradient(circle at 35% 30%, var(--p0), var(--p0-dark));}
-  .corner.p1{top:70px; right:10px; background:radial-gradient(circle at 35% 30%, var(--p1), var(--p1-dark));}
-  .corner.p2{bottom:10px; left:10px; background:radial-gradient(circle at 35% 30%, var(--p2), var(--p2-dark));}
-  .corner.p3{bottom:10px; right:10px; background:radial-gradient(circle at 35% 30%, var(--p3), var(--p3-dark));}
+  .corner::before{
+    content:''; position:absolute; inset:7px; border-radius:16px;
+    border:2px solid rgba(255,255,255,0.22); pointer-events:none;
+  }
+  .corner::after{
+    content:''; position:absolute; left:-30%; top:-60%; width:160%; height:70%;
+    background:linear-gradient(rgba(255,255,255,0.28), transparent); transform:rotate(-8deg); pointer-events:none;
+  }
+  .corner .lbl{font-size:clamp(15px,3.6vw,22px); letter-spacing:1.5px; text-shadow:0 2px 6px rgba(0,0,0,0.5);}
+  .corner .key{
+    font-size:clamp(10px,2.3vw,12px); font-weight:800; letter-spacing:1px;
+    background:rgba(0,0,0,0.3); border-radius:6px; padding:1px 7px; margin-top:3px;
+  }
+  .corner.pressed{transform:scale(0.9); filter:brightness(1.3); opacity:1;}
+  .corner.bot{opacity:0.35; filter:grayscale(0.45); pointer-events:none;}
+  .corner.p0{top:calc(68px + env(safe-area-inset-top)); left:10px;  background:radial-gradient(circle at 32% 26%, #ff7d8a, var(--p0) 45%, var(--p0-dark)); box-shadow:0 8px 24px rgba(0,0,0,0.5);}
+  .corner.p1{top:calc(68px + env(safe-area-inset-top)); right:10px; background:radial-gradient(circle at 32% 26%, #7fb3ff, var(--p1) 45%, var(--p1-dark)); box-shadow:0 8px 24px rgba(0,0,0,0.5);}
+  .corner.p2{bottom:calc(10px + env(safe-area-inset-bottom)); left:10px;  background:radial-gradient(circle at 32% 26%, #7fefa5, var(--p2) 45%, var(--p2-dark)); box-shadow:0 8px 24px rgba(0,0,0,0.5);}
+  .corner.p3{bottom:calc(10px + env(safe-area-inset-bottom)); right:10px; background:radial-gradient(circle at 32% 26%, #ffe37f, var(--p3) 45%, var(--p3-dark)); box-shadow:0 8px 24px rgba(0,0,0,0.5);}
+  .corner.p0.pressed{box-shadow:0 0 38px var(--p0), 0 6px 20px rgba(0,0,0,0.45);}
+  .corner.p1.pressed{box-shadow:0 0 38px var(--p1), 0 6px 20px rgba(0,0,0,0.45);}
+  .corner.p2.pressed{box-shadow:0 0 38px var(--p2), 0 6px 20px rgba(0,0,0,0.45);}
+  .corner.p3.pressed{box-shadow:0 0 38px var(--p3), 0 6px 20px rgba(0,0,0,0.45);}
 
+  /* ---------- оверлеи ---------- */
   #countdown{
     position:absolute; inset:0; z-index:18; display:flex; align-items:center; justify-content:center;
-    font-size:min(22vw,160px); font-weight:900; color:#fff; text-shadow:0 0 40px rgba(0,0,0,0.6);
-    pointer-events:none;
+    font-size:min(24vw,180px); font-weight:900; color:#fff;
+    text-shadow:0 0 60px rgba(255,255,255,0.35), 0 6px 24px rgba(0,0,0,0.7);
+    pointer-events:none; letter-spacing:4px;
   }
   #countdown.hidden{display:none;}
+  #countdown.pop{animation:cdPop .55s cubic-bezier(.2,1.6,.4,1);}
+  @keyframes cdPop{from{transform:scale(1.9); opacity:0;} to{transform:scale(1); opacity:1;}}
 
   #eventText{
-    position:absolute; top:74px; left:0; right:0; z-index:17; text-align:center; pointer-events:none;
-    font-size:clamp(20px,5vw,36px); font-weight:900; color:#fff; text-shadow:0 2px 12px rgba(0,0,0,0.7);
+    position:absolute; top:76px; left:0; right:0; z-index:17; text-align:center; pointer-events:none;
+    font-size:clamp(22px,5.5vw,40px); font-weight:900; color:#fff;
+    text-shadow:0 3px 16px rgba(0,0,0,0.8), 0 0 30px rgba(255,255,255,0.2); letter-spacing:1px;
   }
   #eventText.hidden{display:none;}
+  #eventText.pop{animation:evPop .45s cubic-bezier(.2,1.6,.4,1);}
+  @keyframes evPop{from{transform:translateY(-18px) scale(1.35); opacity:0;} to{transform:translateY(0) scale(1); opacity:1;}}
 
   .overlay{
     position:absolute; inset:0; z-index:30; display:flex; align-items:center; justify-content:center;
-    background:rgba(5,6,10,0.72); backdrop-filter:blur(4px);
+    background:rgba(5,6,10,0.74); backdrop-filter:blur(6px); animation:screenIn .25s ease;
   }
   .overlay.hidden{display:none;}
   .panel{
-    background:linear-gradient(160deg,var(--panel),var(--bg-1)); border:1px solid rgba(255,255,255,0.1);
-    border-radius:22px; padding:30px 34px; display:flex; flex-direction:column; gap:14px; align-items:center;
-    min-width:260px; box-shadow:0 20px 60px rgba(0,0,0,0.55);
+    background:linear-gradient(165deg,#252a3a,#131622); border:1px solid rgba(255,255,255,0.11);
+    border-radius:26px; padding:32px 36px; display:flex; flex-direction:column; gap:13px; align-items:center;
+    min-width:280px; max-width:88vw; box-shadow:0 24px 70px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.08);
   }
-  .panel h2{margin:0 0 6px; font-size:clamp(18px,4vw,26px);}
+  .panel.win{
+    border:2px solid transparent;
+    background:
+      linear-gradient(165deg,#252a3a,#131622) padding-box,
+      linear-gradient(90deg,var(--p0),var(--p3),var(--p2),var(--p1)) border-box;
+  }
+  .panel h2{margin:0 0 8px; font-size:clamp(19px,4.5vw,28px); letter-spacing:.5px; text-align:center; line-height:1.35;}
   .panel button{
-    width:100%; padding:14px 20px; border-radius:14px; border:none; font-size:16px; font-weight:800;
-    background:rgba(255,255,255,0.08); color:var(--ink); cursor:pointer; border:1px solid rgba(255,255,255,0.12);
+    width:100%; padding:15px 22px; border-radius:16px; font-size:16px; font-weight:800; letter-spacing:.5px;
+    background:rgba(255,255,255,0.07); color:var(--ink); cursor:pointer; border:1px solid rgba(255,255,255,0.13);
+    transition:transform .1s ease, background .1s ease;
   }
-  .panel button:active{background:rgba(255,255,255,0.18);}
-  .panel button.primary{background:linear-gradient(90deg,#3d8bff,#3ddc73); color:#0b0c10;}
+  .panel button:active{background:rgba(255,255,255,0.18); transform:scale(.96);}
+  .panel button.primary{
+    background:linear-gradient(90deg,var(--p1),var(--p2)); color:#0b0c10; border:none;
+    box-shadow:0 6px 20px rgba(61,220,115,0.3);
+  }
 </style>
 </head>
 <body>
 <div id="app">
   <canvas id="game"></canvas>
+  <div id="vignette"></div>
 
   <div id="menuPlayers" class="screen">
+    <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="blob b4"></div>
     <h1 class="title">2 3 4<span>PLAYER GAMES</span></h1>
-    <h2 class="subtitle">Сколько игроков за экраном?</h2>
+    <h2 class="subtitle">Сколько игроков за одним экраном?</h2>
     <div class="menu-grid">
-      <button class="menu-btn" data-players="2"><span class="num">2</span>ИГРОКА</button>
-      <button class="menu-btn" data-players="3"><span class="num">3</span>ИГРОКА</button>
-      <button class="menu-btn" data-players="4"><span class="num">4</span>ИГРОКА</button>
+      <button class="menu-btn" data-players="2">
+        <span class="dots"><i style="--c:var(--p0)"></i><i style="--c:var(--p1)"></i></span>2 ИГРОКА
+      </button>
+      <button class="menu-btn" data-players="3">
+        <span class="dots"><i style="--c:var(--p0)"></i><i style="--c:var(--p1)"></i><i style="--c:var(--p2)"></i></span>3 ИГРОКА
+      </button>
+      <button class="menu-btn" data-players="4">
+        <span class="dots"><i style="--c:var(--p0)"></i><i style="--c:var(--p1)"></i><i style="--c:var(--p2)"></i><i style="--c:var(--p3)"></i></span>4 ИГРОКА
+      </button>
     </div>
-    <h2 class="subtitle">Остальные места займут боты</h2>
+    <p class="hint">Свободные места займут <b>боты</b>. На телефоне каждый игрок держит палец в своём углу, на ПК — клавиши <b>Q / P / Z / M</b>.</p>
   </div>
 
   <div id="menuGames" class="screen hidden">
+    <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="blob b4"></div>
     <button class="back-btn" id="backToPlayers">← Назад</button>
-    <h1 class="title" style="font-size:clamp(22px,5vw,36px)">Выбери игру</h1>
+    <h1 class="title small">Выбери арену</h1>
     <div class="game-grid">
-      <button class="game-card" data-game="tanks"><canvas class="icon" data-icon="tanks" width="140" height="140"></canvas><span>ТАНЧИКИ</span></button>
-      <button class="game-card" data-game="soccer"><canvas class="icon" data-icon="soccer" width="140" height="140"></canvas><span>ФУТБОЛ</span></button>
-      <button class="game-card" data-game="sumo"><canvas class="icon" data-icon="sumo" width="140" height="140"></canvas><span>СУМО</span></button>
+      <button class="game-card" data-game="tanks" style="--accent:#ff8a5c">
+        <canvas class="icon" data-icon="tanks" width="300" height="300"></canvas>
+        <span>ТАНЧИКИ</span>
+        <span class="desc">Держи кнопку — езжай и стреляй.<br>Снаряды рикошетят 3 раза!</span>
+        <span class="tag">ДУЭЛЬ</span>
+      </button>
+      <button class="game-card" data-game="soccer" style="--accent:#3ddc73">
+        <canvas class="icon" data-icon="soccer" width="300" height="300"></canvas>
+        <span>ФУТБОЛ</span>
+        <span class="desc">Жми — поворот и рывок.<br>Забей в чужие ворота!</span>
+        <span class="tag">АРКАДА</span>
+      </button>
+      <button class="game-card" data-game="sumo" style="--accent:#ffd23d">
+        <canvas class="icon" data-icon="sumo" width="300" height="300"></canvas>
+        <span>СУМО</span>
+        <span class="desc">Жми в нужный момент — рывок.<br>Вытолкни всех с ринга!</span>
+        <span class="tag">БИТВА</span>
+      </button>
     </div>
+    <p class="hint">Матч идёт до <b>3 очков</b> — это меняется в CONFIG.</p>
   </div>
 
   <div id="hud" class="hidden">
     <div id="scoreboard"></div>
   </div>
-  <button id="pauseBtn" class="hidden">II</button>
+  <button id="pauseBtn" class="hidden">❚❚</button>
 
   <div id="cornerButtons" class="hidden">
     <button class="corner p0" data-p="0"><span class="lbl">P1</span><span class="key">Q</span></button>
@@ -188,7 +313,7 @@
   </div>
 
   <div id="winnerOverlay" class="overlay hidden">
-    <div class="panel">
+    <div class="panel win">
       <h2 id="winnerText">Победа!</h2>
       <button id="playAgainBtn" class="primary">Играть снова</button>
       <button id="chooseGameBtn">Другая игра</button>
@@ -209,15 +334,19 @@
  * ========================================================================== */
 const CONFIG = {
   players: [
-    { id:0, name:'P1', color:'#ff4d5e', dark:'#8f1622', key:'q' },
-    { id:1, name:'P2', color:'#3d8bff', dark:'#0f3d8f', key:'p' },
-    { id:2, name:'P3', color:'#3ddc73', dark:'#0f6b32', key:'z' },
-    { id:3, name:'P4', color:'#ffd23d', dark:'#8a6d0a', key:'m' },
+    { id:0, name:'P1', color:'#ff4d5e', dark:'#8f1622', light:'#ff8d99', key:'q' },
+    { id:1, name:'P2', color:'#3d8bff', dark:'#0f3d8f', light:'#8ab8ff', key:'p' },
+    { id:2, name:'P3', color:'#3ddc73', dark:'#0f6b32', light:'#8beeab', key:'z' },
+    { id:3, name:'P4', color:'#ffd23d', dark:'#8a6d0a', light:'#ffe58a', key:'m' },
   ],
   match: {
     scoreToWin: 3,          // очков для победы в матче
     countdownMs: 2600,      // отсчёт перед стартом/рестартом раунда
     roundEndMs: 1500,       // пауза после гола/убийства/выбывания
+  },
+  fx: {
+    sound: true,            // звуковые эффекты (WebAudio, без файлов)
+    vibration: true,        // вибрация на мобильных при событиях
   },
   // Значения ниже заданы в "опорных" единицах для короткой стороны арены = 700px.
   // Реальные величины на экране игрока масштабируются через GAME.scale.
@@ -240,7 +369,7 @@ const CONFIG = {
     ballRadius: 13,
     ballDamping: 0.62,      // доля скорости мяча, теряемая за секунду
     kickPower: 340,         // сила, придаваемая мячу при касании игроком
-    fieldMargin: 40,
+    fieldMargin: 46,
     goalWidth: 190,         // ширина ворот (проёма в стене)
     aiTurnTolerance: 0.34,  // рад
     aiTapCooldownMs: 220,
@@ -262,12 +391,12 @@ const CONFIG = {
 /* ==========================================================================
  * 2. ЗАГРУЗКА ОРИГИНАЛЬНЫХ СПРАЙТОВ (ОТКЛЮЧЕНО)
  *    Сейчас вся графика рисуется чистой геометрией на Canvas (см. функции
- *    draw* ниже). Если у тебя есть оригинальные PNG-спрайты:
+ *    отрисовки внутри классов игр). Если у тебя есть оригинальные PNG-спрайты:
  *      1) Создай папку "sprites" рядом с этим index.html
  *      2) Положи туда файлы с именами как ниже (tank_red.png и т.д.)
  *      3) Раскомментируй блок SPRITES ниже
- *      4) В нужной функции отрисовки (drawTank/drawSoccerPlayer/drawSumoWrestler)
- *         замени геометрию (ctx.arc/ctx.fillRect/...) на:
+ *      4) В нужной функции отрисовки (блоки помечены комментариями
+ *         "ГЕОМЕТРИЧЕСКАЯ ОТРИСОВКА") замени геометрию на:
  *           ctx.save();
  *           ctx.translate(obj.x, obj.y);
  *           ctx.rotate(obj.angle);
@@ -299,7 +428,6 @@ function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
 function dist(x1,y1,x2,y2){ return Math.hypot(x2-x1, y2-y1); }
 function normAngle(a){ a = a % TAU; if(a>Math.PI) a-=TAU; if(a<-Math.PI) a+=TAU; return a; }
 function angleDiff(a,b){ return normAngle(a-b); }
-function lerp(a,b,t){ return a+(b-a)*t; }
 function rr(ctx,x,y,w,h,r){
   ctx.beginPath();
   ctx.moveTo(x+r,y);
@@ -309,25 +437,165 @@ function rr(ctx,x,y,w,h,r){
   ctx.arcTo(x,y,x+w,y,r);
   ctx.closePath();
 }
+function hexA(hex, a){
+  const n = parseInt(hex.slice(1),16);
+  return 'rgba('+((n>>16)&255)+','+((n>>8)&255)+','+(n&255)+','+a+')';
+}
+function buzz(ms){
+  if(CONFIG.fx.vibration && navigator.vibrate){ try{ navigator.vibrate(ms); }catch(e){} }
+}
 
 /* ==========================================================================
- * 4. ГЛОБАЛЬНОЕ СОСТОЯНИЕ ЭКРАНА / АРЕНЫ
+ * 4. ЗВУК — крошечный синтезатор на WebAudio, никаких файлов
+ * ========================================================================== */
+const Sound = (function(){
+  let ac = null, lastBounce = 0, lastKick = 0;
+  function actx(){
+    if(!CONFIG.fx.sound) return null;
+    if(!ac){ try{ ac = new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } }
+    if(ac && ac.state==='suspended'){ ac.resume(); }
+    return ac;
+  }
+  function tone(freq, dur, type, vol, slideTo){
+    const a = actx(); if(!a) return;
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = type||'square';
+    o.frequency.setValueAtTime(freq, a.currentTime);
+    if(slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(30,slideTo), a.currentTime+dur);
+    g.gain.setValueAtTime(vol||0.12, a.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.001, a.currentTime+dur);
+    o.connect(g); g.connect(a.destination);
+    o.start(); o.stop(a.currentTime+dur);
+  }
+  function noise(dur, vol){
+    const a = actx(); if(!a) return;
+    const n = Math.floor(a.sampleRate*dur);
+    const buf = a.createBuffer(1,n,a.sampleRate);
+    const d = buf.getChannelData(0);
+    for(let i=0;i<n;i++) d[i] = (Math.random()*2-1)*(1-i/n);
+    const s = a.createBufferSource(); s.buffer = buf;
+    const g = a.createGain(); g.gain.value = vol||0.2;
+    s.connect(g); g.connect(a.destination); s.start();
+  }
+  return {
+    unlock(){ actx(); },
+    shoot(){ tone(760,0.09,'square',0.07,240); },
+    explosion(){ noise(0.45,0.32); tone(95,0.35,'sawtooth',0.2,40); },
+    bounce(){ const t=performance.now(); if(t-lastBounce<80) return; lastBounce=t; tone(320,0.05,'triangle',0.05,240); },
+    kick(){ const t=performance.now(); if(t-lastKick<90) return; lastKick=t; tone(230,0.07,'triangle',0.11,140); },
+    dash(){ noise(0.12,0.1); tone(500,0.1,'sine',0.06,900); },
+    impact(){ tone(140,0.13,'sawtooth',0.14,70); },
+    goal(){ [523,659,784].forEach((f,i)=>setTimeout(()=>tone(f,0.18,'square',0.11),i*95)); },
+    out(){ tone(240,0.4,'sawtooth',0.14,70); },
+    count(){ tone(440,0.09,'square',0.07); },
+    go(){ tone(700,0.22,'square',0.1,900); },
+    win(){ [523,659,784,1046].forEach((f,i)=>setTimeout(()=>tone(f,0.22,'square',0.11),i*140)); },
+  };
+})();
+document.addEventListener('pointerdown', ()=>Sound.unlock());
+
+/* ==========================================================================
+ * 5. FX — эффекты: тряска экрана, всплывающие очки, кольца, конфетти, трейлы
+ * ========================================================================== */
+const FX = {
+  shake: 0,
+  popups: [], rings: [], confetti: [], ghosts: [],
+  reset(){ this.shake=0; this.popups=[]; this.rings=[]; this.confetti=[]; this.ghosts=[]; },
+  addShake(m){ this.shake = Math.max(this.shake, m); },
+  popup(x,y,text,color){ this.popups.push({x,y,text,color,life:1.1,max:1.1}); },
+  ring(x,y,color,maxR){ this.rings.push({x,y,color,r:6,maxR:maxR||70,life:0.5,max:0.5}); },
+  ghost(x,y,r,color){ this.ghosts.push({x,y,r,color,life:0.26,max:0.26}); },
+  burstConfetti(x,y,n){
+    const colors = CONFIG.players.map(p=>p.color).concat(['#ffffff']);
+    for(let i=0;i<(n||50);i++){
+      const a = Math.random()*TAU, sp = 120+Math.random()*280;
+      this.confetti.push({
+        x,y, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp-160,
+        rot:Math.random()*TAU, vr:(Math.random()-0.5)*12,
+        w:4+Math.random()*5, h:7+Math.random()*7,
+        color: colors[(Math.random()*colors.length)|0],
+        life:1.4+Math.random()*0.8,
+      });
+    }
+  },
+  update(dt){
+    this.shake = Math.max(0, this.shake - dt*26);
+    for(const p of this.popups){ p.y -= 46*dt; p.life -= dt; }
+    this.popups = this.popups.filter(p=>p.life>0);
+    for(const r of this.rings){ r.r += (r.maxR-r.r)*dt*9; r.life -= dt; }
+    this.rings = this.rings.filter(r=>r.life>0);
+    for(const c of this.confetti){
+      c.x += c.vx*dt; c.y += c.vy*dt; c.vy += 520*dt; c.vx *= (1-0.9*dt);
+      c.rot += c.vr*dt; c.life -= dt;
+    }
+    this.confetti = this.confetti.filter(c=>c.life>0);
+    for(const g of this.ghosts){ g.life -= dt; }
+    this.ghosts = this.ghosts.filter(g=>g.life>0);
+  },
+  renderUnder(ctx){
+    for(const g of this.ghosts){
+      const a = (g.life/g.max)*0.28;
+      ctx.fillStyle = hexA(g.color, a);
+      ctx.beginPath(); ctx.arc(g.x,g.y,g.r,0,TAU); ctx.fill();
+    }
+  },
+  renderOver(ctx, S){
+    for(const r of this.rings){
+      ctx.globalAlpha = clamp(r.life/r.max,0,1);
+      ctx.strokeStyle = r.color; ctx.lineWidth = 3.5*S;
+      ctx.beginPath(); ctx.arc(r.x,r.y,r.r,0,TAU); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+    for(const c of this.confetti){
+      ctx.save();
+      ctx.translate(c.x,c.y); ctx.rotate(c.rot);
+      ctx.globalAlpha = clamp(c.life,0,1);
+      ctx.fillStyle = c.color;
+      ctx.fillRect(-c.w/2,-c.h/2,c.w,c.h);
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+    for(const p of this.popups){
+      const a = clamp(p.life/p.max,0,1);
+      ctx.globalAlpha = a;
+      ctx.font = '900 '+Math.round(26*S)+'px -apple-system,Segoe UI,Roboto,Arial,sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 5*S; ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.strokeText(p.text, p.x, p.y);
+      ctx.fillStyle = p.color;
+      ctx.fillText(p.text, p.x, p.y);
+      ctx.globalAlpha = 1;
+    }
+  },
+};
+
+/* ==========================================================================
+ * 6. ХОЛСТ И РАЗМЕРЫ
  * ========================================================================== */
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 const HUD_H = 62;
 
-const GAME = { w:0, h:0, scale:1, areaTop:HUD_H, areaW:0, areaH:0 };
+const GAME = { w:0, h:0, dpr:1, scale:1, areaTop:HUD_H, areaW:0, areaH:0 };
+
+function makeLayer(){
+  const c = document.createElement('canvas');
+  c.width = Math.max(1, Math.floor(GAME.w*GAME.dpr));
+  c.height = Math.max(1, Math.floor(GAME.h*GAME.dpr));
+  const lctx = c.getContext('2d');
+  lctx.setTransform(GAME.dpr,0,0,GAME.dpr,0,0);
+  return { c, ctx:lctx };
+}
 
 function resize(){
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  GAME.dpr = Math.min(window.devicePixelRatio || 1, 2);
   GAME.w = window.innerWidth;
   GAME.h = window.innerHeight;
-  canvas.width = Math.floor(GAME.w * dpr);
-  canvas.height = Math.floor(GAME.h * dpr);
+  canvas.width = Math.floor(GAME.w * GAME.dpr);
+  canvas.height = Math.floor(GAME.h * GAME.dpr);
   canvas.style.width = GAME.w + 'px';
   canvas.style.height = GAME.h + 'px';
-  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.setTransform(GAME.dpr,0,0,GAME.dpr,0,0);
   GAME.areaTop = HUD_H;
   GAME.areaW = GAME.w;
   GAME.areaH = Math.max(200, GAME.h - HUD_H);
@@ -338,7 +606,7 @@ window.addEventListener('resize', resize);
 window.addEventListener('orientationchange', resize);
 
 /* ==========================================================================
- * 5. ВВОД: мультитач через угловые DOM-кнопки + клавиатура
+ * 7. ВВОД: мультитач через угловые DOM-кнопки + клавиатура
  * ========================================================================== */
 const Input = {
   pointer: [false,false,false,false],
@@ -379,7 +647,7 @@ function updateCornerVisibility(){
 }
 
 /* ==========================================================================
- * 6. UI / ЭКРАНЫ
+ * 8. UI / ЭКРАНЫ
  * ========================================================================== */
 const screens = {
   menuPlayers: document.getElementById('menuPlayers'),
@@ -427,11 +695,14 @@ document.querySelectorAll('.game-card').forEach(card=>{
 
 function buildScoreboard(scores){
   scoreboardEl.innerHTML = '';
+  const max = Math.max.apply(null, scores);
   for(let i=0;i<4;i++){
     const p = CONFIG.players[i];
     const chip = document.createElement('div');
-    chip.className = 'score-chip';
-    chip.innerHTML = '<span class="dot" style="background:'+p.color+'"></span><span>'+(scores[i]||0)+'</span>';
+    chip.className = 'score-chip' + (max>0 && scores[i]===max ? ' leader' : '');
+    chip.style.setProperty('--pc', p.color);
+    const crown = (max>0 && scores[i]===max) ? '<span class="crown">👑</span>' : '';
+    chip.innerHTML = '<span class="dot"></span>'+crown+'<span>'+(scores[i]||0)+'</span>';
     chip.style.opacity = isHuman[i] ? '1' : '0.55';
     scoreboardEl.appendChild(chip);
   }
@@ -442,6 +713,7 @@ function startGame(){
   paused = false;
   pauseOverlay.classList.add('hidden');
   winnerOverlay.classList.add('hidden');
+  FX.reset();
   resize();
   if(selectedGameKey==='tanks') currentGame = new TanksGame();
   else if(selectedGameKey==='soccer') currentGame = new SoccerGame();
@@ -470,15 +742,23 @@ document.getElementById('mainMenuBtn').addEventListener('click', ()=>{ winnerOve
 function showWinner(i){
   const p = CONFIG.players[i];
   const label = isHuman[i] ? p.name : p.name+' (BOT)';
-  document.getElementById('winnerText').innerHTML = '🏆 <span style="color:'+p.color+'">'+label+'</span> побеждает в матче!';
+  document.getElementById('winnerText').innerHTML = '🏆 <span style="color:'+p.color+'">'+label+'</span><br>побеждает в матче!';
   winnerOverlay.classList.remove('hidden');
+  Sound.win();
+  buzz([60,40,60]);
 }
 
 let eventTtl = 0;
-function flashEvent(text){ eventTextEl.textContent = text; eventTextEl.classList.remove('hidden'); eventTtl = 1100; }
+function flashEvent(text){
+  eventTextEl.textContent = text;
+  eventTextEl.classList.remove('hidden','pop');
+  void eventTextEl.offsetWidth;
+  eventTextEl.classList.add('pop');
+  eventTtl = 1200;
+}
 
 /* ==========================================================================
- * 7. БАЗОВЫЙ КЛАСС МИНИ-ИГРЫ
+ * 9. БАЗОВЫЙ КЛАСС МИНИ-ИГРЫ
  * ========================================================================== */
 class BaseGame {
   constructor(){
@@ -489,10 +769,7 @@ class BaseGame {
     this.countdownMs = CONFIG.match.countdownMs;
     this.roundEndMs = 0;
     this.matchOver = false;
-  }
-  activeCount(){
-    // сколько всего участников (реальных + ботов) сейчас в этой мини-игре — всегда 4
-    return 4;
+    this._cdLabel = '';
   }
   computeFrameInput(dt){
     const pressedNow = [0,1,2,3].map(i=>{
@@ -510,7 +787,7 @@ class BaseGame {
         this.matchOver = true;
         this.state = 'matchOver';
         buildScoreboard(this.scores);
-        setTimeout(()=>showWinner(i), 350);
+        setTimeout(()=>showWinner(i), 400);
         return true;
       }
     }
@@ -518,10 +795,17 @@ class BaseGame {
   }
   tickCountdown(dt){
     this.countdownMs -= dt*1000;
-    if(this.countdownMs<=0){ this.state='playing'; countdownEl.classList.add('hidden'); return true; }
+    if(this.countdownMs<=0){ this.state='playing'; countdownEl.classList.add('hidden'); this._cdLabel=''; return true; }
     const secs = Math.ceil(this.countdownMs/1000);
-    countdownEl.textContent = secs>0 ? String(secs) : 'СТАРТ!';
-    countdownEl.classList.remove('hidden');
+    const label = secs>0 ? String(secs) : 'GO!';
+    if(label !== this._cdLabel){
+      this._cdLabel = label;
+      countdownEl.textContent = label;
+      countdownEl.classList.remove('hidden','pop');
+      void countdownEl.offsetWidth;
+      countdownEl.classList.add('pop');
+      if(label==='GO!') Sound.go(); else Sound.count();
+    }
     return false;
   }
   tickRoundEnd(dt, onDone){
@@ -532,7 +816,7 @@ class BaseGame {
 }
 
 /* ==========================================================================
- * 8. МИНИ-ИГРА 1: ТАНЧИКИ
+ * 10. МИНИ-ИГРА 1: ТАНЧИКИ
  * ========================================================================== */
 class TanksGame extends BaseGame {
   constructor(){
@@ -542,13 +826,12 @@ class TanksGame extends BaseGame {
     this.layoutObstacles();
     this.spawnTanks();
   }
-  onResize(){ this.layoutObstacles(); }
+  onResize(){ this.layoutObstacles(); this.buildBg(); }
   layoutObstacles(){
     const c = CONFIG.tanks;
     const m = c.arenaMargin * GAME.scale;
     this.arena = { x:m, y:GAME.areaTop+m, w:GAME.areaW-2*m, h:GAME.areaH-2*m };
     const a = this.arena;
-    // симметричная раскладка препятствий (доли ширины/высоты арены)
     const rel = [
       {x:0.48, y:0.42, w:0.04, h:0.30},
       {x:0.24, y:0.24, w:0.16, h:0.055},
@@ -560,9 +843,55 @@ class TanksGame extends BaseGame {
       x:a.x+o.x*a.w, y:a.y+o.y*a.h, w:o.w*a.w, h:o.h*a.h,
     }));
   }
+  buildBg(){
+    const layer = makeLayer();
+    const g = layer.ctx, a = this.arena, S = GAME.scale;
+    // фон вокруг арены
+    const outer = g.createLinearGradient(0,0,0,GAME.h);
+    outer.addColorStop(0,'#14160e'); outer.addColorStop(1,'#0a0b07');
+    g.fillStyle = outer; g.fillRect(0,0,GAME.w,GAME.h);
+    // пол арены
+    const floor = g.createRadialGradient(a.x+a.w/2,a.y+a.h/2, 40, a.x+a.w/2,a.y+a.h/2, Math.max(a.w,a.h)*0.7);
+    floor.addColorStop(0,'#333922'); floor.addColorStop(1,'#212617');
+    g.fillStyle = floor; g.fillRect(a.x,a.y,a.w,a.h);
+    // шум/грязь на полу
+    for(let k=0;k<700;k++){
+      const x = a.x+Math.random()*a.w, y = a.y+Math.random()*a.h;
+      g.fillStyle = Math.random()<0.5 ? 'rgba(255,255,255,'+(0.015+Math.random()*0.025)+')' : 'rgba(0,0,0,'+(0.05+Math.random()*0.08)+')';
+      const s = 1+Math.random()*3;
+      g.fillRect(x,y,s,s);
+    }
+    // следы гусениц — декоративные дуги
+    g.strokeStyle = 'rgba(0,0,0,0.12)'; g.lineWidth = 7*S;
+    for(let k=0;k<5;k++){
+      g.beginPath();
+      const sx = a.x+Math.random()*a.w, sy = a.y+Math.random()*a.h;
+      g.arc(sx, sy, 60*S+Math.random()*120*S, Math.random()*TAU, Math.random()*TAU);
+      g.stroke();
+    }
+    // рамка арены
+    g.strokeStyle = 'rgba(190,210,120,0.28)'; g.lineWidth = 4;
+    g.strokeRect(a.x,a.y,a.w,a.h);
+    g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = 10;
+    g.strokeRect(a.x-7,a.y-7,a.w+14,a.h+14);
+    // препятствия — ящики
+    for(const o of this.obstacles){
+      const grad = g.createLinearGradient(o.x,o.y,o.x,o.y+o.h);
+      grad.addColorStop(0,'#565c40'); grad.addColorStop(1,'#2c2f22');
+      g.fillStyle = grad;
+      rr(g,o.x,o.y,o.w,o.h,6); g.fill();
+      g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = 2.5; g.stroke();
+      g.strokeStyle = 'rgba(255,255,255,0.1)'; g.lineWidth = 1.5;
+      rr(g,o.x+3,o.y+3,o.w-6,o.h-6,4); g.stroke();
+      g.strokeStyle = 'rgba(0,0,0,0.2)'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(o.x+3,o.y+3); g.lineTo(o.x+o.w-3,o.y+o.h-3); g.stroke();
+      g.beginPath(); g.moveTo(o.x+o.w-3,o.y+3); g.lineTo(o.x+3,o.y+o.h-3); g.stroke();
+    }
+    this.bg = layer.c;
+  }
   spawnTanks(){
     const a = this.arena;
-    const inset = 0.14;
+    const inset = 0.19; // отступ спавна от углов, чтобы танки не прятались под кнопками
     const corners = [
       {x:a.x+a.w*inset, y:a.y+a.h*inset},
       {x:a.x+a.w*(1-inset), y:a.y+a.h*inset},
@@ -571,7 +900,8 @@ class TanksGame extends BaseGame {
     ];
     const cx = a.x+a.w/2, cy=a.y+a.h/2;
     this.tanks = corners.map((p,i)=>({
-      id:i, x:p.x, y:p.y, angle:Math.atan2(cy-p.y, cx-p.x), alive:true, cooldown:0,
+      id:i, x:p.x, y:p.y, angle:Math.atan2(cy-p.y, cx-p.x), alive:true,
+      cooldown:0, tread:0, flashMs:0,
     }));
     this.bullets = [];
     this.state = 'countdown';
@@ -610,7 +940,7 @@ class TanksGame extends BaseGame {
   update(dt){
     if(this.state==='matchOver') return;
     if(this.state==='countdown'){ this.tickCountdown(dt); return; }
-    if(this.state==='roundEnd'){ this.tickRoundEnd(dt, ()=>this.spawnTanks()); return; }
+    if(this.state==='roundEnd'){ this.updateParticles(dt); this.tickRoundEnd(dt, ()=>this.spawnTanks()); return; }
 
     const c = CONFIG.tanks;
     const S = GAME.scale;
@@ -618,6 +948,7 @@ class TanksGame extends BaseGame {
 
     for(const t of this.tanks){
       if(!t.alive) continue;
+      t.flashMs = Math.max(0, t.flashMs - dt*1000);
       const pressed = input.held[t.id];
       if(!pressed){
         t.angle += c.idleRotateSpeed*dt;
@@ -627,15 +958,18 @@ class TanksGame extends BaseGame {
         const r = c.tankRadius*S;
         if(!this.tankBlocked(nx, t.y, r, t.id)) t.x = nx;
         if(!this.tankBlocked(t.x, ny, r, t.id)) t.y = ny;
+        t.tread += c.tankSpeed*S*dt;
         t.cooldown -= dt*1000;
         if(t.cooldown<=0){
           t.cooldown = c.fireCooldownMs;
+          t.flashMs = 90;
           const spawnDist = c.tankRadius*S + c.bulletRadius*S + 4;
           this.bullets.push({
             x:t.x+Math.cos(t.angle)*spawnDist, y:t.y+Math.sin(t.angle)*spawnDist,
             vx:Math.cos(t.angle)*c.bulletSpeed*S, vy:Math.sin(t.angle)*c.bulletSpeed*S,
             bounces:0, owner:t.id, life:6,
           });
+          Sound.shoot();
         }
       }
     }
@@ -644,19 +978,22 @@ class TanksGame extends BaseGame {
     for(const b of this.bullets){
       b.x += b.vx*dt; b.y += b.vy*dt; b.life -= dt;
       const r = c.bulletRadius*S;
-      if(b.x-r<a.x){ b.x=a.x+r; b.vx=-b.vx; b.bounces++; }
-      else if(b.x+r>a.x+a.w){ b.x=a.x+a.w-r; b.vx=-b.vx; b.bounces++; }
-      if(b.y-r<a.y){ b.y=a.y+r; b.vy=-b.vy; b.bounces++; }
-      else if(b.y+r>a.y+a.h){ b.y=a.y+a.h-r; b.vy=-b.vy; b.bounces++; }
+      let bounced = false;
+      if(b.x-r<a.x){ b.x=a.x+r; b.vx=-b.vx; b.bounces++; bounced=true; }
+      else if(b.x+r>a.x+a.w){ b.x=a.x+a.w-r; b.vx=-b.vx; b.bounces++; bounced=true; }
+      if(b.y-r<a.y){ b.y=a.y+r; b.vy=-b.vy; b.bounces++; bounced=true; }
+      else if(b.y+r>a.y+a.h){ b.y=a.y+a.h-r; b.vy=-b.vy; b.bounces++; bounced=true; }
       for(const o of this.obstacles){
         if(this.rectContainsCircle(o,b.x,b.y,r)){
           const cx = o.x+o.w/2, cy=o.y+o.h/2;
           const dx = (b.x-cx)/o.w, dy=(b.y-cy)/o.h;
           if(Math.abs(dx)>Math.abs(dy)) b.vx=-b.vx; else b.vy=-b.vy;
           b.bounces++;
+          bounced = true;
           b.x += b.vx*dt*2; b.y += b.vy*dt*2;
         }
       }
+      if(bounced) Sound.bounce();
     }
     this.bullets = this.bullets.filter(b=>b.life>0 && b.bounces<=c.maxBounces);
 
@@ -669,8 +1006,11 @@ class TanksGame extends BaseGame {
           t.alive = false;
           this.scores[b.owner]++;
           buildScoreboard(this.scores);
-          this.spawnParticles(t.x,t.y,CONFIG.players[t.id].color);
+          this.spawnExplosion(t.x,t.y,CONFIG.players[t.id].color);
+          FX.popup(t.x, t.y - 40*S, '+1', CONFIG.players[b.owner].color);
           flashEvent(CONFIG.players[b.owner].name+' уничтожил '+CONFIG.players[t.id].name+'!');
+          Sound.explosion();
+          buzz(70);
           b.life = 0;
           roundEnded = true;
           if(!this.checkMatchWin()){ this.state='roundEnd'; this.roundEndMs = CONFIG.match.roundEndMs; }
@@ -680,86 +1020,237 @@ class TanksGame extends BaseGame {
     }
     this.updateParticles(dt);
   }
-  spawnParticles(x,y,color){
-    for(let k=0;k<18;k++){
-      const ang = Math.random()*TAU, sp = 60+Math.random()*160;
-      this.particles.push({x,y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,life:0.6+Math.random()*0.4,color});
+  spawnExplosion(x,y,color){
+    FX.addShake(11);
+    FX.ring(x,y,'#ffd98a', 90*GAME.scale);
+    for(let k=0;k<26;k++){
+      const ang = Math.random()*TAU, sp = 60+Math.random()*220;
+      this.particles.push({
+        x,y, vx:Math.cos(ang)*sp, vy:Math.sin(ang)*sp,
+        life:0.5+Math.random()*0.5,
+        color: k%3===0 ? '#ffb347' : color,
+        r: 2.5+Math.random()*3.5,
+      });
+    }
+    for(let k=0;k<10;k++){
+      const ang = Math.random()*TAU, sp = 20+Math.random()*60;
+      this.particles.push({
+        x,y, vx:Math.cos(ang)*sp, vy:Math.sin(ang)*sp-30,
+        life:0.8+Math.random()*0.6, color:'rgba(90,90,90,0.6)', r:5+Math.random()*6, smoke:true,
+      });
     }
   }
   updateParticles(dt){
-    for(const p of this.particles){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=0.9; p.vy*=0.9; p.life-=dt; }
+    for(const p of this.particles){
+      p.x+=p.vx*dt; p.y+=p.vy*dt;
+      p.vx*=(1-2.5*dt); p.vy*=(1-2.5*dt);
+      if(p.smoke) p.r += 8*dt;
+      p.life-=dt;
+    }
     this.particles = this.particles.filter(p=>p.life>0);
   }
   render(ctx){
-    const a = this.arena, S=GAME.scale, c=CONFIG.tanks;
-    ctx.fillStyle = '#1b1e14';
-    ctx.fillRect(a.x,a.y,a.w,a.h);
-    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth=4;
-    ctx.strokeRect(a.x,a.y,a.w,a.h);
-    for(let gx=a.x; gx<a.x+a.w; gx+=40*S){ ctx.strokeStyle='rgba(255,255,255,0.03)'; ctx.beginPath(); ctx.moveTo(gx,a.y); ctx.lineTo(gx,a.y+a.h); ctx.stroke(); }
-
-    for(const o of this.obstacles){
-      const grad = ctx.createLinearGradient(o.x,o.y,o.x,o.y+o.h);
-      grad.addColorStop(0,'#4a4f3d'); grad.addColorStop(1,'#2c2f22');
-      ctx.fillStyle = grad;
-      rr(ctx,o.x,o.y,o.w,o.h,6); ctx.fill();
-      ctx.strokeStyle='rgba(0,0,0,0.4)'; ctx.lineWidth=2; ctx.stroke();
-    }
+    const S=GAME.scale, c=CONFIG.tanks;
+    ctx.drawImage(this.bg, 0, 0, GAME.w, GAME.h);
 
     for(const t of this.tanks){
       if(!t.alive) continue;
       const p = CONFIG.players[t.id];
       const r = c.tankRadius*S;
+      // цветовая подсветка под танком
+      ctx.fillStyle = hexA(p.color, 0.16);
+      ctx.beginPath(); ctx.arc(t.x, t.y, r*1.6, 0, TAU); ctx.fill();
+
       ctx.save();
       ctx.translate(t.x,t.y);
       ctx.rotate(t.angle);
       // -------- НАЧАЛО ГЕОМЕТРИЧЕСКОЙ ОТРИСОВКИ ТАНКА --------
       // Замени этот блок на ctx.drawImage(SPRITES.tank<Цвет>, -r,-r, r*2,r*2)
       // если положишь спрайт в папку sprites/.
-      ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=10*S;
-      ctx.fillStyle = p.dark;
-      rr(ctx,-r,-r*0.78,r*2,r*1.56,6*S); ctx.fill();
-      ctx.fillStyle = p.color;
-      rr(ctx,-r*0.82,-r*0.62,r*1.64,r*1.24,5*S); ctx.fill();
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.fillRect(0, -r*0.18, r*1.35, r*0.36);
-      ctx.fillStyle = p.color;
-      ctx.beginPath(); ctx.arc(0,0,r*0.5,0,TAU); ctx.fill();
-      ctx.strokeStyle='rgba(0,0,0,0.5)'; ctx.lineWidth=2*S; ctx.stroke();
+      ctx.shadowColor='rgba(0,0,0,0.55)'; ctx.shadowBlur=10*S; ctx.shadowOffsetY=3*S;
+      // гусеницы
+      ctx.fillStyle = '#1d1f16';
+      rr(ctx, -r*1.05, -r*0.95, r*2.1, r*0.42, 4*S); ctx.fill();
+      rr(ctx, -r*1.05,  r*0.53, r*2.1, r*0.42, 4*S); ctx.fill();
+      ctx.shadowBlur=0; ctx.shadowOffsetY=0;
+      // сегменты гусениц (бегут при движении)
+      ctx.strokeStyle = 'rgba(255,255,255,0.14)'; ctx.lineWidth = 2*S;
+      const seg = 7*S, off = t.tread % seg;
+      for(let x=-r*1.05+off; x<r*1.05; x+=seg){
+        ctx.beginPath(); ctx.moveTo(x,-r*0.95); ctx.lineTo(x,-r*0.53); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x, r*0.53); ctx.lineTo(x, r*0.95); ctx.stroke();
+      }
+      // корпус
+      const bodyGrad = ctx.createLinearGradient(0,-r*0.7,0,r*0.7);
+      bodyGrad.addColorStop(0, p.light); bodyGrad.addColorStop(0.45, p.color); bodyGrad.addColorStop(1, p.dark);
+      ctx.fillStyle = bodyGrad;
+      rr(ctx, -r*0.88, -r*0.62, r*1.76, r*1.24, 6*S); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 2*S; ctx.stroke();
+      // ствол
+      ctx.fillStyle = '#23252b';
+      rr(ctx, r*0.2, -r*0.15, r*1.45, r*0.3, 3*S); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(r*0.2, -r*0.13, r*1.4, r*0.1);
+      ctx.fillStyle = '#3a3d46';
+      rr(ctx, r*1.45, -r*0.2, r*0.24, r*0.4, 2*S); ctx.fill();
+      // башня
+      const towGrad = ctx.createRadialGradient(-r*0.12,-r*0.12, r*0.1, 0,0, r*0.55);
+      towGrad.addColorStop(0, p.light); towGrad.addColorStop(1, p.dark);
+      ctx.fillStyle = towGrad;
+      ctx.beginPath(); ctx.arc(0,0,r*0.52,0,TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth=2*S; ctx.stroke();
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.beginPath(); ctx.arc(0,0,r*0.2,0,TAU); ctx.fill();
+      // вспышка выстрела
+      if(t.flashMs>0){
+        const fa = t.flashMs/90;
+        ctx.globalAlpha = fa;
+        const fg = ctx.createRadialGradient(r*1.75,0,1, r*1.75,0, r*0.65);
+        fg.addColorStop(0,'#fff8d0'); fg.addColorStop(0.4,'#ffcf5e'); fg.addColorStop(1,'rgba(255,140,40,0)');
+        ctx.fillStyle = fg;
+        ctx.beginPath(); ctx.arc(r*1.75, 0, r*0.65, 0, TAU); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
       // -------- КОНЕЦ ГЕОМЕТРИЧЕСКОЙ ОТРИСОВКИ ТАНКА --------
       ctx.restore();
     }
 
     for(const b of this.bullets){
+      const p = CONFIG.players[b.owner];
+      const r = c.bulletRadius*S;
+      // трейл
+      const sp = Math.hypot(b.vx,b.vy) || 1;
+      for(let k=1;k<=3;k++){
+        ctx.globalAlpha = 0.22/k;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(b.x - b.vx/sp * r*2.2*k, b.y - b.vy/sp * r*2.2*k, r*(1-k*0.18), 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
       ctx.beginPath();
-      ctx.fillStyle = CONFIG.players[b.owner].color;
-      ctx.shadowColor = CONFIG.players[b.owner].color; ctx.shadowBlur = 8*S;
-      ctx.arc(b.x,b.y,c.bulletRadius*S,0,TAU); ctx.fill();
-      ctx.shadowBlur=0;
+      ctx.fillStyle = '#fff';
+      ctx.shadowColor = p.color; ctx.shadowBlur = 12*S;
+      ctx.arc(b.x,b.y,r,0,TAU); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(b.x,b.y,r*0.55,0,TAU); ctx.fill();
     }
+
     for(const pt of this.particles){
       ctx.globalAlpha = clamp(pt.life,0,1);
       ctx.fillStyle = pt.color;
-      ctx.beginPath(); ctx.arc(pt.x,pt.y,4*S,0,TAU); ctx.fill();
+      ctx.beginPath(); ctx.arc(pt.x,pt.y,pt.r*S,0,TAU); ctx.fill();
       ctx.globalAlpha=1;
     }
   }
 }
 
 /* ==========================================================================
- * 9. МИНИ-ИГРА 2: ФУТБОЛ
+ * 11. МИНИ-ИГРА 2: ФУТБОЛ
  * ========================================================================== */
 class SoccerGame extends BaseGame {
   constructor(){
     super();
+    this.trail = [];
+    this.ghostT = 0;
     this.layoutField();
     this.resetPositions(true);
   }
-  onResize(){ this.layoutField(); this.resetPositions(false, true); }
+  onResize(){ this.layoutField(); this.buildBg(); this.resetPositions(false, true); }
   layoutField(){
     const c = CONFIG.soccer;
     const m = c.fieldMargin*GAME.scale;
     this.field = { x:m, y:GAME.areaTop+m, w:GAME.areaW-2*m, h:GAME.areaH-2*m };
+  }
+  goalGeom(){
+    const f = this.field, c = CONFIG.soccer, gw = c.goalWidth*GAME.scale;
+    return {
+      left:  { y0:f.y+f.h/2-gw/2, y1:f.y+f.h/2+gw/2, owner:0 },
+      right: { y0:f.y+f.h/2-gw/2, y1:f.y+f.h/2+gw/2, owner:1 },
+      top:   { x0:f.x+f.w/2-gw/2, x1:f.x+f.w/2+gw/2, owner:2 },
+      bottom:{ x0:f.x+f.w/2-gw/2, x1:f.x+f.w/2+gw/2, owner:3 },
+    };
+  }
+  buildBg(){
+    const layer = makeLayer();
+    const g = layer.ctx, f = this.field, S = GAME.scale;
+    const gg = this.goalGeom();
+    // трибуны/зона вокруг поля
+    const outer = g.createLinearGradient(0,0,0,GAME.h);
+    outer.addColorStop(0,'#0d2417'); outer.addColorStop(1,'#081710');
+    g.fillStyle = outer; g.fillRect(0,0,GAME.w,GAME.h);
+    // беговая дорожка вокруг поля
+    g.fillStyle = 'rgba(255,255,255,0.03)';
+    g.fillRect(f.x-14*S, f.y-14*S, f.w+28*S, f.h+28*S);
+    // газон с полосами покоса
+    const stripes = 12;
+    for(let i=0;i<stripes;i++){
+      const x0 = f.x + f.w*i/stripes;
+      g.fillStyle = i%2===0 ? '#1e7a3c' : '#1a6c35';
+      g.fillRect(x0, f.y, f.w/stripes+1, f.h);
+    }
+    // виньетка травы
+    const shade = g.createRadialGradient(f.x+f.w/2,f.y+f.h/2, Math.min(f.w,f.h)*0.2, f.x+f.w/2,f.y+f.h/2, Math.max(f.w,f.h)*0.75);
+    shade.addColorStop(0,'rgba(255,255,255,0.05)'); shade.addColorStop(1,'rgba(0,0,0,0.28)');
+    g.fillStyle = shade; g.fillRect(f.x,f.y,f.w,f.h);
+
+    const lw = 3*S;
+    g.strokeStyle = 'rgba(255,255,255,0.75)'; g.lineWidth = lw; g.lineCap='round';
+    // границы поля с разрывами под ворота
+    g.beginPath();
+    g.moveTo(f.x,f.y); g.lineTo(gg.top.x0,f.y); g.moveTo(gg.top.x1,f.y); g.lineTo(f.x+f.w,f.y);                     // верх
+    g.moveTo(f.x,f.y+f.h); g.lineTo(gg.bottom.x0,f.y+f.h); g.moveTo(gg.bottom.x1,f.y+f.h); g.lineTo(f.x+f.w,f.y+f.h); // низ
+    g.moveTo(f.x,f.y); g.lineTo(f.x,gg.left.y0); g.moveTo(f.x,gg.left.y1); g.lineTo(f.x,f.y+f.h);                     // лево
+    g.moveTo(f.x+f.w,f.y); g.lineTo(f.x+f.w,gg.right.y0); g.moveTo(f.x+f.w,gg.right.y1); g.lineTo(f.x+f.w,f.y+f.h);   // право
+    g.stroke();
+    // центральная линия и круг
+    g.beginPath(); g.moveTo(f.x+f.w/2,f.y); g.lineTo(f.x+f.w/2,f.y+f.h); g.stroke();
+    g.beginPath(); g.arc(f.x+f.w/2,f.y+f.h/2, 62*S, 0, TAU); g.stroke();
+    g.fillStyle = 'rgba(255,255,255,0.75)';
+    g.beginPath(); g.arc(f.x+f.w/2,f.y+f.h/2, 4*S, 0, TAU); g.fill();
+    // штрафные площадки у каждых ворот
+    const gwPx = CONFIG.soccer.goalWidth*GAME.scale;
+    const boxD = Math.min(f.w,f.h)*0.13, boxW = gwPx*1.5;
+    g.strokeStyle = 'rgba(255,255,255,0.55)';
+    g.strokeRect(f.x, f.y+f.h/2-boxW/2, boxD, boxW);
+    g.strokeRect(f.x+f.w-boxD, f.y+f.h/2-boxW/2, boxD, boxW);
+    g.strokeRect(f.x+f.w/2-boxW/2, f.y, boxW, boxD);
+    g.strokeRect(f.x+f.w/2-boxW/2, f.y+f.h-boxD, boxW, boxD);
+    // угловые дуги
+    g.strokeStyle = 'rgba(255,255,255,0.55)';
+    const cr = 12*S;
+    g.beginPath(); g.arc(f.x,f.y,cr,0,Math.PI/2); g.stroke();
+    g.beginPath(); g.arc(f.x+f.w,f.y,cr,Math.PI/2,Math.PI); g.stroke();
+    g.beginPath(); g.arc(f.x+f.w,f.y+f.h,cr,Math.PI,Math.PI*1.5); g.stroke();
+    g.beginPath(); g.arc(f.x,f.y+f.h,cr,Math.PI*1.5,TAU); g.stroke();
+
+    // ворота: сетка + штанги, каждая с цветом хозяина
+    const netD = 24*S;
+    const drawNet = (x,y,w,h,owner)=>{
+      const col = CONFIG.players[owner];
+      g.fillStyle = hexA(col.color, 0.13);
+      g.fillRect(x,y,w,h);
+      g.strokeStyle = 'rgba(255,255,255,0.28)'; g.lineWidth = 1;
+      const step = 7*S;
+      for(let gx=x; gx<=x+w; gx+=step){ g.beginPath(); g.moveTo(gx,y); g.lineTo(gx,y+h); g.stroke(); }
+      for(let gy=y; gy<=y+h; gy+=step){ g.beginPath(); g.moveTo(x,gy); g.lineTo(x+w,gy); g.stroke(); }
+      g.strokeStyle = col.color; g.lineWidth = 3*S;
+      g.strokeRect(x,y,w,h);
+    };
+    drawNet(f.x-netD, gg.left.y0, netD, gg.left.y1-gg.left.y0, 0);
+    drawNet(f.x+f.w, gg.right.y0, netD, gg.right.y1-gg.right.y0, 1);
+    drawNet(gg.top.x0, f.y-netD, gg.top.x1-gg.top.x0, netD, 2);
+    drawNet(gg.bottom.x0, f.y+f.h, gg.bottom.x1-gg.bottom.x0, netD, 3);
+    // штанги
+    g.fillStyle = '#fff';
+    const post = (x,y)=>{ g.beginPath(); g.arc(x,y,4.5*S,0,TAU); g.fill(); };
+    post(f.x,gg.left.y0); post(f.x,gg.left.y1);
+    post(f.x+f.w,gg.right.y0); post(f.x+f.w,gg.right.y1);
+    post(gg.top.x0,f.y); post(gg.top.x1,f.y);
+    post(gg.bottom.x0,f.y+f.h); post(gg.bottom.x1,f.y+f.h);
+
+    this.bg = layer.c;
   }
   resetPositions(fullReset, keepScore){
     const f = this.field;
@@ -771,20 +1262,12 @@ class SoccerGame extends BaseGame {
       {x:cx, y:f.y+f.h*0.86, ang:-Math.PI/2},
     ];
     this.players = starts.map((s,i)=>({ id:i, x:s.x, y:s.y, angle:s.ang, dashMs:0 }));
-    this.ball = { x:cx, y:cy, vx:0, vy:0, lastTouch:-1 };
+    this.ball = { x:cx, y:cy, vx:0, vy:0, rot:0, lastTouch:-1 };
+    this.trail = [];
     if(!keepScore){
       this.state = 'countdown';
       this.countdownMs = CONFIG.match.countdownMs;
     }
-  }
-  goalGeom(){
-    const f = this.field, c = CONFIG.soccer, gw = c.goalWidth*GAME.scale;
-    return {
-      left:  { y0:f.y+f.h/2-gw/2, y1:f.y+f.h/2+gw/2, owner:0 },
-      right: { y0:f.y+f.h/2-gw/2, y1:f.y+f.h/2+gw/2, owner:1 },
-      top:   { x0:f.x+f.w/2-gw/2, x1:f.x+f.w/2+gw/2, owner:2 },
-      bottom:{ x0:f.x+f.w/2-gw/2, x1:f.x+f.w/2+gw/2, owner:3 },
-    };
   }
   decideBot(i, dt){
     const c = CONFIG.soccer;
@@ -813,9 +1296,17 @@ class SoccerGame extends BaseGame {
       if(input.tap[pl.id]){
         pl.angle = normAngle(pl.angle + Math.PI/2);
         pl.dashMs = c.dashDurationMs;
+        if(isHuman[pl.id]) Sound.dash();
       }
       const speed = (pl.dashMs>0 ? c.dashSpeed : c.moveSpeed) * S;
-      if(pl.dashMs>0) pl.dashMs -= dt*1000;
+      if(pl.dashMs>0){
+        pl.dashMs -= dt*1000;
+        this.ghostT -= dt;
+        if(this.ghostT<=0){
+          this.ghostT = 0.03;
+          FX.ghost(pl.x, pl.y, c.playerRadius*S, CONFIG.players[pl.id].color);
+        }
+      }
       let nx = pl.x + Math.cos(pl.angle)*speed*dt;
       let ny = pl.y + Math.sin(pl.angle)*speed*dt;
       const r = c.playerRadius*S;
@@ -839,24 +1330,33 @@ class SoccerGame extends BaseGame {
     ball.x += ball.vx*dt; ball.y += ball.vy*dt;
     const dampF = Math.pow(1-c.ballDamping, dt);
     ball.vx *= dampF; ball.vy *= dampF;
+    const ballSpeed = Math.hypot(ball.vx, ball.vy);
     const br = c.ballRadius*S;
+    ball.rot += (ballSpeed/br)*dt*0.5*(ball.vx>=0?1:-1);
+    if(ballSpeed>40){
+      this.trail.push({x:ball.x, y:ball.y, life:0.3});
+      if(this.trail.length>24) this.trail.shift();
+    }
+    for(const t of this.trail) t.life -= dt;
+    this.trail = this.trail.filter(t=>t.life>0);
+
     const g = this.goalGeom();
     let scoredOwner = -1;
 
     if(ball.x-br < f.x){
       if(ball.y>g.left.y0 && ball.y<g.left.y1) scoredOwner=0;
-      else { ball.x=f.x+br; ball.vx=-ball.vx*0.85; }
+      else { ball.x=f.x+br; ball.vx=-ball.vx*0.85; Sound.bounce(); }
     } else if(ball.x+br > f.x+f.w){
       if(ball.y>g.right.y0 && ball.y<g.right.y1) scoredOwner=1;
-      else { ball.x=f.x+f.w-br; ball.vx=-ball.vx*0.85; }
+      else { ball.x=f.x+f.w-br; ball.vx=-ball.vx*0.85; Sound.bounce(); }
     }
     if(scoredOwner<0){
       if(ball.y-br < f.y){
         if(ball.x>g.top.x0 && ball.x<g.top.x1) scoredOwner=2;
-        else { ball.y=f.y+br; ball.vy=-ball.vy*0.85; }
+        else { ball.y=f.y+br; ball.vy=-ball.vy*0.85; Sound.bounce(); }
       } else if(ball.y+br > f.y+f.h){
         if(ball.x>g.bottom.x0 && ball.x<g.bottom.x1) scoredOwner=3;
-        else { ball.y=f.y+f.h-br; ball.vy=-ball.vy*0.85; }
+        else { ball.y=f.y+f.h-br; ball.vy=-ball.vy*0.85; Sound.bounce(); }
       }
     }
 
@@ -870,86 +1370,175 @@ class SoccerGame extends BaseGame {
         ball.vx = nx*speed + Math.cos(pl.angle)*c.kickPower*S*0.4;
         ball.vy = ny*speed + Math.sin(pl.angle)*c.kickPower*S*0.4;
         ball.lastTouch = pl.id;
+        Sound.kick();
       }
     }
 
     if(scoredOwner>=0){
       const scorer = ball.lastTouch;
+      FX.burstConfetti(ball.x, ball.y, 60);
+      FX.addShake(7);
+      Sound.goal();
+      buzz(50);
       if(scorer>=0 && scorer!==scoredOwner){
         this.scores[scorer]++;
         buildScoreboard(this.scores);
-        flashEvent('ГОЛ! '+CONFIG.players[scorer].name);
+        flashEvent('⚽ ГОЛ! '+CONFIG.players[scorer].name);
+        FX.popup(ball.x, ball.y-30*S, '+1', CONFIG.players[scorer].color);
       } else {
-        flashEvent('ГОЛ в свои ворота!');
+        flashEvent('⚽ ГОЛ в свои ворота!');
       }
       if(!this.checkMatchWin()){ this.state='roundEnd'; this.roundEndMs = CONFIG.match.roundEndMs; }
     }
   }
-  render(ctx){
-    const f=this.field, S=GAME.scale, c=CONFIG.soccer, g=this.goalGeom();
-    const grad = ctx.createLinearGradient(f.x,f.y,f.x,f.y+f.h);
-    grad.addColorStop(0,'#1f7a3d'); grad.addColorStop(1,'#155c2c');
-    ctx.fillStyle=grad; ctx.fillRect(f.x,f.y,f.w,f.h);
-    ctx.strokeStyle='rgba(255,255,255,0.55)'; ctx.lineWidth=3*S;
-    ctx.strokeRect(f.x,f.y,f.w,f.h);
-    ctx.beginPath(); ctx.moveTo(f.x,f.y+f.h/2); ctx.lineTo(f.x+f.w,f.y+f.h/2); ctx.stroke();
-    ctx.beginPath(); ctx.arc(f.x+f.w/2,f.y+f.h/2, 60*S, 0, TAU); ctx.stroke();
-
-    function goalMark(owner, x0,y0,x1,y1){
-      ctx.strokeStyle = CONFIG.players[owner].color; ctx.lineWidth=6*S;
-      ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+  drawBall(ctx, x, y, r, rot){
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=8*GAME.scale; ctx.shadowOffsetY=3*GAME.scale;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(0,0,r,0,TAU); ctx.fill();
+    ctx.shadowBlur=0; ctx.shadowOffsetY=0;
+    ctx.rotate(rot);
+    // пятиугольники
+    ctx.save();
+    ctx.beginPath(); ctx.arc(0,0,r,0,TAU); ctx.clip();
+    const pent = (px,py,pr,pa)=>{
+      ctx.beginPath();
+      for(let k=0;k<5;k++){
+        const a = pa + k*TAU/5 - Math.PI/2;
+        const vx = px + Math.cos(a)*pr, vy = py + Math.sin(a)*pr;
+        if(k===0) ctx.moveTo(vx,vy); else ctx.lineTo(vx,vy);
+      }
+      ctx.closePath(); ctx.fill();
+    };
+    ctx.fillStyle = '#2b2f38';
+    pent(0,0,r*0.38,0);
+    for(let k=0;k<5;k++){
+      const a = k*TAU/5;
+      pent(Math.cos(a)*r*0.85, Math.sin(a)*r*0.85, r*0.3, a);
     }
-    goalMark(0, f.x,g.left.y0, f.x,g.left.y1);
-    goalMark(1, f.x+f.w,g.right.y0, f.x+f.w,g.right.y1);
-    goalMark(2, g.top.x0,f.y, g.top.x1,f.y);
-    goalMark(3, g.bottom.x0,f.y+f.h, g.bottom.x1,f.y+f.h);
+    ctx.restore();
+    // блик и контур
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1.5*GAME.scale;
+    ctx.beginPath(); ctx.arc(0,0,r,0,TAU); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,0.7)'; ctx.lineWidth = 2*GAME.scale;
+    ctx.beginPath(); ctx.arc(-r*0.25,-r*0.25,r*0.55, Math.PI*0.9, Math.PI*1.5); ctx.stroke();
+    ctx.restore();
+  }
+  render(ctx){
+    const S=GAME.scale, c=CONFIG.soccer;
+    ctx.drawImage(this.bg, 0, 0, GAME.w, GAME.h);
+
+    // трейл мяча
+    for(const t of this.trail){
+      ctx.globalAlpha = clamp(t.life/0.3,0,1)*0.25;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(t.x,t.y,c.ballRadius*S*0.7,0,TAU); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
 
     for(const pl of this.players){
       const p = CONFIG.players[pl.id];
       const r = c.playerRadius*S;
+      // подсветка при рывке
+      if(pl.dashMs>0){
+        ctx.fillStyle = hexA(p.color,0.25);
+        ctx.beginPath(); ctx.arc(pl.x,pl.y,r*1.6,0,TAU); ctx.fill();
+      }
       ctx.save();
       ctx.translate(pl.x,pl.y);
       // -------- ГЕОМЕТРИЧЕСКАЯ ОТРИСОВКА ИГРОКА (замени на drawImage при наличии спрайта) --------
-      ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=8*S;
-      ctx.fillStyle=p.color;
+      ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=8*S; ctx.shadowOffsetY=3*S;
+      const bodyGrad = ctx.createRadialGradient(-r*0.3,-r*0.3,r*0.15, 0,0, r);
+      bodyGrad.addColorStop(0, p.light); bodyGrad.addColorStop(0.6, p.color); bodyGrad.addColorStop(1, p.dark);
+      ctx.fillStyle = bodyGrad;
       ctx.beginPath(); ctx.arc(0,0,r,0,TAU); ctx.fill();
+      ctx.shadowBlur=0; ctx.shadowOffsetY=0;
       ctx.strokeStyle=p.dark; ctx.lineWidth=3*S; ctx.stroke();
-      ctx.shadowBlur=0;
       ctx.rotate(pl.angle);
+      // полоса формы
+      ctx.fillStyle = 'rgba(255,255,255,0.22)';
+      ctx.beginPath(); ctx.arc(0,0,r,0,TAU); ctx.clip();
+      ctx.fillRect(-r,-r*0.28,r*2,r*0.56);
+      // стрелка направления
       ctx.fillStyle='#fff';
-      ctx.beginPath(); ctx.moveTo(r*0.9,0); ctx.lineTo(r*0.15,-r*0.4); ctx.lineTo(r*0.15,r*0.4); ctx.closePath(); ctx.fill();
+      ctx.beginPath(); ctx.moveTo(r*0.92,0); ctx.lineTo(r*0.2,-r*0.42); ctx.lineTo(r*0.2,r*0.42); ctx.closePath(); ctx.fill();
       // -------------------------------------------------------------------------------------
       ctx.restore();
     }
-    const ball = this.ball;
-    ctx.save();
-    ctx.translate(ball.x,ball.y);
-    ctx.shadowColor='rgba(0,0,0,0.6)'; ctx.shadowBlur=6*S;
-    const bg = ctx.createRadialGradient(-4*S,-4*S,1,0,0,c.ballRadius*S);
-    bg.addColorStop(0,'#fff'); bg.addColorStop(1,'#c8c8c8');
-    ctx.fillStyle=bg;
-    ctx.beginPath(); ctx.arc(0,0,c.ballRadius*S,0,TAU); ctx.fill();
-    ctx.strokeStyle='#333'; ctx.lineWidth=1.5*S; ctx.stroke();
-    ctx.restore();
+
+    this.drawBall(ctx, this.ball.x, this.ball.y, c.ballRadius*S, this.ball.rot);
   }
 }
 
 /* ==========================================================================
- * 10. МИНИ-ИГРА 3: СУМО
+ * 12. МИНИ-ИГРА 3: СУМО
  * ========================================================================== */
 class SumoGame extends BaseGame {
   constructor(){
     super();
+    this.falling = [];
+    this.ghostT = 0;
     this.layoutRing();
     this.resetPositions(true);
   }
-  onResize(){ this.layoutRing(); }
+  onResize(){ this.layoutRing(); this.buildBg(); }
   layoutRing(){
     const c = CONFIG.sumo;
     this.ring = {
       cx: GAME.areaW/2, cy: GAME.areaTop + GAME.areaH/2,
       r: Math.min(GAME.areaW,GAME.areaH) * c.ringRadiusFactor,
     };
+  }
+  buildBg(){
+    const layer = makeLayer();
+    const g = layer.ctx, ring = this.ring, S = GAME.scale;
+    // тёмный зал
+    const outer = g.createLinearGradient(0,0,0,GAME.h);
+    outer.addColorStop(0,'#191c26'); outer.addColorStop(1,'#0b0d13');
+    g.fillStyle = outer; g.fillRect(0,0,GAME.w,GAME.h);
+    // прожектор сверху
+    const spot = g.createRadialGradient(ring.cx, ring.cy-ring.r*0.9, 10, ring.cx, ring.cy, ring.r*2.2);
+    spot.addColorStop(0,'rgba(255,240,200,0.10)'); spot.addColorStop(1,'rgba(0,0,0,0)');
+    g.fillStyle = spot; g.fillRect(0,0,GAME.w,GAME.h);
+    // опасная зона — красное свечение вокруг ринга
+    const danger = g.createRadialGradient(ring.cx,ring.cy, ring.r*0.95, ring.cx,ring.cy, ring.r*1.75);
+    danger.addColorStop(0,'rgba(160,30,30,0.0)');
+    danger.addColorStop(0.35,'rgba(190,40,40,0.28)');
+    danger.addColorStop(1,'rgba(60,10,10,0)');
+    g.fillStyle = danger;
+    g.beginPath(); g.arc(ring.cx,ring.cy,ring.r*1.8,0,TAU); g.fill();
+    // тень под ринг
+    g.fillStyle = 'rgba(0,0,0,0.5)';
+    g.beginPath(); g.ellipse(ring.cx, ring.cy+ring.r*0.06, ring.r*1.06, ring.r*1.02, 0, 0, TAU); g.fill();
+    // глиняное покрытие дохё
+    const clay = g.createRadialGradient(ring.cx-ring.r*0.25, ring.cy-ring.r*0.3, ring.r*0.15, ring.cx,ring.cy, ring.r);
+    clay.addColorStop(0,'#e7c283'); clay.addColorStop(0.7,'#cda05e'); clay.addColorStop(1,'#a97c3f');
+    g.fillStyle = clay;
+    g.beginPath(); g.arc(ring.cx,ring.cy,ring.r,0,TAU); g.fill();
+    // песчинки
+    g.save();
+    g.beginPath(); g.arc(ring.cx,ring.cy,ring.r,0,TAU); g.clip();
+    for(let k=0;k<420;k++){
+      const a = Math.random()*TAU, rr_ = Math.sqrt(Math.random())*ring.r;
+      g.fillStyle = Math.random()<0.5 ? 'rgba(255,255,255,0.05)' : 'rgba(80,50,20,0.07)';
+      g.fillRect(ring.cx+Math.cos(a)*rr_, ring.cy+Math.sin(a)*rr_, 1.6, 1.6);
+    }
+    g.restore();
+    // тавара — канат по краю
+    g.strokeStyle = '#f7ecd6'; g.lineWidth = 7*S;
+    g.beginPath(); g.arc(ring.cx,ring.cy,ring.r-3*S,0,TAU); g.stroke();
+    g.setLineDash([9*S, 7*S]);
+    g.strokeStyle = '#b39a6d'; g.lineWidth = 4*S;
+    g.beginPath(); g.arc(ring.cx,ring.cy,ring.r-3*S,0,TAU); g.stroke();
+    g.setLineDash([]);
+    // внутренний круг и стартовые линии
+    g.strokeStyle = 'rgba(255,255,255,0.22)'; g.lineWidth = 2*S;
+    g.beginPath(); g.arc(ring.cx,ring.cy,ring.r*0.6,0,TAU); g.stroke();
+    g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 4*S; g.lineCap='round';
+    g.beginPath(); g.moveTo(ring.cx-ring.r*0.16, ring.cy-ring.r*0.12); g.lineTo(ring.cx-ring.r*0.16, ring.cy+ring.r*0.12); g.stroke();
+    g.beginPath(); g.moveTo(ring.cx+ring.r*0.16, ring.cy-ring.r*0.12); g.lineTo(ring.cx+ring.r*0.16, ring.cy+ring.r*0.12); g.stroke();
+    this.bg = layer.c;
   }
   resetPositions(fullReset){
     const c = CONFIG.sumo;
@@ -962,6 +1551,7 @@ class SumoGame extends BaseGame {
         angle: a+Math.PI, vx:0, vy:0, alive:true,
       };
     });
+    this.falling = [];
     this.state = 'countdown';
     this.countdownMs = CONFIG.match.countdownMs;
   }
@@ -995,6 +1585,7 @@ class SumoGame extends BaseGame {
     return false;
   }
   update(dt){
+    this.updateFalling(dt);
     if(this.state==='matchOver') return;
     if(this.state==='countdown'){ this.tickCountdown(dt); return; }
     if(this.state==='roundEnd'){ this.tickRoundEnd(dt, ()=>this.resetPositions(false)); return; }
@@ -1009,10 +1600,19 @@ class SumoGame extends BaseGame {
       if(input.tap[w.id]){
         w.vx += Math.cos(w.angle)*c.dashPower*S;
         w.vy += Math.sin(w.angle)*c.dashPower*S;
+        if(isHuman[w.id]) Sound.dash();
       }
       w.x += w.vx*dt; w.y += w.vy*dt;
       const damp = Math.pow(Math.E, -c.damping*dt);
       w.vx *= damp; w.vy *= damp;
+      // трейл при быстром движении
+      if(Math.hypot(w.vx,w.vy) > 220*S){
+        this.ghostT -= dt;
+        if(this.ghostT<=0){
+          this.ghostT = 0.03;
+          FX.ghost(w.x, w.y, r, CONFIG.players[w.id].color);
+        }
+      }
     }
 
     for(let i=0;i<4;i++) for(let j=i+1;j<4;j++){
@@ -1030,6 +1630,11 @@ class SumoGame extends BaseGame {
           const impulse = -(1+c.restitution)*velAlong/2;
           A.vx -= impulse*nx; A.vy -= impulse*ny;
           B.vx += impulse*nx; B.vy += impulse*ny;
+          if(impulse > 120*S){
+            Sound.impact();
+            FX.addShake(Math.min(7, impulse/(60*S)));
+            FX.ring((A.x+B.x)/2, (A.y+B.y)/2, '#ffffff', 50*S);
+          }
         }
       }
     }
@@ -1040,7 +1645,12 @@ class SumoGame extends BaseGame {
       if(dist(w.x,w.y,ring.cx,ring.cy) - r*0.3 > ring.r){
         w.alive = false;
         justFell = true;
+        this.falling.push({ x:w.x, y:w.y, vx:w.vx, vy:w.vy, angle:w.angle, id:w.id, scale:1, alpha:1 });
+        FX.ring(w.x,w.y,CONFIG.players[w.id].color, 70*S);
+        FX.popup(w.x, w.y-30*S, 'OUT', CONFIG.players[w.id].color);
         flashEvent(CONFIG.players[w.id].name+' выбывает!');
+        Sound.out();
+        buzz(50);
       }
     }
     if(justFell){
@@ -1049,85 +1659,163 @@ class SumoGame extends BaseGame {
         if(alive.length===1){
           this.scores[alive[0].id]++;
           buildScoreboard(this.scores);
+          FX.popup(alive[0].x, alive[0].y-40*S, '+1', CONFIG.players[alive[0].id].color);
         }
         if(!this.checkMatchWin()){ this.state='roundEnd'; this.roundEndMs = CONFIG.match.roundEndMs; }
       }
     }
   }
+  updateFalling(dt){
+    for(const f of this.falling){
+      f.x += f.vx*dt; f.y += f.vy*dt;
+      f.vx *= (1-1.5*dt); f.vy *= (1-1.5*dt);
+      f.scale = Math.max(0.2, f.scale - 1.6*dt);
+      f.alpha -= 1.8*dt;
+    }
+    this.falling = this.falling.filter(f=>f.alpha>0);
+  }
+  drawWrestler(ctx, w, r, alpha, scale){
+    const p = CONFIG.players[w.id];
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(w.x,w.y);
+    ctx.scale(scale, scale);
+    // тень
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.beginPath(); ctx.ellipse(0, r*0.28, r*0.95, r*0.6, 0, 0, TAU); ctx.fill();
+    ctx.rotate(w.angle);
+    // -------- ГЕОМЕТРИЧЕСКАЯ ОТРИСОВКА СУМОИСТА (замени на drawImage при наличии спрайта) --------
+    // кулаки впереди
+    ctx.fillStyle = p.color;
+    ctx.strokeStyle = p.dark; ctx.lineWidth = 2.5*GAME.scale;
+    ctx.beginPath(); ctx.arc(r*0.78, -r*0.5, r*0.24, 0, TAU); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(r*0.78,  r*0.5, r*0.24, 0, TAU); ctx.fill(); ctx.stroke();
+    // тело
+    const bodyGrad = ctx.createRadialGradient(-r*0.3,-r*0.3,r*0.15, 0,0, r);
+    bodyGrad.addColorStop(0, p.light); bodyGrad.addColorStop(0.6, p.color); bodyGrad.addColorStop(1, p.dark);
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath(); ctx.arc(0,0,r,0,TAU); ctx.fill();
+    ctx.strokeStyle = p.dark; ctx.lineWidth = 3.5*GAME.scale; ctx.stroke();
+    // маваси (пояс)
+    ctx.save();
+    ctx.beginPath(); ctx.arc(0,0,r,0,TAU); ctx.clip();
+    ctx.fillStyle = 'rgba(0,0,0,0.32)';
+    ctx.fillRect(-r*0.55, -r, r*0.34, r*2);
+    ctx.restore();
+    // пучок волос сзади
+    ctx.fillStyle = 'rgba(20,12,8,0.75)';
+    ctx.beginPath(); ctx.arc(-r*0.62, 0, r*0.2, 0, TAU); ctx.fill();
+    // глаза
+    ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.arc(r*0.48,-r*0.22,r*0.14,0,TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(r*0.48, r*0.22,r*0.14,0,TAU); ctx.fill();
+    ctx.fillStyle = '#1a1a1a';
+    ctx.beginPath(); ctx.arc(r*0.55,-r*0.22,r*0.065,0,TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(r*0.55, r*0.22,r*0.065,0,TAU); ctx.fill();
+    // ----------------------------------------------------------------------------------------
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
   render(ctx){
-    const ring=this.ring, S=GAME.scale, c=CONFIG.sumo;
-    ctx.fillStyle = '#12151d';
-    ctx.fillRect(0,GAME.areaTop,GAME.areaW,GAME.areaH);
-    const outerGrad = ctx.createRadialGradient(ring.cx,ring.cy,ring.r*0.9,ring.cx,ring.cy,ring.r*1.5);
-    outerGrad.addColorStop(0,'rgba(20,10,10,0.2)'); outerGrad.addColorStop(1,'rgba(60,10,10,0.55)');
-    ctx.fillStyle = outerGrad;
-    ctx.beginPath(); ctx.arc(ring.cx,ring.cy,ring.r*1.5,0,TAU); ctx.fill();
-
-    const ringGrad = ctx.createRadialGradient(ring.cx,ring.cy,0,ring.cx,ring.cy,ring.r);
-    ringGrad.addColorStop(0,'#d8b06a'); ringGrad.addColorStop(1,'#a97c3f');
-    ctx.fillStyle = ringGrad;
-    ctx.beginPath(); ctx.arc(ring.cx,ring.cy,ring.r,0,TAU); ctx.fill();
-    ctx.strokeStyle='#fff'; ctx.lineWidth=6*S;
-    ctx.beginPath(); ctx.arc(ring.cx,ring.cy,ring.r,0,TAU); ctx.stroke();
-    ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=2*S;
-    ctx.beginPath(); ctx.arc(ring.cx,ring.cy,ring.r*0.6,0,TAU); ctx.stroke();
-
+    const S=GAME.scale, c=CONFIG.sumo;
+    ctx.drawImage(this.bg, 0, 0, GAME.w, GAME.h);
+    const r = c.radius*S;
+    for(const f of this.falling){
+      this.drawWrestler(ctx, f, r, clamp(f.alpha,0,1), f.scale);
+    }
     for(const w of this.wrestlers){
       if(!w.alive) continue;
-      const p = CONFIG.players[w.id];
-      const r = c.radius*S;
-      ctx.save();
-      ctx.translate(w.x,w.y);
-      // -------- ГЕОМЕТРИЧЕСКАЯ ОТРИСОВКА СУМОИСТА (замени на drawImage при наличии спрайта) --------
-      ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=10*S;
-      ctx.fillStyle = p.color;
-      ctx.beginPath(); ctx.arc(0,0,r,0,TAU); ctx.fill();
-      ctx.strokeStyle = p.dark; ctx.lineWidth=4*S; ctx.stroke();
-      ctx.shadowBlur=0;
-      ctx.rotate(w.angle);
-      ctx.fillStyle='rgba(0,0,0,0.55)';
-      ctx.beginPath(); ctx.arc(r*0.55,0,r*0.28,0,TAU); ctx.fill();
-      // ----------------------------------------------------------------------------------------
-      ctx.restore();
+      this.drawWrestler(ctx, w, r, 1, 1);
     }
   }
 }
 
 /* ==========================================================================
- * 11. ИКОНКИ ДЛЯ МЕНЮ ВЫБОРА ИГРЫ
+ * 13. ИКОНКИ ДЛЯ МЕНЮ ВЫБОРА ИГРЫ
  * ========================================================================== */
 function drawIcons(){
   document.querySelectorAll('canvas.icon').forEach(cv=>{
-    const ictx = cv.getContext('2d');
+    const g = cv.getContext('2d');
     const w=cv.width, h=cv.height;
-    ictx.clearRect(0,0,w,h);
+    g.clearRect(0,0,w,h);
     const kind = cv.dataset.icon;
     if(kind==='tanks'){
-      ictx.fillStyle='#2c2f22'; ictx.fillRect(0,0,w,h);
-      ictx.save(); ictx.translate(w/2,h/2); ictx.rotate(-0.4);
-      ictx.fillStyle='#8f1622'; rr(ictx,-30,-22,60,44,8); ictx.fill();
-      ictx.fillStyle='#ff4d5e'; rr(ictx,-24,-17,48,34,6); ictx.fill();
-      ictx.fillStyle='rgba(0,0,0,0.35)'; ictx.fillRect(0,-5,38,10);
-      ictx.restore();
+      const bg = g.createRadialGradient(w/2,h/2,20,w/2,h/2,w*0.75);
+      bg.addColorStop(0,'#2c3020'); bg.addColorStop(1,'#171a10');
+      g.fillStyle=bg; g.fillRect(0,0,w,h);
+      g.fillStyle='#3c4030'; g.fillRect(w*0.55,h*0.16,w*0.3,h*0.11);
+      g.fillStyle='#3c4030'; g.fillRect(w*0.12,h*0.72,w*0.3,h*0.11);
+      // танк
+      g.save(); g.translate(w*0.42,h*0.5); g.rotate(-0.5);
+      g.fillStyle='#1d1f16';
+      g.fillRect(-56,-52,112,20); g.fillRect(-56,32,112,20);
+      const bodyGrad=g.createLinearGradient(0,-36,0,36);
+      bodyGrad.addColorStop(0,'#ff8d99'); bodyGrad.addColorStop(0.5,'#ff4d5e'); bodyGrad.addColorStop(1,'#8f1622');
+      g.fillStyle=bodyGrad; g.fillRect(-48,-34,96,68);
+      g.fillStyle='#23252b'; g.fillRect(10,-9,78,18);
+      g.fillStyle='#ff4d5e'; g.beginPath(); g.arc(0,0,28,0,TAU); g.fill();
+      g.strokeStyle='rgba(0,0,0,0.5)'; g.lineWidth=4; g.stroke();
+      g.restore();
+      // снаряд с трейлом
+      g.fillStyle='rgba(61,139,255,0.3)'; g.beginPath(); g.arc(w*0.72,h*0.68,8,0,TAU); g.fill();
+      g.fillStyle='rgba(61,139,255,0.55)'; g.beginPath(); g.arc(w*0.78,h*0.63,9,0,TAU); g.fill();
+      g.fillStyle='#fff'; g.beginPath(); g.arc(w*0.84,h*0.58,10,0,TAU); g.fill();
+      g.fillStyle='#3d8bff'; g.beginPath(); g.arc(w*0.84,h*0.58,6,0,TAU); g.fill();
     } else if(kind==='soccer'){
-      ictx.fillStyle='#155c2c'; ictx.fillRect(0,0,w,h);
-      ictx.strokeStyle='rgba(255,255,255,0.5)'; ictx.lineWidth=3;
-      ictx.strokeRect(6,6,w-12,h-12);
-      ictx.beginPath(); ictx.arc(w/2,h/2,26,0,TAU); ictx.stroke();
-      ictx.fillStyle='#fff'; ictx.beginPath(); ictx.arc(w/2,h/2,14,0,TAU); ictx.fill();
+      const stripes = 6;
+      for(let i=0;i<stripes;i++){
+        g.fillStyle = i%2===0 ? '#1e7a3c' : '#1a6c35';
+        g.fillRect(w*i/stripes,0,w/stripes+1,h);
+      }
+      g.strokeStyle='rgba(255,255,255,0.65)'; g.lineWidth=5;
+      g.strokeRect(14,14,w-28,h-28);
+      g.beginPath(); g.moveTo(w/2,14); g.lineTo(w/2,h-14); g.stroke();
+      g.beginPath(); g.arc(w/2,h/2,46,0,TAU); g.stroke();
+      // мяч
+      g.save(); g.translate(w/2,h/2);
+      g.fillStyle='#fff'; g.beginPath(); g.arc(0,0,30,0,TAU); g.fill();
+      g.fillStyle='#2b2f38';
+      g.beginPath();
+      for(let k=0;k<5;k++){
+        const a=k*TAU/5-Math.PI/2;
+        const x=Math.cos(a)*12,y=Math.sin(a)*12;
+        if(k===0)g.moveTo(x,y);else g.lineTo(x,y);
+      }
+      g.closePath(); g.fill();
+      g.restore();
     } else if(kind==='sumo'){
-      ictx.fillStyle='#12151d'; ictx.fillRect(0,0,w,h);
-      ictx.fillStyle='#c99a52'; ictx.beginPath(); ictx.arc(w/2,h/2,50,0,TAU); ictx.fill();
-      ictx.strokeStyle='#fff'; ictx.lineWidth=4; ictx.stroke();
-      ictx.fillStyle='#ff4d5e'; ictx.beginPath(); ictx.arc(w/2-14,h/2,16,0,TAU); ictx.fill();
-      ictx.fillStyle='#3d8bff'; ictx.beginPath(); ictx.arc(w/2+14,h/2,16,0,TAU); ictx.fill();
+      const bg = g.createLinearGradient(0,0,0,h);
+      bg.addColorStop(0,'#1b1f2c'); bg.addColorStop(1,'#0d0f16');
+      g.fillStyle=bg; g.fillRect(0,0,w,h);
+      const danger=g.createRadialGradient(w/2,h/2,w*0.32,w/2,h/2,w*0.55);
+      danger.addColorStop(0,'rgba(190,40,40,0)'); danger.addColorStop(0.6,'rgba(190,40,40,0.35)'); danger.addColorStop(1,'rgba(190,40,40,0)');
+      g.fillStyle=danger; g.fillRect(0,0,w,h);
+      const clay=g.createRadialGradient(w*0.42,h*0.4,20,w/2,h/2,w*0.36);
+      clay.addColorStop(0,'#e7c283'); clay.addColorStop(1,'#a97c3f');
+      g.fillStyle=clay; g.beginPath(); g.arc(w/2,h/2,w*0.36,0,TAU); g.fill();
+      g.strokeStyle='#f7ecd6'; g.lineWidth=6; g.stroke();
+      // борцы
+      const fighter=(x,y,color,dark,ang)=>{
+        g.save(); g.translate(x,y); g.rotate(ang);
+        g.fillStyle=color; g.beginPath(); g.arc(0,0,24,0,TAU); g.fill();
+        g.strokeStyle=dark; g.lineWidth=4; g.stroke();
+        g.fillStyle='#fff';
+        g.beginPath(); g.arc(11,-6,5.5,0,TAU); g.fill();
+        g.beginPath(); g.arc(11, 6,5.5,0,TAU); g.fill();
+        g.fillStyle='#1a1a1a';
+        g.beginPath(); g.arc(13,-6,2.5,0,TAU); g.fill();
+        g.beginPath(); g.arc(13, 6,2.5,0,TAU); g.fill();
+        g.restore();
+      };
+      fighter(w/2-30,h/2,'#ff4d5e','#8f1622',0);
+      fighter(w/2+30,h/2,'#3d8bff','#0f3d8f',Math.PI);
     }
   });
 }
 drawIcons();
 
 /* ==========================================================================
- * 12. ГЛАВНЫЙ ЦИКЛ
+ * 14. ГЛАВНЫЙ ЦИКЛ
  * ========================================================================== */
 function render(){
   ctx.clearRect(0,0,GAME.w,GAME.h);
@@ -1135,7 +1823,14 @@ function render(){
   bgGrad.addColorStop(0,'#15171f'); bgGrad.addColorStop(1,'#0b0c10');
   ctx.fillStyle = bgGrad; ctx.fillRect(0,0,GAME.w,GAME.h);
   if(currentGame && !hud.classList.contains('hidden')){
+    ctx.save();
+    if(FX.shake>0.3){
+      ctx.translate((Math.random()-0.5)*FX.shake, (Math.random()-0.5)*FX.shake);
+    }
+    FX.renderUnder(ctx);
     currentGame.render(ctx);
+    FX.renderOver(ctx, GAME.scale);
+    ctx.restore();
   }
 }
 
@@ -1150,6 +1845,7 @@ function loop(ts){
 
   if(currentGame && !paused && !hud.classList.contains('hidden')){
     currentGame.update(dt);
+    FX.update(dt);
   }
   render();
   requestAnimationFrame(loop);
