@@ -6,6 +6,7 @@ on:
       - main
       - claude/reminder-app-store-vvvqle
       - claude/stickman-animation-app-m7mn0x
+      - claude/2-4-player-games-clone-67aaml
   workflow_dispatch:
 
 permissions:
@@ -35,6 +36,7 @@ jobs:
           mkdir -p _site
           cp -r index.html styles.css landing.js manifest.json sw.js app icons _site/
           cp -r stickman _site/
+          cp -r games _site/
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
