@@ -1,0 +1,1166 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<title>2 3 4 Player Games — Танчики, Футбол, Сумо</title>
+<meta name="description" content="Локальный мультиплеер на одном устройстве для 2-4 игроков: Танчики, Футбол и Сумо. Работает на телефоне (мультитач) и на ПК (клавиатура)." />
+<meta name="theme-color" content="#0b0c10" />
+<style>
+  :root{
+    --p0:#ff4d5e; --p0-dark:#8f1622;
+    --p1:#3d8bff; --p1-dark:#0f3d8f;
+    --p2:#3ddc73; --p2-dark:#0f6b32;
+    --p3:#ffd23d; --p3-dark:#8a6d0a;
+    --bg-0:#0b0c10; --bg-1:#15171f; --panel:#1c1f2a; --ink:#eef1f8; --ink-dim:#9aa2b8;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{
+    margin:0; padding:0; width:100%; height:100%; overflow:hidden; position:fixed;
+    background:var(--bg-0); color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+    touch-action:none; overscroll-behavior:none; user-select:none;
+  }
+  #app{position:fixed; inset:0; width:100%; height:100%;}
+  canvas#game{position:absolute; inset:0; display:block; background:#000;}
+
+  .screen{
+    position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:22px; padding:24px; text-align:center;
+    background:radial-gradient(1200px 800px at 50% -10%, #23273a 0%, var(--bg-0) 60%);
+    z-index:20;
+  }
+  .screen.hidden{display:none;}
+
+  h1.title{
+    font-size:clamp(28px,7vw,54px); margin:0; letter-spacing:1px; font-weight:900;
+    background:linear-gradient(90deg,var(--p0),var(--p1),var(--p2),var(--p3));
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    text-shadow:0 2px 24px rgba(255,255,255,0.08);
+  }
+  h1.title span{display:block; font-size:clamp(14px,3vw,20px); color:var(--ink-dim); -webkit-text-fill-color:var(--ink-dim); letter-spacing:6px; margin-top:6px;}
+  h2.subtitle{margin:0; font-weight:700; color:var(--ink-dim); font-size:clamp(15px,3vw,20px);}
+
+  .menu-grid{display:flex; gap:18px; flex-wrap:wrap; justify-content:center;}
+  .menu-btn{
+    width:150px; height:150px; border-radius:24px; border:2px solid rgba(255,255,255,0.08);
+    background:linear-gradient(160deg,var(--panel),var(--bg-1));
+    color:var(--ink); font-size:20px; font-weight:800; cursor:pointer;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px;
+    box-shadow:0 8px 24px rgba(0,0,0,0.4); transition:transform .12s ease, box-shadow .12s ease;
+  }
+  .menu-btn .num{font-size:44px; font-weight:900;}
+  .menu-btn:active{transform:scale(0.94); box-shadow:0 3px 10px rgba(0,0,0,0.5);}
+
+  .game-grid{display:flex; gap:18px; flex-wrap:wrap; justify-content:center; max-width:820px;}
+  .game-card{
+    width:200px; height:200px; border-radius:22px; border:2px solid rgba(255,255,255,0.08);
+    background:linear-gradient(160deg,var(--panel),var(--bg-1)); color:var(--ink);
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px;
+    cursor:pointer; box-shadow:0 8px 24px rgba(0,0,0,0.4); transition:transform .12s ease;
+    font-size:17px; font-weight:800;
+  }
+  .game-card:active{transform:scale(0.94);}
+  .game-card canvas.icon{width:110px; height:110px;}
+
+  .back-btn{
+    position:absolute; top:16px; left:16px; z-index:5; background:rgba(255,255,255,0.06);
+    border:1px solid rgba(255,255,255,0.12); color:var(--ink); padding:10px 16px; border-radius:12px;
+    font-weight:700; font-size:14px; cursor:pointer;
+  }
+  .back-btn:active{background:rgba(255,255,255,0.16);}
+
+  #hud{
+    position:absolute; top:0; left:0; right:0; height:60px; z-index:15;
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    padding:0 90px; pointer-events:none;
+  }
+  #hud.hidden{display:none;}
+  #scoreboard{display:flex; gap:8px; pointer-events:none; flex-wrap:wrap; justify-content:center;}
+  .score-chip{
+    display:flex; align-items:center; gap:6px; background:rgba(20,22,30,0.72); backdrop-filter:blur(6px);
+    border-radius:999px; padding:6px 12px; font-weight:800; font-size:14px; border:1px solid rgba(255,255,255,0.08);
+  }
+  .score-chip .dot{width:10px; height:10px; border-radius:50%;}
+  #pauseBtn{
+    position:absolute; top:10px; right:10px; width:40px; height:40px; border-radius:12px; z-index:16;
+    background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.14); color:var(--ink);
+    font-size:16px; font-weight:900; cursor:pointer; pointer-events:auto;
+  }
+
+  #cornerButtons.hidden{display:none;}
+  .corner{
+    position:fixed; width:min(22vw,120px); height:min(22vw,120px); border-radius:20px; z-index:14;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px;
+    border:3px solid rgba(255,255,255,0.25); color:#fff; font-weight:900; cursor:pointer;
+    touch-action:none; box-shadow:0 6px 20px rgba(0,0,0,0.45); transition:transform .06s ease, filter .06s ease;
+    opacity:0.88;
+  }
+  .corner .lbl{font-size:clamp(14px,3.4vw,20px); letter-spacing:1px;}
+  .corner .key{font-size:clamp(10px,2.4vw,13px); opacity:0.8; font-weight:700;}
+  .corner.pressed{transform:scale(0.9); filter:brightness(1.35); opacity:1;}
+  .corner.bot{opacity:0.4; filter:grayscale(0.3); pointer-events:none;}
+  .corner.p0{top:70px; left:10px; background:radial-gradient(circle at 35% 30%, var(--p0), var(--p0-dark));}
+  .corner.p1{top:70px; right:10px; background:radial-gradient(circle at 35% 30%, var(--p1), var(--p1-dark));}
+  .corner.p2{bottom:10px; left:10px; background:radial-gradient(circle at 35% 30%, var(--p2), var(--p2-dark));}
+  .corner.p3{bottom:10px; right:10px; background:radial-gradient(circle at 35% 30%, var(--p3), var(--p3-dark));}
+
+  #countdown{
+    position:absolute; inset:0; z-index:18; display:flex; align-items:center; justify-content:center;
+    font-size:min(22vw,160px); font-weight:900; color:#fff; text-shadow:0 0 40px rgba(0,0,0,0.6);
+    pointer-events:none;
+  }
+  #countdown.hidden{display:none;}
+
+  #eventText{
+    position:absolute; top:74px; left:0; right:0; z-index:17; text-align:center; pointer-events:none;
+    font-size:clamp(20px,5vw,36px); font-weight:900; color:#fff; text-shadow:0 2px 12px rgba(0,0,0,0.7);
+  }
+  #eventText.hidden{display:none;}
+
+  .overlay{
+    position:absolute; inset:0; z-index:30; display:flex; align-items:center; justify-content:center;
+    background:rgba(5,6,10,0.72); backdrop-filter:blur(4px);
+  }
+  .overlay.hidden{display:none;}
+  .panel{
+    background:linear-gradient(160deg,var(--panel),var(--bg-1)); border:1px solid rgba(255,255,255,0.1);
+    border-radius:22px; padding:30px 34px; display:flex; flex-direction:column; gap:14px; align-items:center;
+    min-width:260px; box-shadow:0 20px 60px rgba(0,0,0,0.55);
+  }
+  .panel h2{margin:0 0 6px; font-size:clamp(18px,4vw,26px);}
+  .panel button{
+    width:100%; padding:14px 20px; border-radius:14px; border:none; font-size:16px; font-weight:800;
+    background:rgba(255,255,255,0.08); color:var(--ink); cursor:pointer; border:1px solid rgba(255,255,255,0.12);
+  }
+  .panel button:active{background:rgba(255,255,255,0.18);}
+  .panel button.primary{background:linear-gradient(90deg,#3d8bff,#3ddc73); color:#0b0c10;}
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="game"></canvas>
+
+  <div id="menuPlayers" class="screen">
+    <h1 class="title">2 3 4<span>PLAYER GAMES</span></h1>
+    <h2 class="subtitle">Сколько игроков за экраном?</h2>
+    <div class="menu-grid">
+      <button class="menu-btn" data-players="2"><span class="num">2</span>ИГРОКА</button>
+      <button class="menu-btn" data-players="3"><span class="num">3</span>ИГРОКА</button>
+      <button class="menu-btn" data-players="4"><span class="num">4</span>ИГРОКА</button>
+    </div>
+    <h2 class="subtitle">Остальные места займут боты</h2>
+  </div>
+
+  <div id="menuGames" class="screen hidden">
+    <button class="back-btn" id="backToPlayers">← Назад</button>
+    <h1 class="title" style="font-size:clamp(22px,5vw,36px)">Выбери игру</h1>
+    <div class="game-grid">
+      <button class="game-card" data-game="tanks"><canvas class="icon" data-icon="tanks" width="140" height="140"></canvas><span>ТАНЧИКИ</span></button>
+      <button class="game-card" data-game="soccer"><canvas class="icon" data-icon="soccer" width="140" height="140"></canvas><span>ФУТБОЛ</span></button>
+      <button class="game-card" data-game="sumo"><canvas class="icon" data-icon="sumo" width="140" height="140"></canvas><span>СУМО</span></button>
+    </div>
+  </div>
+
+  <div id="hud" class="hidden">
+    <div id="scoreboard"></div>
+  </div>
+  <button id="pauseBtn" class="hidden">II</button>
+
+  <div id="cornerButtons" class="hidden">
+    <button class="corner p0" data-p="0"><span class="lbl">P1</span><span class="key">Q</span></button>
+    <button class="corner p1" data-p="1"><span class="lbl">P2</span><span class="key">P</span></button>
+    <button class="corner p2" data-p="2"><span class="lbl">P3</span><span class="key">Z</span></button>
+    <button class="corner p3" data-p="3"><span class="lbl">P4</span><span class="key">M</span></button>
+  </div>
+
+  <div id="countdown" class="hidden"></div>
+  <div id="eventText" class="hidden"></div>
+
+  <div id="pauseOverlay" class="overlay hidden">
+    <div class="panel">
+      <h2>Пауза</h2>
+      <button id="resumeBtn" class="primary">Продолжить</button>
+      <button id="restartRoundBtn">Начать матч заново</button>
+      <button id="toGamesBtn">Другая игра</button>
+      <button id="toMenuBtn">Главное меню</button>
+    </div>
+  </div>
+
+  <div id="winnerOverlay" class="overlay hidden">
+    <div class="panel">
+      <h2 id="winnerText">Победа!</h2>
+      <button id="playAgainBtn" class="primary">Играть снова</button>
+      <button id="chooseGameBtn">Другая игра</button>
+      <button id="mainMenuBtn">Главное меню</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ==========================================================================
+ * 1. CONFIG — вся балансировка игры в одном месте.
+ *    Меняй любое число здесь — эффект применится мгновенно при перезапуске
+ *    экрана/раунда, так как все модули читают значения напрямую из CONFIG,
+ *    а не кэшируют их у себя.
+ * ========================================================================== */
+const CONFIG = {
+  players: [
+    { id:0, name:'P1', color:'#ff4d5e', dark:'#8f1622', key:'q' },
+    { id:1, name:'P2', color:'#3d8bff', dark:'#0f3d8f', key:'p' },
+    { id:2, name:'P3', color:'#3ddc73', dark:'#0f6b32', key:'z' },
+    { id:3, name:'P4', color:'#ffd23d', dark:'#8a6d0a', key:'m' },
+  ],
+  match: {
+    scoreToWin: 3,          // очков для победы в матче
+    countdownMs: 2600,      // отсчёт перед стартом/рестартом раунда
+    roundEndMs: 1500,       // пауза после гола/убийства/выбывания
+  },
+  // Значения ниже заданы в "опорных" единицах для короткой стороны арены = 700px.
+  // Реальные величины на экране игрока масштабируются через GAME.scale.
+  tanks: {
+    tankRadius: 24,
+    tankSpeed: 150,         // px/сек при движении вперёд
+    idleRotateSpeed: 1.1,   // рад/сек — вращение на месте, пока кнопка не нажата
+    bulletSpeed: 420,
+    bulletRadius: 5,
+    maxBounces: 3,          // рикошетов от стен/препятствий, потом снаряд исчезает
+    fireCooldownMs: 1500,
+    arenaMargin: 30,
+    aiAimTolerance: 0.16,   // рад — точность прицеливания бота
+  },
+  soccer: {
+    playerRadius: 22,
+    moveSpeed: 145,         // обычная скорость бега вперёд
+    dashSpeed: 430,         // скорость рывка после нажатия
+    dashDurationMs: 260,
+    ballRadius: 13,
+    ballDamping: 0.62,      // доля скорости мяча, теряемая за секунду
+    kickPower: 340,         // сила, придаваемая мячу при касании игроком
+    fieldMargin: 40,
+    goalWidth: 190,         // ширина ворот (проёма в стене)
+    aiTurnTolerance: 0.34,  // рад
+    aiTapCooldownMs: 220,
+  },
+  sumo: {
+    radius: 27,
+    ringRadiusFactor: 0.42, // доля от короткой стороны игровой зоны
+    spawnRadiusFactor: 0.55,// доля от радиуса ринга для стартовых позиций
+    idleRotateSpeed: 1.5,
+    dashPower: 640,         // импульс скорости при рывке
+    damping: 2.2,           // экспоненциальное затухание скорости в секунду
+    restitution: 0.88,      // упругость столкновений
+    edgeZoneFactor: 0.78,   // если игрок дальше этой доли радиуса — бот целится в центр
+    aiAimTolerance: 0.22,
+    aiTapCooldownMs: 260,
+  },
+};
+
+/* ==========================================================================
+ * 2. ЗАГРУЗКА ОРИГИНАЛЬНЫХ СПРАЙТОВ (ОТКЛЮЧЕНО)
+ *    Сейчас вся графика рисуется чистой геометрией на Canvas (см. функции
+ *    draw* ниже). Если у тебя есть оригинальные PNG-спрайты:
+ *      1) Создай папку "sprites" рядом с этим index.html
+ *      2) Положи туда файлы с именами как ниже (tank_red.png и т.д.)
+ *      3) Раскомментируй блок SPRITES ниже
+ *      4) В нужной функции отрисовки (drawTank/drawSoccerPlayer/drawSumoWrestler)
+ *         замени геометрию (ctx.arc/ctx.fillRect/...) на:
+ *           ctx.save();
+ *           ctx.translate(obj.x, obj.y);
+ *           ctx.rotate(obj.angle);
+ *           ctx.drawImage(SPRITES.tankRed, -r, -r, r*2, r*2);
+ *           ctx.restore();
+ *         подставив нужный ключ спрайта под цвет игрока.
+ * ========================================================================== */
+/*
+const SPRITES = {
+  tankRed:    Object.assign(new Image(), { src: 'sprites/tank_red.png' }),
+  tankBlue:   Object.assign(new Image(), { src: 'sprites/tank_blue.png' }),
+  tankGreen:  Object.assign(new Image(), { src: 'sprites/tank_green.png' }),
+  tankYellow: Object.assign(new Image(), { src: 'sprites/tank_yellow.png' }),
+  ball:       Object.assign(new Image(), { src: 'sprites/ball.png' }),
+  fieldBg:    Object.assign(new Image(), { src: 'sprites/field.png' }),
+  sumoRed:    Object.assign(new Image(), { src: 'sprites/sumo_red.png' }),
+  sumoBlue:   Object.assign(new Image(), { src: 'sprites/sumo_blue.png' }),
+  sumoGreen:  Object.assign(new Image(), { src: 'sprites/sumo_green.png' }),
+  sumoYellow: Object.assign(new Image(), { src: 'sprites/sumo_yellow.png' }),
+  ringBg:     Object.assign(new Image(), { src: 'sprites/ring.png' }),
+};
+*/
+
+/* ==========================================================================
+ * 3. УТИЛИТЫ
+ * ========================================================================== */
+const TAU = Math.PI * 2;
+function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+function dist(x1,y1,x2,y2){ return Math.hypot(x2-x1, y2-y1); }
+function normAngle(a){ a = a % TAU; if(a>Math.PI) a-=TAU; if(a<-Math.PI) a+=TAU; return a; }
+function angleDiff(a,b){ return normAngle(a-b); }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function rr(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.arcTo(x+w,y,x+w,y+h,r);
+  ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r);
+  ctx.arcTo(x,y,x+w,y,r);
+  ctx.closePath();
+}
+
+/* ==========================================================================
+ * 4. ГЛОБАЛЬНОЕ СОСТОЯНИЕ ЭКРАНА / АРЕНЫ
+ * ========================================================================== */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const HUD_H = 62;
+
+const GAME = { w:0, h:0, scale:1, areaTop:HUD_H, areaW:0, areaH:0 };
+
+function resize(){
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  GAME.w = window.innerWidth;
+  GAME.h = window.innerHeight;
+  canvas.width = Math.floor(GAME.w * dpr);
+  canvas.height = Math.floor(GAME.h * dpr);
+  canvas.style.width = GAME.w + 'px';
+  canvas.style.height = GAME.h + 'px';
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  GAME.areaTop = HUD_H;
+  GAME.areaW = GAME.w;
+  GAME.areaH = Math.max(200, GAME.h - HUD_H);
+  GAME.scale = clamp(Math.min(GAME.areaW, GAME.areaH) / 700, 0.55, 2.4);
+  if(currentGame && currentGame.onResize) currentGame.onResize();
+}
+window.addEventListener('resize', resize);
+window.addEventListener('orientationchange', resize);
+
+/* ==========================================================================
+ * 5. ВВОД: мультитач через угловые DOM-кнопки + клавиатура
+ * ========================================================================== */
+const Input = {
+  pointer: [false,false,false,false],
+  key: [false,false,false,false],
+  pressed(i){ return this.pointer[i] || this.key[i]; },
+};
+let isHuman = [true,true,false,false];
+
+const cornerEls = [0,1,2,3].map(i => document.querySelector('.corner.p'+i));
+cornerEls.forEach((el,i)=>{
+  const down = (e)=>{ e.preventDefault(); Input.pointer[i]=true; el.classList.add('pressed'); };
+  const up   = (e)=>{ if(e) e.preventDefault(); Input.pointer[i]=false; el.classList.remove('pressed'); };
+  el.addEventListener('pointerdown', down, {passive:false});
+  el.addEventListener('pointerup', up, {passive:false});
+  el.addEventListener('pointercancel', up, {passive:false});
+  el.addEventListener('pointerleave', up, {passive:false});
+  el.addEventListener('contextmenu', (e)=>e.preventDefault());
+});
+
+const KEY_TO_PLAYER = {};
+CONFIG.players.forEach((p,i)=>{ KEY_TO_PLAYER[p.key] = i; });
+window.addEventListener('keydown', (e)=>{
+  const i = KEY_TO_PLAYER[e.key.toLowerCase()];
+  if(i!==undefined){ Input.key[i]=true; cornerEls[i].classList.add('pressed'); e.preventDefault(); }
+  if(e.key==='Escape') togglePause();
+});
+window.addEventListener('keyup', (e)=>{
+  const i = KEY_TO_PLAYER[e.key.toLowerCase()];
+  if(i!==undefined){ Input.key[i]=false; if(!Input.pointer[i]) cornerEls[i].classList.remove('pressed'); e.preventDefault(); }
+});
+window.addEventListener('blur', ()=>{ Input.pointer=[false,false,false,false]; Input.key=[false,false,false,false]; });
+
+function updateCornerVisibility(){
+  cornerEls.forEach((el,i)=>{
+    el.classList.toggle('bot', !isHuman[i]);
+    el.querySelector('.lbl').textContent = isHuman[i] ? CONFIG.players[i].name : 'BOT';
+  });
+}
+
+/* ==========================================================================
+ * 6. UI / ЭКРАНЫ
+ * ========================================================================== */
+const screens = {
+  menuPlayers: document.getElementById('menuPlayers'),
+  menuGames: document.getElementById('menuGames'),
+};
+const hud = document.getElementById('hud');
+const pauseBtn = document.getElementById('pauseBtn');
+const cornerButtonsWrap = document.getElementById('cornerButtons');
+const countdownEl = document.getElementById('countdown');
+const eventTextEl = document.getElementById('eventText');
+const pauseOverlay = document.getElementById('pauseOverlay');
+const winnerOverlay = document.getElementById('winnerOverlay');
+const scoreboardEl = document.getElementById('scoreboard');
+
+let humanCount = 2;
+let selectedGameKey = 'tanks';
+let currentGame = null;
+let paused = false;
+
+function showScreen(name){
+  screens.menuPlayers.classList.toggle('hidden', name!=='menuPlayers');
+  screens.menuGames.classList.toggle('hidden', name!=='menuGames');
+  const playing = name==='playing';
+  hud.classList.toggle('hidden', !playing);
+  pauseBtn.classList.toggle('hidden', !playing);
+  cornerButtonsWrap.classList.toggle('hidden', !playing);
+  if(!playing){ countdownEl.classList.add('hidden'); eventTextEl.classList.add('hidden'); }
+}
+
+document.querySelectorAll('.menu-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    humanCount = parseInt(btn.dataset.players,10);
+    isHuman = [0,1,2,3].map(i=>i<humanCount);
+    updateCornerVisibility();
+    showScreen('menuGames');
+  });
+});
+document.getElementById('backToPlayers').addEventListener('click', ()=> showScreen('menuPlayers'));
+document.querySelectorAll('.game-card').forEach(card=>{
+  card.addEventListener('click', ()=>{
+    selectedGameKey = card.dataset.game;
+    startGame();
+  });
+});
+
+function buildScoreboard(scores){
+  scoreboardEl.innerHTML = '';
+  for(let i=0;i<4;i++){
+    const p = CONFIG.players[i];
+    const chip = document.createElement('div');
+    chip.className = 'score-chip';
+    chip.innerHTML = '<span class="dot" style="background:'+p.color+'"></span><span>'+(scores[i]||0)+'</span>';
+    chip.style.opacity = isHuman[i] ? '1' : '0.55';
+    scoreboardEl.appendChild(chip);
+  }
+}
+
+function startGame(){
+  showScreen('playing');
+  paused = false;
+  pauseOverlay.classList.add('hidden');
+  winnerOverlay.classList.add('hidden');
+  resize();
+  if(selectedGameKey==='tanks') currentGame = new TanksGame();
+  else if(selectedGameKey==='soccer') currentGame = new SoccerGame();
+  else currentGame = new SumoGame();
+  currentGame.onResize();
+  buildScoreboard(currentGame.scores);
+}
+
+function togglePause(){
+  const inPlayScreen = screens.menuPlayers.classList.contains('hidden') && screens.menuGames.classList.contains('hidden');
+  const winnerShown = !winnerOverlay.classList.contains('hidden');
+  if(!inPlayScreen || !currentGame || winnerShown) return;
+  paused = !paused;
+  pauseOverlay.classList.toggle('hidden', !paused);
+}
+pauseBtn.addEventListener('click', ()=>{ paused=true; pauseOverlay.classList.remove('hidden'); });
+document.getElementById('resumeBtn').addEventListener('click', ()=>{ paused=false; pauseOverlay.classList.add('hidden'); });
+document.getElementById('restartRoundBtn').addEventListener('click', ()=>{ paused=false; pauseOverlay.classList.add('hidden'); startGame(); });
+document.getElementById('toGamesBtn').addEventListener('click', ()=>{ paused=false; pauseOverlay.classList.add('hidden'); showScreen('menuGames'); });
+document.getElementById('toMenuBtn').addEventListener('click', ()=>{ paused=false; pauseOverlay.classList.add('hidden'); showScreen('menuPlayers'); });
+
+document.getElementById('playAgainBtn').addEventListener('click', ()=>{ winnerOverlay.classList.add('hidden'); startGame(); });
+document.getElementById('chooseGameBtn').addEventListener('click', ()=>{ winnerOverlay.classList.add('hidden'); showScreen('menuGames'); });
+document.getElementById('mainMenuBtn').addEventListener('click', ()=>{ winnerOverlay.classList.add('hidden'); showScreen('menuPlayers'); });
+
+function showWinner(i){
+  const p = CONFIG.players[i];
+  const label = isHuman[i] ? p.name : p.name+' (BOT)';
+  document.getElementById('winnerText').innerHTML = '🏆 <span style="color:'+p.color+'">'+label+'</span> побеждает в матче!';
+  winnerOverlay.classList.remove('hidden');
+}
+
+let eventTtl = 0;
+function flashEvent(text){ eventTextEl.textContent = text; eventTextEl.classList.remove('hidden'); eventTtl = 1100; }
+
+/* ==========================================================================
+ * 7. БАЗОВЫЙ КЛАСС МИНИ-ИГРЫ
+ * ========================================================================== */
+class BaseGame {
+  constructor(){
+    this.scores = [0,0,0,0];
+    this.prevPressed = [false,false,false,false];
+    this.botState = [0,1,2,3].map(()=>({cooldown:0}));
+    this.state = 'countdown';
+    this.countdownMs = CONFIG.match.countdownMs;
+    this.roundEndMs = 0;
+    this.matchOver = false;
+  }
+  activeCount(){
+    // сколько всего участников (реальных + ботов) сейчас в этой мини-игре — всегда 4
+    return 4;
+  }
+  computeFrameInput(dt){
+    const pressedNow = [0,1,2,3].map(i=>{
+      if(isHuman[i]) return Input.pressed(i);
+      return this.decideBot(i, dt);
+    });
+    const justPressed = pressedNow.map((p,i)=> p && !this.prevPressed[i]);
+    this.prevPressed = pressedNow;
+    return { held: pressedNow, tap: justPressed };
+  }
+  checkMatchWin(){
+    if(this.matchOver) return false;
+    for(let i=0;i<4;i++){
+      if(this.scores[i] >= CONFIG.match.scoreToWin){
+        this.matchOver = true;
+        this.state = 'matchOver';
+        buildScoreboard(this.scores);
+        setTimeout(()=>showWinner(i), 350);
+        return true;
+      }
+    }
+    return false;
+  }
+  tickCountdown(dt){
+    this.countdownMs -= dt*1000;
+    if(this.countdownMs<=0){ this.state='playing'; countdownEl.classList.add('hidden'); return true; }
+    const secs = Math.ceil(this.countdownMs/1000);
+    countdownEl.textContent = secs>0 ? String(secs) : 'СТАРТ!';
+    countdownEl.classList.remove('hidden');
+    return false;
+  }
+  tickRoundEnd(dt, onDone){
+    this.roundEndMs -= dt*1000;
+    if(this.roundEndMs<=0){ onDone(); }
+  }
+  decideBot(){ return false; }
+}
+
+/* ==========================================================================
+ * 8. МИНИ-ИГРА 1: ТАНЧИКИ
+ * ========================================================================== */
+class TanksGame extends BaseGame {
+  constructor(){
+    super();
+    this.bullets = [];
+    this.particles = [];
+    this.layoutObstacles();
+    this.spawnTanks();
+  }
+  onResize(){ this.layoutObstacles(); }
+  layoutObstacles(){
+    const c = CONFIG.tanks;
+    const m = c.arenaMargin * GAME.scale;
+    this.arena = { x:m, y:GAME.areaTop+m, w:GAME.areaW-2*m, h:GAME.areaH-2*m };
+    const a = this.arena;
+    // симметричная раскладка препятствий (доли ширины/высоты арены)
+    const rel = [
+      {x:0.48, y:0.42, w:0.04, h:0.30},
+      {x:0.24, y:0.24, w:0.16, h:0.055},
+      {x:0.72, y:0.24, w:0.16, h:0.055},
+      {x:0.24, y:0.72, w:0.16, h:0.055},
+      {x:0.72, y:0.72, w:0.16, h:0.055},
+    ];
+    this.obstacles = rel.map(o=>({
+      x:a.x+o.x*a.w, y:a.y+o.y*a.h, w:o.w*a.w, h:o.h*a.h,
+    }));
+  }
+  spawnTanks(){
+    const a = this.arena;
+    const inset = 0.14;
+    const corners = [
+      {x:a.x+a.w*inset, y:a.y+a.h*inset},
+      {x:a.x+a.w*(1-inset), y:a.y+a.h*inset},
+      {x:a.x+a.w*inset, y:a.y+a.h*(1-inset)},
+      {x:a.x+a.w*(1-inset), y:a.y+a.h*(1-inset)},
+    ];
+    const cx = a.x+a.w/2, cy=a.y+a.h/2;
+    this.tanks = corners.map((p,i)=>({
+      id:i, x:p.x, y:p.y, angle:Math.atan2(cy-p.y, cx-p.x), alive:true, cooldown:0,
+    }));
+    this.bullets = [];
+    this.state = 'countdown';
+    this.countdownMs = CONFIG.match.countdownMs;
+  }
+  rectContainsCircle(rect, x, y, r){
+    const cx = clamp(x, rect.x, rect.x+rect.w);
+    const cy = clamp(y, rect.y, rect.y+rect.h);
+    return dist(x,y,cx,cy) < r;
+  }
+  tankBlocked(x,y,r,skipId){
+    const a = this.arena;
+    if(x-r<a.x || x+r>a.x+a.w || y-r<a.y || y+r>a.y+a.h) return true;
+    for(const o of this.obstacles) if(this.rectContainsCircle(o,x,y,r)) return true;
+    for(const t of this.tanks){
+      if(t.id===skipId || !t.alive) continue;
+      if(dist(x,y,t.x,t.y) < r*2*0.9) return true;
+    }
+    return false;
+  }
+  decideBot(i, dt){
+    const c = CONFIG.tanks;
+    const me = this.tanks[i];
+    if(!me || !me.alive) return false;
+    let target=null, best=Infinity;
+    for(const t of this.tanks){
+      if(t.id===i || !t.alive) continue;
+      const d = dist(me.x,me.y,t.x,t.y);
+      if(d<best){ best=d; target=t; }
+    }
+    if(!target) return false;
+    const desired = Math.atan2(target.y-me.y, target.x-me.x);
+    const diff = angleDiff(desired, me.angle);
+    return Math.abs(diff) < c.aiAimTolerance;
+  }
+  update(dt){
+    if(this.state==='matchOver') return;
+    if(this.state==='countdown'){ this.tickCountdown(dt); return; }
+    if(this.state==='roundEnd'){ this.tickRoundEnd(dt, ()=>this.spawnTanks()); return; }
+
+    const c = CONFIG.tanks;
+    const S = GAME.scale;
+    const input = this.computeFrameInput(dt);
+
+    for(const t of this.tanks){
+      if(!t.alive) continue;
+      const pressed = input.held[t.id];
+      if(!pressed){
+        t.angle += c.idleRotateSpeed*dt;
+      } else {
+        const nx = t.x + Math.cos(t.angle)*c.tankSpeed*S*dt;
+        const ny = t.y + Math.sin(t.angle)*c.tankSpeed*S*dt;
+        const r = c.tankRadius*S;
+        if(!this.tankBlocked(nx, t.y, r, t.id)) t.x = nx;
+        if(!this.tankBlocked(t.x, ny, r, t.id)) t.y = ny;
+        t.cooldown -= dt*1000;
+        if(t.cooldown<=0){
+          t.cooldown = c.fireCooldownMs;
+          const spawnDist = c.tankRadius*S + c.bulletRadius*S + 4;
+          this.bullets.push({
+            x:t.x+Math.cos(t.angle)*spawnDist, y:t.y+Math.sin(t.angle)*spawnDist,
+            vx:Math.cos(t.angle)*c.bulletSpeed*S, vy:Math.sin(t.angle)*c.bulletSpeed*S,
+            bounces:0, owner:t.id, life:6,
+          });
+        }
+      }
+    }
+
+    const a = this.arena;
+    for(const b of this.bullets){
+      b.x += b.vx*dt; b.y += b.vy*dt; b.life -= dt;
+      const r = c.bulletRadius*S;
+      if(b.x-r<a.x){ b.x=a.x+r; b.vx=-b.vx; b.bounces++; }
+      else if(b.x+r>a.x+a.w){ b.x=a.x+a.w-r; b.vx=-b.vx; b.bounces++; }
+      if(b.y-r<a.y){ b.y=a.y+r; b.vy=-b.vy; b.bounces++; }
+      else if(b.y+r>a.y+a.h){ b.y=a.y+a.h-r; b.vy=-b.vy; b.bounces++; }
+      for(const o of this.obstacles){
+        if(this.rectContainsCircle(o,b.x,b.y,r)){
+          const cx = o.x+o.w/2, cy=o.y+o.h/2;
+          const dx = (b.x-cx)/o.w, dy=(b.y-cy)/o.h;
+          if(Math.abs(dx)>Math.abs(dy)) b.vx=-b.vx; else b.vy=-b.vy;
+          b.bounces++;
+          b.x += b.vx*dt*2; b.y += b.vy*dt*2;
+        }
+      }
+    }
+    this.bullets = this.bullets.filter(b=>b.life>0 && b.bounces<=c.maxBounces);
+
+    let roundEnded = false;
+    for(const b of this.bullets){
+      if(roundEnded) break;
+      for(const t of this.tanks){
+        if(!t.alive || t.id===b.owner) continue;
+        if(dist(b.x,b.y,t.x,t.y) < c.tankRadius*S + c.bulletRadius*S){
+          t.alive = false;
+          this.scores[b.owner]++;
+          buildScoreboard(this.scores);
+          this.spawnParticles(t.x,t.y,CONFIG.players[t.id].color);
+          flashEvent(CONFIG.players[b.owner].name+' уничтожил '+CONFIG.players[t.id].name+'!');
+          b.life = 0;
+          roundEnded = true;
+          if(!this.checkMatchWin()){ this.state='roundEnd'; this.roundEndMs = CONFIG.match.roundEndMs; }
+          break;
+        }
+      }
+    }
+    this.updateParticles(dt);
+  }
+  spawnParticles(x,y,color){
+    for(let k=0;k<18;k++){
+      const ang = Math.random()*TAU, sp = 60+Math.random()*160;
+      this.particles.push({x,y,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,life:0.6+Math.random()*0.4,color});
+    }
+  }
+  updateParticles(dt){
+    for(const p of this.particles){ p.x+=p.vx*dt; p.y+=p.vy*dt; p.vx*=0.9; p.vy*=0.9; p.life-=dt; }
+    this.particles = this.particles.filter(p=>p.life>0);
+  }
+  render(ctx){
+    const a = this.arena, S=GAME.scale, c=CONFIG.tanks;
+    ctx.fillStyle = '#1b1e14';
+    ctx.fillRect(a.x,a.y,a.w,a.h);
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)'; ctx.lineWidth=4;
+    ctx.strokeRect(a.x,a.y,a.w,a.h);
+    for(let gx=a.x; gx<a.x+a.w; gx+=40*S){ ctx.strokeStyle='rgba(255,255,255,0.03)'; ctx.beginPath(); ctx.moveTo(gx,a.y); ctx.lineTo(gx,a.y+a.h); ctx.stroke(); }
+
+    for(const o of this.obstacles){
+      const grad = ctx.createLinearGradient(o.x,o.y,o.x,o.y+o.h);
+      grad.addColorStop(0,'#4a4f3d'); grad.addColorStop(1,'#2c2f22');
+      ctx.fillStyle = grad;
+      rr(ctx,o.x,o.y,o.w,o.h,6); ctx.fill();
+      ctx.strokeStyle='rgba(0,0,0,0.4)'; ctx.lineWidth=2; ctx.stroke();
+    }
+
+    for(const t of this.tanks){
+      if(!t.alive) continue;
+      const p = CONFIG.players[t.id];
+      const r = c.tankRadius*S;
+      ctx.save();
+      ctx.translate(t.x,t.y);
+      ctx.rotate(t.angle);
+      // -------- НАЧАЛО ГЕОМЕТРИЧЕСКОЙ ОТРИСОВКИ ТАНКА --------
+      // Замени этот блок на ctx.drawImage(SPRITES.tank<Цвет>, -r,-r, r*2,r*2)
+      // если положишь спрайт в папку sprites/.
+      ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=10*S;
+      ctx.fillStyle = p.dark;
+      rr(ctx,-r,-r*0.78,r*2,r*1.56,6*S); ctx.fill();
+      ctx.fillStyle = p.color;
+      rr(ctx,-r*0.82,-r*0.62,r*1.64,r*1.24,5*S); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.35)';
+      ctx.fillRect(0, -r*0.18, r*1.35, r*0.36);
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(0,0,r*0.5,0,TAU); ctx.fill();
+      ctx.strokeStyle='rgba(0,0,0,0.5)'; ctx.lineWidth=2*S; ctx.stroke();
+      // -------- КОНЕЦ ГЕОМЕТРИЧЕСКОЙ ОТРИСОВКИ ТАНКА --------
+      ctx.restore();
+    }
+
+    for(const b of this.bullets){
+      ctx.beginPath();
+      ctx.fillStyle = CONFIG.players[b.owner].color;
+      ctx.shadowColor = CONFIG.players[b.owner].color; ctx.shadowBlur = 8*S;
+      ctx.arc(b.x,b.y,c.bulletRadius*S,0,TAU); ctx.fill();
+      ctx.shadowBlur=0;
+    }
+    for(const pt of this.particles){
+      ctx.globalAlpha = clamp(pt.life,0,1);
+      ctx.fillStyle = pt.color;
+      ctx.beginPath(); ctx.arc(pt.x,pt.y,4*S,0,TAU); ctx.fill();
+      ctx.globalAlpha=1;
+    }
+  }
+}
+
+/* ==========================================================================
+ * 9. МИНИ-ИГРА 2: ФУТБОЛ
+ * ========================================================================== */
+class SoccerGame extends BaseGame {
+  constructor(){
+    super();
+    this.layoutField();
+    this.resetPositions(true);
+  }
+  onResize(){ this.layoutField(); this.resetPositions(false, true); }
+  layoutField(){
+    const c = CONFIG.soccer;
+    const m = c.fieldMargin*GAME.scale;
+    this.field = { x:m, y:GAME.areaTop+m, w:GAME.areaW-2*m, h:GAME.areaH-2*m };
+  }
+  resetPositions(fullReset, keepScore){
+    const f = this.field;
+    const cx=f.x+f.w/2, cy=f.y+f.h/2;
+    const starts = [
+      {x:f.x+f.w*0.12, y:cy, ang:0},
+      {x:f.x+f.w*0.88, y:cy, ang:Math.PI},
+      {x:cx, y:f.y+f.h*0.14, ang:Math.PI/2},
+      {x:cx, y:f.y+f.h*0.86, ang:-Math.PI/2},
+    ];
+    this.players = starts.map((s,i)=>({ id:i, x:s.x, y:s.y, angle:s.ang, dashMs:0 }));
+    this.ball = { x:cx, y:cy, vx:0, vy:0, lastTouch:-1 };
+    if(!keepScore){
+      this.state = 'countdown';
+      this.countdownMs = CONFIG.match.countdownMs;
+    }
+  }
+  goalGeom(){
+    const f = this.field, c = CONFIG.soccer, gw = c.goalWidth*GAME.scale;
+    return {
+      left:  { y0:f.y+f.h/2-gw/2, y1:f.y+f.h/2+gw/2, owner:0 },
+      right: { y0:f.y+f.h/2-gw/2, y1:f.y+f.h/2+gw/2, owner:1 },
+      top:   { x0:f.x+f.w/2-gw/2, x1:f.x+f.w/2+gw/2, owner:2 },
+      bottom:{ x0:f.x+f.w/2-gw/2, x1:f.x+f.w/2+gw/2, owner:3 },
+    };
+  }
+  decideBot(i, dt){
+    const c = CONFIG.soccer;
+    const st = this.botState[i];
+    st.cooldown -= dt*1000;
+    if(st.cooldown>0) return false;
+    const me = this.players[i];
+    const desired = Math.atan2(this.ball.y-me.y, this.ball.x-me.x);
+    const diff = angleDiff(desired, me.angle);
+    if(Math.abs(diff) > c.aiTurnTolerance){
+      st.cooldown = c.aiTapCooldownMs;
+      return true;
+    }
+    if(Math.random() < 0.02){ st.cooldown = c.aiTapCooldownMs*1.4; return true; }
+    return false;
+  }
+  update(dt){
+    if(this.state==='matchOver') return;
+    if(this.state==='countdown'){ this.tickCountdown(dt); return; }
+    if(this.state==='roundEnd'){ this.tickRoundEnd(dt, ()=>{ this.resetPositions(false); this.state='countdown'; this.countdownMs=CONFIG.match.countdownMs; }); return; }
+
+    const c = CONFIG.soccer, S=GAME.scale, f=this.field;
+    const input = this.computeFrameInput(dt);
+
+    for(const pl of this.players){
+      if(input.tap[pl.id]){
+        pl.angle = normAngle(pl.angle + Math.PI/2);
+        pl.dashMs = c.dashDurationMs;
+      }
+      const speed = (pl.dashMs>0 ? c.dashSpeed : c.moveSpeed) * S;
+      if(pl.dashMs>0) pl.dashMs -= dt*1000;
+      let nx = pl.x + Math.cos(pl.angle)*speed*dt;
+      let ny = pl.y + Math.sin(pl.angle)*speed*dt;
+      const r = c.playerRadius*S;
+      if(nx-r<f.x){ nx=f.x+r; pl.angle = normAngle(Math.PI-pl.angle); }
+      else if(nx+r>f.x+f.w){ nx=f.x+f.w-r; pl.angle = normAngle(Math.PI-pl.angle); }
+      if(ny-r<f.y){ ny=f.y+r; pl.angle = normAngle(-pl.angle); }
+      else if(ny+r>f.y+f.h){ ny=f.y+f.h-r; pl.angle = normAngle(-pl.angle); }
+      pl.x=nx; pl.y=ny;
+    }
+    for(let i=0;i<4;i++) for(let j=i+1;j<4;j++){
+      const A=this.players[i], B=this.players[j];
+      const r = c.playerRadius*S;
+      const d = dist(A.x,A.y,B.x,B.y);
+      if(d>0 && d < r*2){
+        const overlap=(r*2-d)/2, nx=(B.x-A.x)/d, ny=(B.y-A.y)/d;
+        A.x-=nx*overlap; A.y-=ny*overlap; B.x+=nx*overlap; B.y+=ny*overlap;
+      }
+    }
+
+    const ball = this.ball;
+    ball.x += ball.vx*dt; ball.y += ball.vy*dt;
+    const dampF = Math.pow(1-c.ballDamping, dt);
+    ball.vx *= dampF; ball.vy *= dampF;
+    const br = c.ballRadius*S;
+    const g = this.goalGeom();
+    let scoredOwner = -1;
+
+    if(ball.x-br < f.x){
+      if(ball.y>g.left.y0 && ball.y<g.left.y1) scoredOwner=0;
+      else { ball.x=f.x+br; ball.vx=-ball.vx*0.85; }
+    } else if(ball.x+br > f.x+f.w){
+      if(ball.y>g.right.y0 && ball.y<g.right.y1) scoredOwner=1;
+      else { ball.x=f.x+f.w-br; ball.vx=-ball.vx*0.85; }
+    }
+    if(scoredOwner<0){
+      if(ball.y-br < f.y){
+        if(ball.x>g.top.x0 && ball.x<g.top.x1) scoredOwner=2;
+        else { ball.y=f.y+br; ball.vy=-ball.vy*0.85; }
+      } else if(ball.y+br > f.y+f.h){
+        if(ball.x>g.bottom.x0 && ball.x<g.bottom.x1) scoredOwner=3;
+        else { ball.y=f.y+f.h-br; ball.vy=-ball.vy*0.85; }
+      }
+    }
+
+    for(const pl of this.players){
+      const r = c.playerRadius*S;
+      const d = dist(pl.x,pl.y,ball.x,ball.y);
+      if(d>0 && d < r+br){
+        const nx=(ball.x-pl.x)/d, ny=(ball.y-pl.y)/d, overlap=(r+br-d);
+        ball.x+=nx*overlap; ball.y+=ny*overlap;
+        const speed = Math.max(Math.hypot(ball.vx,ball.vy), c.kickPower*S*0.5);
+        ball.vx = nx*speed + Math.cos(pl.angle)*c.kickPower*S*0.4;
+        ball.vy = ny*speed + Math.sin(pl.angle)*c.kickPower*S*0.4;
+        ball.lastTouch = pl.id;
+      }
+    }
+
+    if(scoredOwner>=0){
+      const scorer = ball.lastTouch;
+      if(scorer>=0 && scorer!==scoredOwner){
+        this.scores[scorer]++;
+        buildScoreboard(this.scores);
+        flashEvent('ГОЛ! '+CONFIG.players[scorer].name);
+      } else {
+        flashEvent('ГОЛ в свои ворота!');
+      }
+      if(!this.checkMatchWin()){ this.state='roundEnd'; this.roundEndMs = CONFIG.match.roundEndMs; }
+    }
+  }
+  render(ctx){
+    const f=this.field, S=GAME.scale, c=CONFIG.soccer, g=this.goalGeom();
+    const grad = ctx.createLinearGradient(f.x,f.y,f.x,f.y+f.h);
+    grad.addColorStop(0,'#1f7a3d'); grad.addColorStop(1,'#155c2c');
+    ctx.fillStyle=grad; ctx.fillRect(f.x,f.y,f.w,f.h);
+    ctx.strokeStyle='rgba(255,255,255,0.55)'; ctx.lineWidth=3*S;
+    ctx.strokeRect(f.x,f.y,f.w,f.h);
+    ctx.beginPath(); ctx.moveTo(f.x,f.y+f.h/2); ctx.lineTo(f.x+f.w,f.y+f.h/2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(f.x+f.w/2,f.y+f.h/2, 60*S, 0, TAU); ctx.stroke();
+
+    function goalMark(owner, x0,y0,x1,y1){
+      ctx.strokeStyle = CONFIG.players[owner].color; ctx.lineWidth=6*S;
+      ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x1,y1); ctx.stroke();
+    }
+    goalMark(0, f.x,g.left.y0, f.x,g.left.y1);
+    goalMark(1, f.x+f.w,g.right.y0, f.x+f.w,g.right.y1);
+    goalMark(2, g.top.x0,f.y, g.top.x1,f.y);
+    goalMark(3, g.bottom.x0,f.y+f.h, g.bottom.x1,f.y+f.h);
+
+    for(const pl of this.players){
+      const p = CONFIG.players[pl.id];
+      const r = c.playerRadius*S;
+      ctx.save();
+      ctx.translate(pl.x,pl.y);
+      // -------- ГЕОМЕТРИЧЕСКАЯ ОТРИСОВКА ИГРОКА (замени на drawImage при наличии спрайта) --------
+      ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=8*S;
+      ctx.fillStyle=p.color;
+      ctx.beginPath(); ctx.arc(0,0,r,0,TAU); ctx.fill();
+      ctx.strokeStyle=p.dark; ctx.lineWidth=3*S; ctx.stroke();
+      ctx.shadowBlur=0;
+      ctx.rotate(pl.angle);
+      ctx.fillStyle='#fff';
+      ctx.beginPath(); ctx.moveTo(r*0.9,0); ctx.lineTo(r*0.15,-r*0.4); ctx.lineTo(r*0.15,r*0.4); ctx.closePath(); ctx.fill();
+      // -------------------------------------------------------------------------------------
+      ctx.restore();
+    }
+    const ball = this.ball;
+    ctx.save();
+    ctx.translate(ball.x,ball.y);
+    ctx.shadowColor='rgba(0,0,0,0.6)'; ctx.shadowBlur=6*S;
+    const bg = ctx.createRadialGradient(-4*S,-4*S,1,0,0,c.ballRadius*S);
+    bg.addColorStop(0,'#fff'); bg.addColorStop(1,'#c8c8c8');
+    ctx.fillStyle=bg;
+    ctx.beginPath(); ctx.arc(0,0,c.ballRadius*S,0,TAU); ctx.fill();
+    ctx.strokeStyle='#333'; ctx.lineWidth=1.5*S; ctx.stroke();
+    ctx.restore();
+  }
+}
+
+/* ==========================================================================
+ * 10. МИНИ-ИГРА 3: СУМО
+ * ========================================================================== */
+class SumoGame extends BaseGame {
+  constructor(){
+    super();
+    this.layoutRing();
+    this.resetPositions(true);
+  }
+  onResize(){ this.layoutRing(); }
+  layoutRing(){
+    const c = CONFIG.sumo;
+    this.ring = {
+      cx: GAME.areaW/2, cy: GAME.areaTop + GAME.areaH/2,
+      r: Math.min(GAME.areaW,GAME.areaH) * c.ringRadiusFactor,
+    };
+  }
+  resetPositions(fullReset){
+    const c = CONFIG.sumo;
+    const ring = this.ring;
+    const sr = ring.r * c.spawnRadiusFactor;
+    this.wrestlers = [0,1,2,3].map(i=>{
+      const a = -Math.PI/2 + i*(Math.PI/2);
+      return {
+        id:i, x:ring.cx+Math.cos(a)*sr, y:ring.cy+Math.sin(a)*sr,
+        angle: a+Math.PI, vx:0, vy:0, alive:true,
+      };
+    });
+    this.state = 'countdown';
+    this.countdownMs = CONFIG.match.countdownMs;
+  }
+  decideBot(i, dt){
+    const c = CONFIG.sumo;
+    const me = this.wrestlers[i];
+    if(!me || !me.alive) return false;
+    const st = this.botState[i];
+    st.cooldown -= dt*1000;
+    if(st.cooldown>0) return false;
+    const ring = this.ring;
+    const distFromCenter = dist(me.x,me.y,ring.cx,ring.cy);
+    let desired;
+    if(distFromCenter > ring.r*c.edgeZoneFactor){
+      desired = Math.atan2(ring.cy-me.y, ring.cx-me.x);
+    } else {
+      let target=null, best=Infinity;
+      for(const w of this.wrestlers){
+        if(w.id===i || !w.alive) continue;
+        const d = dist(me.x,me.y,w.x,w.y);
+        if(d<best){ best=d; target=w; }
+      }
+      if(!target) return false;
+      desired = Math.atan2(target.y-me.y, target.x-me.x);
+    }
+    const diff = angleDiff(desired, me.angle);
+    if(Math.abs(diff) < c.aiAimTolerance){
+      st.cooldown = c.aiTapCooldownMs;
+      return true;
+    }
+    return false;
+  }
+  update(dt){
+    if(this.state==='matchOver') return;
+    if(this.state==='countdown'){ this.tickCountdown(dt); return; }
+    if(this.state==='roundEnd'){ this.tickRoundEnd(dt, ()=>this.resetPositions(false)); return; }
+
+    const c = CONFIG.sumo, S=GAME.scale, ring=this.ring;
+    const input = this.computeFrameInput(dt);
+    const r = c.radius*S;
+
+    for(const w of this.wrestlers){
+      if(!w.alive) continue;
+      w.angle += c.idleRotateSpeed*dt;
+      if(input.tap[w.id]){
+        w.vx += Math.cos(w.angle)*c.dashPower*S;
+        w.vy += Math.sin(w.angle)*c.dashPower*S;
+      }
+      w.x += w.vx*dt; w.y += w.vy*dt;
+      const damp = Math.pow(Math.E, -c.damping*dt);
+      w.vx *= damp; w.vy *= damp;
+    }
+
+    for(let i=0;i<4;i++) for(let j=i+1;j<4;j++){
+      const A=this.wrestlers[i], B=this.wrestlers[j];
+      if(!A.alive || !B.alive) continue;
+      const d = dist(A.x,A.y,B.x,B.y);
+      if(d>0 && d < r*2){
+        const nx=(B.x-A.x)/d, ny=(B.y-A.y)/d;
+        const overlap = r*2-d;
+        A.x -= nx*overlap/2; A.y -= ny*overlap/2;
+        B.x += nx*overlap/2; B.y += ny*overlap/2;
+        const rvx=B.vx-A.vx, rvy=B.vy-A.vy;
+        const velAlong = rvx*nx+rvy*ny;
+        if(velAlong<0){
+          const impulse = -(1+c.restitution)*velAlong/2;
+          A.vx -= impulse*nx; A.vy -= impulse*ny;
+          B.vx += impulse*nx; B.vy += impulse*ny;
+        }
+      }
+    }
+
+    let justFell = false;
+    for(const w of this.wrestlers){
+      if(!w.alive) continue;
+      if(dist(w.x,w.y,ring.cx,ring.cy) - r*0.3 > ring.r){
+        w.alive = false;
+        justFell = true;
+        flashEvent(CONFIG.players[w.id].name+' выбывает!');
+      }
+    }
+    if(justFell){
+      const alive = this.wrestlers.filter(w=>w.alive);
+      if(alive.length<=1){
+        if(alive.length===1){
+          this.scores[alive[0].id]++;
+          buildScoreboard(this.scores);
+        }
+        if(!this.checkMatchWin()){ this.state='roundEnd'; this.roundEndMs = CONFIG.match.roundEndMs; }
+      }
+    }
+  }
+  render(ctx){
+    const ring=this.ring, S=GAME.scale, c=CONFIG.sumo;
+    ctx.fillStyle = '#12151d';
+    ctx.fillRect(0,GAME.areaTop,GAME.areaW,GAME.areaH);
+    const outerGrad = ctx.createRadialGradient(ring.cx,ring.cy,ring.r*0.9,ring.cx,ring.cy,ring.r*1.5);
+    outerGrad.addColorStop(0,'rgba(20,10,10,0.2)'); outerGrad.addColorStop(1,'rgba(60,10,10,0.55)');
+    ctx.fillStyle = outerGrad;
+    ctx.beginPath(); ctx.arc(ring.cx,ring.cy,ring.r*1.5,0,TAU); ctx.fill();
+
+    const ringGrad = ctx.createRadialGradient(ring.cx,ring.cy,0,ring.cx,ring.cy,ring.r);
+    ringGrad.addColorStop(0,'#d8b06a'); ringGrad.addColorStop(1,'#a97c3f');
+    ctx.fillStyle = ringGrad;
+    ctx.beginPath(); ctx.arc(ring.cx,ring.cy,ring.r,0,TAU); ctx.fill();
+    ctx.strokeStyle='#fff'; ctx.lineWidth=6*S;
+    ctx.beginPath(); ctx.arc(ring.cx,ring.cy,ring.r,0,TAU); ctx.stroke();
+    ctx.strokeStyle='rgba(255,255,255,0.25)'; ctx.lineWidth=2*S;
+    ctx.beginPath(); ctx.arc(ring.cx,ring.cy,ring.r*0.6,0,TAU); ctx.stroke();
+
+    for(const w of this.wrestlers){
+      if(!w.alive) continue;
+      const p = CONFIG.players[w.id];
+      const r = c.radius*S;
+      ctx.save();
+      ctx.translate(w.x,w.y);
+      // -------- ГЕОМЕТРИЧЕСКАЯ ОТРИСОВКА СУМОИСТА (замени на drawImage при наличии спрайта) --------
+      ctx.shadowColor='rgba(0,0,0,0.5)'; ctx.shadowBlur=10*S;
+      ctx.fillStyle = p.color;
+      ctx.beginPath(); ctx.arc(0,0,r,0,TAU); ctx.fill();
+      ctx.strokeStyle = p.dark; ctx.lineWidth=4*S; ctx.stroke();
+      ctx.shadowBlur=0;
+      ctx.rotate(w.angle);
+      ctx.fillStyle='rgba(0,0,0,0.55)';
+      ctx.beginPath(); ctx.arc(r*0.55,0,r*0.28,0,TAU); ctx.fill();
+      // ----------------------------------------------------------------------------------------
+      ctx.restore();
+    }
+  }
+}
+
+/* ==========================================================================
+ * 11. ИКОНКИ ДЛЯ МЕНЮ ВЫБОРА ИГРЫ
+ * ========================================================================== */
+function drawIcons(){
+  document.querySelectorAll('canvas.icon').forEach(cv=>{
+    const ictx = cv.getContext('2d');
+    const w=cv.width, h=cv.height;
+    ictx.clearRect(0,0,w,h);
+    const kind = cv.dataset.icon;
+    if(kind==='tanks'){
+      ictx.fillStyle='#2c2f22'; ictx.fillRect(0,0,w,h);
+      ictx.save(); ictx.translate(w/2,h/2); ictx.rotate(-0.4);
+      ictx.fillStyle='#8f1622'; rr(ictx,-30,-22,60,44,8); ictx.fill();
+      ictx.fillStyle='#ff4d5e'; rr(ictx,-24,-17,48,34,6); ictx.fill();
+      ictx.fillStyle='rgba(0,0,0,0.35)'; ictx.fillRect(0,-5,38,10);
+      ictx.restore();
+    } else if(kind==='soccer'){
+      ictx.fillStyle='#155c2c'; ictx.fillRect(0,0,w,h);
+      ictx.strokeStyle='rgba(255,255,255,0.5)'; ictx.lineWidth=3;
+      ictx.strokeRect(6,6,w-12,h-12);
+      ictx.beginPath(); ictx.arc(w/2,h/2,26,0,TAU); ictx.stroke();
+      ictx.fillStyle='#fff'; ictx.beginPath(); ictx.arc(w/2,h/2,14,0,TAU); ictx.fill();
+    } else if(kind==='sumo'){
+      ictx.fillStyle='#12151d'; ictx.fillRect(0,0,w,h);
+      ictx.fillStyle='#c99a52'; ictx.beginPath(); ictx.arc(w/2,h/2,50,0,TAU); ictx.fill();
+      ictx.strokeStyle='#fff'; ictx.lineWidth=4; ictx.stroke();
+      ictx.fillStyle='#ff4d5e'; ictx.beginPath(); ictx.arc(w/2-14,h/2,16,0,TAU); ictx.fill();
+      ictx.fillStyle='#3d8bff'; ictx.beginPath(); ictx.arc(w/2+14,h/2,16,0,TAU); ictx.fill();
+    }
+  });
+}
+drawIcons();
+
+/* ==========================================================================
+ * 12. ГЛАВНЫЙ ЦИКЛ
+ * ========================================================================== */
+function render(){
+  ctx.clearRect(0,0,GAME.w,GAME.h);
+  const bgGrad = ctx.createLinearGradient(0,0,0,GAME.h);
+  bgGrad.addColorStop(0,'#15171f'); bgGrad.addColorStop(1,'#0b0c10');
+  ctx.fillStyle = bgGrad; ctx.fillRect(0,0,GAME.w,GAME.h);
+  if(currentGame && !hud.classList.contains('hidden')){
+    currentGame.render(ctx);
+  }
+}
+
+let lastT = null;
+function loop(ts){
+  if(lastT===null) lastT = ts;
+  let dt = (ts-lastT)/1000;
+  lastT = ts;
+  if(dt>0.05) dt=0.05;
+
+  if(eventTtl>0){ eventTtl -= dt*1000; if(eventTtl<=0) eventTextEl.classList.add('hidden'); }
+
+  if(currentGame && !paused && !hud.classList.contains('hidden')){
+    currentGame.update(dt);
+  }
+  render();
+  requestAnimationFrame(loop);
+}
+
+resize();
+showScreen('menuPlayers');
+updateCornerVisibility();
+requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>
