@@ -1,10 +1,11 @@
 import logging
+import time
 from typing import Optional, Tuple
 
 from telegram import Message, Update
 from telegram.ext import ContextTypes
 
-from . import formatting
+from . import commands, formatting
 from .storage import Storage
 
 logger = logging.getLogger(__name__)
@@ -60,11 +61,28 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
     storage: Storage = context.bot_data["storage"]
     bcid = message.business_connection_id
 
+    conn = await _get_connection(storage, context.bot, bcid)
+    is_owner = bool(conn and message.from_user and message.from_user.id == conn["owner_user_id"])
+
+    if is_owner and conn:
+        handled = await commands.try_handle_owner_command(message, context, storage, conn["owner_chat_id"])
+        if handled:
+            return
+
     _store_message(storage, message, bcid)
+
+    if conn and not is_owner:
+        until_ts = storage.get_ban(bcid, message.chat_id)
+        if until_ts and until_ts > time.time():
+            remaining_min = max(1, int((until_ts - time.time()) // 60) + 1)
+            await context.bot.send_message(
+                chat_id=message.chat_id,
+                business_connection_id=bcid,
+                text=f"⛔ Вы заблокированы ещё на {remaining_min} мин.",
+            )
 
     reply = message.reply_to_message
     if reply and reply.photo and not storage.message_exists(bcid, message.chat_id, reply.message_id):
-        conn = await _get_connection(storage, context.bot, bcid)
         if not conn:
             return
         _store_message(storage, reply, bcid)

@@ -11,6 +11,13 @@ CREATE TABLE IF NOT EXISTS connections (
     updated_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS bans (
+    business_connection_id TEXT NOT NULL,
+    chat_id INTEGER NOT NULL,
+    until_ts INTEGER NOT NULL,
+    PRIMARY KEY (business_connection_id, chat_id)
+);
+
 CREATE TABLE IF NOT EXISTS messages (
     business_connection_id TEXT NOT NULL,
     chat_id INTEGER NOT NULL,
@@ -66,6 +73,33 @@ class Storage:
         if not row:
             return None
         return {"owner_user_id": row[0], "owner_chat_id": row[1], "is_enabled": bool(row[2])}
+
+    def set_ban(self, business_connection_id: str, chat_id: int, until_ts: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO bans (business_connection_id, chat_id, until_ts)
+                VALUES (?, ?, ?)
+                ON CONFLICT(business_connection_id, chat_id) DO UPDATE SET
+                    until_ts=excluded.until_ts
+                """,
+                (business_connection_id, chat_id, until_ts),
+            )
+
+    def clear_ban(self, business_connection_id: str, chat_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM bans WHERE business_connection_id = ? AND chat_id = ?",
+                (business_connection_id, chat_id),
+            )
+
+    def get_ban(self, business_connection_id: str, chat_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT until_ts FROM bans WHERE business_connection_id = ? AND chat_id = ?",
+                (business_connection_id, chat_id),
+            ).fetchone()
+        return row[0] if row else None
 
     def save_message(
         self,
