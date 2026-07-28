@@ -81,6 +81,41 @@ Telegram Bot API не присылает ботам полное содержи�
    python -m bed_dialog_bot
    ```
 
+## Хостинг (Railway / Render)
+
+Бот работает через long polling — ему не нужен публичный URL/порт, только
+машина, которая запускает процесс `python -m bed_dialog_bot` постоянно. Для
+обеих площадок нужны одни и те же настройки:
+
+- **Build Command:** `pip install -r bed_dialog_bot/requirements.txt`
+- **Start Command:** `python -m bed_dialog_bot`
+- **Переменные окружения** (Environment/Variables, вписывать вручную в
+  дашборде — не в репозиторий!): `BOT_TOKEN`, `ADMIN_USER_IDS`, при желании
+  `DB_PATH`, `PREMIUM_STARS_PRICE`, `PREMIUM_DURATION_DAYS`, `FREE_SPAM_MAX`,
+  `PREMIUM_SPAM_MAX`.
+
+### Railway
+
+1. New Project → Deploy from GitHub repo → выбрать этот репозиторий и ветку.
+2. В настройках сервиса указать Build/Start Command как выше.
+3. Во вкладке Variables добавить `BOT_TOKEN` и остальные переменные.
+4. Подключить Volume и указать `DB_PATH=/data/bed_dialog.db` — иначе база
+   (сохранённые сообщения, баны, премиум-статусы) слетит при каждом
+   передеплое.
+
+### Render
+
+1. New → **Background Worker** (не Web Service — воркеру не нужен открытый
+   порт, а веб-сервисы на бесплатном тарифе засыпают и не ловят polling-
+   обновления).
+2. Подключить репозиторий/ветку, указать Build/Start Command как выше.
+3. Environment → добавить `BOT_TOKEN` и остальные переменные.
+4. Добавить Disk (persistent storage), смонтировать, например, в `/data`,
+   и указать `DB_PATH=/data/bed_dialog.db`.
+5. У Render бесплатный тариф обычно доступен только для Web Service —
+   Background Worker может требовать платный план; уточните это в текущих
+   тарифах Render перед деплоем.
+
 ## Подключение к вашему аккаунту
 
 1. В Telegram: **Настройки → Автоматизация чатов** (Business → Chatbots).
