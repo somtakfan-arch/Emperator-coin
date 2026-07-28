@@ -63,7 +63,11 @@ async def handle_business_connection(update: Update, context: ContextTypes.DEFAU
     if is_new and bc.is_enabled:
         text = texts.build_intro_text(context.bot.username) + texts.CONNECTED_SUFFIX
         try:
-            await context.bot.send_message(chat_id=bc.user_chat_id, text=text)
+            await context.bot.send_message(
+                chat_id=bc.user_chat_id,
+                text=text,
+                reply_markup=texts.build_intro_keyboard(context.bot.username),
+            )
         except Exception:
             logger.exception("Failed to send onboarding message to %s", bc.user_chat_id)
 
@@ -183,7 +187,10 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     text = message.text or ""
 
     if text.startswith("/start") or text.startswith("/help"):
-        await message.reply_text(texts.build_intro_text(context.bot.username))
+        await message.reply_text(
+            texts.build_intro_text(context.bot.username),
+            reply_markup=texts.build_intro_keyboard(context.bot.username),
+        )
         return
 
     if text.startswith("/premium"):
