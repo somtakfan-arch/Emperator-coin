@@ -186,11 +186,20 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     text = message.text or ""
 
-    if text.startswith("/start") or text.startswith("/help"):
+    if text.startswith("/start"):
         await message.reply_text(
             texts.build_intro_text(context.bot.username),
             reply_markup=texts.build_intro_keyboard(context.bot.username),
         )
+        return
+
+    if text.startswith("/help"):
+        await message.reply_text(texts.build_help_text())
+        return
+
+    if text.startswith("/status"):
+        premium_until = storage.get_premium_until(message.from_user.id)
+        await message.reply_text(texts.build_status_text(premium_until))
         return
 
     if text.startswith("/premium"):

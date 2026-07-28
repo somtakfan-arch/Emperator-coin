@@ -14,7 +14,7 @@ logging.basicConfig(
 
 
 def main() -> None:
-    application = Application.builder().token(BOT_TOKEN).build()
+    application = Application.builder().token(BOT_TOKEN).concurrent_updates(True).build()
     application.bot_data["storage"] = Storage(DB_PATH)
     application.add_handler(TypeHandler(Update, dispatch))
     application.run_polling(allowed_updates=Update.ALL_TYPES)
