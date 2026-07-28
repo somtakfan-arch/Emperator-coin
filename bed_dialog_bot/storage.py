@@ -18,6 +18,11 @@ CREATE TABLE IF NOT EXISTS bans (
     PRIMARY KEY (business_connection_id, chat_id)
 );
 
+CREATE TABLE IF NOT EXISTS premium (
+    user_id INTEGER PRIMARY KEY,
+    premium_until INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS messages (
     business_connection_id TEXT NOT NULL,
     chat_id INTEGER NOT NULL,
@@ -100,6 +105,32 @@ class Storage:
                 (business_connection_id, chat_id),
             ).fetchone()
         return row[0] if row else None
+
+    def get_premium_until(self, user_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT premium_until FROM premium WHERE user_id = ?", (user_id,)
+            ).fetchone()
+        return row[0] if row else None
+
+    def is_premium(self, user_id: int) -> bool:
+        until = self.get_premium_until(user_id)
+        return bool(until and until > time.time())
+
+    def grant_premium_days(self, user_id: int, days: int) -> int:
+        now = int(time.time())
+        current = self.get_premium_until(user_id)
+        base = current if current and current > now else now
+        new_until = base + days * 86400
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO premium (user_id, premium_until) VALUES (?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET premium_until=excluded.premium_until
+                """,
+                (user_id, new_until),
+            )
+        return new_until
 
     def save_message(
         self,

@@ -4,13 +4,14 @@ import re
 import time
 
 from telegram import Message
+from telegram.error import RetryAfter
 from telegram.ext import ContextTypes
 
+from . import config
 from .storage import Storage
 
 logger = logging.getLogger(__name__)
 
-MAX_SPAM_COUNT = 100
 SPAM_WINDOW_SECONDS = 45
 
 _BAN_RE = re.compile(r"^\.ban\s+(\d+)\s*$")
@@ -25,7 +26,8 @@ HELP_TEXT = (
     "вместо этого автоматически отвечает собеседнику, пока бан активен.\n"
     ".unban — снять бан раньше времени\n"
     ".spam <количество> <сообщение> — отправить сообщение N раз подряд "
-    "(максимум 100 сообщений за 45 секунд)\n"
+    f"(максимум {config.FREE_SPAM_MAX} сообщений за {SPAM_WINDOW_SECONDS} секунд, "
+    f"с премиумом — до {config.PREMIUM_SPAM_MAX})\n"
     ".help — этот список команд"
 )
 
@@ -72,13 +74,18 @@ async def try_handle_owner_command(
 
     spam_match = _SPAM_RE.match(text)
     if spam_match:
-        count = max(1, min(int(spam_match.group(1)), MAX_SPAM_COUNT))
+        max_count = config.PREMIUM_SPAM_MAX if storage.is_premium(message.from_user.id) else config.FREE_SPAM_MAX
+        count = max(1, min(int(spam_match.group(1)), max_count))
         spam_text = spam_match.group(2)
         await _edit_command_message(context, bcid, chat_id, message_id, spam_text)
         interval = SPAM_WINDOW_SECONDS / count
         for _ in range(count - 1):
             await asyncio.sleep(interval)
-            await context.bot.send_message(chat_id=chat_id, business_connection_id=bcid, text=spam_text)
+            try:
+                await context.bot.send_message(chat_id=chat_id, business_connection_id=bcid, text=spam_text)
+            except RetryAfter as e:
+                await asyncio.sleep(e.retry_after)
+                await context.bot.send_message(chat_id=chat_id, business_connection_id=bcid, text=spam_text)
         return True
 
     if _HELP_RE.match(text):

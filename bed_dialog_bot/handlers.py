@@ -1,12 +1,16 @@
 import logging
+import re
 import time
+from datetime import datetime
 from typing import Optional, Tuple
 
-from telegram import Message, Update
+from telegram import LabeledPrice, Message, Update
 from telegram.ext import ContextTypes
 
-from . import commands, formatting
+from . import commands, config, formatting
 from .storage import Storage
+
+_GIVE_PREMIUM_RE = re.compile(r"^/give\s+premium\s+(\d+)\s+(\d+)\s*$")
 
 logger = logging.getLogger(__name__)
 
@@ -87,10 +91,13 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
             return
         _store_message(storage, reply, bcid)
         r_name, r_username = _display_name(reply)
+        is_premium = storage.is_premium(conn["owner_user_id"])
+        caption = formatting.format_one_time_photo_caption(r_name, r_username)
+        caption = formatting.with_watermark(caption, context.bot.username, is_premium)
         await context.bot.send_photo(
             chat_id=conn["owner_chat_id"],
             photo=reply.photo[-1].file_id,
-            caption=formatting.format_one_time_photo_caption(r_name, r_username),
+            caption=caption,
         )
 
 
@@ -110,10 +117,10 @@ async def handle_edited_business_message(update: Update, context: ContextTypes.D
         conn = await _get_connection(storage, context.bot, bcid)
         if not conn:
             return
-        await context.bot.send_message(
-            chat_id=conn["owner_chat_id"],
-            text=formatting.format_edited_text(name, username, old_text, new_text),
-        )
+        is_premium = storage.is_premium(conn["owner_user_id"])
+        text_out = formatting.format_edited_text(name, username, old_text, new_text)
+        text_out = formatting.with_watermark(text_out, context.bot.username, is_premium)
+        await context.bot.send_message(chat_id=conn["owner_chat_id"], text=text_out)
 
 
 async def handle_deleted_business_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -125,6 +132,8 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
     if not conn:
         return
 
+    is_premium = storage.is_premium(conn["owner_user_id"])
+
     for message_id in deleted.message_ids:
         stored = storage.get_message(bcid, deleted.chat.id, message_id)
         if not stored:
@@ -134,18 +143,71 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
         username = stored["from_username"]
 
         if stored["photo_file_id"]:
+            caption = formatting.format_deleted_photo_caption(name, username, stored["caption"])
+            caption = formatting.with_watermark(caption, context.bot.username, is_premium)
             await context.bot.send_photo(
                 chat_id=conn["owner_chat_id"],
                 photo=stored["photo_file_id"],
-                caption=formatting.format_deleted_photo_caption(name, username, stored["caption"]),
+                caption=caption,
             )
         elif stored["text"]:
-            await context.bot.send_message(
-                chat_id=conn["owner_chat_id"],
-                text=formatting.format_deleted_text(name, username, stored["text"]),
-            )
+            text_out = formatting.format_deleted_text(name, username, stored["text"])
+            text_out = formatting.with_watermark(text_out, context.bot.username, is_premium)
+            await context.bot.send_message(chat_id=conn["owner_chat_id"], text=text_out)
 
         storage.delete_message(bcid, deleted.chat.id, message_id)
+
+
+async def handle_pre_checkout_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await context.bot.answer_pre_checkout_query(update.pre_checkout_query.id, ok=True)
+
+
+async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    message = update.message
+    storage: Storage = context.bot_data["storage"]
+
+    if message.successful_payment:
+        until_ts = storage.grant_premium_days(message.from_user.id, config.PREMIUM_DURATION_DAYS)
+        until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y")
+        await message.reply_text(f"✅ Премиум активирован до {until_str}.")
+        return
+
+    text = message.text or ""
+
+    if text.startswith("/start"):
+        await message.reply_text(
+            "Bed Dialog Bot подключается через Telegram → Настройки → "
+            "Автоматизация чатов.\n\n"
+            f"/premium — премиум за {config.PREMIUM_STARS_PRICE}⭐/мес: без "
+            f"водяных знаков и .spam до {config.PREMIUM_SPAM_MAX} сообщений."
+        )
+        return
+
+    if text.startswith("/premium"):
+        await context.bot.send_invoice(
+            chat_id=message.chat_id,
+            title="Bed Dialog Premium (1 месяц)",
+            description=(
+                "Без водяных знаков в пересланных сообщениях и лимит .spam "
+                f"до {config.PREMIUM_SPAM_MAX} сообщений."
+            ),
+            payload=f"premium:{message.from_user.id}",
+            currency="XTR",
+            prices=[LabeledPrice("Premium 1 месяц", config.PREMIUM_STARS_PRICE)],
+            provider_token="",
+        )
+        return
+
+    give_match = _GIVE_PREMIUM_RE.match(text)
+    if give_match:
+        if message.from_user.id not in config.ADMIN_USER_IDS:
+            return
+        target_id = int(give_match.group(1))
+        days = int(give_match.group(2))
+        until_ts = storage.grant_premium_days(target_id, days)
+        until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y")
+        await message.reply_text(f"✅ Премиум для {target_id} выдан до {until_str}.")
+        return
 
 
 async def dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -157,3 +219,7 @@ async def dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await handle_edited_business_message(update, context)
     elif update.business_message:
         await handle_new_business_message(update, context)
+    elif update.pre_checkout_query:
+        await handle_pre_checkout_query(update, context)
+    elif update.message:
+        await handle_direct_message(update, context)
