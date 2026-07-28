@@ -7,7 +7,7 @@ from typing import Optional, Tuple
 from telegram import LabeledPrice, Message, Update
 from telegram.ext import ContextTypes
 
-from . import commands, config, formatting
+from . import commands, config, formatting, texts
 from .storage import Storage
 
 _GIVE_PREMIUM_RE = re.compile(r"^/give\s+premium\s+(\d+)\s+(\d+)\s*$")
@@ -56,8 +56,16 @@ async def _get_connection(storage: Storage, bot, business_connection_id: str):
 async def handle_business_connection(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     bc = update.business_connection
     storage: Storage = context.bot_data["storage"]
+    is_new = storage.get_connection(bc.id) is None
     storage.save_connection(bc.id, bc.user.id, bc.user_chat_id, bc.is_enabled)
     logger.info("Business connection %s for user %s (enabled=%s)", bc.id, bc.user.id, bc.is_enabled)
+
+    if is_new and bc.is_enabled:
+        text = texts.build_intro_text(context.bot.username) + texts.CONNECTED_SUFFIX
+        try:
+            await context.bot.send_message(chat_id=bc.user_chat_id, text=text)
+        except Exception:
+            logger.exception("Failed to send onboarding message to %s", bc.user_chat_id)
 
 
 async def handle_new_business_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -174,13 +182,8 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     text = message.text or ""
 
-    if text.startswith("/start"):
-        await message.reply_text(
-            "Bed Dialog Bot подключается через Telegram → Настройки → "
-            "Автоматизация чатов.\n\n"
-            f"/premium — премиум за {config.PREMIUM_STARS_PRICE}⭐/мес: без "
-            f"водяных знаков и .spam до {config.PREMIUM_SPAM_MAX} сообщений."
-        )
+    if text.startswith("/start") or text.startswith("/help"):
+        await message.reply_text(texts.build_intro_text(context.bot.username))
         return
 
     if text.startswith("/premium"):
