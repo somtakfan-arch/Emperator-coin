@@ -13,6 +13,8 @@ from .storage import Storage
 _GIVE_PREMIUM_RE = re.compile(r"^/give\s+premium\s+(\d+)\s+(\d+)\s*$")
 _SUPPORT_RE = re.compile(r"^/support(?:\s+(.+))?$", re.DOTALL)
 _REPLY_RE = re.compile(r"^/reply\s+(\d+)\s+(.+)$", re.DOTALL)
+_BLACKLIST_RE = re.compile(r"^/blacklist\s+(\d+)(?:\s+(.+))?$", re.DOTALL)
+_UNBLACKLIST_RE = re.compile(r"^/unblacklist\s+(\d+)\s*$")
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +84,9 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
     bcid = message.business_connection_id
 
     conn = await _get_connection(storage, context.bot, bcid)
+    if conn and storage.is_blacklisted(conn["owner_user_id"]):
+        return
+
     is_owner = bool(conn and message.from_user and message.from_user.id == conn["owner_user_id"])
 
     if is_owner and conn:
@@ -144,7 +149,7 @@ async def handle_edited_business_message(update: Update, context: ContextTypes.D
 
     if old and old_text is not None and new_text is not None and old_text != new_text:
         conn = await _get_connection(storage, context.bot, bcid)
-        if not conn:
+        if not conn or storage.is_blacklisted(conn["owner_user_id"]):
             return
         is_premium = storage.is_premium(conn["owner_user_id"])
         text_out = formatting.format_edited_text(name, username, old_text, new_text)
@@ -158,7 +163,7 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
     bcid = deleted.business_connection_id
 
     conn = await _get_connection(storage, context.bot, bcid)
-    if not conn:
+    if not conn or storage.is_blacklisted(conn["owner_user_id"]):
         return
 
     is_premium = storage.is_premium(conn["owner_user_id"])
@@ -202,6 +207,13 @@ async def handle_pre_checkout_query(update: Update, context: ContextTypes.DEFAUL
 async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.message
     storage: Storage = context.bot_data["storage"]
+
+    if (
+        message.from_user
+        and message.from_user.id not in config.ADMIN_USER_IDS
+        and storage.is_blacklisted(message.from_user.id)
+    ):
+        return
 
     if message.successful_payment:
         until_ts = storage.grant_premium_days(message.from_user.id, config.PREMIUM_DURATION_DAYS)
@@ -300,6 +312,25 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         until_ts = storage.grant_premium_days(target_id, days)
         until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y")
         await message.reply_text(f"✅ Премиум для {target_id} выдан до {until_str}.")
+        return
+
+    blacklist_match = _BLACKLIST_RE.match(text)
+    if blacklist_match:
+        if message.from_user.id not in config.ADMIN_USER_IDS:
+            return
+        target_id = int(blacklist_match.group(1))
+        reason = blacklist_match.group(2)
+        storage.blacklist_user(target_id, reason)
+        await message.reply_text(f"⛔ Пользователь {target_id} заблокирован навсегда.")
+        return
+
+    unblacklist_match = _UNBLACKLIST_RE.match(text)
+    if unblacklist_match:
+        if message.from_user.id not in config.ADMIN_USER_IDS:
+            return
+        target_id = int(unblacklist_match.group(1))
+        storage.unblacklist_user(target_id)
+        await message.reply_text(f"✅ Пользователь {target_id} разблокирован.")
         return
 
 

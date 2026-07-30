@@ -47,6 +47,12 @@ CREATE TABLE IF NOT EXISTS tickets (
     status TEXT NOT NULL DEFAULT 'open',
     created_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS blacklist (
+    user_id INTEGER PRIMARY KEY,
+    reason TEXT,
+    banned_at INTEGER NOT NULL
+);
 """
 
 
@@ -263,3 +269,24 @@ class Storage:
     def set_ticket_status(self, ticket_id: int, status: str) -> None:
         with self._connect() as conn:
             conn.execute("UPDATE tickets SET status = ? WHERE id = ?", (status, ticket_id))
+
+    def blacklist_user(self, user_id: int, reason=None) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO blacklist (user_id, reason, banned_at) VALUES (?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET reason=excluded.reason, banned_at=excluded.banned_at
+                """,
+                (user_id, reason, int(time.time())),
+            )
+
+    def unblacklist_user(self, user_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM blacklist WHERE user_id = ?", (user_id,))
+
+    def is_blacklisted(self, user_id: int) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM blacklist WHERE user_id = ?", (user_id,)
+            ).fetchone()
+        return row is not None
