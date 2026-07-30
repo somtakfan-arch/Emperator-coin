@@ -5,6 +5,7 @@ from telegram import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup
 
 from . import config
 from .commands import SPAM_WINDOW_SECONDS
+from .formatting import format_sender
 
 
 def build_intro_text(bot_username: str) -> str:
@@ -12,9 +13,10 @@ def build_intro_text(bot_username: str) -> str:
         "🚀 Добро пожаловать!\n\n"
         "😇 Базовые функции бота бесплатны и готовы к работе.\n\n"
         "🔥 Возможности бота\n"
-        "🗑 Отслеживание удалённых сообщений\n"
+        "🗑 Отслеживание удалённых сообщений и фото\n"
         "✏️ Отслеживание изменённых сообщений\n"
         "📸 Сохранение одноразовых фото (если на них ответили)\n"
+        "🎥 Сохранение удалённых и одноразовых кружков\n"
         "🆕 Команды .ban / .unban / .spam / .help прямо в чате\n\n"
         f"💎 /premium — {config.PREMIUM_STARS_PRICE}⭐/мес: без водяных знаков в "
         f"уведомлениях и лимит .spam до {config.PREMIUM_SPAM_MAX} (без премиума — "
@@ -24,7 +26,8 @@ def build_intro_text(bot_username: str) -> str:
         "2. Нажмите «🔌 Подключить».\n"
         "3. Выберите 🤖 Автоматизация чатов.\n"
         "4. Вставьте скопированный username в поле бота и включите право "
-        "«Просматривать сообщения»."
+        "«Просматривать сообщения».\n\n"
+        "Что-то не работает — жмите «🆘 Поддержка» ниже."
     )
 
 
@@ -38,12 +41,14 @@ def build_intro_keyboard(bot_username: str) -> InlineKeyboardMarkup:
                 ),
                 InlineKeyboardButton("🔌 Подключить", url="tg://settings/edit"),
             ],
-            [InlineKeyboardButton("🆘 Поддержка", url=f"https://t.me/{config.SUPPORT_USERNAME}")],
+            [InlineKeyboardButton("🆘 Поддержка", callback_data="support_info")],
         ]
     )
 
 
 CONNECTED_SUFFIX = "\n\n✅ Подключение установлено, бот уже следит за этим чатом."
+
+SUPPORT_PROMPT = "Опишите проблему одним сообщением: /support <ваш вопрос>"
 
 
 def build_help_text() -> str:
@@ -62,14 +67,7 @@ def build_help_text() -> str:
         "/status — ваш статус премиума\n"
         f"/premium — оформить премиум за {config.PREMIUM_STARS_PRICE}⭐/мес\n"
         "/help — этот справочник\n"
-        f"/support — связаться с поддержкой (@{config.SUPPORT_USERNAME})"
-    )
-
-
-def build_support_text() -> str:
-    return (
-        "🆘 Поддержка\n\n"
-        f"По вопросам и проблемам с ботом пишите @{config.SUPPORT_USERNAME}."
+        "/support <текст> — создать тикет в поддержку"
     )
 
 
@@ -82,3 +80,20 @@ def build_status_text(premium_until) -> str:
         f"Оформить — /premium ({config.PREMIUM_STARS_PRICE}⭐/мес): без водяных "
         f"знаков в уведомлениях и лимит .spam до {config.PREMIUM_SPAM_MAX}."
     )
+
+
+def build_ticket_created_text(ticket_id: int) -> str:
+    return f"🎫 Тикет #{ticket_id} создан, ожидайте ответа от поддержки."
+
+
+def build_ticket_notification(ticket_id: int, name: str, username, message: str) -> str:
+    return (
+        f"🎫 Новый тикет #{ticket_id}\n"
+        f"👤 {format_sender(name, username)}\n\n"
+        f"{message}\n\n"
+        f"Ответить: /reply {ticket_id} <текст>"
+    )
+
+
+def build_ticket_reply_text(ticket_id: int, reply_text: str) -> str:
+    return f"🎫 Ответ поддержки (тикет #{ticket_id}):\n\n{reply_text}"

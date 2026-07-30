@@ -36,6 +36,17 @@ CREATE TABLE IF NOT EXISTS messages (
     date INTEGER,
     PRIMARY KEY (business_connection_id, chat_id, message_id)
 );
+
+CREATE TABLE IF NOT EXISTS tickets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    chat_id INTEGER NOT NULL,
+    name TEXT,
+    username TEXT,
+    message TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at INTEGER NOT NULL
+);
 """
 
 
@@ -44,6 +55,12 @@ class Storage:
         self._db_path = db_path
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
+            self._migrate(conn)
+
+    def _migrate(self, conn) -> None:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(messages)")}
+        if "video_note_file_id" not in columns:
+            conn.execute("ALTER TABLE messages ADD COLUMN video_note_file_id TEXT")
 
     @contextmanager
     def _connect(self):
@@ -143,6 +160,7 @@ class Storage:
         from_username,
         text,
         photo_file_id,
+        video_note_file_id=None,
         caption,
         date,
     ) -> None:
@@ -151,15 +169,16 @@ class Storage:
                 """
                 INSERT INTO messages (
                     business_connection_id, chat_id, message_id, from_user_id,
-                    from_name, from_username, text, photo_file_id, caption, date
+                    from_name, from_username, text, photo_file_id, video_note_file_id, caption, date
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(business_connection_id, chat_id, message_id) DO UPDATE SET
                     from_user_id=excluded.from_user_id,
                     from_name=excluded.from_name,
                     from_username=excluded.from_username,
                     text=excluded.text,
                     photo_file_id=excluded.photo_file_id,
+                    video_note_file_id=excluded.video_note_file_id,
                     caption=excluded.caption,
                     date=excluded.date
                 """,
@@ -172,6 +191,7 @@ class Storage:
                     from_username,
                     text,
                     photo_file_id,
+                    video_note_file_id,
                     caption,
                     date,
                 ),
@@ -181,7 +201,8 @@ class Storage:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT from_user_id, from_name, from_username, text, photo_file_id, caption, date
+                SELECT from_user_id, from_name, from_username, text, photo_file_id,
+                       video_note_file_id, caption, date
                 FROM messages WHERE business_connection_id = ? AND chat_id = ? AND message_id = ?
                 """,
                 (business_connection_id, chat_id, message_id),
@@ -194,8 +215,9 @@ class Storage:
             "from_username": row[2],
             "text": row[3],
             "photo_file_id": row[4],
-            "caption": row[5],
-            "date": row[6],
+            "video_note_file_id": row[5],
+            "caption": row[6],
+            "date": row[7],
         }
 
     def message_exists(self, business_connection_id: str, chat_id: int, message_id: int) -> bool:
@@ -207,3 +229,37 @@ class Storage:
                 "DELETE FROM messages WHERE business_connection_id = ? AND chat_id = ? AND message_id = ?",
                 (business_connection_id, chat_id, message_id),
             )
+
+    def create_ticket(self, *, user_id: int, chat_id: int, name, username, message: str) -> int:
+        with self._connect() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO tickets (user_id, chat_id, name, username, message, status, created_at)
+                VALUES (?, ?, ?, ?, ?, 'open', ?)
+                """,
+                (user_id, chat_id, name, username, message, int(time.time())),
+            )
+            return cur.lastrowid
+
+    def get_ticket(self, ticket_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT user_id, chat_id, name, username, message, status, created_at "
+                "FROM tickets WHERE id = ?",
+                (ticket_id,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "user_id": row[0],
+            "chat_id": row[1],
+            "name": row[2],
+            "username": row[3],
+            "message": row[4],
+            "status": row[5],
+            "created_at": row[6],
+        }
+
+    def set_ticket_status(self, ticket_id: int, status: str) -> None:
+        with self._connect() as conn:
+            conn.execute("UPDATE tickets SET status = ? WHERE id = ?", (status, ticket_id))

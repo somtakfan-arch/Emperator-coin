@@ -29,6 +29,14 @@ def format_one_time_photo_caption(name: str, username: Optional[str]) -> str:
     return f"🔥 {format_sender(name, username)} отправил(а) одноразовое фото:"
 
 
+def format_deleted_video_note_header(name: str, username: Optional[str]) -> str:
+    return f"🗑 {format_sender(name, username)} удалил(а) Кружок:"
+
+
+def format_one_time_video_note_header(name: str, username: Optional[str]) -> str:
+    return f"🔥 {format_sender(name, username)} отправил(а) одноразовый кружок:"
+
+
 def with_watermark(text: str, bot_username: Optional[str], is_premium: bool) -> str:
     if is_premium or not bot_username:
         return text

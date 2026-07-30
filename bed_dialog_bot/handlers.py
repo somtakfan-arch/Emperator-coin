@@ -11,6 +11,8 @@ from . import commands, config, formatting, texts
 from .storage import Storage
 
 _GIVE_PREMIUM_RE = re.compile(r"^/give\s+premium\s+(\d+)\s+(\d+)\s*$")
+_SUPPORT_RE = re.compile(r"^/support(?:\s+(.+))?$", re.DOTALL)
+_REPLY_RE = re.compile(r"^/reply\s+(\d+)\s+(.+)$", re.DOTALL)
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +27,7 @@ def _display_name(message: Message) -> Tuple[str, Optional[str]]:
 
 def _store_message(storage: Storage, message: Message, business_connection_id: str) -> None:
     photo_file_id = message.photo[-1].file_id if message.photo else None
+    video_note_file_id = message.video_note.file_id if message.video_note else None
     name, username = _display_name(message)
     storage.save_message(
         business_connection_id=business_connection_id,
@@ -35,6 +38,7 @@ def _store_message(storage: Storage, message: Message, business_connection_id: s
         from_username=username,
         text=message.text,
         photo_file_id=photo_file_id,
+        video_note_file_id=video_note_file_id,
         caption=message.caption,
         date=int(message.date.timestamp()) if message.date else None,
     )
@@ -98,19 +102,32 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
             )
 
     reply = message.reply_to_message
-    if reply and reply.photo and not storage.message_exists(bcid, message.chat_id, reply.message_id):
+    if (
+        reply
+        and (reply.photo or reply.video_note)
+        and not storage.message_exists(bcid, message.chat_id, reply.message_id)
+    ):
         if not conn:
             return
         _store_message(storage, reply, bcid)
         r_name, r_username = _display_name(reply)
         is_premium = storage.is_premium(conn["owner_user_id"])
-        caption = formatting.format_one_time_photo_caption(r_name, r_username)
-        caption = formatting.with_watermark(caption, context.bot.username, is_premium)
-        await context.bot.send_photo(
-            chat_id=conn["owner_chat_id"],
-            photo=reply.photo[-1].file_id,
-            caption=caption,
-        )
+        if reply.photo:
+            caption = formatting.format_one_time_photo_caption(r_name, r_username)
+            caption = formatting.with_watermark(caption, context.bot.username, is_premium)
+            await context.bot.send_photo(
+                chat_id=conn["owner_chat_id"],
+                photo=reply.photo[-1].file_id,
+                caption=caption,
+            )
+        else:
+            header = formatting.format_one_time_video_note_header(r_name, r_username)
+            header = formatting.with_watermark(header, context.bot.username, is_premium)
+            await context.bot.send_message(chat_id=conn["owner_chat_id"], text=header)
+            await context.bot.send_video_note(
+                chat_id=conn["owner_chat_id"],
+                video_note=reply.video_note.file_id,
+            )
 
 
 async def handle_edited_business_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -162,6 +179,14 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
                 photo=stored["photo_file_id"],
                 caption=caption,
             )
+        elif stored["video_note_file_id"]:
+            header = formatting.format_deleted_video_note_header(name, username)
+            header = formatting.with_watermark(header, context.bot.username, is_premium)
+            await context.bot.send_message(chat_id=conn["owner_chat_id"], text=header)
+            await context.bot.send_video_note(
+                chat_id=conn["owner_chat_id"],
+                video_note=stored["video_note_file_id"],
+            )
         elif stored["text"]:
             text_out = formatting.format_deleted_text(name, username, stored["text"])
             text_out = formatting.with_watermark(text_out, context.bot.username, is_premium)
@@ -202,8 +227,53 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         await message.reply_text(texts.build_status_text(premium_until))
         return
 
-    if text.startswith("/support"):
-        await message.reply_text(texts.build_support_text())
+    support_match = _SUPPORT_RE.match(text)
+    if support_match:
+        ticket_message = (support_match.group(1) or "").strip()
+        if not ticket_message:
+            await message.reply_text(texts.SUPPORT_PROMPT)
+            return
+        name, username = _display_name(message)
+        ticket_id = storage.create_ticket(
+            user_id=message.from_user.id,
+            chat_id=message.chat_id,
+            name=name,
+            username=username,
+            message=ticket_message,
+        )
+        await message.reply_text(texts.build_ticket_created_text(ticket_id))
+        notify_text = texts.build_ticket_notification(ticket_id, name, username, ticket_message)
+        for admin_id in config.ADMIN_USER_IDS:
+            try:
+                await context.bot.send_message(chat_id=admin_id, text=notify_text)
+            except Exception:
+                logger.exception("Failed to notify admin %s about ticket %s", admin_id, ticket_id)
+        return
+
+    reply_match = _REPLY_RE.match(text)
+    if reply_match:
+        if message.from_user.id not in config.ADMIN_USER_IDS:
+            return
+        ticket_id = int(reply_match.group(1))
+        reply_text = reply_match.group(2)
+        ticket = storage.get_ticket(ticket_id)
+        if not ticket:
+            await message.reply_text(f"Тикет #{ticket_id} не найден.")
+            return
+        try:
+            await context.bot.send_message(
+                chat_id=ticket["chat_id"],
+                text=texts.build_ticket_reply_text(ticket_id, reply_text),
+            )
+        except Exception:
+            logger.exception("Failed to deliver reply for ticket %s", ticket_id)
+            await message.reply_text(
+                f"⚠️ Не удалось доставить ответ по тикету #{ticket_id} — "
+                "пользователь мог заблокировать бота."
+            )
+            return
+        storage.set_ticket_status(ticket_id, "answered")
+        await message.reply_text(f"✅ Ответ по тикету #{ticket_id} отправлен.")
         return
 
     if text.startswith("/premium"):
@@ -233,6 +303,14 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
 
+async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    if query.data == "support_info":
+        await query.answer(text=texts.SUPPORT_PROMPT, show_alert=True)
+    else:
+        await query.answer()
+
+
 async def dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.business_connection:
         await handle_business_connection(update, context)
@@ -244,5 +322,7 @@ async def dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await handle_new_business_message(update, context)
     elif update.pre_checkout_query:
         await handle_pre_checkout_query(update, context)
+    elif update.callback_query:
+        await handle_callback_query(update, context)
     elif update.message:
         await handle_direct_message(update, context)
