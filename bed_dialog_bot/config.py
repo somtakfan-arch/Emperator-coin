@@ -16,3 +16,5 @@ PREMIUM_DURATION_DAYS = int(os.environ.get("PREMIUM_DURATION_DAYS", "30"))
 
 FREE_SPAM_MAX = int(os.environ.get("FREE_SPAM_MAX", "100"))
 PREMIUM_SPAM_MAX = int(os.environ.get("PREMIUM_SPAM_MAX", "500"))
+
+SUPPORT_USERNAME = os.environ.get("SUPPORT_USERNAME", "Empeeerator")

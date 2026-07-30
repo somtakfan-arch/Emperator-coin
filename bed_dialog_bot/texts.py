@@ -37,7 +37,8 @@ def build_intro_keyboard(bot_username: str) -> InlineKeyboardMarkup:
                     copy_text=CopyTextButton(f"@{bot_username}"),
                 ),
                 InlineKeyboardButton("🔌 Подключить", url="tg://settings/edit"),
-            ]
+            ],
+            [InlineKeyboardButton("🆘 Поддержка", url=f"https://t.me/{config.SUPPORT_USERNAME}")],
         ]
     )
 
@@ -60,7 +61,15 @@ def build_help_text() -> str:
         "/start — приветствие и кнопки для подключения бота\n"
         "/status — ваш статус премиума\n"
         f"/premium — оформить премиум за {config.PREMIUM_STARS_PRICE}⭐/мес\n"
-        "/help — этот справочник"
+        "/help — этот справочник\n"
+        f"/support — связаться с поддержкой (@{config.SUPPORT_USERNAME})"
+    )
+
+
+def build_support_text() -> str:
+    return (
+        "🆘 Поддержка\n\n"
+        f"По вопросам и проблемам с ботом пишите @{config.SUPPORT_USERNAME}."
     )
 
 

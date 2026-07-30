@@ -202,6 +202,10 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         await message.reply_text(texts.build_status_text(premium_until))
         return
 
+    if text.startswith("/support"):
+        await message.reply_text(texts.build_support_text())
+        return
+
     if text.startswith("/premium"):
         await context.bot.send_invoice(
             chat_id=message.chat_id,
