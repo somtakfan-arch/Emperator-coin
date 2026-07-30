@@ -100,10 +100,15 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
         until_ts = storage.get_ban(bcid, message.chat_id)
         if until_ts and until_ts > time.time():
             remaining_min = max(1, int((until_ts - time.time()) // 60) + 1)
+            ban_notice = formatting.with_watermark(
+                f"⛔ Вы заблокированы ещё на {remaining_min} мин.",
+                context.bot.username,
+                storage.is_premium(conn["owner_user_id"]),
+            )
             await context.bot.send_message(
                 chat_id=message.chat_id,
                 business_connection_id=bcid,
-                text=f"⛔ Вы заблокированы ещё на {remaining_min} мин.",
+                text=ban_notice,
             )
 
     reply = message.reply_to_message
@@ -234,9 +239,14 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         await message.reply_text(texts.build_help_text())
         return
 
+    def mark(value: str) -> str:
+        return formatting.with_watermark(
+            value, context.bot.username, storage.is_premium(message.from_user.id)
+        )
+
     if text.startswith("/status"):
         premium_until = storage.get_premium_until(message.from_user.id)
-        await message.reply_text(texts.build_status_text(premium_until))
+        await message.reply_text(mark(texts.build_status_text(premium_until)))
         return
 
     support_match = _SUPPORT_RE.match(text)
@@ -253,7 +263,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             username=username,
             message=ticket_message,
         )
-        await message.reply_text(texts.build_ticket_created_text(ticket_id))
+        await message.reply_text(mark(texts.build_ticket_created_text(ticket_id)))
         notify_text = texts.build_ticket_notification(ticket_id, name, username, ticket_message)
         for admin_id in config.ADMIN_USER_IDS:
             try:
@@ -275,7 +285,11 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         try:
             await context.bot.send_message(
                 chat_id=ticket["chat_id"],
-                text=texts.build_ticket_reply_text(ticket_id, reply_text),
+                text=formatting.with_watermark(
+                    texts.build_ticket_reply_text(ticket_id, reply_text),
+                    context.bot.username,
+                    storage.is_premium(ticket["user_id"]),
+                ),
             )
         except Exception:
             logger.exception("Failed to deliver reply for ticket %s", ticket_id)

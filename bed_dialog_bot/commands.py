@@ -7,7 +7,7 @@ from telegram import Message
 from telegram.error import RetryAfter
 from telegram.ext import ContextTypes
 
-from . import config
+from . import config, formatting
 from .storage import Storage
 
 logger = logging.getLogger(__name__)
@@ -60,23 +60,31 @@ async def try_handle_owner_command(
     chat_id = message.chat_id
     message_id = message.message_id
 
+    is_premium = storage.is_premium(message.from_user.id)
+    bot_username = context.bot.username
+
+    def mark(value: str) -> str:
+        return formatting.with_watermark(value, bot_username, is_premium)
+
     ban_match = _BAN_RE.match(text)
     if ban_match:
         minutes = int(ban_match.group(1))
         storage.set_ban(bcid, chat_id, int(time.time()) + minutes * 60)
-        await _edit_command_message(context, bcid, chat_id, message_id, f"Вы забанены на {minutes} мин.")
+        await _edit_command_message(
+            context, bcid, chat_id, message_id, mark(f"Вы забанены на {minutes} мин.")
+        )
         return True
 
     if _UNBAN_RE.match(text):
         storage.clear_ban(bcid, chat_id)
-        await _edit_command_message(context, bcid, chat_id, message_id, "Вы разбанены.")
+        await _edit_command_message(context, bcid, chat_id, message_id, mark("Вы разбанены."))
         return True
 
     spam_match = _SPAM_RE.match(text)
     if spam_match:
-        max_count = config.PREMIUM_SPAM_MAX if storage.is_premium(message.from_user.id) else config.FREE_SPAM_MAX
+        max_count = config.PREMIUM_SPAM_MAX if is_premium else config.FREE_SPAM_MAX
         count = max(1, min(int(spam_match.group(1)), max_count))
-        spam_text = spam_match.group(2)
+        spam_text = mark(spam_match.group(2))
         await _edit_command_message(context, bcid, chat_id, message_id, spam_text)
         interval = SPAM_WINDOW_SECONDS / count
         for _ in range(count - 1):
@@ -89,8 +97,8 @@ async def try_handle_owner_command(
         return True
 
     if _HELP_RE.match(text):
-        await _edit_command_message(context, bcid, chat_id, message_id, "🤖")
-        await context.bot.send_message(chat_id=owner_chat_id, text=HELP_TEXT)
+        await _edit_command_message(context, bcid, chat_id, message_id, mark("🤖"))
+        await context.bot.send_message(chat_id=owner_chat_id, text=mark(HELP_TEXT))
         return True
 
     return False
