@@ -11,7 +11,9 @@ import org.bukkit.potion.PotionEffect;
 import org.bukkit.potion.PotionEffectType;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 public final class ShadowCloakListener implements Listener {
@@ -19,6 +21,8 @@ public final class ShadowCloakListener implements Listener {
     private final JavaPlugin plugin;
     private final ShadowCloakItem item;
     private final Map<UUID, Long> lastMoved = new HashMap<>();
+    // Tracks players currently invisible from ShadowCloak so we can remove it cleanly
+    private final Set<UUID> cloaked = new HashSet<>();
 
     public ShadowCloakListener(JavaPlugin plugin, ShadowCloakItem item) {
         this.plugin = plugin;
@@ -36,7 +40,7 @@ public final class ShadowCloakListener implements Listener {
         if (from.getX() == to.getX() && from.getY() == to.getY() && from.getZ() == to.getZ()) return;
 
         lastMoved.put(player.getUniqueId(), System.currentTimeMillis());
-        if (player.hasPotionEffect(PotionEffectType.INVISIBILITY)) {
+        if (cloaked.remove(player.getUniqueId())) {
             player.removePotionEffect(PotionEffectType.INVISIBILITY);
         }
     }
@@ -45,6 +49,7 @@ public final class ShadowCloakListener implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         UUID id = event.getPlayer().getUniqueId();
         lastMoved.remove(id);
+        cloaked.remove(id);
     }
 
     private void tick() {
@@ -52,19 +57,24 @@ public final class ShadowCloakListener implements Listener {
         long now = System.currentTimeMillis();
 
         for (Player player : plugin.getServer().getOnlinePlayers()) {
-            if (!wearsShadowCloak(player)) {
-                if (player.hasPotionEffect(PotionEffectType.INVISIBILITY)) {
-                    // Wearing a different chestplate now — clean up if we added it
-                    // (only remove if active; can't distinguish our effect from others, acceptable trade-off)
+            boolean wearing = wearsShadowCloak(player);
+
+            if (!wearing) {
+                // Cloak removed — revoke our invisibility immediately
+                if (cloaked.remove(player.getUniqueId())) {
+                    player.removePotionEffect(PotionEffectType.INVISIBILITY);
                 }
                 continue;
             }
+
             long last = lastMoved.getOrDefault(player.getUniqueId(), now);
             boolean shouldBeInvisible = (now - last) >= stillMs;
 
-            if (shouldBeInvisible && !player.hasPotionEffect(PotionEffectType.INVISIBILITY)) {
-                player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, 999999, 0, false, false));
-            } else if (!shouldBeInvisible && player.hasPotionEffect(PotionEffectType.INVISIBILITY)) {
+            if (shouldBeInvisible) {
+                cloaked.add(player.getUniqueId());
+                // Short duration refreshed each tick cycle — expires naturally if we stop refreshing
+                player.addPotionEffect(new PotionEffect(PotionEffectType.INVISIBILITY, 25, 0, false, false));
+            } else if (cloaked.remove(player.getUniqueId())) {
                 player.removePotionEffect(PotionEffectType.INVISIBILITY);
             }
         }

@@ -35,17 +35,12 @@ public final class PhoenixAshListener implements Listener {
         if (event.isCancelled()) return;
         if (!(event.getEntity() instanceof Player player)) return;
         if (processing.contains(player.getUniqueId())) return;
-        if (player.getHealth() - event.getFinalDamage() > 0) return; // won't die
+        if (player.getHealth() - event.getFinalDamage() > 0) return;
 
-        ItemStack ash = findAsh(player);
-        if (ash == null) return;
+        if (!findAndConsume(player)) return;
 
         event.setCancelled(true);
         processing.add(player.getUniqueId());
-
-        // Consume ash
-        if (ash.getAmount() > 1) ash.setAmount(ash.getAmount() - 1);
-        else player.getInventory().remove(ash);
 
         double reviveHealth = plugin.getConfig().getDouble("phoenix-ash.revive-health", 8.0);
         player.setHealth(Math.min(reviveHealth, player.getMaxHealth()));
@@ -64,10 +59,23 @@ public final class PhoenixAshListener implements Listener {
         processing.remove(event.getPlayer().getUniqueId());
     }
 
-    private ItemStack findAsh(Player player) {
-        for (ItemStack stack : player.getInventory().getContents()) {
-            if (item.isPhoenixAsh(stack)) return stack;
+    // Checks offhand explicitly, then main inventory; consumes item if found.
+    private boolean findAndConsume(Player player) {
+        // Offhand must be checked separately — remove() doesn't cover it
+        ItemStack offhand = player.getInventory().getItemInOffHand();
+        if (item.isPhoenixAsh(offhand)) {
+            if (offhand.getAmount() > 1) offhand.setAmount(offhand.getAmount() - 1);
+            else player.getInventory().setItemInOffHand(null);
+            return true;
         }
-        return null;
+        // Main inventory slots 0–35
+        ItemStack[] contents = player.getInventory().getContents();
+        for (int i = 0; i < contents.length; i++) {
+            if (!item.isPhoenixAsh(contents[i])) continue;
+            if (contents[i].getAmount() > 1) contents[i].setAmount(contents[i].getAmount() - 1);
+            else player.getInventory().setItem(i, null);
+            return true;
+        }
+        return false;
     }
 }
