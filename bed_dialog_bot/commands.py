@@ -84,8 +84,10 @@ async def try_handle_owner_command(
     if spam_match:
         max_count = config.PREMIUM_SPAM_MAX if is_premium else config.FREE_SPAM_MAX
         count = max(1, min(int(spam_match.group(1)), max_count))
-        spam_text = mark(spam_match.group(2))
-        await _edit_command_message(context, bcid, chat_id, message_id, spam_text)
+        spam_text = spam_match.group(2)
+        # Only the first message carries the watermark — repeating it under
+        # every copy of a spam run would bury the actual text.
+        await _edit_command_message(context, bcid, chat_id, message_id, mark(spam_text))
         interval = SPAM_WINDOW_SECONDS / count
         for _ in range(count - 1):
             await asyncio.sleep(interval)

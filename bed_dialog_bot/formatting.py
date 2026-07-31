@@ -40,4 +40,4 @@ def format_one_time_video_note_header(name: str, username: Optional[str]) -> str
 def with_watermark(text: str, bot_username: Optional[str], is_premium: bool) -> str:
     if is_premium or not bot_username:
         return text
-    return f"{text}\n\n@{bot_username} - Диалоги это просто."
+    return f"{text}\n\n@{bot_username}"
