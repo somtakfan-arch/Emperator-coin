@@ -55,17 +55,24 @@ public final class ResellingTask {
         int slots = maxBotListings - botManager.totalBotListings();
         if (slots <= 0 || stock.size() == 0) return;
 
-        int toResell = Math.min(perCycle, slots);
+        final int toResell = Math.min(perCycle, slots);
         List<ItemStack> items = stock.take(toResell);
 
-        for (ItemStack item : items) {
-            try {
-                relistItem(item);
-            } catch (Exception e) {
-                // Return the item so we don't lose it permanently
-                stock.addItem(item);
-                log.warning("ResellingTask: failed to relist " + item.getType() + " — " + e.getMessage());
-            }
+        // Stagger each relist 20 ticks (1 s) apart; saveNotes() once after the last one.
+        for (int i = 0; i < items.size(); i++) {
+            final ItemStack item = items.get(i);
+            final boolean isLast = (i == items.size() - 1);
+            plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                try {
+                    relistItem(item);
+                } catch (Exception e) {
+                    stock.addItem(item);
+                    log.warning("ResellingTask: failed to relist " + item.getType() + " — " + e.getMessage());
+                }
+                if (isLast) {
+                    NoteForger.saveNotes(log);
+                }
+            }, (long) i * 20L);
         }
     }
 
@@ -73,7 +80,6 @@ public final class ResellingTask {
         Material mat = item.getType();
         double unitWorth = worth.getWorth(mat);
         if (unitWorth <= 0) {
-            // No known worth — put back rather than discard
             stock.addItem(item);
             return;
         }

@@ -162,6 +162,7 @@ public final class ListingTask {
         UUID botUUID       = botManager.uuidFor(botName);
         String displayName = botManager.displayName(botName);
         NoteForger.forge(botUUID, displayName, item, price, listingHours, log);
+        NoteForger.saveNotes(log);
         log.info("[Listing] addcustom: " + botName + " выставил [" + key + "] за "
                 + String.format("%.2f", price));
         return true;
@@ -179,13 +180,21 @@ public final class ListingTask {
         List<Material> gearCandidates = candidates.stream().filter(this::isGearMaterial).toList();
         List<Material> resourceCandidates = candidates.stream().filter(m -> !isGearMaterial(m)).toList();
 
-        int toCreate = Math.min(perCycle, slots);
+        // Stagger each listing 20 ticks (1 s) apart to avoid a spike on a single tick.
+        // saveNotes() is called once after the last listing instead of per-forge.
+        final int toCreate = Math.min(perCycle, slots);
         for (int i = 0; i < toCreate; i++) {
-            try {
-                createOneListing(candidates, gearCandidates, resourceCandidates);
-            } catch (Exception e) {
-                log.warning("ListingTask: failed to create listing — " + e.getMessage());
-            }
+            final int idx = i;
+            plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+                try {
+                    createOneListing(candidates, gearCandidates, resourceCandidates);
+                } catch (Exception e) {
+                    log.warning("ListingTask: failed to create listing — " + e.getMessage());
+                }
+                if (idx == toCreate - 1) {
+                    NoteForger.saveNotes(log);
+                }
+            }, (long) i * 20L);
         }
     }
 

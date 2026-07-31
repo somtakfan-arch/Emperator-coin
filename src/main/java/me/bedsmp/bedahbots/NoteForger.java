@@ -145,14 +145,23 @@ public final class NoteForger {
         // Register in AuctionHouseStorage (adds to sorted lists if isOnAuction() && !isExpired())
         AuctionHouseStorage.add(note);
 
-        // Persist all notes (including this new one) — saveNotes serialises getAll() to JSON
+        // Note: callers are responsible for calling saveNotes() after a batch of forge() calls.
+        // Do NOT call saveNotes() here — it serialises all AH listings to disk every time
+        // and causes main-thread lag when multiple listings are created per cycle.
+
+        return note;
+    }
+
+    /**
+     * Persists all AH notes to disk. Call once after a batch of forge() calls,
+     * not after each individual forge().
+     */
+    public static void saveNotes(Logger log) {
         try {
             ItemNoteStorage.saveNotes();
         } catch (Exception e) {
-            log.warning("saveNotes() failed after forging note: " + e.getMessage());
+            log.warning("saveNotes() failed: " + e.getMessage());
         }
-
-        return note;
     }
 
     /**
