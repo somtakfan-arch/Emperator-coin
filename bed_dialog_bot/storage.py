@@ -53,6 +53,17 @@ CREATE TABLE IF NOT EXISTS blacklist (
     reason TEXT,
     banned_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_user_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    content TEXT,
+    file_id TEXT,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_logs_owner_time ON logs (owner_user_id, created_at);
 """
 
 
@@ -290,3 +301,23 @@ class Storage:
                 "SELECT 1 FROM blacklist WHERE user_id = ?", (user_id,)
             ).fetchone()
         return row is not None
+
+    def log_event(self, owner_user_id: int, kind: str, content=None, file_id=None) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO logs (owner_user_id, kind, content, file_id, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (owner_user_id, kind, content, file_id, int(time.time())),
+            )
+
+    def get_logs(self, owner_user_id: int, since_ts: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT kind, content, file_id, created_at FROM logs "
+                "WHERE owner_user_id = ? AND created_at >= ? ORDER BY created_at ASC",
+                (owner_user_id, since_ts),
+            ).fetchall()
+        return [
+            {"kind": r[0], "content": r[1], "file_id": r[2], "created_at": r[3]}
+            for r in rows
+        ]

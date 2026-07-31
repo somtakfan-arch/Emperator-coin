@@ -1,3 +1,4 @@
+import io
 import logging
 import re
 import time
@@ -15,8 +16,16 @@ _SUPPORT_RE = re.compile(r"^/support(?:\s+(.+))?$", re.DOTALL)
 _REPLY_RE = re.compile(r"^/reply\s+(\d+)\s+(.+)$", re.DOTALL)
 _BLACKLIST_RE = re.compile(r"^/blacklist\s+(\d+)(?:\s+(.+))?$", re.DOTALL)
 _UNBLACKLIST_RE = re.compile(r"^/unblacklist\s+(\d+)\s*$")
+_LOG_RE = re.compile(r"^/log\s+(\d+)\s+(\d+)([mhdw])\s*$")
+_PHOTOLOG_RE = re.compile(r"^/photolog\s+(\d+)\s+(\d+)([mhdw])\s*$")
+
+_DURATION_UNITS = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
 
 logger = logging.getLogger(__name__)
+
+
+def _parse_duration(amount: str, unit: str) -> int:
+    return int(amount) * _DURATION_UNITS[unit]
 
 
 def _display_name(message: Message) -> Tuple[str, Optional[str]]:
@@ -123,21 +132,24 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
         r_name, r_username = _display_name(reply)
         is_premium = storage.is_premium(conn["owner_user_id"])
         if reply.photo:
-            caption = formatting.format_one_time_photo_caption(r_name, r_username)
-            caption = formatting.with_watermark(caption, context.bot.username, is_premium)
+            base = formatting.format_one_time_photo_caption(r_name, r_username)
             await context.bot.send_photo(
                 chat_id=conn["owner_chat_id"],
                 photo=reply.photo[-1].file_id,
-                caption=caption,
+                caption=formatting.with_watermark(base, context.bot.username, is_premium),
             )
+            storage.log_event(conn["owner_user_id"], "photo", base, reply.photo[-1].file_id)
         else:
-            header = formatting.format_one_time_video_note_header(r_name, r_username)
-            header = formatting.with_watermark(header, context.bot.username, is_premium)
-            await context.bot.send_message(chat_id=conn["owner_chat_id"], text=header)
+            base = formatting.format_one_time_video_note_header(r_name, r_username)
+            await context.bot.send_message(
+                chat_id=conn["owner_chat_id"],
+                text=formatting.with_watermark(base, context.bot.username, is_premium),
+            )
             await context.bot.send_video_note(
                 chat_id=conn["owner_chat_id"],
                 video_note=reply.video_note.file_id,
             )
+            storage.log_event(conn["owner_user_id"], "video_note", base, reply.video_note.file_id)
 
 
 async def handle_edited_business_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -157,9 +169,12 @@ async def handle_edited_business_message(update: Update, context: ContextTypes.D
         if not conn or storage.is_blacklisted(conn["owner_user_id"]):
             return
         is_premium = storage.is_premium(conn["owner_user_id"])
-        text_out = formatting.format_edited_text(name, username, old_text, new_text)
-        text_out = formatting.with_watermark(text_out, context.bot.username, is_premium)
-        await context.bot.send_message(chat_id=conn["owner_chat_id"], text=text_out)
+        base = formatting.format_edited_text(name, username, old_text, new_text)
+        await context.bot.send_message(
+            chat_id=conn["owner_chat_id"],
+            text=formatting.with_watermark(base, context.bot.username, is_premium),
+        )
+        storage.log_event(conn["owner_user_id"], "text", base)
 
 
 async def handle_deleted_business_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -182,25 +197,29 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
         username = stored["from_username"]
 
         if stored["photo_file_id"]:
-            caption = formatting.format_deleted_photo_caption(name, username, stored["caption"])
-            caption = formatting.with_watermark(caption, context.bot.username, is_premium)
+            base = formatting.format_deleted_photo_caption(name, username, stored["caption"])
             await context.bot.send_photo(
                 chat_id=conn["owner_chat_id"],
                 photo=stored["photo_file_id"],
-                caption=caption,
+                caption=formatting.with_watermark(base, context.bot.username, is_premium),
             )
+            storage.log_event(conn["owner_user_id"], "photo", base, stored["photo_file_id"])
         elif stored["video_note_file_id"]:
-            header = formatting.format_deleted_video_note_header(name, username)
-            header = formatting.with_watermark(header, context.bot.username, is_premium)
-            await context.bot.send_message(chat_id=conn["owner_chat_id"], text=header)
+            base = formatting.format_deleted_video_note_header(name, username)
+            await context.bot.send_message(
+                chat_id=conn["owner_chat_id"],
+                text=formatting.with_watermark(base, context.bot.username, is_premium),
+            )
             await context.bot.send_video_note(
                 chat_id=conn["owner_chat_id"],
                 video_note=stored["video_note_file_id"],
             )
+            storage.log_event(conn["owner_user_id"], "video_note", base, stored["video_note_file_id"])
         elif stored["text"]:
-            text_out = formatting.format_deleted_text(name, username, stored["text"])
-            text_out = formatting.with_watermark(text_out, context.bot.username, is_premium)
+            base = formatting.format_deleted_text(name, username, stored["text"])
+            text_out = formatting.with_watermark(base, context.bot.username, is_premium)
             await context.bot.send_message(chat_id=conn["owner_chat_id"], text=text_out)
+            storage.log_event(conn["owner_user_id"], "text", base)
 
         storage.delete_message(bcid, deleted.chat.id, message_id)
 
@@ -263,8 +282,11 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             username=username,
             message=ticket_message,
         )
+        check_logs = "лог" in ticket_message.lower()
         await message.reply_text(mark(texts.build_ticket_created_text(ticket_id)))
-        notify_text = texts.build_ticket_notification(ticket_id, name, username, ticket_message)
+        notify_text = texts.build_ticket_notification(
+            ticket_id, name, username, ticket_message, message.from_user.id, check_logs
+        )
         for admin_id in config.ADMIN_USER_IDS:
             try:
                 await context.bot.send_message(chat_id=admin_id, text=notify_text)
@@ -345,6 +367,60 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         target_id = int(unblacklist_match.group(1))
         storage.unblacklist_user(target_id)
         await message.reply_text(f"✅ Пользователь {target_id} разблокирован.")
+        return
+
+    log_match = _LOG_RE.match(text)
+    if log_match:
+        if message.from_user.id not in config.ADMIN_USER_IDS:
+            return
+        target_id = int(log_match.group(1))
+        window = f"{log_match.group(2)}{log_match.group(3)}"
+        since_ts = int(time.time()) - _parse_duration(log_match.group(2), log_match.group(3))
+        events = storage.get_logs(target_id, since_ts)
+        if not events:
+            await message.reply_text(f"Логи для {target_id} за {window} пусты.")
+            return
+        lines = []
+        for e in events:
+            ts = datetime.fromtimestamp(e["created_at"]).strftime("%Y-%m-%d %H:%M:%S")
+            if e["kind"] == "photo":
+                body = f"[ФОТО] {e['content'] or ''}".rstrip()
+            elif e["kind"] == "video_note":
+                body = f"[КРУЖОК] {e['content'] or ''}".rstrip()
+            else:
+                body = e["content"] or ""
+            lines.append(f"[{ts}]\n{body}\n")
+        report = f"Логи пользователя {target_id} за {window} ({len(events)} событий)\n\n" + "\n".join(lines)
+        buf = io.BytesIO(report.encode("utf-8"))
+        await context.bot.send_document(
+            chat_id=message.chat_id,
+            document=buf,
+            filename=f"log_{target_id}_{window}.txt",
+        )
+        return
+
+    photolog_match = _PHOTOLOG_RE.match(text)
+    if photolog_match:
+        if message.from_user.id not in config.ADMIN_USER_IDS:
+            return
+        target_id = int(photolog_match.group(1))
+        window = f"{photolog_match.group(2)}{photolog_match.group(3)}"
+        since_ts = int(time.time()) - _parse_duration(photolog_match.group(2), photolog_match.group(3))
+        media = [e for e in storage.get_logs(target_id, since_ts) if e["file_id"]]
+        if not media:
+            await message.reply_text(f"Медиа-логи для {target_id} за {window} пусты.")
+            return
+        await message.reply_text(f"📸 Медиа пользователя {target_id} за {window}: {len(media)} шт.")
+        for e in media:
+            ts = datetime.fromtimestamp(e["created_at"]).strftime("%Y-%m-%d %H:%M:%S")
+            try:
+                if e["kind"] == "video_note":
+                    await context.bot.send_video_note(chat_id=message.chat_id, video_note=e["file_id"])
+                    await context.bot.send_message(chat_id=message.chat_id, text=f"⬆️ {ts}")
+                else:
+                    await context.bot.send_photo(chat_id=message.chat_id, photo=e["file_id"], caption=ts)
+            except Exception:
+                logger.exception("Failed to resend media %s for %s", e["file_id"], target_id)
         return
 
 

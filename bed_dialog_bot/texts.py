@@ -48,7 +48,10 @@ def build_intro_keyboard(bot_username: str) -> InlineKeyboardMarkup:
 
 CONNECTED_SUFFIX = "\n\n✅ Подключение установлено, бот уже следит за этим чатом."
 
-SUPPORT_PROMPT = "Опишите проблему одним сообщением: /support <ваш вопрос>"
+SUPPORT_PROMPT = (
+    "Опишите проблему одним сообщением: /support <ваш вопрос>\n"
+    "Если хотите, чтобы поддержка проверила ваши логи — добавьте слово «логи»."
+)
 
 
 def build_help_text() -> str:
@@ -86,12 +89,17 @@ def build_ticket_created_text(ticket_id: int) -> str:
     return f"🎫 Тикет #{ticket_id} создан, ожидайте ответа от поддержки."
 
 
-def build_ticket_notification(ticket_id: int, name: str, username, message: str) -> str:
+def build_ticket_notification(
+    ticket_id: int, name: str, username, message: str, user_id: int, check_logs: bool
+) -> str:
+    flag = "\n🔎 Пользователь просит проверить логи." if check_logs else ""
     return (
         f"🎫 Новый тикет #{ticket_id}\n"
-        f"👤 {format_sender(name, username)}\n\n"
+        f"👤 {format_sender(name, username)}\n"
+        f"🆔 {user_id}{flag}\n\n"
         f"{message}\n\n"
-        f"Ответить: /reply {ticket_id} <текст>"
+        f"Ответить: /reply {ticket_id} <текст>\n"
+        f"Логи: /log {user_id} 1d   ·   Фото: /photolog {user_id} 1d"
     )
 
 
