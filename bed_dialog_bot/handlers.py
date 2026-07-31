@@ -73,6 +73,7 @@ async def handle_business_connection(update: Update, context: ContextTypes.DEFAU
     storage: Storage = context.bot_data["storage"]
     is_new = storage.get_connection(bc.id) is None
     storage.save_connection(bc.id, bc.user.id, bc.user_chat_id, bc.is_enabled)
+    storage.upsert_user(bc.user.id, bc.user.full_name or bc.user.first_name, bc.user.username)
     logger.info("Business connection %s for user %s (enabled=%s)", bc.id, bc.user.id, bc.is_enabled)
 
     if is_new and bc.is_enabled:
@@ -239,6 +240,10 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     ):
         return
 
+    if message.from_user:
+        name, username = _display_name(message)
+        storage.upsert_user(message.from_user.id, name, username)
+
     if message.successful_payment:
         until_ts = storage.grant_premium_days(message.from_user.id, config.PREMIUM_DURATION_DAYS)
         until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y")
@@ -367,6 +372,29 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         target_id = int(unblacklist_match.group(1))
         storage.unblacklist_user(target_id)
         await message.reply_text(f"✅ Пользователь {target_id} разблокирован.")
+        return
+
+    if text.startswith("/list"):
+        if message.from_user.id not in config.ADMIN_USER_IDS:
+            return
+        users = storage.list_users()
+        total = len(users)
+        if not users:
+            await message.reply_text("Пользователей пока нет.")
+            return
+        lines = []
+        for u in users:
+            handle = f"@{u['username']}" if u["username"] else (u["name"] or "—")
+            lines.append(f"{handle} — {u['user_id']}")
+        body = "\n".join(lines)
+        header = f"👥 Пользователей: {total}\n\n"
+        if len(header) + len(body) > 3500:
+            buf = io.BytesIO((header + body).encode("utf-8"))
+            await context.bot.send_document(
+                chat_id=message.chat_id, document=buf, filename="users.txt"
+            )
+        else:
+            await message.reply_text(header + body)
         return
 
     log_match = _LOG_RE.match(text)

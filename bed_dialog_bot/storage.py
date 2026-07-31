@@ -64,6 +64,13 @@ CREATE TABLE IF NOT EXISTS logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_logs_owner_time ON logs (owner_user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY,
+    name TEXT,
+    username TEXT,
+    last_seen INTEGER NOT NULL
+);
 """
 
 
@@ -309,6 +316,34 @@ class Storage:
                 "VALUES (?, ?, ?, ?, ?)",
                 (owner_user_id, kind, content, file_id, int(time.time())),
             )
+
+    def upsert_user(self, user_id: int, name=None, username=None) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO users (user_id, name, username, last_seen) VALUES (?, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    name=excluded.name, username=excluded.username, last_seen=excluded.last_seen
+                """,
+                (user_id, name, username, int(time.time())),
+            )
+
+    def list_users(self, limit=None):
+        query = "SELECT user_id, name, username, last_seen FROM users ORDER BY last_seen DESC"
+        params = ()
+        if limit is not None:
+            query += " LIMIT ?"
+            params = (limit,)
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [
+            {"user_id": r[0], "name": r[1], "username": r[2], "last_seen": r[3]}
+            for r in rows
+        ]
+
+    def count_users(self) -> int:
+        with self._connect() as conn:
+            return conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
 
     def get_logs(self, owner_user_id: int, since_ts: int):
         with self._connect() as conn:
