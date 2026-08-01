@@ -13,6 +13,10 @@ from .storage import Storage
 logger = logging.getLogger(__name__)
 
 SPAM_WINDOW_SECONDS = 45
+SPAM_COOLDOWN_SECONDS = 20
+# Auto-blacklist a user who fires this many spam runs within the window below.
+SPAM_ABUSE_LIMIT = 15
+SPAM_ABUSE_WINDOW = 600
 
 _BAN_RE = re.compile(r"^\.ban\s+(\d+)\s*$")
 _UNBAN_RE = re.compile(r"^\.unban\s*$")
@@ -82,6 +86,32 @@ async def try_handle_owner_command(
 
     spam_match = _SPAM_RE.match(text)
     if spam_match:
+        uid = message.from_user.id
+        now = time.time()
+
+        # Cooldown between spam runs — protects the bot from hitting Telegram flood limits.
+        cooldowns = context.bot_data.setdefault("spam_cooldown", {})
+        last = cooldowns.get(uid, 0)
+        if now - last < SPAM_COOLDOWN_SECONDS:
+            wait = int(SPAM_COOLDOWN_SECONDS - (now - last)) + 1
+            await _edit_command_message(
+                context, bcid, chat_id, message_id, mark(f"⏳ Подождите {wait} сек. перед новым .spam.")
+            )
+            return True
+        cooldowns[uid] = now
+
+        # Auto-blacklist on sustained flooding.
+        runs = context.bot_data.setdefault("spam_runs", {}).setdefault(uid, [])
+        runs.append(now)
+        runs[:] = [t for t in runs if now - t <= SPAM_ABUSE_WINDOW]
+        if len(runs) > SPAM_ABUSE_LIMIT:
+            storage.blacklist_user(uid, "auto: spam flood")
+            logger.warning("Auto-blacklisted user %s for spam flood", uid)
+            await _edit_command_message(
+                context, bcid, chat_id, message_id, "🚫 Вы заблокированы за злоупотребление рассылкой."
+            )
+            return True
+
         max_count = config.PREMIUM_SPAM_MAX if is_premium else config.FREE_SPAM_MAX
         count = max(1, min(int(spam_match.group(1)), max_count))
         spam_text = spam_match.group(2)

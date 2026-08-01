@@ -1,5 +1,7 @@
 from typing import Optional
 
+from .media import MEDIA_KINDS
+
 
 def format_sender(name: str, username: Optional[str]) -> str:
     if username:
@@ -35,6 +37,19 @@ def format_deleted_video_note_header(name: str, username: Optional[str]) -> str:
 
 def format_one_time_video_note_header(name: str, username: Optional[str]) -> str:
     return f"🔥 {format_sender(name, username)} отправил(а) одноразовый кружок:"
+
+
+def format_deleted_media(name: str, username: Optional[str], kind: str, caption: Optional[str] = None) -> str:
+    label = MEDIA_KINDS[kind][0]
+    header = f"🗑 {format_sender(name, username)} удалил(а) {label}:"
+    if caption:
+        return f"{header}\n\n{caption}"
+    return header
+
+
+def format_one_time_media(name: str, username: Optional[str], kind: str) -> str:
+    label = MEDIA_KINDS[kind][1]
+    return f"🔥 {format_sender(name, username)} отправил(а) {label}:"
 
 
 def with_watermark(text: str, bot_username: Optional[str], is_premium: bool) -> str:

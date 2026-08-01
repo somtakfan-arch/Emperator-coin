@@ -85,6 +85,13 @@ class Storage:
         columns = {row[1] for row in conn.execute("PRAGMA table_info(messages)")}
         if "video_note_file_id" not in columns:
             conn.execute("ALTER TABLE messages ADD COLUMN video_note_file_id TEXT")
+        if "media_kind" not in columns:
+            conn.execute("ALTER TABLE messages ADD COLUMN media_kind TEXT")
+        if "media_file_id" not in columns:
+            conn.execute("ALTER TABLE messages ADD COLUMN media_file_id TEXT")
+        user_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+        if user_cols and "muted" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN muted INTEGER NOT NULL DEFAULT 0")
 
     @contextmanager
     def _connect(self):
@@ -183,19 +190,23 @@ class Storage:
         from_name,
         from_username,
         text,
-        photo_file_id,
-        video_note_file_id=None,
+        media_kind=None,
+        media_file_id=None,
         caption,
         date,
     ) -> None:
+        # photo_file_id / video_note_file_id kept in sync for backward-compat reads.
+        photo_file_id = media_file_id if media_kind == "photo" else None
+        video_note_file_id = media_file_id if media_kind == "video_note" else None
         with self._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO messages (
                     business_connection_id, chat_id, message_id, from_user_id,
-                    from_name, from_username, text, photo_file_id, video_note_file_id, caption, date
+                    from_name, from_username, text, photo_file_id, video_note_file_id,
+                    media_kind, media_file_id, caption, date
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(business_connection_id, chat_id, message_id) DO UPDATE SET
                     from_user_id=excluded.from_user_id,
                     from_name=excluded.from_name,
@@ -203,6 +214,8 @@ class Storage:
                     text=excluded.text,
                     photo_file_id=excluded.photo_file_id,
                     video_note_file_id=excluded.video_note_file_id,
+                    media_kind=excluded.media_kind,
+                    media_file_id=excluded.media_file_id,
                     caption=excluded.caption,
                     date=excluded.date
                 """,
@@ -216,6 +229,8 @@ class Storage:
                     text,
                     photo_file_id,
                     video_note_file_id,
+                    media_kind,
+                    media_file_id,
                     caption,
                     date,
                 ),
@@ -226,13 +241,19 @@ class Storage:
             row = conn.execute(
                 """
                 SELECT from_user_id, from_name, from_username, text, photo_file_id,
-                       video_note_file_id, caption, date
+                       video_note_file_id, media_kind, media_file_id, caption, date
                 FROM messages WHERE business_connection_id = ? AND chat_id = ? AND message_id = ?
                 """,
                 (business_connection_id, chat_id, message_id),
             ).fetchone()
         if not row:
             return None
+        media_kind, media_file_id = row[6], row[7]
+        if media_kind is None:  # backfill for rows written before media_kind existed
+            if row[4]:
+                media_kind, media_file_id = "photo", row[4]
+            elif row[5]:
+                media_kind, media_file_id = "video_note", row[5]
         return {
             "from_user_id": row[0],
             "from_name": row[1],
@@ -240,8 +261,10 @@ class Storage:
             "text": row[3],
             "photo_file_id": row[4],
             "video_note_file_id": row[5],
-            "caption": row[6],
-            "date": row[7],
+            "media_kind": media_kind,
+            "media_file_id": media_file_id,
+            "caption": row[8],
+            "date": row[9],
         }
 
     def message_exists(self, business_connection_id: str, chat_id: int, message_id: int) -> bool:
@@ -287,6 +310,25 @@ class Storage:
     def set_ticket_status(self, ticket_id: int, status: str) -> None:
         with self._connect() as conn:
             conn.execute("UPDATE tickets SET status = ? WHERE id = ?", (status, ticket_id))
+
+    def list_open_tickets(self, limit=30):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, user_id, name, username, message, created_at FROM tickets "
+                "WHERE status = 'open' ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "id": r[0],
+                "user_id": r[1],
+                "name": r[2],
+                "username": r[3],
+                "message": r[4],
+                "created_at": r[5],
+            }
+            for r in rows
+        ]
 
     def blacklist_user(self, user_id: int, reason=None) -> None:
         with self._connect() as conn:
@@ -344,6 +386,34 @@ class Storage:
     def count_users(self) -> int:
         with self._connect() as conn:
             return conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+
+    def set_muted(self, user_id: int, muted: bool) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO users (user_id, last_seen, muted) VALUES (?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET muted=excluded.muted
+                """,
+                (user_id, int(time.time()), int(muted)),
+            )
+
+    def is_muted(self, user_id: int) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT muted FROM users WHERE user_id = ?", (user_id,)
+            ).fetchone()
+        return bool(row and row[0])
+
+    def count_premium(self) -> int:
+        with self._connect() as conn:
+            return conn.execute(
+                "SELECT COUNT(*) FROM premium WHERE premium_until > ?", (int(time.time()),)
+            ).fetchone()[0]
+
+    def all_user_ids(self):
+        with self._connect() as conn:
+            rows = conn.execute("SELECT user_id FROM users").fetchall()
+        return [r[0] for r in rows]
 
     def get_logs(self, owner_user_id: int, since_ts: int):
         with self._connect() as conn:

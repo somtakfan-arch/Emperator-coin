@@ -1,3 +1,4 @@
+import asyncio
 import io
 import logging
 import re
@@ -8,7 +9,7 @@ from typing import Optional, Tuple
 from telegram import LabeledPrice, Message, Update
 from telegram.ext import ContextTypes
 
-from . import commands, config, formatting, texts
+from . import commands, config, formatting, media, texts
 from .storage import Storage
 
 _GIVE_PREMIUM_RE = re.compile(r"^/give\s+premium\s+(\d+)\s+(\d+)\s*$")
@@ -18,6 +19,8 @@ _BLACKLIST_RE = re.compile(r"^/blacklist\s+(\d+)(?:\s+(.+))?$", re.DOTALL)
 _UNBLACKLIST_RE = re.compile(r"^/unblacklist\s+(\d+)\s*$")
 _LOG_RE = re.compile(r"^/log\s+(\d+)\s+(\d+)([mhdw])\s*$")
 _PHOTOLOG_RE = re.compile(r"^/photolog\s+(\d+)\s+(\d+)([mhdw])\s*$")
+_BROADCAST_RE = re.compile(r"^/broadcast\s+(.+)$", re.DOTALL)
+_CLOSE_RE = re.compile(r"^/close\s+(\d+)\s*$")
 
 _DURATION_UNITS = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
 
@@ -26,6 +29,21 @@ logger = logging.getLogger(__name__)
 
 def _parse_duration(amount: str, unit: str) -> int:
     return int(amount) * _DURATION_UNITS[unit]
+
+
+def _fmt_time(ts) -> str:
+    if not ts:
+        return ""
+    return datetime.fromtimestamp(ts).strftime("%H:%M %d.%m")
+
+
+async def _send_media(bot, chat_id: int, kind: str, file_id: str, caption=None) -> None:
+    """Send any supported media kind; captions only where the type allows them."""
+    sender = getattr(bot, f"send_{kind}")
+    kwargs = {"chat_id": chat_id, kind: file_id}
+    if caption and media.supports_caption(kind):
+        kwargs["caption"] = caption
+    await sender(**kwargs)
 
 
 def _display_name(message: Message) -> Tuple[str, Optional[str]]:
@@ -37,8 +55,7 @@ def _display_name(message: Message) -> Tuple[str, Optional[str]]:
 
 
 def _store_message(storage: Storage, message: Message, business_connection_id: str) -> None:
-    photo_file_id = message.photo[-1].file_id if message.photo else None
-    video_note_file_id = message.video_note.file_id if message.video_note else None
+    media_kind, media_file_id = media.extract_media(message)
     name, username = _display_name(message)
     storage.save_message(
         business_connection_id=business_connection_id,
@@ -48,8 +65,8 @@ def _store_message(storage: Storage, message: Message, business_connection_id: s
         from_name=name,
         from_username=username,
         text=message.text,
-        photo_file_id=photo_file_id,
-        video_note_file_id=video_note_file_id,
+        media_kind=media_kind,
+        media_file_id=media_file_id,
         caption=message.caption,
         date=int(message.date.timestamp()) if message.date else None,
     )
@@ -122,35 +139,20 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
             )
 
     reply = message.reply_to_message
-    if (
-        reply
-        and (reply.photo or reply.video_note)
-        and not storage.message_exists(bcid, message.chat_id, reply.message_id)
-    ):
-        if not conn:
-            return
-        _store_message(storage, reply, bcid)
-        r_name, r_username = _display_name(reply)
-        is_premium = storage.is_premium(conn["owner_user_id"])
-        if reply.photo:
-            base = formatting.format_one_time_photo_caption(r_name, r_username)
-            await context.bot.send_photo(
-                chat_id=conn["owner_chat_id"],
-                photo=reply.photo[-1].file_id,
-                caption=formatting.with_watermark(base, context.bot.username, is_premium),
-            )
-            storage.log_event(conn["owner_user_id"], "photo", base, reply.photo[-1].file_id)
-        else:
-            base = formatting.format_one_time_video_note_header(r_name, r_username)
-            await context.bot.send_message(
-                chat_id=conn["owner_chat_id"],
-                text=formatting.with_watermark(base, context.bot.username, is_premium),
-            )
-            await context.bot.send_video_note(
-                chat_id=conn["owner_chat_id"],
-                video_note=reply.video_note.file_id,
-            )
-            storage.log_event(conn["owner_user_id"], "video_note", base, reply.video_note.file_id)
+    if reply and not storage.message_exists(bcid, message.chat_id, reply.message_id):
+        reply_kind, reply_file_id = media.extract_media(reply)
+        if conn and reply_kind and not storage.is_muted(conn["owner_user_id"]):
+            _store_message(storage, reply, bcid)
+            r_name, r_username = _display_name(reply)
+            is_premium = storage.is_premium(conn["owner_user_id"])
+            base = formatting.format_one_time_media(r_name, r_username, reply_kind)
+            marked = formatting.with_watermark(base, context.bot.username, is_premium)
+            if media.supports_caption(reply_kind):
+                await _send_media(context.bot, conn["owner_chat_id"], reply_kind, reply_file_id, marked)
+            else:
+                await context.bot.send_message(chat_id=conn["owner_chat_id"], text=marked)
+                await _send_media(context.bot, conn["owner_chat_id"], reply_kind, reply_file_id)
+            storage.log_event(conn["owner_user_id"], reply_kind, base, reply_file_id)
 
 
 async def handle_edited_business_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -169,13 +171,16 @@ async def handle_edited_business_message(update: Update, context: ContextTypes.D
         conn = await _get_connection(storage, context.bot, bcid)
         if not conn or storage.is_blacklisted(conn["owner_user_id"]):
             return
+        storage.log_event(conn["owner_user_id"], "text",
+                          formatting.format_edited_text(name, username, old_text, new_text))
+        if storage.is_muted(conn["owner_user_id"]):
+            return
         is_premium = storage.is_premium(conn["owner_user_id"])
         base = formatting.format_edited_text(name, username, old_text, new_text)
         await context.bot.send_message(
             chat_id=conn["owner_chat_id"],
             text=formatting.with_watermark(base, context.bot.username, is_premium),
         )
-        storage.log_event(conn["owner_user_id"], "text", base)
 
 
 async def handle_deleted_business_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -187,7 +192,11 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
     if not conn or storage.is_blacklisted(conn["owner_user_id"]):
         return
 
-    is_premium = storage.is_premium(conn["owner_user_id"])
+    owner_id = conn["owner_user_id"]
+    owner_chat = conn["owner_chat_id"]
+    is_premium = storage.is_premium(owner_id)
+    muted = storage.is_muted(owner_id)
+    text_items = []  # grouped together into as few messages as possible
 
     for message_id in deleted.message_ids:
         stored = storage.get_message(bcid, deleted.chat.id, message_id)
@@ -196,33 +205,39 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
 
         name = stored["from_name"] or "Неизвестный"
         username = stored["from_username"]
+        when = _fmt_time(stored["date"])
 
-        if stored["photo_file_id"]:
-            base = formatting.format_deleted_photo_caption(name, username, stored["caption"])
-            await context.bot.send_photo(
-                chat_id=conn["owner_chat_id"],
-                photo=stored["photo_file_id"],
-                caption=formatting.with_watermark(base, context.bot.username, is_premium),
-            )
-            storage.log_event(conn["owner_user_id"], "photo", base, stored["photo_file_id"])
-        elif stored["video_note_file_id"]:
-            base = formatting.format_deleted_video_note_header(name, username)
-            await context.bot.send_message(
-                chat_id=conn["owner_chat_id"],
-                text=formatting.with_watermark(base, context.bot.username, is_premium),
-            )
-            await context.bot.send_video_note(
-                chat_id=conn["owner_chat_id"],
-                video_note=stored["video_note_file_id"],
-            )
-            storage.log_event(conn["owner_user_id"], "video_note", base, stored["video_note_file_id"])
+        if stored["media_kind"]:
+            kind = stored["media_kind"]
+            base = formatting.format_deleted_media(name, username, kind, stored["caption"])
+            storage.log_event(owner_id, kind, base, stored["media_file_id"])
+            if not muted:
+                marked = formatting.with_watermark(
+                    f"{base}\n🕐 {when}" if when else base, context.bot.username, is_premium
+                )
+                if media.supports_caption(kind):
+                    await _send_media(context.bot, owner_chat, kind, stored["media_file_id"], marked)
+                else:
+                    await context.bot.send_message(chat_id=owner_chat, text=marked)
+                    await _send_media(context.bot, owner_chat, kind, stored["media_file_id"])
         elif stored["text"]:
             base = formatting.format_deleted_text(name, username, stored["text"])
-            text_out = formatting.with_watermark(base, context.bot.username, is_premium)
-            await context.bot.send_message(chat_id=conn["owner_chat_id"], text=text_out)
-            storage.log_event(conn["owner_user_id"], "text", base)
+            storage.log_event(owner_id, "text", base)
+            if not muted:
+                text_items.append(f"{base}\n🕐 {when}" if when else base)
 
         storage.delete_message(bcid, deleted.chat.id, message_id)
+
+    if text_items and not muted:
+        combined = "\n\n———\n\n".join(text_items)
+        combined = formatting.with_watermark(combined, context.bot.username, is_premium)
+        await _send_chunked(context.bot, owner_chat, combined)
+
+
+async def _send_chunked(bot, chat_id: int, text: str, limit: int = 4000) -> None:
+    while text:
+        await bot.send_message(chat_id=chat_id, text=text[:limit])
+        text = text[limit:]
 
 
 async def handle_pre_checkout_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -271,6 +286,19 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if text.startswith("/status"):
         premium_until = storage.get_premium_until(message.from_user.id)
         await message.reply_text(mark(texts.build_status_text(premium_until)))
+        return
+
+    if text.startswith("/pause"):
+        storage.set_muted(message.from_user.id, True)
+        await message.reply_text(
+            "🔕 Уведомления приостановлены. Бот остаётся подключённым и продолжает "
+            "сохранять сообщения — включить обратно: /resume"
+        )
+        return
+
+    if text.startswith("/resume"):
+        storage.set_muted(message.from_user.id, False)
+        await message.reply_text("🔔 Уведомления снова включены.")
         return
 
     support_match = _SUPPORT_RE.match(text)
@@ -397,6 +425,61 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             await message.reply_text(header + body)
         return
 
+    broadcast_match = _BROADCAST_RE.match(text)
+    if broadcast_match:
+        if message.from_user.id not in config.ADMIN_USER_IDS:
+            return
+        payload = broadcast_match.group(1)
+        recipients = storage.all_user_ids()
+        await message.reply_text(f"📢 Рассылка запущена на {len(recipients)} пользователей…")
+        sent = failed = 0
+        for uid in recipients:
+            try:
+                await context.bot.send_message(chat_id=uid, text=payload)
+                sent += 1
+            except Exception:
+                failed += 1
+            await asyncio.sleep(0.05)
+        await message.reply_text(f"✅ Готово. Доставлено: {sent}, не удалось: {failed}.")
+        return
+
+    if text.startswith("/tickets"):
+        if message.from_user.id not in config.ADMIN_USER_IDS:
+            return
+        tickets = storage.list_open_tickets()
+        if not tickets:
+            await message.reply_text("Открытых тикетов нет.")
+            return
+        lines = []
+        for t in tickets:
+            handle = f"@{t['username']}" if t["username"] else (t["name"] or str(t["user_id"]))
+            preview = (t["message"] or "").replace("\n", " ")[:60]
+            lines.append(f"#{t['id']} · {handle} ({t['user_id']})\n{preview}")
+        await message.reply_text(
+            "🎫 Открытые тикеты:\n\n" + "\n\n".join(lines) +
+            "\n\nОтветить: /reply <id> <текст> · Закрыть: /close <id>"
+        )
+        return
+
+    close_match = _CLOSE_RE.match(text)
+    if close_match:
+        if message.from_user.id not in config.ADMIN_USER_IDS:
+            return
+        ticket_id = int(close_match.group(1))
+        ticket = storage.get_ticket(ticket_id)
+        if not ticket:
+            await message.reply_text(f"Тикет #{ticket_id} не найден.")
+            return
+        storage.set_ticket_status(ticket_id, "closed")
+        try:
+            await context.bot.send_message(
+                chat_id=ticket["chat_id"], text=f"✅ Ваш тикет #{ticket_id} закрыт поддержкой."
+            )
+        except Exception:
+            logger.exception("Failed to notify user about closed ticket %s", ticket_id)
+        await message.reply_text(f"✅ Тикет #{ticket_id} закрыт.")
+        return
+
     log_match = _LOG_RE.match(text)
     if log_match:
         if message.from_user.id not in config.ADMIN_USER_IDS:
@@ -411,10 +494,9 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         lines = []
         for e in events:
             ts = datetime.fromtimestamp(e["created_at"]).strftime("%Y-%m-%d %H:%M:%S")
-            if e["kind"] == "photo":
-                body = f"[ФОТО] {e['content'] or ''}".rstrip()
-            elif e["kind"] == "video_note":
-                body = f"[КРУЖОК] {e['content'] or ''}".rstrip()
+            if e["file_id"] and e["kind"] in media.MEDIA_KINDS:
+                label = media.MEDIA_KINDS[e["kind"]][0].upper()
+                body = f"[{label}] {e['content'] or ''}".rstrip()
             else:
                 body = e["content"] or ""
             lines.append(f"[{ts}]\n{body}\n")
@@ -434,19 +516,22 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         target_id = int(photolog_match.group(1))
         window = f"{photolog_match.group(2)}{photolog_match.group(3)}"
         since_ts = int(time.time()) - _parse_duration(photolog_match.group(2), photolog_match.group(3))
-        media = [e for e in storage.get_logs(target_id, since_ts) if e["file_id"]]
-        if not media:
+        media_events = [
+            e for e in storage.get_logs(target_id, since_ts)
+            if e["file_id"] and e["kind"] in media.MEDIA_KINDS
+        ]
+        if not media_events:
             await message.reply_text(f"Медиа-логи для {target_id} за {window} пусты.")
             return
-        await message.reply_text(f"📸 Медиа пользователя {target_id} за {window}: {len(media)} шт.")
-        for e in media:
+        await message.reply_text(f"📸 Медиа пользователя {target_id} за {window}: {len(media_events)} шт.")
+        for e in media_events:
             ts = datetime.fromtimestamp(e["created_at"]).strftime("%Y-%m-%d %H:%M:%S")
             try:
-                if e["kind"] == "video_note":
-                    await context.bot.send_video_note(chat_id=message.chat_id, video_note=e["file_id"])
-                    await context.bot.send_message(chat_id=message.chat_id, text=f"⬆️ {ts}")
+                if media.supports_caption(e["kind"]):
+                    await _send_media(context.bot, message.chat_id, e["kind"], e["file_id"], ts)
                 else:
-                    await context.bot.send_photo(chat_id=message.chat_id, photo=e["file_id"], caption=ts)
+                    await _send_media(context.bot, message.chat_id, e["kind"], e["file_id"])
+                    await context.bot.send_message(chat_id=message.chat_id, text=f"⬆️ {ts}")
             except Exception:
                 logger.exception("Failed to resend media %s for %s", e["file_id"], target_id)
         return
