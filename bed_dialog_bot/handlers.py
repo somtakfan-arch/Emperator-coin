@@ -21,6 +21,7 @@ _LOG_RE = re.compile(r"^/log\s+(\d+)\s+(\d+)([mhdw])\s*$")
 _PHOTOLOG_RE = re.compile(r"^/photolog\s+(\d+)\s+(\d+)([mhdw])\s*$")
 _BROADCAST_RE = re.compile(r"^/broadcast\s+(.+)$", re.DOTALL)
 _CLOSE_RE = re.compile(r"^/close\s+(\d+)\s*$")
+_CLEARLOG_RE = re.compile(r"^/clearlog\s+(\d+|all)\s*$")
 
 _DURATION_UNITS = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
 
@@ -543,6 +544,19 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
                     await context.bot.send_message(chat_id=message.chat_id, text=f"⬆️ {ts}")
             except Exception:
                 logger.exception("Failed to resend media %s for %s", e["file_id"], target_id)
+        return
+
+    clearlog_match = _CLEARLOG_RE.match(text)
+    if clearlog_match:
+        if message.from_user.id not in config.ADMIN_USER_IDS:
+            return
+        target = clearlog_match.group(1)
+        if target == "all":
+            removed = storage.clear_all_logs()
+            await message.reply_text(f"🧹 Очищены все логи ({removed} событий).")
+        else:
+            removed = storage.clear_logs(int(target))
+            await message.reply_text(f"🧹 Логи пользователя {target} очищены ({removed} событий).")
         return
 
 

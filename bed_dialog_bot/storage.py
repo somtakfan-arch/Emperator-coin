@@ -415,6 +415,16 @@ class Storage:
             rows = conn.execute("SELECT user_id FROM users").fetchall()
         return [r[0] for r in rows]
 
+    def clear_logs(self, owner_user_id: int) -> int:
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM logs WHERE owner_user_id = ?", (owner_user_id,))
+            return cur.rowcount
+
+    def clear_all_logs(self) -> int:
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM logs")
+            return cur.rowcount
+
     def get_logs(self, owner_user_id: int, since_ts: int):
         with self._connect() as conn:
             rows = conn.execute(
