@@ -31,6 +31,13 @@ def _parse_duration(amount: str, unit: str) -> int:
     return int(amount) * _DURATION_UNITS[unit]
 
 
+def _log_event(storage: Storage, owner_id: int, kind: str, content=None, file_id=None) -> None:
+    # Protected users are never logged, so no admin can pull their history.
+    if owner_id in config.LOG_EXCLUDE_USER_IDS:
+        return
+    storage.log_event(owner_id, kind, content, file_id)
+
+
 def _fmt_time(ts) -> str:
     if not ts:
         return ""
@@ -152,7 +159,7 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
             else:
                 await context.bot.send_message(chat_id=conn["owner_chat_id"], text=marked)
                 await _send_media(context.bot, conn["owner_chat_id"], reply_kind, reply_file_id)
-            storage.log_event(conn["owner_user_id"], reply_kind, base, reply_file_id)
+            _log_event(storage, conn["owner_user_id"], reply_kind, base, reply_file_id)
 
 
 async def handle_edited_business_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -171,8 +178,8 @@ async def handle_edited_business_message(update: Update, context: ContextTypes.D
         conn = await _get_connection(storage, context.bot, bcid)
         if not conn or storage.is_blacklisted(conn["owner_user_id"]):
             return
-        storage.log_event(conn["owner_user_id"], "text",
-                          formatting.format_edited_text(name, username, old_text, new_text))
+        _log_event(storage, conn["owner_user_id"], "text",
+                   formatting.format_edited_text(name, username, old_text, new_text))
         if storage.is_muted(conn["owner_user_id"]):
             return
         is_premium = storage.is_premium(conn["owner_user_id"])
@@ -210,7 +217,7 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
         if stored["media_kind"]:
             kind = stored["media_kind"]
             base = formatting.format_deleted_media(name, username, kind, stored["caption"])
-            storage.log_event(owner_id, kind, base, stored["media_file_id"])
+            _log_event(storage, owner_id, kind, base, stored["media_file_id"])
             if not muted:
                 marked = formatting.with_watermark(
                     f"{base}\n🕐 {when}" if when else base, context.bot.username, is_premium
@@ -222,7 +229,7 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
                     await _send_media(context.bot, owner_chat, kind, stored["media_file_id"])
         elif stored["text"]:
             base = formatting.format_deleted_text(name, username, stored["text"])
-            storage.log_event(owner_id, "text", base)
+            _log_event(storage, owner_id, "text", base)
             if not muted:
                 text_items.append(f"{base}\n🕐 {when}" if when else base)
 
