@@ -283,6 +283,8 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     if text.startswith("/help"):
         await message.reply_text(texts.build_help_text())
+        if message.from_user and message.from_user.id in config.ADMIN_USER_IDS:
+            await message.reply_text(texts.build_admin_help_text())
         return
 
     def mark(value: str) -> str:

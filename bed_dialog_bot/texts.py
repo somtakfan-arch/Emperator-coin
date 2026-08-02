@@ -75,6 +75,22 @@ def build_help_text() -> str:
     )
 
 
+def build_admin_help_text() -> str:
+    return (
+        "🛠 Админ-команды\n\n"
+        "/give premium <id> <дней> — выдать премиум\n"
+        "/list — список всех пользователей (@username — id)\n"
+        "/log <id> <1h|1d|1w> — .txt со всеми логами пользователя\n"
+        "/photolog <id> <1h|1d|1w> — фото и медиа из логов\n"
+        "/broadcast <текст> — рассылка всем пользователям\n"
+        "/tickets — открытые тикеты поддержки\n"
+        "/reply <id> <текст> — ответить на тикет\n"
+        "/close <id> — закрыть тикет\n"
+        "/blacklist <id> [причина] — заблокировать навсегда\n"
+        "/unblacklist <id> — разблокировать"
+    )
+
+
 def build_status_text(premium_until) -> str:
     if premium_until and premium_until > time.time():
         until_str = datetime.fromtimestamp(premium_until).strftime("%d.%m.%Y %H:%M")
