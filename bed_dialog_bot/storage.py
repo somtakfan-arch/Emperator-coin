@@ -71,6 +71,11 @@ CREATE TABLE IF NOT EXISTS users (
     username TEXT,
     last_seen INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
 """
 
 
@@ -414,6 +419,19 @@ class Storage:
         with self._connect() as conn:
             rows = conn.execute("SELECT user_id FROM users").fetchall()
         return [r[0] for r in rows]
+
+    def get_setting(self, key: str, default=None):
+        with self._connect() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        return row[0] if row else default
+
+    def set_setting(self, key: str, value: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key, value),
+            )
 
     def clear_logs(self, owner_user_id: int) -> int:
         with self._connect() as conn:

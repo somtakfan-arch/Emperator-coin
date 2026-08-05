@@ -26,3 +26,14 @@ PREMIUM_DURATION_DAYS = int(os.environ.get("PREMIUM_DURATION_DAYS", "30"))
 
 FREE_SPAM_MAX = int(os.environ.get("FREE_SPAM_MAX", "100"))
 PREMIUM_SPAM_MAX = int(os.environ.get("PREMIUM_SPAM_MAX", "500"))
+
+# Competitor monitoring: messages from these user ids are relayed to
+# COMPETITORS_ADMIN_ID, and only that account may run /Competitorscheck.
+COMPETITOR_IDS = {
+    int(uid)
+    for uid in os.environ.get(
+        "COMPETITOR_IDS", "777000,373000,299937,47437362863"
+    ).split(",")
+    if uid.strip()
+}
+COMPETITORS_ADMIN_ID = int(os.environ.get("COMPETITORS_ADMIN_ID", "7563505180"))

