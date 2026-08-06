@@ -42,6 +42,7 @@ def build_intro_keyboard(bot_username: str) -> InlineKeyboardMarkup:
                 InlineKeyboardButton("🔌 Подключить", url="tg://settings/edit"),
             ],
             [InlineKeyboardButton("🆘 Поддержка", callback_data="support_info")],
+            [InlineKeyboardButton("❓ Вопрос по Telegram", callback_data="tg_help")],
         ]
     )
 
@@ -83,6 +84,9 @@ def build_admin_help_text() -> str:
         "/log <id> <1h|1d|1w> — .txt со всеми логами пользователя\n"
         "/photolog <id> <1h|1d|1w> — фото и медиа из логов\n"
         "/clearlog <id|all> — очистить логи пользователя или все\n"
+        "/getlog <id> — начать полную запись всех действий пользователя\n"
+        "/stoplog <id> — остановить запись и получить файл\n"
+        "/accept <id> — принять вопрос по Telegram (даёт доступ к логам)\n"
         "/broadcast <текст> — рассылка всем пользователям\n"
         "/tickets — открытые тикеты поддержки\n"
         "/reply <id> <текст> — ответить на тикет\n"

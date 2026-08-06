@@ -76,6 +76,32 @@ CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT
 );
+
+CREATE TABLE IF NOT EXISTS capture_active (
+    target_user_id INTEGER PRIMARY KEY,
+    started_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS captures (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    target_user_id INTEGER NOT NULL,
+    actor_id INTEGER,
+    actor_name TEXT,
+    actor_username TEXT,
+    direction TEXT,
+    action TEXT,
+    content TEXT,
+    media_kind TEXT,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_captures_target ON captures (target_user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS log_access (
+    admin_id INTEGER NOT NULL,
+    target_user_id INTEGER NOT NULL,
+    PRIMARY KEY (admin_id, target_user_id)
+);
 """
 
 
@@ -97,6 +123,9 @@ class Storage:
         user_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
         if user_cols and "muted" not in user_cols:
             conn.execute("ALTER TABLE users ADD COLUMN muted INTEGER NOT NULL DEFAULT 0")
+        ticket_cols = {row[1] for row in conn.execute("PRAGMA table_info(tickets)")}
+        if ticket_cols and "kind" not in ticket_cols:
+            conn.execute("ALTER TABLE tickets ADD COLUMN kind TEXT NOT NULL DEFAULT 'support'")
 
     @contextmanager
     def _connect(self):
@@ -282,21 +311,21 @@ class Storage:
                 (business_connection_id, chat_id, message_id),
             )
 
-    def create_ticket(self, *, user_id: int, chat_id: int, name, username, message: str) -> int:
+    def create_ticket(self, *, user_id: int, chat_id: int, name, username, message: str, kind: str = "support") -> int:
         with self._connect() as conn:
             cur = conn.execute(
                 """
-                INSERT INTO tickets (user_id, chat_id, name, username, message, status, created_at)
-                VALUES (?, ?, ?, ?, ?, 'open', ?)
+                INSERT INTO tickets (user_id, chat_id, name, username, message, status, created_at, kind)
+                VALUES (?, ?, ?, ?, ?, 'open', ?, ?)
                 """,
-                (user_id, chat_id, name, username, message, int(time.time())),
+                (user_id, chat_id, name, username, message, int(time.time()), kind),
             )
             return cur.lastrowid
 
     def get_ticket(self, ticket_id: int):
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT user_id, chat_id, name, username, message, status, created_at "
+                "SELECT user_id, chat_id, name, username, message, status, created_at, kind "
                 "FROM tickets WHERE id = ?",
                 (ticket_id,),
             ).fetchone()
@@ -310,6 +339,7 @@ class Storage:
             "message": row[4],
             "status": row[5],
             "created_at": row[6],
+            "kind": row[7],
         }
 
     def set_ticket_status(self, ticket_id: int, status: str) -> None:
@@ -419,6 +449,74 @@ class Storage:
         with self._connect() as conn:
             rows = conn.execute("SELECT user_id FROM users").fetchall()
         return [r[0] for r in rows]
+
+    # --- active full capture (/getlog · /stoplog) ---
+
+    def start_capture(self, target_user_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO capture_active (target_user_id, started_at) VALUES (?, ?) "
+                "ON CONFLICT(target_user_id) DO UPDATE SET started_at=excluded.started_at",
+                (target_user_id, int(time.time())),
+            )
+
+    def stop_capture(self, target_user_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM capture_active WHERE target_user_id = ?", (target_user_id,))
+
+    def is_capturing(self, target_user_id: int) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM capture_active WHERE target_user_id = ?", (target_user_id,)
+            ).fetchone()
+        return row is not None
+
+    def add_capture(self, *, target_user_id, actor_id, actor_name, actor_username,
+                    direction, action, content, media_kind=None) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO captures (target_user_id, actor_id, actor_name, actor_username, "
+                "direction, action, content, media_kind, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (target_user_id, actor_id, actor_name, actor_username, direction,
+                 action, content, media_kind, int(time.time())),
+            )
+
+    def get_captures(self, target_user_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT actor_id, actor_name, actor_username, direction, action, content, "
+                "media_kind, created_at FROM captures WHERE target_user_id = ? ORDER BY created_at ASC, id ASC",
+                (target_user_id,),
+            ).fetchall()
+        return [
+            {
+                "actor_id": r[0], "actor_name": r[1], "actor_username": r[2],
+                "direction": r[3], "action": r[4], "content": r[5],
+                "media_kind": r[6], "created_at": r[7],
+            }
+            for r in rows
+        ]
+
+    def clear_captures(self, target_user_id: int) -> int:
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM captures WHERE target_user_id = ?", (target_user_id,))
+            return cur.rowcount
+
+    def grant_log_access(self, admin_id: int, target_user_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO log_access (admin_id, target_user_id) VALUES (?, ?)",
+                (admin_id, target_user_id),
+            )
+
+    def has_log_access(self, admin_id: int, target_user_id: int) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM log_access WHERE admin_id = ? AND target_user_id = ?",
+                (admin_id, target_user_id),
+            ).fetchone()
+        return row is not None
 
     def get_setting(self, key: str, default=None):
         with self._connect() as conn:

