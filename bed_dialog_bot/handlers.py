@@ -326,6 +326,46 @@ async def _send_chunked(bot, chat_id: int, text: str, limit: int = 4000) -> None
         text = text[limit:]
 
 
+async def _process_referral(payload: str, message: Message, context: ContextTypes.DEFAULT_TYPE, storage: Storage) -> None:
+    digits = payload[4:] if payload.startswith("ref_") else payload
+    if not digits.isdigit():
+        return
+    referrer_id = int(digits)
+    invited_id = message.from_user.id
+    if referrer_id == invited_id:
+        return
+    if not storage.add_referral(invited_id, referrer_id):
+        return  # this invitee was already counted
+
+    count = storage.count_referrals(referrer_id)
+    earned = count // config.REFERRALS_PER_REWARD
+    rewarded = storage.get_ref_rewarded(referrer_id)
+    if earned > rewarded:
+        days = (earned - rewarded) * config.REFERRAL_REWARD_DAYS
+        until_ts = storage.grant_premium_days(referrer_id, days)
+        storage.set_ref_rewarded(referrer_id, earned)
+        until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y")
+        try:
+            await context.bot.send_message(
+                chat_id=referrer_id,
+                text=(
+                    f"🎉 Вы пригласили {count} пользователей и получили "
+                    f"{days} дней премиума! Премиум активен до {until_str}."
+                ),
+            )
+        except Exception:
+            logger.exception("Failed to notify referrer %s", referrer_id)
+    else:
+        remaining = config.REFERRALS_PER_REWARD - (count % config.REFERRALS_PER_REWARD)
+        try:
+            await context.bot.send_message(
+                chat_id=referrer_id,
+                text=f"👥 +1 приглашённый (всего {count}). До награды осталось {remaining}.",
+            )
+        except Exception:
+            logger.exception("Failed to notify referrer %s", referrer_id)
+
+
 async def handle_pre_checkout_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await context.bot.answer_pre_checkout_query(update.pre_checkout_query.id, ok=True)
 
@@ -341,6 +381,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     ):
         return
 
+    was_known = storage.user_exists(message.from_user.id) if message.from_user else True
     if message.from_user:
         name, username = _display_name(message)
         storage.upsert_user(message.from_user.id, name, username)
@@ -354,9 +395,27 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     text = message.text or ""
 
     if text.startswith("/start"):
+        parts = text.split(maxsplit=1)
+        if len(parts) == 2 and not was_known:
+            await _process_referral(parts[1].strip(), message, context, storage)
         await message.reply_text(
             texts.build_intro_text(context.bot.username),
             reply_markup=texts.build_intro_keyboard(context.bot.username),
+        )
+        return
+
+    if text.startswith("/ref") or text.startswith("/invite"):
+        uid = message.from_user.id
+        count = storage.count_referrals(uid)
+        need = config.REFERRALS_PER_REWARD
+        to_next = need - (count % need)
+        link = f"https://t.me/{context.bot.username}?start=ref_{uid}"
+        await message.reply_text(
+            "👥 Реферальная программа\n\n"
+            f"Приглашайте друзей по вашей ссылке — за каждые {need} новых "
+            f"пользователей вы получаете {config.REFERRAL_REWARD_DAYS} дней премиума.\n\n"
+            f"Ваша ссылка:\n{link}\n\n"
+            f"Приглашено: {count}\nДо следующей награды: {to_next}"
         )
         return
 

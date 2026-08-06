@@ -70,6 +70,8 @@ def build_help_text() -> str:
         "/start — приветствие и кнопки для подключения бота\n"
         "/status — ваш статус премиума\n"
         f"/premium — оформить премиум за {config.PREMIUM_STARS_PRICE}⭐/мес\n"
+        f"/ref — реф-ссылка ({config.REFERRALS_PER_REWARD} друзей = "
+        f"{config.REFERRAL_REWARD_DAYS} дней премиума)\n"
         "/pause · /resume — приостановить / возобновить уведомления\n"
         "/help — этот справочник\n"
         "/support <текст> — создать тикет в поддержку"

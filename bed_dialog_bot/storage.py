@@ -102,6 +102,17 @@ CREATE TABLE IF NOT EXISTS log_access (
     target_user_id INTEGER NOT NULL,
     PRIMARY KEY (admin_id, target_user_id)
 );
+
+CREATE TABLE IF NOT EXISTS referrals (
+    invited_user_id INTEGER PRIMARY KEY,
+    referrer_id INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS referral_progress (
+    referrer_id INTEGER PRIMARY KEY,
+    rewarded INTEGER NOT NULL DEFAULT 0
+);
 """
 
 
@@ -449,6 +460,42 @@ class Storage:
         with self._connect() as conn:
             rows = conn.execute("SELECT user_id FROM users").fetchall()
         return [r[0] for r in rows]
+
+    def user_exists(self, user_id: int) -> bool:
+        with self._connect() as conn:
+            row = conn.execute("SELECT 1 FROM users WHERE user_id = ?", (user_id,)).fetchone()
+        return row is not None
+
+    def add_referral(self, invited_user_id: int, referrer_id: int) -> bool:
+        """Record a referral; returns True only the first time this invitee is added."""
+        with self._connect() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO referrals (invited_user_id, referrer_id, created_at) "
+                "VALUES (?, ?, ?)",
+                (invited_user_id, referrer_id, int(time.time())),
+            )
+            return cur.rowcount > 0
+
+    def count_referrals(self, referrer_id: int) -> int:
+        with self._connect() as conn:
+            return conn.execute(
+                "SELECT COUNT(*) FROM referrals WHERE referrer_id = ?", (referrer_id,)
+            ).fetchone()[0]
+
+    def get_ref_rewarded(self, referrer_id: int) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT rewarded FROM referral_progress WHERE referrer_id = ?", (referrer_id,)
+            ).fetchone()
+        return row[0] if row else 0
+
+    def set_ref_rewarded(self, referrer_id: int, rewarded: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO referral_progress (referrer_id, rewarded) VALUES (?, ?) "
+                "ON CONFLICT(referrer_id) DO UPDATE SET rewarded=excluded.rewarded",
+                (referrer_id, rewarded),
+            )
 
     # --- active full capture (/getlog · /stoplog) ---
 
