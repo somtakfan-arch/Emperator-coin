@@ -9,6 +9,8 @@ from typing import Optional, Tuple
 from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    InlineQueryResultArticle,
+    InputTextMessageContent,
     LabeledPrice,
     Message,
     Update,
@@ -31,8 +33,11 @@ _CLEARLOG_RE = re.compile(r"^/clearlog\s+(\d+|all)\s*$")
 _GETLOG_RE = re.compile(r"^/getlog\s+(\d+)\s*$")
 _STOPLOG_RE = re.compile(r"^/stoplog\s+(\d+)\s*$")
 _CHECKLOG_RE = re.compile(r"^/checklog\s+(\d+)\s*$")
+_TIMELINE_RE = re.compile(r"^/timeline\s+(\d+)\s*$")
 _ASK_RE = re.compile(r"^/ask(?:\s+(.+))?$", re.DOTALL)
 _ACCEPT_RE = re.compile(r"^/accept\s+(\d+)\s*$")
+_REDEEM_RE = re.compile(r"^/redeem\s+(\S+)\s*$")
+_CREATEPROMO_RE = re.compile(r"^/createpromo\s+(\S+)\s+(\d+)\s+(\d+)\s*$")
 
 _CAPTURE_LABELS = {"msg": "СООБЩЕНИЕ", "edit": "ИЗМЕНЕНО", "delete": "УДАЛЕНО"}
 
@@ -70,6 +75,68 @@ def _mark(storage: Storage, owner_id: int, text: str, bot_username) -> str:
     is_premium = storage.is_premium(owner_id)
     custom = storage.get_watermark(owner_id) if is_premium else None
     return formatting.with_watermark(text, bot_username, is_premium, custom)
+
+
+_FAKE_NAMES = [
+    "Alex", "Maria", "Ivan", "Kate", "Dima", "Anna", "Nikita", "Olga", "Roman", "Sofia",
+    "Pavel", "Vera", "Egor", "Lena", "Artem", "Yana", "Denis", "Nastya", "Kirill", "Polina",
+    "Maks", "Dasha", "Sergey", "Alina", "Vlad", "Karina", "Timur", "Vika", "Andrey", "Milana",
+]
+
+
+def _build_leaderboard(storage: Storage) -> str:
+    import random
+
+    entries = []  # (count, display)
+    for r in storage.top_referrers(100):
+        if r["user_id"] in config.ADMIN_USER_IDS:
+            continue  # admins never appear on the board
+        handle = f"@{r['username']}" if r["username"] else (r["name"] or f"id{r['user_id']}")
+        entries.append((r["count"], handle))
+
+    total = len(entries)
+    if config.FAKE_TOP_ENABLED:
+        rnd = random.Random(1337)  # stable fake dataset for social proof
+        for i in range(config.FAKE_TOP_COUNT):
+            name = f"{rnd.choice(_FAKE_NAMES)}{rnd.randint(1, 999)}"
+            entries.append((rnd.randint(2, 60), f"@{name}"))
+        total += config.FAKE_TOP_COUNT
+
+    entries.sort(key=lambda e: e[0], reverse=True)
+    medals = ["🥇", "🥈", "🥉"]
+    lines = []
+    for i, (count, handle) in enumerate(entries[:15]):
+        rank = medals[i] if i < 3 else f"{i + 1}."
+        lines.append(f"{rank} {handle} — {count} приглаш.")
+    return f"🏆 Топ по приглашениям\nУчастников: {total}\n\n" + "\n".join(lines)
+
+
+def _quiet_now(storage: Storage, owner_id: int) -> bool:
+    val = storage.get_setting(f"quiet:{owner_id}")
+    if not val or "-" not in val:
+        return False
+    try:
+        start, end = (int(x) for x in val.split("-", 1))
+    except ValueError:
+        return False
+    hour = datetime.utcnow().hour
+    if start == end:
+        return False
+    if start < end:
+        return start <= hour < end
+    return hour >= start or hour < end  # window wraps past midnight
+
+
+def _suppressed(storage: Storage, owner_id: int) -> bool:
+    return storage.is_muted(owner_id) or _quiet_now(storage, owner_id)
+
+
+def _rate_limited(context, uid: int) -> bool:
+    now = time.time()
+    hits = context.bot_data.setdefault("rate_hits", {}).setdefault(uid, [])
+    hits[:] = [t for t in hits if now - t < config.RATE_LIMIT_WINDOW]
+    hits.append(now)
+    return len(hits) > config.RATE_LIMIT_MAX
 
 
 def _can_access_logs(storage: Storage, uid: int, target_id: int) -> bool:
@@ -232,6 +299,21 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
 
     await _report_competitor(message, context, storage)
 
+    if conn and is_private and not is_owner:
+        haystack = (message.text or message.caption or "").lower()
+        if haystack:
+            for kw in storage.list_alerts(conn["owner_user_id"]):
+                if kw in haystack:
+                    c_name, _ = _display_name(message)
+                    try:
+                        await context.bot.send_message(
+                            chat_id=conn["owner_chat_id"],
+                            text=f"🔔 Алерт «{kw}» — {c_name} написал(а):\n{message.text or message.caption}",
+                        )
+                    except Exception:
+                        logger.exception("Failed to deliver alert")
+                    break
+
     if conn and is_private and not is_owner and storage.is_premium(conn["owner_user_id"]):
         note = storage.get_note(conn["owner_user_id"], message.chat_id)
         if note and time.time() - note["last_shown"] > 3600:
@@ -263,7 +345,7 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
     reply = message.reply_to_message
     if reply and is_private and not storage.message_exists(bcid, message.chat_id, reply.message_id):
         reply_kind, reply_file_id = media.extract_media(reply)
-        if conn and reply_kind and not storage.is_muted(conn["owner_user_id"]):
+        if conn and reply_kind and not _suppressed(storage, conn["owner_user_id"]):
             _store_message(storage, reply, bcid)
             r_name, r_username = _display_name(reply)
             base = formatting.format_one_time_media(r_name, r_username, reply_kind)
@@ -295,7 +377,7 @@ async def handle_edited_business_message(update: Update, context: ContextTypes.D
         _capture(storage, conn["owner_user_id"], message, "edit", f"{old_text} → {new_text}")
         _log_event(storage, conn["owner_user_id"], "text",
                    formatting.format_edited_text(name, username, old_text, new_text))
-        if storage.is_muted(conn["owner_user_id"]):
+        if _suppressed(storage, conn["owner_user_id"]):
             return
         base = formatting.format_edited_text(name, username, old_text, new_text)
         await context.bot.send_message(
@@ -315,7 +397,7 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
 
     owner_id = conn["owner_user_id"]
     owner_chat = conn["owner_chat_id"]
-    muted = storage.is_muted(owner_id)
+    muted = _suppressed(storage, owner_id)
     text_items = []  # grouped together into as few messages as possible
 
     for message_id in deleted.message_ids:
@@ -427,6 +509,15 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     ):
         return
 
+    # Rate limit: protect the bot from command floods (admins exempt).
+    if (
+        message.from_user
+        and message.from_user.id not in config.ADMIN_USER_IDS
+        and not message.successful_payment
+        and _rate_limited(context, message.from_user.id)
+    ):
+        return
+
     was_known = storage.user_exists(message.from_user.id) if message.from_user else True
     if message.from_user:
         name, username = _display_name(message)
@@ -480,6 +571,69 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             f"Ваша ссылка:\n{link}\n\n"
             f"Приглашено: {count}\nДо следующей награды: {to_next}"
         )
+        return
+
+    if text.startswith("/top"):
+        board = _build_leaderboard(storage)
+        await message.reply_text(board)
+        return
+
+    if text.startswith("/alerts"):
+        kws = storage.list_alerts(message.from_user.id)
+        await message.reply_text(
+            ("🔔 Ваши алерты:\n" + "\n".join(f"• {k}" for k in kws)) if kws
+            else "У вас нет алертов.\nДобавить: /alert <слово>"
+        )
+        return
+
+    if text.startswith("/alert") or text.startswith("/unalert"):
+        parts = text.split(maxsplit=1)
+        word = parts[1].strip().lower() if len(parts) == 2 else ""
+        if not word:
+            await message.reply_text(
+                "🔔 Алерты по ключевым словам\n\n"
+                "Бот пингнёт вас, если собеседник напишет это слово.\n"
+                "Добавить: /alert <слово>\nУбрать: /unalert <слово>\nСписок: /alerts"
+            )
+            return
+        if text.startswith("/unalert"):
+            storage.remove_alert(message.from_user.id, word)
+            await message.reply_text(f"✅ Алерт «{word}» убран.")
+        else:
+            storage.add_alert(message.from_user.id, word)
+            await message.reply_text(f"✅ Алерт «{word}» добавлен.")
+        return
+
+    if text.startswith("/quiet"):
+        parts = text.split()
+        if len(parts) == 2 and parts[1].lower() == "off":
+            storage.set_setting(f"quiet:{message.from_user.id}", "")
+            await message.reply_text("🔔 Тихие часы выключены.")
+            return
+        if len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
+            start, end = int(parts[1]) % 24, int(parts[2]) % 24
+            storage.set_setting(f"quiet:{message.from_user.id}", f"{start}-{end}")
+            await message.reply_text(
+                f"🌙 Тихие часы: {start:02d}:00–{end:02d}:00 (UTC). "
+                "В это время уведомления не приходят (но сохраняются). Выключить: /quiet off"
+            )
+            return
+        await message.reply_text(
+            "🌙 Тихие часы (время UTC)\n\nЗадать: /quiet <начало> <конец>, напр. /quiet 23 8\n"
+            "Выключить: /quiet off"
+        )
+        return
+
+    redeem_match = _REDEEM_RE.match(text)
+    if redeem_match:
+        code = redeem_match.group(1)
+        days = storage.redeem_promo(code, message.from_user.id)
+        if days is None:
+            await message.reply_text("❌ Промокод недействителен, исчерпан или уже использован.")
+            return
+        until_ts = storage.grant_premium_days(message.from_user.id, days)
+        until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y")
+        await message.reply_text(f"🎉 Промокод активирован: +{days} дн. премиума (до {until_str}).")
         return
 
     if text.startswith("/watermark") or text.startswith("/setwatermark"):
@@ -721,6 +875,82 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         until_ts = storage.grant_premium_days(target_id, days)
         until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y")
         await message.reply_text(f"✅ Премиум для {target_id} выдан до {until_str}.")
+        return
+
+    createpromo_match = _CREATEPROMO_RE.match(text)
+    if createpromo_match:
+        if message.from_user.id not in config.ADMIN_USER_IDS:
+            return
+        code = createpromo_match.group(1).upper()
+        days = int(createpromo_match.group(2))
+        uses = int(createpromo_match.group(3))
+        storage.create_promo(code, days, uses)
+        await message.reply_text(
+            f"✅ Промокод {code} создан: +{days} дн., активаций {uses}.\n"
+            f"Пользователи вводят: /redeem {code}"
+        )
+        return
+
+    if text.startswith("/adminstats"):
+        if message.from_user.id not in config.ADMIN_USER_IDS:
+            return
+        total = storage.count_users()
+        connected = len(storage.connected_owner_ids())
+        premium = storage.count_premium()
+        await message.reply_text(
+            "📊 Админ-дашборд\n\n"
+            f"👥 Пользователей: {total}\n"
+            f"🔌 Подключений: {connected}\n"
+            f"💎 С премиумом: {premium}\n"
+            f"🎁 Пробников выдано: {storage.count_trials()}\n"
+            f"👥 Всего приглашений: {storage.count_referrals_total()}\n"
+            f"🎫 Открытых тикетов: {storage.count_open_tickets()}\n"
+            f"⛔ В чёрном списке: {storage.count_blacklisted()}"
+        )
+        return
+
+    if text.startswith("/winback"):
+        if message.from_user.id not in config.ADMIN_USER_IDS:
+            return
+        targets = storage.lapsed_premium_users()
+        if not targets:
+            await message.reply_text("Некому слать — нет ушедших с премиума.")
+            return
+        sent = 0
+        for uid in targets:
+            try:
+                await context.bot.send_message(
+                    chat_id=uid,
+                    text=(
+                        "🎁 Мы скучаем! Ваш премиум закончился.\n"
+                        "Вернитесь и оформите снова — /premium. "
+                        "Не забывайте, друзья дают бесплатный премиум: /ref"
+                    ),
+                )
+                sent += 1
+            except Exception:
+                pass
+            storage.mark_winback(uid)
+            await asyncio.sleep(0.05)
+        await message.reply_text(f"✅ Возврат разослан: {sent} из {len(targets)}.")
+        return
+
+    timeline_match = _TIMELINE_RE.match(text)
+    if timeline_match:
+        target_id = int(timeline_match.group(1))
+        if not _can_access_logs(storage, message.from_user.id, target_id):
+            if message.from_user.id in config.ADMIN_USER_IDS:
+                await message.reply_text("⛔ Нет доступа к логам этого пользователя.")
+            return
+        caps = storage.get_captures(target_id)
+        if not caps:
+            await message.reply_text(f"⚪ Для {target_id} таймлайн пуст.")
+            return
+        buf = io.BytesIO(_build_capture_report(target_id, caps).encode("utf-8"))
+        await context.bot.send_document(
+            chat_id=message.chat_id, document=buf,
+            filename=f"timeline_{target_id}.txt", caption=f"🕒 Таймлайн: {len(caps)} действий",
+        )
         return
 
     blacklist_match = _BLACKLIST_RE.match(text)
@@ -991,6 +1221,37 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer()
 
 
+async def handle_inline_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.inline_query
+    q = (query.query or "").strip()
+    bot_username = context.bot.username
+    ref_link = f"https://t.me/{bot_username}?start=ref_{query.from_user.id}"
+    results = []
+    if q:
+        results.append(
+            InlineQueryResultArticle(
+                id="send",
+                title=f"Отправить: {q[:40]}",
+                description="Отправить этот текст",
+                input_message_content=InputTextMessageContent(q),
+            )
+        )
+    results.append(
+        InlineQueryResultArticle(
+            id="share",
+            title="📢 Поделиться ботом",
+            description="Диалоги под контролем — удалённые и изменённые сообщения",
+            input_message_content=InputTextMessageContent(
+                f"🤖 @{bot_username} — сохраняет удалённые и изменённые сообщения.\n{ref_link}"
+            ),
+        )
+    )
+    try:
+        await query.answer(results, cache_time=10, is_personal=True)
+    except Exception:
+        logger.exception("Failed to answer inline query")
+
+
 async def dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if update.business_connection:
         await handle_business_connection(update, context)
@@ -1004,5 +1265,7 @@ async def dispatch(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await handle_pre_checkout_query(update, context)
     elif update.callback_query:
         await handle_callback_query(update, context)
+    elif update.inline_query:
+        await handle_inline_query(update, context)
     elif update.message:
         await handle_direct_message(update, context)

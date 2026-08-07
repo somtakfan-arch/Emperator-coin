@@ -48,6 +48,15 @@ TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "1"))
 # explicitly /getlog'd are kept without limit until /stoplog.
 CAPTURE_RETENTION_SECONDS = int(os.environ.get("CAPTURE_RETENTION_SECONDS", "86400"))
 
+# Referral leaderboard: seed fake entries for social proof (remove later
+# by setting FAKE_TOP_ENABLED=0).
+FAKE_TOP_ENABLED = os.environ.get("FAKE_TOP_ENABLED", "1") == "1"
+FAKE_TOP_COUNT = int(os.environ.get("FAKE_TOP_COUNT", "200"))
+
+# Per-user command rate limit for direct messages.
+RATE_LIMIT_MAX = int(os.environ.get("RATE_LIMIT_MAX", "20"))
+RATE_LIMIT_WINDOW = int(os.environ.get("RATE_LIMIT_WINDOW", "60"))
+
 # Premium purchase packages: (label, stars, days).
 PREMIUM_PACKAGES = [
     ("1 месяц", PREMIUM_STARS_PRICE, PREMIUM_DURATION_DAYS),

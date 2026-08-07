@@ -128,6 +128,32 @@ CREATE TABLE IF NOT EXISTS notes (
 );
 """
 
+_SCHEMA += """
+CREATE TABLE IF NOT EXISTS alerts (
+    owner_user_id INTEGER NOT NULL,
+    keyword TEXT NOT NULL,
+    PRIMARY KEY (owner_user_id, keyword)
+);
+
+CREATE TABLE IF NOT EXISTS promos (
+    code TEXT PRIMARY KEY,
+    days INTEGER NOT NULL,
+    uses_left INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS promo_redemptions (
+    code TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    PRIMARY KEY (code, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS winback (
+    user_id INTEGER PRIMARY KEY,
+    sent_at INTEGER NOT NULL
+);
+"""
+
 CAPTURE_RETENTION_SECONDS = 86400
 
 
@@ -668,6 +694,116 @@ class Storage:
                 (owner_user_id, f"%{query}%", limit),
             ).fetchall()
         return [{"kind": r[0], "content": r[1], "created_at": r[2]} for r in rows]
+
+    # --- keyword alerts ---
+
+    def add_alert(self, owner_user_id: int, keyword: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO alerts (owner_user_id, keyword) VALUES (?, ?)",
+                (owner_user_id, keyword.lower()),
+            )
+
+    def remove_alert(self, owner_user_id: int, keyword: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM alerts WHERE owner_user_id = ? AND keyword = ?",
+                (owner_user_id, keyword.lower()),
+            )
+
+    def list_alerts(self, owner_user_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT keyword FROM alerts WHERE owner_user_id = ?", (owner_user_id,)
+            ).fetchall()
+        return [r[0] for r in rows]
+
+    # --- promo codes ---
+
+    def create_promo(self, code: str, days: int, uses: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO promos (code, days, uses_left, created_at) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(code) DO UPDATE SET days=excluded.days, uses_left=excluded.uses_left",
+                (code.upper(), days, uses, int(time.time())),
+            )
+
+    def get_promo(self, code: str):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT code, days, uses_left FROM promos WHERE code = ?", (code.upper(),)
+            ).fetchone()
+        return {"code": row[0], "days": row[1], "uses_left": row[2]} if row else None
+
+    def redeem_promo(self, code: str, user_id: int):
+        """Returns days granted, or None if invalid/exhausted/already used."""
+        code = code.upper()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT days, uses_left FROM promos WHERE code = ?", (code,)
+            ).fetchone()
+            if not row or row[1] <= 0:
+                return None
+            already = conn.execute(
+                "SELECT 1 FROM promo_redemptions WHERE code = ? AND user_id = ?", (code, user_id)
+            ).fetchone()
+            if already:
+                return None
+            conn.execute(
+                "INSERT INTO promo_redemptions (code, user_id) VALUES (?, ?)", (code, user_id)
+            )
+            conn.execute("UPDATE promos SET uses_left = uses_left - 1 WHERE code = ?", (code,))
+            return row[0]
+
+    # --- referral leaderboard ---
+
+    def top_referrers(self, limit: int = 50):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT r.referrer_id, COUNT(*) c, u.name, u.username "
+                "FROM referrals r LEFT JOIN users u ON u.user_id = r.referrer_id "
+                "GROUP BY r.referrer_id ORDER BY c DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [{"user_id": r[0], "count": r[1], "name": r[2], "username": r[3]} for r in rows]
+
+    # --- win-back of lapsed premium ---
+
+    def lapsed_premium_users(self, limit: int = 200):
+        now = int(time.time())
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT p.user_id FROM premium p "
+                "WHERE p.premium_until < ? "
+                "AND p.user_id NOT IN (SELECT user_id FROM winback) LIMIT ?",
+                (now, limit),
+            ).fetchall()
+        return [r[0] for r in rows]
+
+    def mark_winback(self, user_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO winback (user_id, sent_at) VALUES (?, ?)",
+                (user_id, int(time.time())),
+            )
+
+    # --- admin dashboard counts ---
+
+    def count_blacklisted(self) -> int:
+        with self._connect() as conn:
+            return conn.execute("SELECT COUNT(*) FROM blacklist").fetchone()[0]
+
+    def count_open_tickets(self) -> int:
+        with self._connect() as conn:
+            return conn.execute("SELECT COUNT(*) FROM tickets WHERE status = 'open'").fetchone()[0]
+
+    def count_referrals_total(self) -> int:
+        with self._connect() as conn:
+            return conn.execute("SELECT COUNT(*) FROM referrals").fetchone()[0]
+
+    def count_trials(self) -> int:
+        with self._connect() as conn:
+            return conn.execute("SELECT COUNT(*) FROM trials").fetchone()[0]
 
     def get_setting(self, key: str, default=None):
         with self._connect() as conn:
