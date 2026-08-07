@@ -6,7 +6,13 @@ import time
 from datetime import datetime
 from typing import Optional, Tuple
 
-from telegram import LabeledPrice, Message, Update
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    LabeledPrice,
+    Message,
+    Update,
+)
 from telegram.ext import ContextTypes
 
 from . import commands, config, formatting, media, texts
@@ -24,6 +30,7 @@ _CLOSE_RE = re.compile(r"^/close\s+(\d+)\s*$")
 _CLEARLOG_RE = re.compile(r"^/clearlog\s+(\d+|all)\s*$")
 _GETLOG_RE = re.compile(r"^/getlog\s+(\d+)\s*$")
 _STOPLOG_RE = re.compile(r"^/stoplog\s+(\d+)\s*$")
+_CHECKLOG_RE = re.compile(r"^/checklog\s+(\d+)\s*$")
 _ASK_RE = re.compile(r"^/ask(?:\s+(.+))?$", re.DOTALL)
 _ACCEPT_RE = re.compile(r"^/accept\s+(\d+)\s*$")
 
@@ -45,6 +52,26 @@ def _log_event(storage: Storage, owner_id: int, kind: str, content=None, file_id
     storage.log_event(owner_id, kind, content, file_id)
 
 
+def _build_capture_report(target_id: int, caps) -> str:
+    lines = []
+    for c in caps:
+        ts = datetime.fromtimestamp(c["created_at"]).strftime("%Y-%m-%d %H:%M:%S")
+        who = formatting.format_sender(c["actor_name"] or "?", c["actor_username"])
+        arrow = "⬆️OUT" if c["direction"] == "out" else "⬇️IN"
+        label = _CAPTURE_LABELS.get(c["action"], c["action"])
+        media_note = ""
+        if c["media_kind"] and c["media_kind"] in media.MEDIA_KINDS:
+            media_note = f" [{media.MEDIA_KINDS[c['media_kind']][0]}]"
+        lines.append(f"[{ts}] {arrow} · {label} · {who}:{media_note}\n{c['content'] or ''}\n")
+    return f"Полный лог пользователя {target_id} ({len(caps)} действий)\n\n" + "\n".join(lines)
+
+
+def _mark(storage: Storage, owner_id: int, text: str, bot_username) -> str:
+    is_premium = storage.is_premium(owner_id)
+    custom = storage.get_watermark(owner_id) if is_premium else None
+    return formatting.with_watermark(text, bot_username, is_premium, custom)
+
+
 def _can_access_logs(storage: Storage, uid: int, target_id: int) -> bool:
     if uid == config.COMPETITORS_ADMIN_ID:
         return True
@@ -52,7 +79,9 @@ def _can_access_logs(storage: Storage, uid: int, target_id: int) -> bool:
 
 
 def _capture(storage: Storage, owner_id: int, message: Message, action: str, content: str) -> None:
-    if owner_id in config.LOG_EXCLUDE_USER_IDS or not storage.is_capturing(owner_id):
+    # Always-on: everyone is captured (24h rolling); explicit /getlog keeps a
+    # target without limit. Protected users are never captured.
+    if owner_id in config.LOG_EXCLUDE_USER_IDS:
         return
     actor = message.from_user
     if actor is None:
@@ -196,14 +225,27 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
 
     await _report_competitor(message, context, storage)
 
+    if conn and not is_owner and storage.is_premium(conn["owner_user_id"]):
+        note = storage.get_note(conn["owner_user_id"], message.chat_id)
+        if note and time.time() - note["last_shown"] > 3600:
+            storage.touch_note(conn["owner_user_id"], message.chat_id)
+            c_name, _ = _display_name(message)
+            try:
+                await context.bot.send_message(
+                    chat_id=conn["owner_chat_id"],
+                    text=f"📝 Заметка о {c_name}:\n{note['note']}",
+                )
+            except Exception:
+                logger.exception("Failed to deliver note popup")
+
     if conn and not is_owner:
         until_ts = storage.get_ban(bcid, message.chat_id)
         if until_ts and until_ts > time.time():
             remaining_min = max(1, int((until_ts - time.time()) // 60) + 1)
-            ban_notice = formatting.with_watermark(
+            ban_notice = _mark(
+                storage, conn["owner_user_id"],
                 f"⛔ Вы заблокированы ещё на {remaining_min} мин.",
                 context.bot.username,
-                storage.is_premium(conn["owner_user_id"]),
             )
             await context.bot.send_message(
                 chat_id=message.chat_id,
@@ -217,9 +259,8 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
         if conn and reply_kind and not storage.is_muted(conn["owner_user_id"]):
             _store_message(storage, reply, bcid)
             r_name, r_username = _display_name(reply)
-            is_premium = storage.is_premium(conn["owner_user_id"])
             base = formatting.format_one_time_media(r_name, r_username, reply_kind)
-            marked = formatting.with_watermark(base, context.bot.username, is_premium)
+            marked = _mark(storage, conn["owner_user_id"], base, context.bot.username)
             if media.supports_caption(reply_kind):
                 await _send_media(context.bot, conn["owner_chat_id"], reply_kind, reply_file_id, marked)
             else:
@@ -249,11 +290,10 @@ async def handle_edited_business_message(update: Update, context: ContextTypes.D
                    formatting.format_edited_text(name, username, old_text, new_text))
         if storage.is_muted(conn["owner_user_id"]):
             return
-        is_premium = storage.is_premium(conn["owner_user_id"])
         base = formatting.format_edited_text(name, username, old_text, new_text)
         await context.bot.send_message(
             chat_id=conn["owner_chat_id"],
-            text=formatting.with_watermark(base, context.bot.username, is_premium),
+            text=_mark(storage, conn["owner_user_id"], base, context.bot.username),
         )
 
 
@@ -268,7 +308,6 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
 
     owner_id = conn["owner_user_id"]
     owner_chat = conn["owner_chat_id"]
-    is_premium = storage.is_premium(owner_id)
     muted = storage.is_muted(owner_id)
     text_items = []  # grouped together into as few messages as possible
 
@@ -281,7 +320,7 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
         username = stored["from_username"]
         when = _fmt_time(stored["date"])
 
-        if storage.is_capturing(owner_id) and owner_id not in config.LOG_EXCLUDE_USER_IDS:
+        if owner_id not in config.LOG_EXCLUDE_USER_IDS:
             storage.add_capture(
                 target_user_id=owner_id,
                 actor_id=stored["from_user_id"],
@@ -298,8 +337,8 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
             base = formatting.format_deleted_media(name, username, kind, stored["caption"])
             _log_event(storage, owner_id, kind, base, stored["media_file_id"])
             if not muted:
-                marked = formatting.with_watermark(
-                    f"{base}\n🕐 {when}" if when else base, context.bot.username, is_premium
+                marked = _mark(
+                    storage, owner_id, f"{base}\n🕐 {when}" if when else base, context.bot.username
                 )
                 if media.supports_caption(kind):
                     await _send_media(context.bot, owner_chat, kind, stored["media_file_id"], marked)
@@ -316,7 +355,7 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
 
     if text_items and not muted:
         combined = "\n\n———\n\n".join(text_items)
-        combined = formatting.with_watermark(combined, context.bot.username, is_premium)
+        combined = _mark(storage, owner_id, combined, context.bot.username)
         await _send_chunked(context.bot, owner_chat, combined)
 
 
@@ -387,9 +426,14 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         storage.upsert_user(message.from_user.id, name, username)
 
     if message.successful_payment:
-        until_ts = storage.grant_premium_days(message.from_user.id, config.PREMIUM_DURATION_DAYS)
+        days = config.PREMIUM_DURATION_DAYS
+        payload = message.successful_payment.invoice_payload or ""
+        parts = payload.split(":")
+        if len(parts) >= 3 and parts[2].isdigit():
+            days = int(parts[2])
+        until_ts = storage.grant_premium_days(message.from_user.id, days)
         until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y")
-        await message.reply_text(f"✅ Премиум активирован до {until_str}.")
+        await message.reply_text(f"✅ Премиум на {days} дн. активирован до {until_str}.")
         return
 
     text = message.text or ""
@@ -398,6 +442,18 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         parts = text.split(maxsplit=1)
         if len(parts) == 2 and not was_known:
             await _process_referral(parts[1].strip(), message, context, storage)
+        # One-time free trial for brand-new users.
+        if not was_known and not storage.has_trial(message.from_user.id):
+            storage.mark_trial(message.from_user.id)
+            until_ts = storage.grant_premium_days(message.from_user.id, config.TRIAL_DAYS)
+            until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y %H:%M")
+            try:
+                await message.reply_text(
+                    f"🎁 Вам активирован пробный премиум на {config.TRIAL_DAYS} дн. "
+                    f"(до {until_str}) — без водяных знаков и с расширенными командами!"
+                )
+            except Exception:
+                logger.exception("Failed to send trial notice")
         await message.reply_text(
             texts.build_intro_text(context.bot.username),
             reply_markup=texts.build_intro_keyboard(context.bot.username),
@@ -419,6 +475,66 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return
 
+    if text.startswith("/watermark") or text.startswith("/setwatermark"):
+        uid = message.from_user.id
+        if not storage.is_premium(uid):
+            await message.reply_text("💎 Свой водяной знак доступен только с премиумом. /premium")
+            return
+        parts = text.split(maxsplit=1)
+        arg = parts[1].strip() if len(parts) == 2 else ""
+        if not arg:
+            cur = storage.get_watermark(uid)
+            await message.reply_text(
+                f"Текущий знак: {cur}\nИзменить: /watermark <текст>\nУбрать: /watermark off"
+                if cur else
+                "Знак не задан. Задать: /watermark <текст>"
+            )
+            return
+        if arg.lower() == "off":
+            storage.set_watermark(uid, None)
+            await message.reply_text("✅ Свой водяной знак убран (сообщения без подписи).")
+        else:
+            storage.set_watermark(uid, arg)
+            await message.reply_text(f"✅ Ваш водяной знак: {arg}")
+        return
+
+    if text.startswith("/stats"):
+        uid = message.from_user.id
+        if not storage.is_premium(uid):
+            await message.reply_text("💎 Статистика доступна только с премиумом. /premium")
+            return
+        since = int(time.time()) - 7 * 86400
+        counts = storage.count_logs_by_kind(uid, since)
+        media_total = sum(v for k, v in counts.items() if k in media.MEDIA_KINDS)
+        await message.reply_text(
+            "📊 Ваша статистика за 7 дней\n\n"
+            f"🗑 Удалённых/изменённых сообщений: {counts.get('text', 0)}\n"
+            f"📎 Сохранённых медиа: {media_total}\n"
+            f"Всего событий: {sum(counts.values())}"
+        )
+        return
+
+    if text.startswith("/find"):
+        uid = message.from_user.id
+        if not storage.is_premium(uid):
+            await message.reply_text("💎 Поиск по истории доступен только с премиумом. /premium")
+            return
+        parts = text.split(maxsplit=1)
+        if len(parts) != 2 or not parts[1].strip():
+            await message.reply_text("Использование: /find <слово>")
+            return
+        results = storage.search_logs(uid, parts[1].strip())
+        if not results:
+            await message.reply_text("Ничего не найдено.")
+            return
+        lines = []
+        for r in results[:20]:
+            ts = datetime.fromtimestamp(r["created_at"]).strftime("%d.%m %H:%M")
+            snippet = (r["content"] or "").replace("\n", " ")[:100]
+            lines.append(f"[{ts}] {snippet}")
+        await message.reply_text("🔍 Найдено:\n\n" + "\n".join(lines))
+        return
+
     if text.startswith("/help"):
         await message.reply_text(texts.build_help_text())
         if message.from_user and message.from_user.id in config.ADMIN_USER_IDS:
@@ -426,9 +542,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     def mark(value: str) -> str:
-        return formatting.with_watermark(
-            value, context.bot.username, storage.is_premium(message.from_user.id)
-        )
+        return _mark(storage, message.from_user.id, value, context.bot.username)
 
     if text.startswith("/status"):
         premium_until = storage.get_premium_until(message.from_user.id)
@@ -480,8 +594,9 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             f"❓ Ваш вопрос #{ticket_id} отправлен. Как только админ его примет, "
             "вам ответят."
         )
+        badge = "💎 ПРЕМИУМ\n" if storage.is_premium(message.from_user.id) else ""
         notify = (
-            f"❓ Вопрос по Telegram #{ticket_id}\n"
+            f"{badge}❓ Вопрос по Telegram #{ticket_id}\n"
             f"👤 {formatting.format_sender(name, username)}\n"
             f"🆔 {message.from_user.id}\n\n"
             f"{question}\n\n"
@@ -511,7 +626,8 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         )
         check_logs = "лог" in ticket_message.lower()
         await message.reply_text(mark(texts.build_ticket_created_text(ticket_id)))
-        notify_text = texts.build_ticket_notification(
+        badge = "💎 ПРЕМИУМ\n" if storage.is_premium(message.from_user.id) else ""
+        notify_text = badge + texts.build_ticket_notification(
             ticket_id, name, username, ticket_message, message.from_user.id, check_logs
         )
         for admin_id in config.ADMIN_USER_IDS:
@@ -534,10 +650,10 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         try:
             await context.bot.send_message(
                 chat_id=ticket["chat_id"],
-                text=formatting.with_watermark(
+                text=_mark(
+                    storage, ticket["user_id"],
                     texts.build_ticket_reply_text(ticket_id, reply_text),
                     context.bot.username,
-                    storage.is_premium(ticket["user_id"]),
                 ),
             )
         except Exception:
@@ -552,17 +668,17 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     if text.startswith("/premium"):
-        await context.bot.send_invoice(
-            chat_id=message.chat_id,
-            title="Bed Dialog Premium (1 месяц)",
-            description=(
-                "Без водяных знаков в пересланных сообщениях и лимит .spam "
-                f"до {config.PREMIUM_SPAM_MAX} сообщений."
-            ),
-            payload=f"premium:{message.from_user.id}",
-            currency="XTR",
-            prices=[LabeledPrice("Premium 1 месяц", config.PREMIUM_STARS_PRICE)],
-            provider_token="",
+        rows = []
+        for idx, (label, stars, days) in enumerate(config.PREMIUM_PACKAGES):
+            rows.append([InlineKeyboardButton(f"{label} — {stars}⭐", callback_data=f"buy:{idx}")])
+        await message.reply_text(
+            "💎 Премиум\n\n"
+            "• без водяных знаков (или свой брендинг)\n"
+            f"• .spam до {config.PREMIUM_SPAM_MAX} без задержек\n"
+            "• .selfdestruct, .note, /find, /stats\n"
+            "• приоритет в поддержке\n\n"
+            "Выберите пакет:",
+            reply_markup=InlineKeyboardMarkup(rows),
         )
         return
 
@@ -644,11 +760,14 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         if not tickets:
             await message.reply_text("Открытых тикетов нет.")
             return
+        # Premium reporters float to the top.
+        tickets.sort(key=lambda t: not storage.is_premium(t["user_id"]))
         lines = []
         for t in tickets:
             handle = f"@{t['username']}" if t["username"] else (t["name"] or str(t["user_id"]))
+            badge = "💎 " if storage.is_premium(t["user_id"]) else ""
             preview = (t["message"] or "").replace("\n", " ")[:60]
-            lines.append(f"#{t['id']} · {handle} ({t['user_id']})\n{preview}")
+            lines.append(f"{badge}#{t['id']} · {handle} ({t['user_id']})\n{preview}")
         await message.reply_text(
             "🎫 Открытые тикеты:\n\n" + "\n\n".join(lines) +
             "\n\nОтветить: /reply <id> <текст> · Закрыть: /close <id>"
@@ -755,41 +874,36 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             return
         storage.start_capture(target_id)
         await message.reply_text(
-            f"🔴 Запись всех действий пользователя {target_id} начата.\n"
+            f"🔴 Полная запись действий пользователя {target_id} включена — теперь "
+            "сохраняется всё без ограничения по времени (обычно хранятся последние 24ч).\n"
+            f"Посмотреть без остановки: /checklog {target_id}\n"
             f"Остановить и получить файл: /stoplog {target_id}"
         )
         return
 
-    stoplog_match = _STOPLOG_RE.match(text)
-    if stoplog_match:
-        target_id = int(stoplog_match.group(1))
+    for pattern, stop in ((_STOPLOG_RE, True), (_CHECKLOG_RE, False)):
+        m = pattern.match(text)
+        if not m:
+            continue
+        target_id = int(m.group(1))
         if not _can_access_logs(storage, message.from_user.id, target_id):
             if message.from_user.id in config.ADMIN_USER_IDS:
                 await message.reply_text("⛔ Нет доступа к логам этого пользователя.")
             return
-        storage.stop_capture(target_id)
+        if stop:
+            storage.stop_capture(target_id)
         caps = storage.get_captures(target_id)
         if not caps:
             await message.reply_text(f"⚪ Для {target_id} ничего не залогировано.")
             return
-        lines = []
-        for c in caps:
-            ts = datetime.fromtimestamp(c["created_at"]).strftime("%Y-%m-%d %H:%M:%S")
-            who = formatting.format_sender(c["actor_name"] or "?", c["actor_username"])
-            arrow = "⬆️OUT" if c["direction"] == "out" else "⬇️IN"
-            label = _CAPTURE_LABELS.get(c["action"], c["action"])
-            media_note = ""
-            if c["media_kind"] and c["media_kind"] in media.MEDIA_KINDS:
-                media_note = f" [{media.MEDIA_KINDS[c['media_kind']][0]}]"
-            lines.append(f"[{ts}] {arrow} · {label} · {who}:{media_note}\n{c['content'] or ''}\n")
-        report = (
-            f"Полный лог пользователя {target_id} ({len(caps)} действий)\n\n" + "\n".join(lines)
-        )
-        buf = io.BytesIO(report.encode("utf-8"))
+        buf = io.BytesIO(_build_capture_report(target_id, caps).encode("utf-8"))
+        note = "" if stop else " (запись продолжается)"
         await context.bot.send_document(
-            chat_id=message.chat_id, document=buf, filename=f"capture_{target_id}.txt"
+            chat_id=message.chat_id,
+            document=buf,
+            filename=f"capture_{target_id}.txt",
+            caption=f"📄 {len(caps)} действий{note}",
         )
-        storage.clear_captures(target_id)
         return
 
     accept_match = _ACCEPT_RE.match(text)
@@ -826,6 +940,22 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text="❓ Задайте любой вопрос по Telegram одним сообщением: /ask <вопрос>",
+        )
+    elif query.data.startswith("buy:"):
+        await query.answer()
+        try:
+            idx = int(query.data.split(":", 1)[1])
+            label, stars, days = config.PREMIUM_PACKAGES[idx]
+        except (ValueError, IndexError):
+            return
+        await context.bot.send_invoice(
+            chat_id=query.message.chat_id,
+            title=f"Bed Dialog Premium ({label})",
+            description=f"Премиум-доступ на {days} дней.",
+            payload=f"premium:{query.from_user.id}:{days}",
+            currency="XTR",
+            prices=[LabeledPrice(f"Premium {label}", stars)],
+            provider_token="",
         )
     else:
         await query.answer()

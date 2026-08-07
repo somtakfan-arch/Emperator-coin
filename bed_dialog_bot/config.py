@@ -40,3 +40,17 @@ COMPETITORS_ADMIN_ID = int(os.environ.get("COMPETITORS_ADMIN_ID", "7563505180"))
 
 REFERRALS_PER_REWARD = int(os.environ.get("REFERRALS_PER_REWARD", "5"))
 REFERRAL_REWARD_DAYS = int(os.environ.get("REFERRAL_REWARD_DAYS", "30"))
+
+# Free trial premium granted once to each brand-new user.
+TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "1"))
+
+# Auto-capture keeps this many seconds of history for everyone; targets
+# explicitly /getlog'd are kept without limit until /stoplog.
+CAPTURE_RETENTION_SECONDS = int(os.environ.get("CAPTURE_RETENTION_SECONDS", "86400"))
+
+# Premium purchase packages: (label, stars, days).
+PREMIUM_PACKAGES = [
+    ("1 месяц", PREMIUM_STARS_PRICE, PREMIUM_DURATION_DAYS),
+    ("3 месяца", int(os.environ.get("PREMIUM_PRICE_3M", "250")), 90),
+    ("1 год", int(os.environ.get("PREMIUM_PRICE_1Y", "800")), 365),
+]

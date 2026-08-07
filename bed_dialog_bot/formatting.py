@@ -52,7 +52,10 @@ def format_one_time_media(name: str, username: Optional[str], kind: str) -> str:
     return f"🔥 {format_sender(name, username)} отправил(а) {label}:"
 
 
-def with_watermark(text: str, bot_username: Optional[str], is_premium: bool) -> str:
-    if is_premium or not bot_username:
+def with_watermark(text: str, bot_username: Optional[str], is_premium: bool, custom: Optional[str] = None) -> str:
+    if is_premium:
+        # Premium removes the default mark; optional custom branding replaces it.
+        return f"{text}\n\n{custom}" if custom else text
+    if not bot_username:
         return text
     return f"{text}\n\n@{bot_username}"

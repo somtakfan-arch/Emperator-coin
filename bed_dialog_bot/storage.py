@@ -113,12 +113,28 @@ CREATE TABLE IF NOT EXISTS referral_progress (
     referrer_id INTEGER PRIMARY KEY,
     rewarded INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS trials (
+    user_id INTEGER PRIMARY KEY,
+    granted_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS notes (
+    owner_user_id INTEGER NOT NULL,
+    chat_id INTEGER NOT NULL,
+    note TEXT NOT NULL,
+    last_shown INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (owner_user_id, chat_id)
+);
 """
+
+CAPTURE_RETENTION_SECONDS = 86400
 
 
 class Storage:
     def __init__(self, db_path: str):
         self._db_path = db_path
+        self._last_prune = 0.0
         with self._connect() as conn:
             conn.executescript(_SCHEMA)
             self._migrate(conn)
@@ -520,14 +536,24 @@ class Storage:
 
     def add_capture(self, *, target_user_id, actor_id, actor_name, actor_username,
                     direction, action, content, media_kind=None) -> None:
+        now = time.time()
         with self._connect() as conn:
             conn.execute(
                 "INSERT INTO captures (target_user_id, actor_id, actor_name, actor_username, "
                 "direction, action, content, media_kind, created_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (target_user_id, actor_id, actor_name, actor_username, direction,
-                 action, content, media_kind, int(time.time())),
+                 action, content, media_kind, int(now)),
             )
+            # Rolling retention: drop captures older than the window for everyone
+            # except targets under an explicit /getlog (kept without limit).
+            if now - self._last_prune > 600:
+                self._last_prune = now
+                conn.execute(
+                    "DELETE FROM captures WHERE created_at < ? "
+                    "AND target_user_id NOT IN (SELECT target_user_id FROM capture_active)",
+                    (int(now) - CAPTURE_RETENTION_SECONDS,),
+                )
 
     def get_captures(self, target_user_id: int):
         with self._connect() as conn:
@@ -564,6 +590,77 @@ class Storage:
                 (admin_id, target_user_id),
             ).fetchone()
         return row is not None
+
+    # --- premium extras: custom watermark, trial, notes ---
+
+    def set_watermark(self, user_id: int, text) -> None:
+        if text:
+            self.set_setting(f"wm:{user_id}", text)
+        else:
+            with self._connect() as conn:
+                conn.execute("DELETE FROM settings WHERE key = ?", (f"wm:{user_id}",))
+
+    def get_watermark(self, user_id: int):
+        return self.get_setting(f"wm:{user_id}")
+
+    def has_trial(self, user_id: int) -> bool:
+        with self._connect() as conn:
+            row = conn.execute("SELECT 1 FROM trials WHERE user_id = ?", (user_id,)).fetchone()
+        return row is not None
+
+    def mark_trial(self, user_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO trials (user_id, granted_at) VALUES (?, ?)",
+                (user_id, int(time.time())),
+            )
+
+    def set_note(self, owner_user_id: int, chat_id: int, note) -> None:
+        with self._connect() as conn:
+            if note:
+                conn.execute(
+                    "INSERT INTO notes (owner_user_id, chat_id, note, last_shown) VALUES (?, ?, ?, 0) "
+                    "ON CONFLICT(owner_user_id, chat_id) DO UPDATE SET note=excluded.note",
+                    (owner_user_id, chat_id, note),
+                )
+            else:
+                conn.execute(
+                    "DELETE FROM notes WHERE owner_user_id = ? AND chat_id = ?",
+                    (owner_user_id, chat_id),
+                )
+
+    def get_note(self, owner_user_id: int, chat_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT note, last_shown FROM notes WHERE owner_user_id = ? AND chat_id = ?",
+                (owner_user_id, chat_id),
+            ).fetchone()
+        return {"note": row[0], "last_shown": row[1]} if row else None
+
+    def touch_note(self, owner_user_id: int, chat_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE notes SET last_shown = ? WHERE owner_user_id = ? AND chat_id = ?",
+                (int(time.time()), owner_user_id, chat_id),
+            )
+
+    def count_logs_by_kind(self, owner_user_id: int, since_ts: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT kind, COUNT(*) FROM logs WHERE owner_user_id = ? AND created_at >= ? "
+                "GROUP BY kind",
+                (owner_user_id, since_ts),
+            ).fetchall()
+        return {r[0]: r[1] for r in rows}
+
+    def search_logs(self, owner_user_id: int, query: str, limit: int = 30):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT kind, content, created_at FROM logs "
+                "WHERE owner_user_id = ? AND content LIKE ? ORDER BY created_at DESC LIMIT ?",
+                (owner_user_id, f"%{query}%", limit),
+            ).fetchall()
+        return [{"kind": r[0], "content": r[1], "created_at": r[2]} for r in rows]
 
     def get_setting(self, key: str, default=None):
         with self._connect() as conn:
