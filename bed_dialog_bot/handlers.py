@@ -217,15 +217,22 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
         if handled:
             return
 
-    _store_message(storage, message, bcid)
+    chat_type = getattr(message.chat, "type", "private")
+    is_private = chat_type == "private"
 
-    if conn and getattr(message.chat, "type", "private") == "private":
+    # Deletion/edit tracking only works for private chats, so only store those.
+    if is_private:
+        _store_message(storage, message, bcid)
+
+    # Capture: private chats fully; in groups only the owner's own messages
+    # (messages from other group members are noise/spam and are skipped).
+    if conn and (is_private or is_owner):
         _capture(storage, conn["owner_user_id"], message, "msg",
                  message.text or message.caption or "")
 
     await _report_competitor(message, context, storage)
 
-    if conn and not is_owner and storage.is_premium(conn["owner_user_id"]):
+    if conn and is_private and not is_owner and storage.is_premium(conn["owner_user_id"]):
         note = storage.get_note(conn["owner_user_id"], message.chat_id)
         if note and time.time() - note["last_shown"] > 3600:
             storage.touch_note(conn["owner_user_id"], message.chat_id)
@@ -238,7 +245,7 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
             except Exception:
                 logger.exception("Failed to deliver note popup")
 
-    if conn and not is_owner:
+    if conn and is_private and not is_owner:
         until_ts = storage.get_ban(bcid, message.chat_id)
         if until_ts and until_ts > time.time():
             remaining_min = max(1, int((until_ts - time.time()) // 60) + 1)
@@ -254,7 +261,7 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
             )
 
     reply = message.reply_to_message
-    if reply and not storage.message_exists(bcid, message.chat_id, reply.message_id):
+    if reply and is_private and not storage.message_exists(bcid, message.chat_id, reply.message_id):
         reply_kind, reply_file_id = media.extract_media(reply)
         if conn and reply_kind and not storage.is_muted(conn["owner_user_id"]):
             _store_message(storage, reply, bcid)
@@ -545,6 +552,29 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return _mark(storage, message.from_user.id, value, context.bot.username)
 
     if text.startswith("/status"):
+        if message.from_user.id in config.ADMIN_USER_IDS:
+            users = storage.list_users()
+            connected = storage.connected_owner_ids()
+            on = [u for u in users if u["user_id"] in connected]
+            off = [u for u in users if u["user_id"] not in connected]
+
+            def fmt(u):
+                handle = f"@{u['username']}" if u["username"] else (u["name"] or "—")
+                return f"{handle} — {u['user_id']}"
+
+            body = (
+                f"📊 Подключений: {len(on)} из {len(users)}\n\n"
+                "✅ Подключён бот:\n" + ("\n".join(fmt(u) for u in on) or "—") +
+                "\n\n❌ Не подключён:\n" + ("\n".join(fmt(u) for u in off) or "—")
+            )
+            if len(body) > 3500:
+                buf = io.BytesIO(body.encode("utf-8"))
+                await context.bot.send_document(
+                    chat_id=message.chat_id, document=buf, filename="status.txt"
+                )
+            else:
+                await message.reply_text(body)
+            return
         premium_until = storage.get_premium_until(message.from_user.id)
         await message.reply_text(mark(texts.build_status_text(premium_until)))
         return

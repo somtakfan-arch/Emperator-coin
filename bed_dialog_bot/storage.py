@@ -178,6 +178,13 @@ class Storage:
                 (business_connection_id, owner_user_id, owner_chat_id, int(is_enabled), int(time.time())),
             )
 
+    def connected_owner_ids(self):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT owner_user_id FROM connections WHERE is_enabled = 1"
+            ).fetchall()
+        return {r[0] for r in rows}
+
     def get_connection(self, business_connection_id: str):
         with self._connect() as conn:
             row = conn.execute(
