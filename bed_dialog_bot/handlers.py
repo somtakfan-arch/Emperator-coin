@@ -77,17 +77,23 @@ def _mark(storage: Storage, owner_id: int, text: str, bot_username) -> str:
     return formatting.with_watermark(text, bot_username, is_premium, custom)
 
 
-_FAKE_NAMES = [
-    "Александр", "Мария", "Иван", "Екатерина", "Дмитрий", "Анна", "Никита", "Ольга",
-    "Роман", "София", "Павел", "Вера", "Егор", "Елена", "Артём", "Яна", "Денис",
-    "Анастасия", "Кирилл", "Полина", "Максим", "Дарья", "Сергей", "Алина", "Влад",
-    "Карина", "Тимур", "Виктория", "Андрей", "Милана",
+_FAKE_NICK_WORDS = [
+    "pro", "dark", "shadow", "ghost", "neo", "cyber", "mega", "ultra", "night", "fire",
+    "ice", "storm", "wolf", "dragon", "sniper", "gamer", "king", "lord", "master", "ninja",
+    "phantom", "toxic", "crazy", "silent", "red", "blue", "black", "gold", "star", "hunter",
+    "viper", "raven", "frost", "blaze", "steel", "venom", "rapid", "smart", "lucky", "epic",
 ]
-_FAKE_SURNAMES = [
-    "Иванов", "Смирнова", "Кузнецов", "Попова", "Соколов", "Лебедева", "Козлов",
-    "Новикова", "Морозов", "Волкова", "Петров", "Сергеева", "Орлов", "Зайцева",
-    "Павлов", "Никитина", "Егоров", "Фомина", "Крылов", "Белова",
-]
+
+
+def _fake_nick(rnd) -> str:
+    style = rnd.randint(0, 2)
+    a = rnd.choice(_FAKE_NICK_WORDS)
+    if style == 0:
+        return f"{a}{rnd.randint(1, 99)}"
+    b = rnd.choice(_FAKE_NICK_WORDS)
+    if style == 1:
+        return f"{a}_{b}{rnd.randint(1, 99)}"
+    return f"xX_{a}_Xx{rnd.randint(1, 9)}"
 
 
 def _build_leaderboard(storage: Storage) -> str:
@@ -105,8 +111,7 @@ def _build_leaderboard(storage: Storage) -> str:
     if config.FAKE_TOP_ENABLED:
         rnd = random.Random(1337)  # stable fake dataset for social proof
         for i in range(config.FAKE_TOP_COUNT):
-            nick = f"{rnd.choice(_FAKE_NAMES)} {rnd.choice(_FAKE_SURNAMES)}"
-            entries.append((rnd.randint(2, 60), nick))
+            entries.append((rnd.randint(2, 60), _fake_nick(rnd)))
         total += config.FAKE_TOP_COUNT
 
     entries.sort(key=lambda e: e[0], reverse=True)
