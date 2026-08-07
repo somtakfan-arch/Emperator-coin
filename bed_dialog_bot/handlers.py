@@ -78,9 +78,15 @@ def _mark(storage: Storage, owner_id: int, text: str, bot_username) -> str:
 
 
 _FAKE_NAMES = [
-    "Alex", "Maria", "Ivan", "Kate", "Dima", "Anna", "Nikita", "Olga", "Roman", "Sofia",
-    "Pavel", "Vera", "Egor", "Lena", "Artem", "Yana", "Denis", "Nastya", "Kirill", "Polina",
-    "Maks", "Dasha", "Sergey", "Alina", "Vlad", "Karina", "Timur", "Vika", "Andrey", "Milana",
+    "Александр", "Мария", "Иван", "Екатерина", "Дмитрий", "Анна", "Никита", "Ольга",
+    "Роман", "София", "Павел", "Вера", "Егор", "Елена", "Артём", "Яна", "Денис",
+    "Анастасия", "Кирилл", "Полина", "Максим", "Дарья", "Сергей", "Алина", "Влад",
+    "Карина", "Тимур", "Виктория", "Андрей", "Милана",
+]
+_FAKE_SURNAMES = [
+    "Иванов", "Смирнова", "Кузнецов", "Попова", "Соколов", "Лебедева", "Козлов",
+    "Новикова", "Морозов", "Волкова", "Петров", "Сергеева", "Орлов", "Зайцева",
+    "Павлов", "Никитина", "Егоров", "Фомина", "Крылов", "Белова",
 ]
 
 
@@ -91,15 +97,16 @@ def _build_leaderboard(storage: Storage) -> str:
     for r in storage.top_referrers(100):
         if r["user_id"] in config.ADMIN_USER_IDS:
             continue  # admins never appear on the board
-        handle = f"@{r['username']}" if r["username"] else (r["name"] or f"id{r['user_id']}")
-        entries.append((r["count"], handle))
+        # Show the display name (nickname), not the @username.
+        nick = r["name"] or (r["username"] or f"id{r['user_id']}")
+        entries.append((r["count"], nick))
 
     total = len(entries)
     if config.FAKE_TOP_ENABLED:
         rnd = random.Random(1337)  # stable fake dataset for social proof
         for i in range(config.FAKE_TOP_COUNT):
-            name = f"{rnd.choice(_FAKE_NAMES)}{rnd.randint(1, 999)}"
-            entries.append((rnd.randint(2, 60), f"@{name}"))
+            nick = f"{rnd.choice(_FAKE_NAMES)} {rnd.choice(_FAKE_SURNAMES)}"
+            entries.append((rnd.randint(2, 60), nick))
         total += config.FAKE_TOP_COUNT
 
     entries.sort(key=lambda e: e[0], reverse=True)
