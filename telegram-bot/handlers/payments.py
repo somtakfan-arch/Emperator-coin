@@ -25,7 +25,7 @@ TOPUP_TEXT = (
 
 async def _send_invoice(message: Message, coins: int, stars: int) -> None:
     await message.answer_invoice(
-        title=f"{coins} фишек Emperator Casino",
+        title=f"{coins} фишек Bad Casino",
         description="Виртуальные игровые фишки. Не имеют денежной ценности, не подлежат выводу.",
         payload=f"coins:{coins}:{stars}",
         currency="XTR",

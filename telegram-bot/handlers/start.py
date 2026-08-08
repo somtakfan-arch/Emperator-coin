@@ -9,7 +9,7 @@ from keyboards import main_menu_kb
 router = Router()
 
 WELCOME = (
-    "🎰 <b>Добро пожаловать в Emperator Casino!</b>\n\n"
+    "🎰 <b>Добро пожаловать в Bad Casino!</b>\n\n"
     "Это развлекательный бот с виртуальными фишками. Играйте в кости, слоты, "
     "рулетку, блэкджек и монетку.\n\n"
     "⚠️ <b>Важно:</b> фишки — это игровые очки без денежной ценности. Их нельзя "
@@ -50,7 +50,7 @@ async def cb_home(callback: CallbackQuery) -> None:
     user = await db.get_or_create_user(callback.from_user.id, callback.from_user.username)
     await safe_edit(
         callback.message,
-        f"🎰 <b>Emperator Casino</b>\n\nВаш баланс: <b>{user['balance']}</b> фишек 🪙\nВыберите игру:",
+        f"🎰 <b>Bad Casino</b>\n\nВаш баланс: <b>{user['balance']}</b> фишек 🪙\nВыберите игру:",
         reply_markup=main_menu_kb(),
     )
     await callback.answer()

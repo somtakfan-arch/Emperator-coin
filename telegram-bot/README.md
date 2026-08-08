@@ -1,4 +1,4 @@
-# Emperator Casino — Telegram Bot
+# Bad Casino — Telegram Bot
 
 Развлекательный казино-бот для Telegram на **Python + aiogram 3**. Валюта —
 виртуальные фишки (1 фишка = 1 Telegram Star при покупке), **без вывода
