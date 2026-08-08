@@ -3,6 +3,7 @@ from aiogram.filters import CommandStart
 from aiogram.types import CallbackQuery, Message
 
 import database as db
+from config import ADMIN_IDS
 from handlers.utils import safe_edit
 from keyboards import main_menu_kb
 
@@ -12,12 +13,6 @@ WELCOME = (
     "🎰 <b>Добро пожаловать в Bad Casino!</b>\n\n"
     "Это развлекательный бот с виртуальными фишками. Играйте в кости, слоты, "
     "рулетку, блэкджек и монетку.\n\n"
-    "⚠️ <b>Важно:</b> фишки — это игровые очки без денежной ценности. Их нельзя "
-    "продать, вывести или обменять обратно на звёзды/деньги — это просто счёт "
-    "для развлечения и статуса в таблице лидеров.\n"
-    "Перевес всегда на стороне казино: в долгую фишки уходят в минус — "
-    "это развлечение, а не способ заработка.\n"
-    "Бот предназначен только для лиц 18+. Играйте ответственно.\n\n"
     "Ваш баланс: <b>{balance}</b> фишек 🪙\n"
     "Заберите 🎁 бонус или пополните счёт ⭐, чтобы начать."
 )
@@ -28,7 +23,7 @@ async def cmd_start(message: Message) -> None:
     user = await db.get_or_create_user(message.from_user.id, message.from_user.username)
     await message.answer(
         WELCOME.format(balance=user["balance"]),
-        reply_markup=main_menu_kb(),
+        reply_markup=main_menu_kb(is_admin=message.from_user.id in ADMIN_IDS),
     )
 
 
@@ -41,7 +36,7 @@ async def cmd_help(message: Message) -> None:
         "/bonus — ежедневный бонус\n"
         "/topup — купить фишки за Telegram Stars\n"
         "/top — таблица лидеров",
-        reply_markup=main_menu_kb(),
+        reply_markup=main_menu_kb(is_admin=message.from_user.id in ADMIN_IDS),
     )
 
 
@@ -51,6 +46,6 @@ async def cb_home(callback: CallbackQuery) -> None:
     await safe_edit(
         callback.message,
         f"🎰 <b>Bad Casino</b>\n\nВаш баланс: <b>{user['balance']}</b> фишек 🪙\nВыберите игру:",
-        reply_markup=main_menu_kb(),
+        reply_markup=main_menu_kb(is_admin=callback.from_user.id in ADMIN_IDS),
     )
     await callback.answer()

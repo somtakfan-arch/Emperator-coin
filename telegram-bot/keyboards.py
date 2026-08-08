@@ -21,7 +21,24 @@ def back_button(callback_data: str, text: str = "⬅️ Назад") -> InlineKe
     return InlineKeyboardButton(text=text, callback_data=callback_data)
 
 
-def main_menu_kb() -> InlineKeyboardMarkup:
+def admin_panel_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="💸 Выдать фишки", callback_data="admin:grant")],
+            [InlineKeyboardButton(text="🔍 Найти игрока", callback_data="admin:find")],
+            [InlineKeyboardButton(text="📊 Статистика", callback_data="admin:stats")],
+            [back_button("menu:home", text="⬅️ В меню")],
+        ]
+    )
+
+
+def admin_back_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[back_button("admin:panel", text="⬅️ Назад в админку")]]
+    )
+
+
+def main_menu_kb(is_admin: bool = False) -> InlineKeyboardMarkup:
     rows = [
         [
             InlineKeyboardButton(text="🪙 Монетка", callback_data="menu:coinflip"),
@@ -43,6 +60,8 @@ def main_menu_kb() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="🏆 Топ игроков", callback_data="menu:top"),
         ],
     ]
+    if is_admin:
+        rows.append([InlineKeyboardButton(text="🛠 Админка", callback_data="admin:panel")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

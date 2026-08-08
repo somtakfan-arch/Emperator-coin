@@ -25,6 +25,16 @@ CREATE TABLE IF NOT EXISTS topups (
     telegram_charge_id TEXT,
     created_at TEXT NOT NULL
 );
+
+-- Chips handed out by an admin are created out of thin air, unlike topups
+-- which are backed by Stars. Keep an audit trail so the two never blur.
+CREATE TABLE IF NOT EXISTS admin_grants (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    admin_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    amount INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+);
 """
 
 _db: aiosqlite.Connection | None = None
@@ -136,6 +146,44 @@ async def record_topup(user_id: int, stars: int, coins: int, charge_id: str) -> 
         (user_id, stars, coins, charge_id, _now()),
     )
     await _db.commit()
+
+
+async def record_admin_grant(admin_id: int, user_id: int, amount: int) -> None:
+    await _db.execute(
+        "INSERT INTO admin_grants (admin_id, user_id, amount, created_at) VALUES (?, ?, ?, ?)",
+        (admin_id, user_id, amount, _now()),
+    )
+    await _db.commit()
+
+
+async def find_user(query: str) -> aiosqlite.Row | None:
+    """Look a player up by numeric id or by @username."""
+    _db.row_factory = aiosqlite.Row
+    query = query.strip().lstrip("@")
+    if query.isdigit():
+        cur = await _db.execute("SELECT * FROM users WHERE user_id = ?", (int(query),))
+    else:
+        cur = await _db.execute(
+            "SELECT * FROM users WHERE username = ? COLLATE NOCASE", (query,)
+        )
+    return await cur.fetchone()
+
+
+async def global_stats() -> aiosqlite.Row:
+    _db.row_factory = aiosqlite.Row
+    cur = await _db.execute(
+        """
+        SELECT
+            (SELECT COUNT(*) FROM users)                      AS users,
+            (SELECT COALESCE(SUM(balance), 0) FROM users)     AS chips,
+            (SELECT COALESCE(SUM(games_played), 0) FROM users) AS games,
+            (SELECT COALESCE(SUM(total_wagered), 0) FROM users) AS wagered,
+            (SELECT COALESCE(SUM(stars), 0) FROM topups)      AS stars,
+            (SELECT COUNT(*) FROM topups)                     AS topups,
+            (SELECT COALESCE(SUM(amount), 0) FROM admin_grants) AS granted
+        """
+    )
+    return await cur.fetchone()
 
 
 async def top_balances(limit: int = 10) -> list[aiosqlite.Row]:
