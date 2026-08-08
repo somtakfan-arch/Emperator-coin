@@ -46,6 +46,24 @@ SLOTS_PAYOUTS = {0: 2.0, 1: 3.0, 2: 5.0, 3: 15.0}
 ROULETTE_OUTSIDE_MULTIPLIER = 1.8  # red/black/even/odd/1-18/19-36
 ROULETTE_ZERO_MULTIPLIER = 25.0
 
+# Mines: the multiplier after k safe picks is the fair odds C(N,k)/C(N-M,k)
+# scaled by this RTP. Mine counts below are chosen so that even the very first
+# pick already pays above x1 — with fewer mines the fair odds are so thin that
+# the margin would push an early cash-out under the player's own stake, which
+# looks broken even though the maths is honest.
+MINES_RTP = 0.85
+# Clearing a whole field pays fair odds in the millions, and a single such hit
+# would wreck the chip economy and the leaderboard. Real casinos cap max win
+# the same way; the cap is shown to the player and applied to the multiplier
+# itself, so the number on screen is always the number that gets paid.
+MINES_MAX_MULTIPLIER = 1000.0
+MINES_SIZES = [3, 4, 5]
+MINES_PRESETS = {
+    3: [2, 3, 4, 5],
+    4: [3, 5, 8, 12],
+    5: [4, 7, 12, 18],
+}
+
 BLACKJACK_WIN_MULTIPLIER = 1.8
 BLACKJACK_BLACKJACK_MULTIPLIER = 2.2
 BLACKJACK_PUSH_MULTIPLIER = 1.0  # tie returns the bet

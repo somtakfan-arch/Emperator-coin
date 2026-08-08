@@ -6,6 +6,8 @@ from config import (
     DICE_EXTREME_MULTIPLIER,
     DICE_NUMBER_MULTIPLIER,
     DICE_PARITY_MULTIPLIER,
+    MINES_PRESETS,
+    MINES_SIZES,
     ROULETTE_OUTSIDE_MULTIPLIER,
     ROULETTE_ZERO_MULTIPLIER,
     STAR_PACKAGES,
@@ -78,6 +80,7 @@ def main_menu_kb(is_admin: bool = False) -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(text="🃏 Блэкджек", callback_data="menu:blackjack"),
+            InlineKeyboardButton(text="💣 Мины", callback_data="menu:mines"),
         ],
         [
             InlineKeyboardButton(text="💰 Баланс", callback_data="menu:balance"),
@@ -212,6 +215,79 @@ def roulette_bet_kb(amount: int) -> InlineKeyboardMarkup:
             [back_button("menu:roulette")],
         ]
     )
+
+
+def mines_size_kb(amount: int) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"{size}x{size} ({size * size} клеток)",
+                callback_data=f"msize:{amount}:{size}",
+            )
+        ]
+        for size in MINES_SIZES
+    ]
+    rows.append([back_button("menu:mines")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def mines_count_kb(amount: int, size: int) -> InlineKeyboardMarkup:
+    from games.mines import multiplier
+
+    rows, row = [], []
+    for mines in MINES_PRESETS[size]:
+        # show what the first safe pick pays, so the risk is visible up front
+        first = multiplier(size, mines, 1)
+        row.append(
+            InlineKeyboardButton(
+                text=f"💣{mines} · x{first:.2f}",
+                callback_data=f"mcount:{amount}:{size}:{mines}",
+            )
+        )
+        if len(row) == 2:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append([back_button(f"bet:mines:{amount}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def mines_board_kb(game, reveal: bool = False) -> InlineKeyboardMarkup:
+    """Board buttons. `reveal` shows every mine once the round is over."""
+    rows = []
+    for r in range(game.size):
+        row = []
+        for c in range(game.size):
+            idx = r * game.size + c
+            if idx in game.opened:
+                text = "💎"
+            elif reveal and idx in game.mine_cells:
+                text = "💣"
+            else:
+                text = "⬜"
+            # a finished board is inert: every cell points at a no-op
+            data = "mnoop" if (reveal or game.finished) else f"mopen:{idx}"
+            row.append(InlineKeyboardButton(text=text, callback_data=data))
+        rows.append(row)
+
+    if not game.finished:
+        if game.opened:
+            rows.append(
+                [
+                    InlineKeyboardButton(
+                        text=f"💰 Забрать {game.payout()} 🪙", callback_data="mcash"
+                    )
+                ]
+            )
+        else:
+            rows.append(
+                [InlineKeyboardButton(text="Откройте первую клетку", callback_data="mnoop")]
+            )
+    else:
+        rows.append([InlineKeyboardButton(text="🔄 Ещё раз", callback_data="menu:mines")])
+        rows.append([InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:home")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def blackjack_action_kb(can_double: bool) -> InlineKeyboardMarkup:

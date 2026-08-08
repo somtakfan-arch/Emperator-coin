@@ -1,7 +1,7 @@
 from aiogram import Router
 
 from . import admin, balance, bonus, leaderboard, payments, start
-from .games import blackjack, coinflip, dice, roulette, slots
+from .games import blackjack, coinflip, dice, mines, roulette, slots
 
 router = Router()
 # Admin first: its router-level filter drops non-admins straight through, so
@@ -17,3 +17,4 @@ router.include_router(dice.router)
 router.include_router(slots.router)
 router.include_router(roulette.router)
 router.include_router(blackjack.router)
+router.include_router(mines.router)

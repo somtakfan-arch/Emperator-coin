@@ -105,6 +105,16 @@ async def cb_double(callback: CallbackQuery, state: FSMContext) -> None:
     await _finish(callback, state, game, extra_note=f"(удвоено, +{extra_bet} 🪙 к ставке)")
 
 
+@router.callback_query(F.data.startswith("bj:"))
+async def cb_expired(callback: CallbackQuery, state: FSMContext) -> None:
+    """Same guard as in mines: a redeploy wipes the in-memory hand."""
+    await state.clear()
+    await callback.answer(
+        "Эта раздача больше не активна — бот перезапускался. Начните новую.",
+        show_alert=True,
+    )
+
+
 async def _finish(callback: CallbackQuery, state: FSMContext, game: BlackjackGame, extra_note: str | None) -> None:
     await state.clear()
     result, multiplier = game.outcome()
