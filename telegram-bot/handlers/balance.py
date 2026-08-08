@@ -3,6 +3,7 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 
 import database as db
+from handlers.utils import safe_edit
 from keyboards import back_to_menu_kb
 
 router = Router()
@@ -33,7 +34,8 @@ async def cmd_balance(message: Message) -> None:
 async def cb_balance(callback: CallbackQuery) -> None:
     await db.get_or_create_user(callback.from_user.id, callback.from_user.username)
     stats = await db.get_stats(callback.from_user.id)
-    await callback.message.edit_text(
+    await safe_edit(
+        callback.message,
         _stats_text(callback.from_user.id, callback.from_user.username, stats),
         reply_markup=back_to_menu_kb(),
     )

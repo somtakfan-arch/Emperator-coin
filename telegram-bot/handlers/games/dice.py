@@ -5,26 +5,29 @@ from aiogram.types import CallbackQuery
 
 import database as db
 from games import dice
-from keyboards import back_to_menu_kb, bet_amount_kb, dice_number_kb, dice_type_kb
+from keyboards import dice_number_kb, dice_type_kb, play_again_kb
+from .common import show_bet_screen
 
 router = Router()
 
 TYPE_LABEL = {
-    "high": "⬆️ Больше 3",
-    "low": "⬇️ Меньше 4",
+    "high": "⬆️ 5 или 6",
+    "low": "⬇️ 1 или 2",
     "even": "➗ Чёт",
     "odd": "➕ Нечёт",
 }
 
+DESCRIPTION = (
+    "🎲 <b>Кости</b>\n"
+    "Бросок — нативный кубик Telegram, результат приходит с его серверов.\n"
+    "Ставка «5 или 6» и «1 или 2» выигрывает в 2 случаях из 6, "
+    "чёт/нечёт — в 3 из 6, точное число — в 1 из 6."
+)
+
 
 @router.callback_query(F.data == "menu:dice")
 async def cb_menu(callback: CallbackQuery) -> None:
-    balance = await db.get_balance(callback.from_user.id)
-    await callback.message.edit_text(
-        f"🎲 <b>Кости</b>\nВыберите ставку (баланс: {balance} 🪙):",
-        reply_markup=bet_amount_kb("dice", balance),
-    )
-    await callback.answer()
+    await show_bet_screen(callback, "dice", DESCRIPTION)
 
 
 @router.callback_query(F.data.startswith("bet:dice:"))
@@ -65,7 +68,9 @@ async def _resolve(callback: CallbackQuery, amount: int, bet_type: str, guess: i
         return
     await callback.answer()
 
-    await callback.message.edit_text(f"🎲 Бросаем кости... ставка {amount} 🪙, {TYPE_LABEL.get(bet_type, 'число ' + str(guess))}")
+    label = TYPE_LABEL.get(bet_type, f"число {guess}")
+    await callback.message.edit_text(f"🎲 Бросаем кости... ставка {amount} 🪙 на {label}")
+
     dice_msg = await callback.message.answer_dice(emoji="🎲")
     value = dice_msg.dice.value
     await asyncio.sleep(3)
@@ -76,8 +81,10 @@ async def _resolve(callback: CallbackQuery, amount: int, bet_type: str, guess: i
 
     balance = await db.get_balance(callback.from_user.id)
     if result.won:
-        text = f"🎲 Выпало: {value}\n✅ Вы выиграли {result.payout} 🪙\nБаланс: {balance} 🪙"
+        text = f"🎲 Выпало: {value}\n✅ Вы выиграли {result.payout} 🪙"
     else:
-        text = f"🎲 Выпало: {value}\n❌ Вы проиграли {amount} 🪙\nБаланс: {balance} 🪙"
+        text = f"🎲 Выпало: {value}\n❌ Вы проиграли {amount} 🪙"
 
-    await callback.message.answer(text, reply_markup=back_to_menu_kb())
+    await callback.message.answer(
+        f"{text}\nБаланс: {balance} 🪙", reply_markup=play_again_kb("dice")
+    )

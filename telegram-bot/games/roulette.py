@@ -1,16 +1,18 @@
 import secrets
 from dataclasses import dataclass
 
+from config import ROULETTE_OUTSIDE_MULTIPLIER, ROULETTE_ZERO_MULTIPLIER
+
 RED_NUMBERS = {1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36}
 
 MULTIPLIERS = {
-    "red": 2.0,
-    "black": 2.0,
-    "even": 2.0,
-    "odd": 2.0,
-    "low": 2.0,  # 1-18
-    "high": 2.0,  # 19-36
-    "zero": 35.0,  # straight-up bet on 0
+    "red": ROULETTE_OUTSIDE_MULTIPLIER,
+    "black": ROULETTE_OUTSIDE_MULTIPLIER,
+    "even": ROULETTE_OUTSIDE_MULTIPLIER,
+    "odd": ROULETTE_OUTSIDE_MULTIPLIER,
+    "low": ROULETTE_OUTSIDE_MULTIPLIER,  # 1-18
+    "high": ROULETTE_OUTSIDE_MULTIPLIER,  # 19-36
+    "zero": ROULETTE_ZERO_MULTIPLIER,  # straight-up bet on 0
 }
 
 

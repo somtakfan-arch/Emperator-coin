@@ -3,6 +3,7 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 
 import database as db
+from handlers.utils import safe_edit
 from keyboards import back_to_menu_kb
 
 router = Router()
@@ -28,5 +29,5 @@ async def cmd_top(message: Message) -> None:
 
 @router.callback_query(F.data == "menu:top")
 async def cb_top(callback: CallbackQuery) -> None:
-    await callback.message.edit_text(await _leaderboard_text(), reply_markup=back_to_menu_kb())
+    await safe_edit(callback.message, await _leaderboard_text(), reply_markup=back_to_menu_kb())
     await callback.answer()

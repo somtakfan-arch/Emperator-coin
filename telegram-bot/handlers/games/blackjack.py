@@ -3,11 +3,21 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
 import database as db
+from config import BLACKJACK_BLACKJACK_MULTIPLIER, BLACKJACK_WIN_MULTIPLIER
 from games.blackjack import BlackjackGame, hand_value, is_blackjack
 from handlers.states import BlackjackStates
-from keyboards import back_to_menu_kb, bet_amount_kb, blackjack_action_kb
+from keyboards import blackjack_action_kb, play_again_kb
+from .common import show_bet_screen
 
 router = Router()
+
+DESCRIPTION = (
+    "🃏 <b>Блэкджек</b>\n"
+    "Наберите больше дилера, но не больше 21. Дилер добирает до 17.\n"
+    f"Победа — x{BLACKJACK_WIN_MULTIPLIER:g}, блэкджек — "
+    f"x{BLACKJACK_BLACKJACK_MULTIPLIER:g}, ничья — возврат ставки.\n"
+    "Перебор у вас — проигрыш сразу, даже если дилер потом тоже перебрал."
+)
 
 
 def _hand_text(cards: list[str]) -> str:
@@ -24,13 +34,9 @@ async def _table_text(game: BlackjackGame, reveal_dealer: bool) -> str:
 
 
 @router.callback_query(F.data == "menu:blackjack")
-async def cb_menu(callback: CallbackQuery) -> None:
-    balance = await db.get_balance(callback.from_user.id)
-    await callback.message.edit_text(
-        f"🃏 <b>Блэкджек</b>\nОбычная колода, дилер берёт до 17.\nВыберите ставку (баланс: {balance} 🪙):",
-        reply_markup=bet_amount_kb("blackjack", balance),
-    )
-    await callback.answer()
+async def cb_menu(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    await show_bet_screen(callback, "blackjack", DESCRIPTION)
 
 
 @router.callback_query(F.data.startswith("bet:blackjack:"))
@@ -118,5 +124,5 @@ async def _finish(callback: CallbackQuery, state: FSMContext, game: BlackjackGam
     note = f"\n{extra_note}" if extra_note else ""
     text = f"{table}{note}\n\n{labels[result]}\nБаланс: {balance} 🪙"
 
-    await callback.message.edit_text(text, reply_markup=back_to_menu_kb())
+    await callback.message.edit_text(text, reply_markup=play_again_kb("blackjack"))
     await callback.answer()

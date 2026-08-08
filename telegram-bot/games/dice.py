@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 
-NUMBER_MULTIPLIER = 5.0  # true fair odds would be x6 (1/6 chance) -> house edge
-EVEN_ODD_MULTIPLIER = 1.9
-HIGH_LOW_MULTIPLIER = 1.9
+from config import (
+    DICE_EXTREME_MULTIPLIER,
+    DICE_NUMBER_MULTIPLIER,
+    DICE_PARITY_MULTIPLIER,
+)
 
 
 @dataclass
@@ -19,19 +21,20 @@ def resolve(bet: int, bet_type: str, value: int, guess: int | None = None) -> Di
 
     if bet_type == "number":
         won = guess == value
-        multiplier = NUMBER_MULTIPLIER
+        multiplier = DICE_NUMBER_MULTIPLIER
     elif bet_type == "high":
-        won = value >= 4
-        multiplier = HIGH_LOW_MULTIPLIER
+        # only 5 and 6 win — 3 and 4 go to the house
+        won = value >= 5
+        multiplier = DICE_EXTREME_MULTIPLIER
     elif bet_type == "low":
-        won = value <= 3
-        multiplier = HIGH_LOW_MULTIPLIER
+        won = value <= 2
+        multiplier = DICE_EXTREME_MULTIPLIER
     elif bet_type == "even":
         won = value % 2 == 0
-        multiplier = EVEN_ODD_MULTIPLIER
+        multiplier = DICE_PARITY_MULTIPLIER
     elif bet_type == "odd":
         won = value % 2 == 1
-        multiplier = EVEN_ODD_MULTIPLIER
+        multiplier = DICE_PARITY_MULTIPLIER
     else:
         raise ValueError(f"Unknown dice bet type: {bet_type}")
 

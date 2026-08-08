@@ -1,6 +1,12 @@
 import secrets
 from dataclasses import dataclass, field
 
+from config import (
+    BLACKJACK_BLACKJACK_MULTIPLIER,
+    BLACKJACK_PUSH_MULTIPLIER,
+    BLACKJACK_WIN_MULTIPLIER,
+)
+
 RANKS = ["A", "2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K"]
 SUITS = ["♠️", "♥️", "♦️", "♣️"]
 
@@ -74,11 +80,11 @@ class BlackjackGame:
         if player_total > 21:
             return "lose", 0.0
         if is_blackjack(self.player) and not is_blackjack(self.dealer):
-            return "blackjack", 2.5
+            return "blackjack", BLACKJACK_BLACKJACK_MULTIPLIER
         if dealer_total > 21:
-            return "win", 2.0
+            return "win", BLACKJACK_WIN_MULTIPLIER
         if player_total > dealer_total:
-            return "win", 2.0
+            return "win", BLACKJACK_WIN_MULTIPLIER
         if player_total == dealer_total:
-            return "push", 1.0
+            return "push", BLACKJACK_PUSH_MULTIPLIER
         return "lose", 0.0

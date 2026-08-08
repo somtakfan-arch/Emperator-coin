@@ -2,22 +2,26 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
 import database as db
+from config import COINFLIP_EDGE_CHANCE, COINFLIP_MULTIPLIER
 from games import coinflip
-from keyboards import back_to_menu_kb, bet_amount_kb, coinflip_side_kb
+from keyboards import coinflip_side_kb, play_again_kb
+from .common import show_bet_screen
 
 router = Router()
 
 SIDE_LABEL = {"heads": "🦅 Орёл", "tails": "🪙 Решка"}
 
+DESCRIPTION = (
+    "🪙 <b>Монетка</b>\n"
+    f"Угадали сторону — выплата x{COINFLIP_MULTIPLIER:g}.\n"
+    f"Но с шансом {COINFLIP_EDGE_CHANCE:.0%} монета встаёт на ребро — "
+    "тогда ставку забирает казино."
+)
+
 
 @router.callback_query(F.data == "menu:coinflip")
 async def cb_menu(callback: CallbackQuery) -> None:
-    balance = await db.get_balance(callback.from_user.id)
-    await callback.message.edit_text(
-        f"🪙 <b>Монетка</b>\nВыплата за угадывание: x1.9\nВаш баланс: {balance} 🪙\n\nВыберите ставку:",
-        reply_markup=bet_amount_kb("coinflip", balance),
-    )
-    await callback.answer()
+    await show_bet_screen(callback, "coinflip", DESCRIPTION)
 
 
 @router.callback_query(F.data.startswith("bet:coinflip:"))
@@ -44,11 +48,14 @@ async def cb_play(callback: CallbackQuery) -> None:
         await db.pay_winnings(callback.from_user.id, result.payout)
 
     balance = await db.get_balance(callback.from_user.id)
-    outcome_label = SIDE_LABEL[result.outcome]
-    if result.won:
-        text = f"{outcome_label}!\n✅ Вы выиграли {result.payout} 🪙\nБаланс: {balance} 🪙"
+    if result.outcome == "edge":
+        text = f"🪙 Ребро! Монета не упала ни на одну сторону.\n❌ Вы проиграли {amount} 🪙"
+    elif result.won:
+        text = f"{SIDE_LABEL[result.outcome]}!\n✅ Вы выиграли {result.payout} 🪙"
     else:
-        text = f"{outcome_label}!\n❌ Вы проиграли {amount} 🪙\nБаланс: {balance} 🪙"
+        text = f"{SIDE_LABEL[result.outcome]}!\n❌ Вы проиграли {amount} 🪙"
 
-    await callback.message.edit_text(text, reply_markup=back_to_menu_kb())
+    await callback.message.edit_text(
+        f"{text}\nБаланс: {balance} 🪙", reply_markup=play_again_kb("coinflip")
+    )
     await callback.answer()

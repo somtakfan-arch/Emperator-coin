@@ -2,8 +2,10 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
 import database as db
+from config import ROULETTE_OUTSIDE_MULTIPLIER, ROULETTE_ZERO_MULTIPLIER
 from games import roulette
-from keyboards import back_to_menu_kb, bet_amount_kb, roulette_bet_kb
+from keyboards import play_again_kb, roulette_bet_kb
+from .common import show_bet_screen
 
 router = Router()
 
@@ -19,15 +21,18 @@ BET_LABEL = {
 
 COLOR_EMOJI = {"red": "🔴", "black": "⚫", "green": "🟢"}
 
+DESCRIPTION = (
+    "🎡 <b>Рулетка</b>\n"
+    "Европейская, 37 чисел (0-36). На зеро все внешние ставки проигрывают — "
+    "это 1 случай из 37.\n"
+    f"Красное/чёрное, чёт/нечёт, половина — x{ROULETTE_OUTSIDE_MULTIPLIER:g}. "
+    f"Зеро — x{ROULETTE_ZERO_MULTIPLIER:g}."
+)
+
 
 @router.callback_query(F.data == "menu:roulette")
 async def cb_menu(callback: CallbackQuery) -> None:
-    balance = await db.get_balance(callback.from_user.id)
-    await callback.message.edit_text(
-        f"🎡 <b>Рулетка</b>\nЕвропейская, одно зеро.\nВыберите ставку (баланс: {balance} 🪙):",
-        reply_markup=bet_amount_kb("roulette", balance),
-    )
-    await callback.answer()
+    await show_bet_screen(callback, "roulette", DESCRIPTION)
 
 
 @router.callback_query(F.data.startswith("bet:roulette:"))
@@ -50,7 +55,9 @@ async def cb_play(callback: CallbackQuery) -> None:
         return
     await callback.answer()
 
-    await callback.message.edit_text(f"🎡 Крутим рулетку... ставка {amount} 🪙 на {BET_LABEL[bet_type]}")
+    await callback.message.edit_text(
+        f"🎡 Крутим рулетку... ставка {amount} 🪙 на {BET_LABEL[bet_type]}"
+    )
 
     number = roulette.spin()
     result = roulette.resolve(amount, bet_type, number)
@@ -62,9 +69,11 @@ async def cb_play(callback: CallbackQuery) -> None:
     if result.won:
         text = (
             f"{color_emoji} Выпало: {number}\n"
-            f"✅ Вы выиграли {result.payout} 🪙 (x{result.multiplier:g})\nБаланс: {balance} 🪙"
+            f"✅ Вы выиграли {result.payout} 🪙 (x{result.multiplier:g})"
         )
     else:
-        text = f"{color_emoji} Выпало: {number}\n❌ Вы проиграли {amount} 🪙\nБаланс: {balance} 🪙"
+        text = f"{color_emoji} Выпало: {number}\n❌ Вы проиграли {amount} 🪙"
 
-    await callback.message.answer(text, reply_markup=back_to_menu_kb())
+    await callback.message.answer(
+        f"{text}\nБаланс: {balance} 🪙", reply_markup=play_again_kb("roulette")
+    )

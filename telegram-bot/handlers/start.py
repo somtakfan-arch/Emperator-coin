@@ -3,6 +3,7 @@ from aiogram.filters import CommandStart
 from aiogram.types import CallbackQuery, Message
 
 import database as db
+from handlers.utils import safe_edit
 from keyboards import main_menu_kb
 
 router = Router()
@@ -14,8 +15,11 @@ WELCOME = (
     "⚠️ <b>Важно:</b> фишки — это игровые очки без денежной ценности. Их нельзя "
     "продать, вывести или обменять обратно на звёзды/деньги — это просто счёт "
     "для развлечения и статуса в таблице лидеров.\n"
+    "Перевес всегда на стороне казино: в долгую фишки уходят в минус — "
+    "это развлечение, а не способ заработка.\n"
     "Бот предназначен только для лиц 18+. Играйте ответственно.\n\n"
-    f"Стартовый баланс: <b>{{balance}}</b> фишек 🪙"
+    "Ваш баланс: <b>{balance}</b> фишек 🪙\n"
+    "Заберите 🎁 бонус или пополните счёт ⭐, чтобы начать."
 )
 
 
@@ -44,7 +48,8 @@ async def cmd_help(message: Message) -> None:
 @router.callback_query(F.data == "menu:home")
 async def cb_home(callback: CallbackQuery) -> None:
     user = await db.get_or_create_user(callback.from_user.id, callback.from_user.username)
-    await callback.message.edit_text(
+    await safe_edit(
+        callback.message,
         f"🎰 <b>Emperator Casino</b>\n\nВаш баланс: <b>{user['balance']}</b> фишек 🪙\nВыберите игру:",
         reply_markup=main_menu_kb(),
     )

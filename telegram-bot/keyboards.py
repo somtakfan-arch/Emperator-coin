@@ -1,6 +1,24 @@
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from config import BET_PRESETS, STAR_PACKAGES
+from config import (
+    BET_PRESETS,
+    COINFLIP_MULTIPLIER,
+    DICE_EXTREME_MULTIPLIER,
+    DICE_NUMBER_MULTIPLIER,
+    DICE_PARITY_MULTIPLIER,
+    ROULETTE_OUTSIDE_MULTIPLIER,
+    ROULETTE_ZERO_MULTIPLIER,
+    STAR_PACKAGES,
+)
+
+# Multipliers in button labels are formatted straight from config so a payout
+# change can never silently leave the player looking at stale odds.
+def _x(multiplier: float) -> str:
+    return f"x{multiplier:g}"
+
+
+def back_button(callback_data: str, text: str = "⬅️ Назад") -> InlineKeyboardButton:
+    return InlineKeyboardButton(text=text, callback_data=callback_data)
 
 
 def main_menu_kb() -> InlineKeyboardMarkup:
@@ -34,6 +52,16 @@ def back_to_menu_kb() -> InlineKeyboardMarkup:
     )
 
 
+def play_again_kb(game: str) -> InlineKeyboardMarkup:
+    """Result screen: repeat the same game or go back to the main menu."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🔄 Ещё раз", callback_data=f"menu:{game}")],
+            [InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:home")],
+        ]
+    )
+
+
 def bet_amount_kb(game: str, balance: int) -> InlineKeyboardMarkup:
     rows, row = [], []
     for amount in BET_PRESETS:
@@ -49,7 +77,9 @@ def bet_amount_kb(game: str, balance: int) -> InlineKeyboardMarkup:
         rows.append(
             [InlineKeyboardButton(text=f"Всё ({balance})", callback_data=f"bet:{game}:{balance}")]
         )
-    rows.append([InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:home")])
+    else:
+        rows.append([InlineKeyboardButton(text="⭐ Пополнить", callback_data="menu:topup")])
+    rows.append([back_button("menu:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
@@ -59,7 +89,8 @@ def coinflip_side_kb(amount: int) -> InlineKeyboardMarkup:
             [
                 InlineKeyboardButton(text="🦅 Орёл", callback_data=f"coinflip:{amount}:heads"),
                 InlineKeyboardButton(text="🪙 Решка", callback_data=f"coinflip:{amount}:tails"),
-            ]
+            ],
+            [back_button("menu:coinflip")],
         ]
     )
 
@@ -67,15 +98,33 @@ def coinflip_side_kb(amount: int) -> InlineKeyboardMarkup:
 def dice_type_kb(amount: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🎯 Угадать число (x5)", callback_data=f"dicetype:{amount}:number")],
             [
-                InlineKeyboardButton(text="⬆️ Больше 3 (x1.9)", callback_data=f"dicetype:{amount}:high"),
-                InlineKeyboardButton(text="⬇️ Меньше 4 (x1.9)", callback_data=f"dicetype:{amount}:low"),
+                InlineKeyboardButton(
+                    text=f"🎯 Точное число ({_x(DICE_NUMBER_MULTIPLIER)})",
+                    callback_data=f"dicetype:{amount}:number",
+                )
             ],
             [
-                InlineKeyboardButton(text="➗ Чёт (x1.9)", callback_data=f"dicetype:{amount}:even"),
-                InlineKeyboardButton(text="➕ Нечёт (x1.9)", callback_data=f"dicetype:{amount}:odd"),
+                InlineKeyboardButton(
+                    text=f"⬆️ 5 или 6 ({_x(DICE_EXTREME_MULTIPLIER)})",
+                    callback_data=f"dicetype:{amount}:high",
+                ),
+                InlineKeyboardButton(
+                    text=f"⬇️ 1 или 2 ({_x(DICE_EXTREME_MULTIPLIER)})",
+                    callback_data=f"dicetype:{amount}:low",
+                ),
             ],
+            [
+                InlineKeyboardButton(
+                    text=f"➗ Чёт ({_x(DICE_PARITY_MULTIPLIER)})",
+                    callback_data=f"dicetype:{amount}:even",
+                ),
+                InlineKeyboardButton(
+                    text=f"➕ Нечёт ({_x(DICE_PARITY_MULTIPLIER)})",
+                    callback_data=f"dicetype:{amount}:odd",
+                ),
+            ],
+            [back_button("menu:dice")],
         ]
     )
 
@@ -84,35 +133,48 @@ def dice_number_kb(amount: int) -> InlineKeyboardMarkup:
     row = [
         InlineKeyboardButton(text=str(n), callback_data=f"dicenum:{amount}:{n}") for n in range(1, 7)
     ]
-    return InlineKeyboardMarkup(inline_keyboard=[row])
+    return InlineKeyboardMarkup(inline_keyboard=[row, [back_button(f"bet:dice:{amount}")]])
 
 
 def roulette_bet_kb(amount: int) -> InlineKeyboardMarkup:
+    out = _x(ROULETTE_OUTSIDE_MULTIPLIER)
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="🔴 Красное (x2)", callback_data=f"roulette:{amount}:red"),
-                InlineKeyboardButton(text="⚫ Чёрное (x2)", callback_data=f"roulette:{amount}:black"),
+                InlineKeyboardButton(
+                    text=f"🔴 Красное ({out})", callback_data=f"roulette:{amount}:red"
+                ),
+                InlineKeyboardButton(
+                    text=f"⚫ Чёрное ({out})", callback_data=f"roulette:{amount}:black"
+                ),
             ],
             [
-                InlineKeyboardButton(text="➗ Чёт (x2)", callback_data=f"roulette:{amount}:even"),
-                InlineKeyboardButton(text="➕ Нечёт (x2)", callback_data=f"roulette:{amount}:odd"),
+                InlineKeyboardButton(text=f"➗ Чёт ({out})", callback_data=f"roulette:{amount}:even"),
+                InlineKeyboardButton(text=f"➕ Нечёт ({out})", callback_data=f"roulette:{amount}:odd"),
             ],
             [
-                InlineKeyboardButton(text="1-18 (x2)", callback_data=f"roulette:{amount}:low"),
-                InlineKeyboardButton(text="19-36 (x2)", callback_data=f"roulette:{amount}:high"),
+                InlineKeyboardButton(text=f"1-18 ({out})", callback_data=f"roulette:{amount}:low"),
+                InlineKeyboardButton(text=f"19-36 ({out})", callback_data=f"roulette:{amount}:high"),
             ],
-            [InlineKeyboardButton(text="0️⃣ Зеро (x35)", callback_data=f"roulette:{amount}:zero")],
+            [
+                InlineKeyboardButton(
+                    text=f"0️⃣ Зеро ({_x(ROULETTE_ZERO_MULTIPLIER)})",
+                    callback_data=f"roulette:{amount}:zero",
+                )
+            ],
+            [back_button("menu:roulette")],
         ]
     )
 
 
 def blackjack_action_kb(can_double: bool) -> InlineKeyboardMarkup:
-    row = [
-        InlineKeyboardButton(text="🃏 Ещё карту", callback_data="bj:hit"),
-        InlineKeyboardButton(text="✋ Хватит", callback_data="bj:stand"),
+    # No "back" here on purpose: the bet is already on the table.
+    rows = [
+        [
+            InlineKeyboardButton(text="🃏 Ещё карту", callback_data="bj:hit"),
+            InlineKeyboardButton(text="✋ Хватит", callback_data="bj:stand"),
+        ]
     ]
-    rows = [row]
     if can_double:
         rows.append([InlineKeyboardButton(text="⏫ Удвоить", callback_data="bj:double")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
@@ -120,8 +182,19 @@ def blackjack_action_kb(can_double: bool) -> InlineKeyboardMarkup:
 
 def topup_kb() -> InlineKeyboardMarkup:
     rows = [
-        [InlineKeyboardButton(text=f"{coins} фишек — {stars}⭐", callback_data=f"topup:{coins}:{stars}")]
+        [
+            InlineKeyboardButton(
+                text=f"{coins} фишек — {stars}⭐", callback_data=f"topuppkg:{coins}:{stars}"
+            )
+        ]
         for coins, stars in STAR_PACKAGES
     ]
-    rows.append([InlineKeyboardButton(text="⬅️ В меню", callback_data="menu:home")])
+    rows.append([InlineKeyboardButton(text="✏️ Своя сумма", callback_data="topup:custom")])
+    rows.append([back_button("menu:home")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def cancel_topup_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[back_button("menu:topup", text="⬅️ Назад")]]
+    )

@@ -4,20 +4,28 @@ from aiogram import F, Router
 from aiogram.types import CallbackQuery
 
 import database as db
+from config import SLOTS_PAYOUTS
 from games import slots
-from keyboards import back_to_menu_kb, bet_amount_kb
+from keyboards import play_again_kb
+from .common import show_bet_screen
 
 router = Router()
+
+# 4 winning combos out of the 64 outcomes Telegram's slot machine can return.
+WIN_CHANCE = 4 / 64
+
+DESCRIPTION = (
+    "🎰 <b>Слоты</b>\n"
+    "Барабаны крутит сам Telegram. Выигрывают только три одинаковых символа — "
+    f"это {WIN_CHANCE:.1%} спинов.\n"
+    f"🍫 x{SLOTS_PAYOUTS[0]:g} · 🍇 x{SLOTS_PAYOUTS[1]:g} · "
+    f"🍋 x{SLOTS_PAYOUTS[2]:g} · 7️⃣ x{SLOTS_PAYOUTS[3]:g}"
+)
 
 
 @router.callback_query(F.data == "menu:slots")
 async def cb_menu(callback: CallbackQuery) -> None:
-    balance = await db.get_balance(callback.from_user.id)
-    await callback.message.edit_text(
-        f"🎰 <b>Слоты</b>\nТри одинаковых символа — выигрыш (до x20)!\nВыберите ставку (баланс: {balance} 🪙):",
-        reply_markup=bet_amount_kb("slots", balance),
-    )
-    await callback.answer()
+    await show_bet_screen(callback, "slots", DESCRIPTION)
 
 
 @router.callback_query(F.data.startswith("bet:slots:"))
@@ -41,8 +49,10 @@ async def cb_play(callback: CallbackQuery) -> None:
     balance = await db.get_balance(callback.from_user.id)
     reels_str = " ".join(result.reels)
     if result.won:
-        text = f"{reels_str}\n✅ Вы выиграли {result.payout} 🪙 (x{result.multiplier:g})\nБаланс: {balance} 🪙"
+        text = f"{reels_str}\n✅ Вы выиграли {result.payout} 🪙 (x{result.multiplier:g})"
     else:
-        text = f"{reels_str}\n❌ Вы проиграли {amount} 🪙\nБаланс: {balance} 🪙"
+        text = f"{reels_str}\n❌ Вы проиграли {amount} 🪙"
 
-    await callback.message.answer(text, reply_markup=back_to_menu_kb())
+    await callback.message.answer(
+        f"{text}\nБаланс: {balance} 🪙", reply_markup=play_again_kb("slots")
+    )
