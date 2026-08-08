@@ -1,4 +1,5 @@
 from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import BaseFilter, Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message, TelegramObject
@@ -7,7 +8,12 @@ import database as db
 from config import ADMIN_IDS
 from handlers.states import AdminStates
 from handlers.utils import safe_edit
-from keyboards import admin_back_kb, admin_panel_kb
+from keyboards import (
+    admin_back_kb,
+    admin_panel_kb,
+    refund_confirm_kb,
+    refunds_list_kb,
+)
 
 router = Router()
 
@@ -151,6 +157,109 @@ async def process_search(message: Message, state: FSMContext) -> None:
         f"📅 С нами с: {row['created_at'][:10]}",
         reply_markup=admin_panel_kb(),
     )
+
+
+# --- Refunding Stars ---------------------------------------------------
+
+
+@router.callback_query(F.data == "admin:refunds")
+async def cb_refunds(callback: CallbackQuery, state: FSMContext) -> None:
+    await state.clear()
+    topups = await db.recent_topups(limit=10)
+    if not topups:
+        await safe_edit(
+            callback.message,
+            "↩️ <b>Возвраты звёзд</b>\n\nНевозвращённых платежей нет.",
+            reply_markup=admin_back_kb(),
+        )
+        await callback.answer()
+        return
+
+    await safe_edit(
+        callback.message,
+        "↩️ <b>Возвраты звёзд</b>\n\n"
+        "Последние платежи. Возврат вернёт звёзды игроку и заберёт "
+        "выданные за них фишки.",
+        reply_markup=refunds_list_kb(topups),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin:refund:"))
+async def cb_refund_confirm(callback: CallbackQuery) -> None:
+    topup_id = int(callback.data.split(":")[2])
+    t = await db.get_topup(topup_id)
+    if t is None:
+        await callback.answer("Платёж не найден", show_alert=True)
+        return
+
+    await safe_edit(
+        callback.message,
+        f"↩️ <b>Возврат платежа #{t['id']}</b>\n\n"
+        f"Игрок: <code>{t['user_id']}</code>\n"
+        f"Звёзд к возврату: {t['stars']} ⭐\n"
+        f"Фишек будет списано: до {t['coins']} 🪙\n"
+        f"Дата: {t['created_at'][:16].replace('T', ' ')}\n\n"
+        "Подтвердить?",
+        reply_markup=refund_confirm_kb(topup_id),
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data.startswith("admin:refundok:"))
+async def cb_refund_do(callback: CallbackQuery, bot: Bot) -> None:
+    topup_id = int(callback.data.split(":")[2])
+    t = await db.get_topup(topup_id)
+    if t is None:
+        await callback.answer("Платёж не найден", show_alert=True)
+        return
+    if t["refunded_at"]:
+        await callback.answer("Этот платёж уже возвращён", show_alert=True)
+        return
+
+    try:
+        await bot.refund_star_payment(
+            user_id=t["user_id"], telegram_payment_charge_id=t["telegram_charge_id"]
+        )
+    except TelegramBadRequest as exc:
+        # Telegram refuses already-refunded or unknown charges — surface the
+        # real reason instead of pretending the refund went through.
+        await safe_edit(
+            callback.message,
+            f"❌ Telegram отклонил возврат платежа #{topup_id}:\n<code>{exc.message}</code>",
+            reply_markup=admin_back_kb(),
+        )
+        await callback.answer()
+        return
+
+    taken = await db.deduct_up_to(t["user_id"], t["coins"])
+    await db.mark_topup_refunded(topup_id)
+    balance = await db.get_balance(t["user_id"])
+
+    shortfall = ""
+    if taken < t["coins"]:
+        shortfall = (
+            f"\n⚠️ Списать удалось только {taken} из {t['coins']} 🪙 — "
+            "остальное игрок уже проиграл."
+        )
+
+    await safe_edit(
+        callback.message,
+        f"✅ Платёж #{topup_id} возвращён.\n"
+        f"Игроку <code>{t['user_id']}</code> вернулось {t['stars']} ⭐\n"
+        f"Списано фишек: {taken} 🪙, его баланс: {balance} 🪙{shortfall}",
+        reply_markup=admin_back_kb(),
+    )
+    await callback.answer()
+
+    try:
+        await bot.send_message(
+            t["user_id"],
+            f"↩️ Возврат: вам вернулось {t['stars']} ⭐, "
+            f"списано {taken} фишек.\nБаланс: {balance} 🪙",
+        )
+    except Exception:
+        pass
 
 
 # --- Global stats ------------------------------------------------------

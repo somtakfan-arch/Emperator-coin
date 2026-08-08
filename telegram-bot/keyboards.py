@@ -26,8 +26,36 @@ def admin_panel_kb() -> InlineKeyboardMarkup:
         inline_keyboard=[
             [InlineKeyboardButton(text="💸 Выдать фишки", callback_data="admin:grant")],
             [InlineKeyboardButton(text="🔍 Найти игрока", callback_data="admin:find")],
+            [InlineKeyboardButton(text="↩️ Возвраты звёзд", callback_data="admin:refunds")],
             [InlineKeyboardButton(text="📊 Статистика", callback_data="admin:stats")],
             [back_button("menu:home", text="⬅️ В меню")],
+        ]
+    )
+
+
+def refunds_list_kb(topups) -> InlineKeyboardMarkup:
+    rows = [
+        [
+            InlineKeyboardButton(
+                text=f"#{t['id']} · {t['stars']}⭐ · {('@' + t['username']) if t['username'] else t['user_id']}",
+                callback_data=f"admin:refund:{t['id']}",
+            )
+        ]
+        for t in topups
+    ]
+    rows.append([back_button("admin:panel", text="⬅️ Назад в админку")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def refund_confirm_kb(topup_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Да, вернуть звёзды", callback_data=f"admin:refundok:{topup_id}"
+                )
+            ],
+            [back_button("admin:refunds", text="⬅️ Отмена")],
         ]
     )
 

@@ -45,6 +45,16 @@ async def init_db() -> None:
     _db = await aiosqlite.connect(DB_PATH)
     await _db.executescript(SCHEMA)
     await _db.commit()
+    await _migrate()
+
+
+async def _migrate() -> None:
+    """Additive migrations for databases created by an earlier version."""
+    cur = await _db.execute("PRAGMA table_info(topups)")
+    columns = {row[1] for row in await cur.fetchall()}
+    if "refunded_at" not in columns:
+        await _db.execute("ALTER TABLE topups ADD COLUMN refunded_at TEXT")
+        await _db.commit()
 
 
 async def close_db() -> None:
@@ -146,6 +156,49 @@ async def record_topup(user_id: int, stars: int, coins: int, charge_id: str) -> 
         (user_id, stars, coins, charge_id, _now()),
     )
     await _db.commit()
+
+
+async def recent_topups(limit: int = 10, include_refunded: bool = False) -> list[aiosqlite.Row]:
+    _db.row_factory = aiosqlite.Row
+    where = "" if include_refunded else "WHERE refunded_at IS NULL"
+    cur = await _db.execute(
+        f"""
+        SELECT t.*, u.username
+        FROM topups t LEFT JOIN users u ON u.user_id = t.user_id
+        {where}
+        ORDER BY t.id DESC LIMIT ?
+        """,
+        (limit,),
+    )
+    return await cur.fetchall()
+
+
+async def get_topup(topup_id: int) -> aiosqlite.Row | None:
+    _db.row_factory = aiosqlite.Row
+    cur = await _db.execute("SELECT * FROM topups WHERE id = ?", (topup_id,))
+    return await cur.fetchone()
+
+
+async def mark_topup_refunded(topup_id: int) -> None:
+    await _db.execute("UPDATE topups SET refunded_at = ? WHERE id = ?", (_now(), topup_id))
+    await _db.commit()
+
+
+async def deduct_up_to(user_id: int, amount: int) -> int:
+    """Take back up to `amount` chips, never pushing the balance below zero.
+
+    A refunded player may already have gambled the chips away; a negative
+    balance would lock him out of the bot entirely, so we claw back what is
+    left and report the shortfall to the admin.
+    """
+    balance = await get_balance(user_id)
+    taken = min(balance, amount)
+    if taken > 0:
+        await _db.execute(
+            "UPDATE users SET balance = balance - ? WHERE user_id = ?", (taken, user_id)
+        )
+        await _db.commit()
+    return taken
 
 
 async def record_admin_grant(admin_id: int, user_id: int, amount: int) -> None:
