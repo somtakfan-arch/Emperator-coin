@@ -92,6 +92,7 @@ CREATE TABLE IF NOT EXISTS captures (
     action TEXT,
     content TEXT,
     media_kind TEXT,
+    media_file_id TEXT,
     created_at INTEGER NOT NULL
 );
 
@@ -179,6 +180,9 @@ class Storage:
         ticket_cols = {row[1] for row in conn.execute("PRAGMA table_info(tickets)")}
         if ticket_cols and "kind" not in ticket_cols:
             conn.execute("ALTER TABLE tickets ADD COLUMN kind TEXT NOT NULL DEFAULT 'support'")
+        capture_cols = {row[1] for row in conn.execute("PRAGMA table_info(captures)")}
+        if capture_cols and "media_file_id" not in capture_cols:
+            conn.execute("ALTER TABLE captures ADD COLUMN media_file_id TEXT")
 
     @contextmanager
     def _connect(self):
@@ -568,15 +572,15 @@ class Storage:
         return row is not None
 
     def add_capture(self, *, target_user_id, actor_id, actor_name, actor_username,
-                    direction, action, content, media_kind=None) -> None:
+                    direction, action, content, media_kind=None, media_file_id=None) -> None:
         now = time.time()
         with self._connect() as conn:
             conn.execute(
                 "INSERT INTO captures (target_user_id, actor_id, actor_name, actor_username, "
-                "direction, action, content, media_kind, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "direction, action, content, media_kind, media_file_id, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (target_user_id, actor_id, actor_name, actor_username, direction,
-                 action, content, media_kind, int(now)),
+                 action, content, media_kind, media_file_id, int(now)),
             )
             # Rolling retention: drop captures older than the window for everyone
             # except targets under an explicit /getlog (kept without limit).
@@ -592,14 +596,15 @@ class Storage:
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT actor_id, actor_name, actor_username, direction, action, content, "
-                "media_kind, created_at FROM captures WHERE target_user_id = ? ORDER BY created_at ASC, id ASC",
+                "media_kind, media_file_id, created_at FROM captures WHERE target_user_id = ? "
+                "ORDER BY created_at ASC, id ASC",
                 (target_user_id,),
             ).fetchall()
         return [
             {
                 "actor_id": r[0], "actor_name": r[1], "actor_username": r[2],
                 "direction": r[3], "action": r[4], "content": r[5],
-                "media_kind": r[6], "created_at": r[7],
+                "media_kind": r[6], "media_file_id": r[7], "created_at": r[8],
             }
             for r in rows
         ]

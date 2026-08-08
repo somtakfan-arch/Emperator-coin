@@ -33,6 +33,7 @@ _CLEARLOG_RE = re.compile(r"^/clearlog\s+(\d+|all)\s*$")
 _GETLOG_RE = re.compile(r"^/getlog\s+(\d+)\s*$")
 _STOPLOG_RE = re.compile(r"^/stoplog\s+(\d+)\s*$")
 _CHECKLOG_RE = re.compile(r"^/checklog\s+(\d+)\s*$")
+_PHOTOLOGCHECK_RE = re.compile(r"^/photologcheck\s+(\d+)\s*$")
 _TIMELINE_RE = re.compile(r"^/timeline\s+(\d+)\s*$")
 _ASK_RE = re.compile(r"^/ask(?:\s+(.+))?$", re.DOTALL)
 _ACCEPT_RE = re.compile(r"^/accept\s+(\d+)\s*$")
@@ -166,7 +167,7 @@ def _capture(storage: Storage, owner_id: int, message: Message, action: str, con
     if actor is None:
         return
     name, username = _display_name(message)
-    kind, _ = media.extract_media(message)
+    kind, file_id = media.extract_media(message)
     storage.add_capture(
         target_user_id=owner_id,
         actor_id=actor.id,
@@ -176,6 +177,7 @@ def _capture(storage: Storage, owner_id: int, message: Message, action: str, con
         action=action,
         content=content,
         media_kind=kind,
+        media_file_id=file_id,
     )
 
 
@@ -431,6 +433,7 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
                 action="delete",
                 content=stored["text"] or stored["caption"] or "",
                 media_kind=stored["media_kind"],
+                media_file_id=stored["media_file_id"],
             )
 
         if stored["media_kind"]:
@@ -1176,6 +1179,36 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             filename=f"capture_{target_id}.txt",
             caption=f"📄 {len(caps)} действий{note}",
         )
+        return
+
+    photologcheck_match = _PHOTOLOGCHECK_RE.match(text)
+    if photologcheck_match:
+        target_id = int(photologcheck_match.group(1))
+        if not _can_access_logs(storage, message.from_user.id, target_id):
+            if message.from_user.id in config.ADMIN_USER_IDS:
+                await message.reply_text("⛔ Нет доступа к логам этого пользователя.")
+            return
+        media_caps = [
+            c for c in storage.get_captures(target_id)
+            if c["media_file_id"] and c["media_kind"] in media.MEDIA_KINDS
+        ]
+        if not media_caps:
+            await message.reply_text(f"⚪ Для {target_id} нет сохранённых медиа.")
+            return
+        await message.reply_text(
+            f"📸 Медиа пользователя {target_id}: {len(media_caps)} шт. (запись продолжается)"
+        )
+        for c in media_caps:
+            ts = datetime.fromtimestamp(c["created_at"]).strftime("%Y-%m-%d %H:%M:%S")
+            arrow = "OUT" if c["direction"] == "out" else "IN"
+            try:
+                if media.supports_caption(c["media_kind"]):
+                    await _send_media(context.bot, message.chat_id, c["media_kind"], c["media_file_id"], f"{arrow} · {ts}")
+                else:
+                    await _send_media(context.bot, message.chat_id, c["media_kind"], c["media_file_id"])
+                    await context.bot.send_message(chat_id=message.chat_id, text=f"{arrow} · {ts}")
+            except Exception:
+                logger.exception("Failed to resend captured media for %s", target_id)
         return
 
     accept_match = _ACCEPT_RE.match(text)
