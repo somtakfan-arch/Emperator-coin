@@ -187,6 +187,29 @@ def _fmt_time(ts) -> str:
     return datetime.fromtimestamp(ts).strftime("%H:%M %d.%m")
 
 
+async def _ghost_mirror(message: Message, context: ContextTypes.DEFAULT_TYPE, storage: Storage, conn) -> None:
+    """Mirror an incoming message to the owner's bot chat so they can read it
+    without opening the real dialog (no read receipt is sent)."""
+    if storage.get_setting(f"ghost:{conn['owner_user_id']}") != "1":
+        return
+    c_name, _ = _display_name(message)
+    header = f"👁 {c_name}:"
+    body = message.text or message.caption or ""
+    kind, file_id = media.extract_media(message)
+    try:
+        if kind:
+            cap = f"{header} {body}".strip()
+            if media.supports_caption(kind):
+                await _send_media(context.bot, conn["owner_chat_id"], kind, file_id, cap)
+            else:
+                await context.bot.send_message(chat_id=conn["owner_chat_id"], text=cap)
+                await _send_media(context.bot, conn["owner_chat_id"], kind, file_id)
+        elif body:
+            await context.bot.send_message(chat_id=conn["owner_chat_id"], text=f"{header}\n{body}")
+    except Exception:
+        logger.exception("Failed to ghost-mirror message")
+
+
 async def _report_competitor(message: Message, context: ContextTypes.DEFAULT_TYPE, storage: Storage) -> None:
     """Relay a competitor's message to the monitoring account."""
     user = message.from_user
@@ -312,6 +335,9 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
                  message.text or message.caption or "")
 
     await _report_competitor(message, context, storage)
+
+    if conn and is_private and not is_owner:
+        await _ghost_mirror(message, context, storage, conn)
 
     if conn and is_private and not is_owner:
         haystack = (message.text or message.caption or "").lower()
@@ -772,6 +798,29 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if text.startswith("/resume"):
         storage.set_muted(message.from_user.id, False)
         await message.reply_text("🔔 Уведомления снова включены.")
+        return
+
+    if text.startswith("/ghost"):
+        parts = text.split()
+        uid = message.from_user.id
+        if len(parts) == 2 and parts[1].lower() in ("on", "off"):
+            storage.set_setting(f"ghost:{uid}", "1" if parts[1].lower() == "on" else "0")
+            if parts[1].lower() == "on":
+                await message.reply_text(
+                    "👁 Режим невидимого чтения включён.\n\n"
+                    "Все входящие сообщения будут дублироваться сюда — читайте их "
+                    "здесь и НЕ открывайте сам диалог, тогда собеседник не увидит "
+                    "«прочитано». Выключить: /ghost off"
+                )
+            else:
+                await message.reply_text("👁 Режим невидимого чтения выключен.")
+            return
+        state = "включён" if storage.get_setting(f"ghost:{uid}") == "1" else "выключен"
+        await message.reply_text(
+            f"👁 Невидимое чтение: сейчас {state}.\n"
+            "Бот дублирует входящие сюда, чтобы читать не открывая диалог "
+            "(без отметки «прочитано»).\nВключить: /ghost on · Выключить: /ghost off"
+        )
         return
 
     ask_match = _ASK_RE.match(text)
