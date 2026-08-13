@@ -94,6 +94,14 @@ async def try_handle_owner_command(
         uid = message.from_user.id
         now = time.time()
 
+        # The recipient forbade spam into this chat (.stopspam on their side).
+        if storage.is_chat_muted(chat_id, uid):
+            await _edit_command_message(
+                context, bcid, chat_id, message_id,
+                mark("🚫 Этот собеседник запретил рассылку в этот чат."),
+            )
+            return True
+
         # Free users: cooldown + anti-flood. Premium spams freely, no delays.
         if not is_premium:
             cooldowns = context.bot_data.setdefault("spam_cooldown", {})
@@ -156,10 +164,10 @@ async def try_handle_owner_command(
             return True
         if stopspam_match.group(1) == "off":
             storage.unmute_chat(message.from_user.id, chat_id)
-            await _edit_command_message(context, bcid, chat_id, message_id, "🔔 Уведомления от этого собеседника снова включены.")
+            await _edit_command_message(context, bcid, chat_id, message_id, mark("✅ Рассылка в этот чат снова разрешена."))
         else:
             storage.mute_chat(message.from_user.id, chat_id)
-            await _edit_command_message(context, bcid, chat_id, message_id, "🔇 Спам от этого собеседника отключён (вам он больше не приходит).")
+            await _edit_command_message(context, bcid, chat_id, message_id, mark("🚫 Рассылка (.spam) в этот чат запрещена навсегда."))
         return True
 
     note_match = _NOTE_RE.match(text)

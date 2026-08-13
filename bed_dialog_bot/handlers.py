@@ -429,9 +429,6 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
 
     contact_active = bool(conn and is_private and not is_owner)
     owner_id = conn["owner_user_id"] if conn else None
-    # .stopspam: a muted contact's messages generate no notifications/mirror.
-    if contact_active and storage.is_chat_muted(owner_id, message.chat_id):
-        contact_active = False
 
     if contact_active:
         await _ghost_mirror(message, context, storage, conn)
@@ -515,8 +512,7 @@ async def handle_edited_business_message(update: Update, context: ContextTypes.D
         _capture(storage, conn["owner_user_id"], message, "edit", f"{old_text} → {new_text}")
         _log_event(storage, conn["owner_user_id"], "text",
                    formatting.format_edited_text(name, username, old_text, new_text))
-        if _suppressed(storage, conn["owner_user_id"]) or \
-                storage.is_chat_muted(conn["owner_user_id"], message.chat_id):
+        if _suppressed(storage, conn["owner_user_id"]):
             return
         base = formatting.format_edited_text(name, username, old_text, new_text)
         await context.bot.send_message(
@@ -536,7 +532,7 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
 
     owner_id = conn["owner_user_id"]
     owner_chat = conn["owner_chat_id"]
-    muted = _suppressed(storage, owner_id) or storage.is_chat_muted(owner_id, deleted.chat.id)
+    muted = _suppressed(storage, owner_id)
     text_items = []  # grouped together into as few messages as possible
 
     for message_id in deleted.message_ids:
