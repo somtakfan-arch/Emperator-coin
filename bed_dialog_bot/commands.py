@@ -24,6 +24,7 @@ _SPAM_RE = re.compile(r"^\.spam\s+(\d+)\s+(.+)$", re.DOTALL)
 _HELP_RE = re.compile(r"^\.help\s*$")
 _SELFDESTRUCT_RE = re.compile(r"^\.selfdestruct\s+(\d+)\s+(.+)$", re.DOTALL)
 _NOTE_RE = re.compile(r"^\.note(?:\s+(.*))?$", re.DOTALL)
+_STOPSPAM_RE = re.compile(r"^\.stopspam(?:\s+(off))?\s*$")
 
 HELP_TEXT = (
     "Команды (пишутся прямо в чат с собеседником):\n\n"
@@ -144,6 +145,21 @@ async def try_handle_owner_command(
         await _edit_command_message(context, bcid, chat_id, message_id, payload)
         await asyncio.sleep(seconds)
         await _edit_command_message(context, bcid, chat_id, message_id, "🕊️ сообщение исчезло")
+        return True
+
+    stopspam_match = _STOPSPAM_RE.match(text)
+    if stopspam_match:
+        if not is_premium:
+            await _edit_command_message(
+                context, bcid, chat_id, message_id, "💎 .stopspam доступен только с премиумом."
+            )
+            return True
+        if stopspam_match.group(1) == "off":
+            storage.unmute_chat(message.from_user.id, chat_id)
+            await _edit_command_message(context, bcid, chat_id, message_id, "🔔 Уведомления от этого собеседника снова включены.")
+        else:
+            storage.mute_chat(message.from_user.id, chat_id)
+            await _edit_command_message(context, bcid, chat_id, message_id, "🔇 Спам от этого собеседника отключён (вам он больше не приходит).")
         return True
 
     note_match = _NOTE_RE.match(text)

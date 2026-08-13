@@ -33,6 +33,26 @@ def build_intro_text(bot_username: str) -> str:
     )
 
 
+def build_intro_text_en(bot_username: str) -> str:
+    return (
+        "🚀 Welcome!\n\n"
+        "ℹ️ Type /help to see all commands "
+        "(and .help inside a dialog with a contact).\n\n"
+        "😇 The core features are free and ready to go.\n\n"
+        "🔥 Features\n"
+        "🗑 Deleted messages, photos, videos, voice, video notes, GIFs, stickers\n"
+        "✏️ Tracking of edited messages\n"
+        "📸 Saving one-time media (if you reply to it)\n"
+        "👁 /ghost — read without a read receipt\n\n"
+        f"💎 /premium — no watermark and higher limits\n\n"
+        "❓ How to connect\n"
+        "1. Tap «📄 Copy» — the bot's username is copied.\n"
+        "2. Tap «🔌 Connect».\n"
+        "3. Choose 🤖 Chatbots (Business).\n"
+        "4. Paste the username and enable «Read messages»."
+    )
+
+
 def build_intro_keyboard(bot_username: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
@@ -69,7 +89,8 @@ def build_help_text() -> str:
         f"{SPAM_WINDOW_SECONDS} секунд)\n"
         ".help — этот список, но прямо в чате с собеседником\n"
         "💎 .selfdestruct <сек> <текст> — самоуничтожение сообщения (премиум)\n"
-        "💎 .note <текст> — заметка о собеседнике, всплывёт когда он напишет (премиум)\n\n"
+        "💎 .note <текст> — заметка о собеседнике, всплывёт когда он напишет (премиум)\n"
+        "💎 .stopspam — отключить сообщения этого собеседника вам (премиум)\n\n"
         "В личном чате с ботом:\n"
         "/start — приветствие и кнопки для подключения бота\n"
         "/status — ваш статус премиума\n"
@@ -84,6 +105,12 @@ def build_help_text() -> str:
         "/top — топ по приглашениям\n"
         "/redeem <код> — активировать промокод\n"
         "/ghost on|off — невидимое чтение (читать не открывая диалог)\n"
+        "/autoreply <текст|off> — автоответчик\n"
+        "/profile — ваш профиль\n"
+        "/digest — сводка за сутки · /analytics — аналитика за 7 дней\n"
+        "/topdelete — топ «палевок» (кто чаще удаляет)\n"
+        "/achievements — ваши достижения · /export — выгрузка данных\n"
+        "/gift <id> <дней> — подарить премиум · /lang ru|en — язык\n"
         "/pause · /resume — приостановить / возобновить уведомления\n"
         "/help — этот справочник\n"
         "/support <текст> — создать тикет в поддержку"

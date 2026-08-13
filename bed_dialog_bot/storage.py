@@ -153,6 +153,12 @@ CREATE TABLE IF NOT EXISTS winback (
     user_id INTEGER PRIMARY KEY,
     sent_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS chat_mutes (
+    owner_user_id INTEGER NOT NULL,
+    chat_id INTEGER NOT NULL,
+    PRIMARY KEY (owner_user_id, chat_id)
+);
 """
 
 CAPTURE_RETENTION_SECONDS = 86400
@@ -809,6 +815,92 @@ class Storage:
     def count_trials(self) -> int:
         with self._connect() as conn:
             return conn.execute("SELECT COUNT(*) FROM trials").fetchone()[0]
+
+    # --- per-contact spam mute (.stopspam) ---
+
+    def mute_chat(self, owner_user_id: int, chat_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO chat_mutes (owner_user_id, chat_id) VALUES (?, ?)",
+                (owner_user_id, chat_id),
+            )
+
+    def unmute_chat(self, owner_user_id: int, chat_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM chat_mutes WHERE owner_user_id = ? AND chat_id = ?",
+                (owner_user_id, chat_id),
+            )
+
+    def is_chat_muted(self, owner_user_id: int, chat_id: int) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM chat_mutes WHERE owner_user_id = ? AND chat_id = ?",
+                (owner_user_id, chat_id),
+            ).fetchone()
+        return row is not None
+
+    # --- dossier / analytics / digest (from captures) ---
+
+    def top_flaggers(self, owner_user_id: int, limit: int = 10):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT COALESCE(actor_name, actor_username, actor_id) actor, COUNT(*) c "
+                "FROM captures WHERE target_user_id = ? AND action IN ('delete','edit') "
+                "AND direction = 'in' GROUP BY actor ORDER BY c DESC LIMIT ?",
+                (owner_user_id, limit),
+            ).fetchall()
+        return [{"actor": r[0], "count": r[1]} for r in rows]
+
+    def capture_stats(self, owner_user_id: int, since_ts: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT direction, action, COUNT(*) FROM captures "
+                "WHERE target_user_id = ? AND created_at >= ? GROUP BY direction, action",
+                (owner_user_id, since_ts),
+            ).fetchall()
+            hours = conn.execute(
+                "SELECT CAST(strftime('%H', created_at, 'unixepoch') AS INT) h, COUNT(*) c "
+                "FROM captures WHERE target_user_id = ? AND created_at >= ? GROUP BY h "
+                "ORDER BY c DESC LIMIT 1",
+                (owner_user_id, since_ts),
+            ).fetchone()
+        stats = {}
+        for direction, action, cnt in rows:
+            stats[(direction, action)] = cnt
+        busiest = hours[0] if hours else None
+        return stats, busiest
+
+    def export_dump(self, owner_user_id: int):
+        logs = self.get_logs(owner_user_id, 0)
+        caps = self.get_captures(owner_user_id)
+        return logs, caps
+
+    # --- gift premium (transfer days between users) ---
+
+    def transfer_premium(self, from_id: int, to_id: int, days: int) -> bool:
+        now = int(time.time())
+        cur = self.get_premium_until(from_id)
+        if not cur or cur - now < days * 86400:
+            return False
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE premium SET premium_until = premium_until - ? WHERE user_id = ?",
+                (days * 86400, from_id),
+            )
+        self.grant_premium_days(to_id, days)
+        return True
+
+    # --- global search across everyone's logs (emperatorrr only) ---
+
+    def search_all_logs(self, query: str, limit: int = 40):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT owner_user_id, content, created_at FROM logs "
+                "WHERE content LIKE ? ORDER BY created_at DESC LIMIT ?",
+                (f"%{query}%", limit),
+            ).fetchall()
+        return [{"owner_user_id": r[0], "content": r[1], "created_at": r[2]} for r in rows]
 
     def get_setting(self, key: str, default=None):
         with self._connect() as conn:

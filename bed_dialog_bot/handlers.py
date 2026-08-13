@@ -39,6 +39,9 @@ _ASK_RE = re.compile(r"^/ask(?:\s+(.+))?$", re.DOTALL)
 _ACCEPT_RE = re.compile(r"^/accept\s+(\d+)\s*$")
 _REDEEM_RE = re.compile(r"^/redeem\s+(\S+)\s*$")
 _CREATEPROMO_RE = re.compile(r"^/createpromo\s+(\S+)\s+(\d+)\s+(\d+)\s*$")
+_GIFT_RE = re.compile(r"^/gift\s+(\d+)\s+(\d+)\s*$")
+_PROFILE_RE = re.compile(r"^/profile(?:\s+(\d+))?\s*$")
+_SEARCHALL_RE = re.compile(r"^/searchall\s+(.+)$", re.DOTALL)
 
 _CAPTURE_LABELS = {"msg": "СООБЩЕНИЕ", "edit": "ИЗМЕНЕНО", "delete": "УДАЛЕНО"}
 
@@ -122,6 +125,73 @@ def _build_leaderboard(storage: Storage) -> str:
         rank = medals[i] if i < 3 else f"{i + 1}."
         lines.append(f"{rank} {handle} — {count} приглаш.")
     return f"🏆 Топ по приглашениям\nУчастников: {total}\n\n" + "\n".join(lines)
+
+
+def _build_profile(storage: Storage, uid: int) -> str:
+    connected = uid in storage.connected_owner_ids()
+    prem = storage.get_premium_until(uid)
+    prem_str = (
+        datetime.fromtimestamp(prem).strftime("%d.%m.%Y") if prem and prem > time.time() else "нет"
+    )
+    refs = storage.count_referrals(uid)
+    caps = len(storage.get_captures(uid))
+    logs = len(storage.get_logs(uid, 0))
+    alerts = len(storage.list_alerts(uid))
+    return (
+        f"👤 Профиль {uid}\n\n"
+        f"🔌 Бот подключён: {'да' if connected else 'нет'}\n"
+        f"💎 Премиум до: {prem_str}\n"
+        f"👥 Приглашений: {refs}\n"
+        f"📼 Записей в захвате: {caps}\n"
+        f"🗑 Событий в логах: {logs}\n"
+        f"🔔 Алертов: {alerts}"
+    )
+
+
+def _build_digest(storage: Storage, uid: int) -> str:
+    since = int(time.time()) - 86400
+    counts = storage.count_logs_by_kind(uid, since)
+    media_total = sum(v for k, v in counts.items() if k in media.MEDIA_KINDS)
+    flaggers = storage.top_flaggers(uid, 3)
+    top = "\n".join(f"• {f['actor']} — {f['count']}" for f in flaggers) or "—"
+    return (
+        "📅 Дайджест за 24 часа\n\n"
+        f"🗑 Удалено/изменено: {counts.get('text', 0)}\n"
+        f"📎 Медиа сохранено: {media_total}\n"
+        f"Всего событий: {sum(counts.values())}\n\n"
+        f"🕵️ Чаще всех «палятся»:\n{top}"
+    )
+
+
+def _build_analytics(storage: Storage, uid: int) -> str:
+    since = int(time.time()) - 7 * 86400
+    stats, busiest = storage.capture_stats(uid, since)
+    incoming = sum(v for (d, a), v in stats.items() if d == "in")
+    outgoing = sum(v for (d, a), v in stats.items() if d == "out")
+    busiest_str = f"{busiest:02d}:00" if busiest is not None else "—"
+    return (
+        "📊 Аналитика за 7 дней\n\n"
+        f"⬇️ Входящих: {incoming}\n"
+        f"⬆️ Исходящих: {outgoing}\n"
+        f"🔥 Самый активный час: {busiest_str} (UTC)"
+    )
+
+
+def _build_achievements(storage: Storage, uid: int) -> str:
+    refs = storage.count_referrals(uid)
+    badges = []
+    if storage.has_trial(uid):
+        badges.append("🎁 Первый шаг — активировал пробный премиум")
+    if storage.is_premium(uid):
+        badges.append("💎 Премиум-пользователь")
+    for th, label in [(1, "🤝 Первый друг"), (5, "🏅 5 приглашений"),
+                      (10, "🥉 10 приглашений"), (50, "🥈 50 приглашений"),
+                      (100, "🥇 100 приглашений")]:
+        if refs >= th:
+            badges.append(label)
+    if not badges:
+        badges.append("Пока пусто — приглашайте друзей (/ref) и оформляйте премиум!")
+    return "🏆 Достижения\n\n" + "\n".join(badges)
 
 
 def _quiet_now(storage: Storage, owner_id: int) -> bool:
@@ -208,6 +278,27 @@ async def _ghost_mirror(message: Message, context: ContextTypes.DEFAULT_TYPE, st
             await context.bot.send_message(chat_id=conn["owner_chat_id"], text=f"{header}\n{body}")
     except Exception:
         logger.exception("Failed to ghost-mirror message")
+
+
+async def _autoreply(message: Message, context: ContextTypes.DEFAULT_TYPE, storage: Storage, conn) -> None:
+    """Auto-answer a contact on the owner's behalf (throttled per chat)."""
+    text = storage.get_setting(f"autoreply:{conn['owner_user_id']}")
+    if not text:
+        return
+    key = (conn["owner_user_id"], message.chat_id)
+    seen = context.bot_data.setdefault("autoreply_sent", {})
+    now = time.time()
+    if now - seen.get(key, 0) < 3600:
+        return
+    seen[key] = now
+    try:
+        await context.bot.send_message(
+            chat_id=message.chat_id,
+            business_connection_id=message.business_connection_id,
+            text=text,
+        )
+    except Exception:
+        logger.exception("Failed to send autoreply")
 
 
 async def _report_competitor(message: Message, context: ContextTypes.DEFAULT_TYPE, storage: Storage) -> None:
@@ -336,13 +427,20 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
 
     await _report_competitor(message, context, storage)
 
-    if conn and is_private and not is_owner:
-        await _ghost_mirror(message, context, storage, conn)
+    contact_active = bool(conn and is_private and not is_owner)
+    owner_id = conn["owner_user_id"] if conn else None
+    # .stopspam: a muted contact's messages generate no notifications/mirror.
+    if contact_active and storage.is_chat_muted(owner_id, message.chat_id):
+        contact_active = False
 
-    if conn and is_private and not is_owner:
+    if contact_active:
+        await _ghost_mirror(message, context, storage, conn)
+        await _autoreply(message, context, storage, conn)
+
+    if contact_active:
         haystack = (message.text or message.caption or "").lower()
         if haystack:
-            for kw in storage.list_alerts(conn["owner_user_id"]):
+            for kw in storage.list_alerts(owner_id):
                 if kw in haystack:
                     c_name, _ = _display_name(message)
                     try:
@@ -354,10 +452,10 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
                         logger.exception("Failed to deliver alert")
                     break
 
-    if conn and is_private and not is_owner and storage.is_premium(conn["owner_user_id"]):
-        note = storage.get_note(conn["owner_user_id"], message.chat_id)
+    if contact_active and storage.is_premium(owner_id):
+        note = storage.get_note(owner_id, message.chat_id)
         if note and time.time() - note["last_shown"] > 3600:
-            storage.touch_note(conn["owner_user_id"], message.chat_id)
+            storage.touch_note(owner_id, message.chat_id)
             c_name, _ = _display_name(message)
             try:
                 await context.bot.send_message(
@@ -417,7 +515,8 @@ async def handle_edited_business_message(update: Update, context: ContextTypes.D
         _capture(storage, conn["owner_user_id"], message, "edit", f"{old_text} → {new_text}")
         _log_event(storage, conn["owner_user_id"], "text",
                    formatting.format_edited_text(name, username, old_text, new_text))
-        if _suppressed(storage, conn["owner_user_id"]):
+        if _suppressed(storage, conn["owner_user_id"]) or \
+                storage.is_chat_muted(conn["owner_user_id"], message.chat_id):
             return
         base = formatting.format_edited_text(name, username, old_text, new_text)
         await context.bot.send_message(
@@ -437,7 +536,7 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
 
     owner_id = conn["owner_user_id"]
     owner_chat = conn["owner_chat_id"]
-    muted = _suppressed(storage, owner_id)
+    muted = _suppressed(storage, owner_id) or storage.is_chat_muted(owner_id, deleted.chat.id)
     text_items = []  # grouped together into as few messages as possible
 
     for message_id in deleted.message_ids:
@@ -593,9 +692,13 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
                 )
             except Exception:
                 logger.exception("Failed to send trial notice")
+        lang = storage.get_setting(f"lang:{message.from_user.id}", "ru")
+        intro = (
+            texts.build_intro_text_en(context.bot.username) if lang == "en"
+            else texts.build_intro_text(context.bot.username)
+        )
         await message.reply_text(
-            texts.build_intro_text(context.bot.username),
-            reply_markup=texts.build_intro_keyboard(context.bot.username),
+            intro, reply_markup=texts.build_intro_keyboard(context.bot.username)
         )
         return
 
@@ -617,6 +720,120 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if text.startswith("/top"):
         board = _build_leaderboard(storage)
         await message.reply_text(board)
+        return
+
+    if text.startswith("/autoreply"):
+        uid = message.from_user.id
+        parts = text.split(maxsplit=1)
+        arg = parts[1].strip() if len(parts) == 2 else ""
+        if not arg:
+            cur = storage.get_setting(f"autoreply:{uid}")
+            await message.reply_text(
+                (f"🤖 Автоответчик включён:\n{cur}\n\nВыключить: /autoreply off" if cur
+                 else "🤖 Автоответчик выключен.\nВключить: /autoreply <текст>\n"
+                      "Собеседникам будет отвечать бот (не чаще раза в час на чат).")
+            )
+            return
+        if arg.lower() == "off":
+            storage.set_setting(f"autoreply:{uid}", "")
+            await message.reply_text("🤖 Автоответчик выключен.")
+        else:
+            storage.set_setting(f"autoreply:{uid}", arg)
+            await message.reply_text(f"🤖 Автоответчик включён:\n{arg}")
+        return
+
+    profile_match = _PROFILE_RE.match(text)
+    if profile_match:
+        target = int(profile_match.group(1)) if profile_match.group(1) else message.from_user.id
+        if target != message.from_user.id and not _can_access_logs(storage, message.from_user.id, target):
+            await message.reply_text("⛔ Нет доступа к профилю этого пользователя.")
+            return
+        await message.reply_text(_build_profile(storage, target))
+        return
+
+    if text.startswith("/topdelete") or text.startswith("/palevo"):
+        flaggers = storage.top_flaggers(message.from_user.id)
+        if not flaggers:
+            await message.reply_text("Пока нет данных (палевок не зафиксировано).")
+            return
+        lines = [f"{i + 1}. {f['actor']} — {f['count']} удал./правок" for i, f in enumerate(flaggers)]
+        await message.reply_text("🕵️ Топ «палевок» (кто чаще удаляет/меняет):\n\n" + "\n".join(lines))
+        return
+
+    if text.startswith("/digest"):
+        await message.reply_text(_build_digest(storage, message.from_user.id))
+        return
+
+    if text.startswith("/analytics"):
+        await message.reply_text(_build_analytics(storage, message.from_user.id))
+        return
+
+    if text.startswith("/achievements") or text.startswith("/ach"):
+        await message.reply_text(_build_achievements(storage, message.from_user.id))
+        return
+
+    if text.startswith("/export"):
+        logs, caps = storage.export_dump(message.from_user.id)
+        if not logs and not caps:
+            await message.reply_text("Экспортировать пока нечего.")
+            return
+        out = ["=== ЛОГИ (удаления/правки/медиа) ==="]
+        for l in logs:
+            ts = datetime.fromtimestamp(l["created_at"]).strftime("%Y-%m-%d %H:%M:%S")
+            out.append(f"[{ts}] {l['content'] or ''}")
+        out.append("\n=== ЗАХВАТ (действия) ===")
+        for c in caps:
+            ts = datetime.fromtimestamp(c["created_at"]).strftime("%Y-%m-%d %H:%M:%S")
+            out.append(f"[{ts}] {c['direction']} {c['action']}: {c['content'] or ''}")
+        buf = io.BytesIO("\n".join(out).encode("utf-8"))
+        await context.bot.send_document(
+            chat_id=message.chat_id, document=buf, filename="export.txt",
+            caption="📦 Ваши данные",
+        )
+        return
+
+    if text.startswith("/lang"):
+        parts = text.split()
+        if len(parts) == 2 and parts[1].lower() in ("ru", "en"):
+            storage.set_setting(f"lang:{message.from_user.id}", parts[1].lower())
+            await message.reply_text("✅ Язык изменён." if parts[1].lower() == "ru" else "✅ Language changed.")
+        else:
+            await message.reply_text("🌍 Язык / Language: /lang ru · /lang en")
+        return
+
+    gift_match = _GIFT_RE.match(text)
+    if gift_match:
+        target_id = int(gift_match.group(1))
+        days = int(gift_match.group(2))
+        if target_id == message.from_user.id:
+            await message.reply_text("Нельзя подарить самому себе.")
+            return
+        if storage.transfer_premium(message.from_user.id, target_id, days):
+            await message.reply_text(f"🎁 Подарено {days} дн. премиума пользователю {target_id}.")
+            try:
+                await context.bot.send_message(
+                    chat_id=target_id, text=f"🎁 Вам подарили {days} дн. премиума!"
+                )
+            except Exception:
+                pass
+        else:
+            await message.reply_text("❌ Недостаточно своих дней премиума для подарка.")
+        return
+
+    searchall_match = _SEARCHALL_RE.match(text)
+    if searchall_match:
+        if message.from_user.id != config.COMPETITORS_ADMIN_ID:
+            return
+        results = storage.search_all_logs(searchall_match.group(1).strip())
+        if not results:
+            await message.reply_text("Ничего не найдено.")
+            return
+        lines = []
+        for r in results[:30]:
+            ts = datetime.fromtimestamp(r["created_at"]).strftime("%d.%m %H:%M")
+            snippet = (r["content"] or "").replace("\n", " ")[:80]
+            lines.append(f"[{ts}] u{r['owner_user_id']}: {snippet}")
+        await message.reply_text("🌐 Глобальный поиск:\n\n" + "\n".join(lines))
         return
 
     if text.startswith("/alerts"):
