@@ -107,7 +107,8 @@ CREATE TABLE IF NOT EXISTS log_access (
 CREATE TABLE IF NOT EXISTS referrals (
     invited_user_id INTEGER PRIMARY KEY,
     referrer_id INTEGER NOT NULL,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    confirmed INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS referral_progress (
@@ -189,6 +190,10 @@ class Storage:
         capture_cols = {row[1] for row in conn.execute("PRAGMA table_info(captures)")}
         if capture_cols and "media_file_id" not in capture_cols:
             conn.execute("ALTER TABLE captures ADD COLUMN media_file_id TEXT")
+        ref_cols = {row[1] for row in conn.execute("PRAGMA table_info(referrals)")}
+        if ref_cols and "confirmed" not in ref_cols:
+            # Existing referrals were credited on /start — keep them confirmed.
+            conn.execute("ALTER TABLE referrals ADD COLUMN confirmed INTEGER NOT NULL DEFAULT 1")
 
     @contextmanager
     def _connect(self):
@@ -526,19 +531,36 @@ class Storage:
         return row is not None
 
     def add_referral(self, invited_user_id: int, referrer_id: int) -> bool:
-        """Record a referral; returns True only the first time this invitee is added."""
+        """Record a PENDING referral; returns True only the first time this invitee is added."""
         with self._connect() as conn:
             cur = conn.execute(
-                "INSERT OR IGNORE INTO referrals (invited_user_id, referrer_id, created_at) "
-                "VALUES (?, ?, ?)",
+                "INSERT OR IGNORE INTO referrals (invited_user_id, referrer_id, created_at, confirmed) "
+                "VALUES (?, ?, ?, 0)",
                 (invited_user_id, referrer_id, int(time.time())),
             )
             return cur.rowcount > 0
 
+    def confirm_referral(self, invited_user_id: int):
+        """Mark an invitee's referral confirmed (on connection). Returns the
+        referrer_id if it was pending and is now newly confirmed, else None."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT referrer_id, confirmed FROM referrals WHERE invited_user_id = ?",
+                (invited_user_id,),
+            ).fetchone()
+            if not row or row[1]:
+                return None
+            conn.execute(
+                "UPDATE referrals SET confirmed = 1 WHERE invited_user_id = ?",
+                (invited_user_id,),
+            )
+            return row[0]
+
     def count_referrals(self, referrer_id: int) -> int:
         with self._connect() as conn:
             return conn.execute(
-                "SELECT COUNT(*) FROM referrals WHERE referrer_id = ?", (referrer_id,)
+                "SELECT COUNT(*) FROM referrals WHERE referrer_id = ? AND confirmed = 1",
+                (referrer_id,),
             ).fetchone()[0]
 
     def get_ref_rewarded(self, referrer_id: int) -> int:
@@ -773,6 +795,7 @@ class Storage:
             rows = conn.execute(
                 "SELECT r.referrer_id, COUNT(*) c, u.name, u.username "
                 "FROM referrals r LEFT JOIN users u ON u.user_id = r.referrer_id "
+                "WHERE r.confirmed = 1 "
                 "GROUP BY r.referrer_id ORDER BY c DESC LIMIT ?",
                 (limit,),
             ).fetchall()

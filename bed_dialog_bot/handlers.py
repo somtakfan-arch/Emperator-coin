@@ -384,6 +384,9 @@ async def handle_business_connection(update: Update, context: ContextTypes.DEFAU
     storage.upsert_user(bc.user.id, bc.user.full_name or bc.user.first_name, bc.user.username)
     logger.info("Business connection %s for user %s (enabled=%s)", bc.id, bc.user.id, bc.is_enabled)
 
+    if bc.is_enabled:
+        await _confirm_referral(bc.user.id, context, storage)
+
     if is_new and bc.is_enabled:
         text = texts.build_intro_text(context.bot.username) + texts.CONNECTED_SUFFIX
         try:
@@ -590,17 +593,22 @@ async def _send_chunked(bot, chat_id: int, text: str, limit: int = 4000) -> None
         text = text[limit:]
 
 
-async def _process_referral(payload: str, message: Message, context: ContextTypes.DEFAULT_TYPE, storage: Storage) -> None:
+def _record_pending_referral(payload: str, invited_id: int, storage: Storage) -> None:
+    """On a ref deep-link: remember who invited this user. Reward is granted
+    later, only when the invitee actually connects the bot."""
     digits = payload[4:] if payload.startswith("ref_") else payload
     if not digits.isdigit():
         return
     referrer_id = int(digits)
-    invited_id = message.from_user.id
-    if referrer_id == invited_id:
-        return
-    if not storage.add_referral(invited_id, referrer_id):
-        return  # this invitee was already counted
+    if referrer_id != invited_id:
+        storage.add_referral(invited_id, referrer_id)
 
+
+async def _confirm_referral(invited_id: int, context: ContextTypes.DEFAULT_TYPE, storage: Storage) -> None:
+    """Called when a user connects the bot: credit the referrer who invited them."""
+    referrer_id = storage.confirm_referral(invited_id)
+    if referrer_id is None:
+        return
     count = storage.count_referrals(referrer_id)
     earned = count // config.REFERRALS_PER_REWARD
     rewarded = storage.get_ref_rewarded(referrer_id)
@@ -609,25 +617,20 @@ async def _process_referral(payload: str, message: Message, context: ContextType
         until_ts = storage.grant_premium_days(referrer_id, days)
         storage.set_ref_rewarded(referrer_id, earned)
         until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y")
-        try:
-            await context.bot.send_message(
-                chat_id=referrer_id,
-                text=(
-                    f"🎉 Вы пригласили {count} пользователей и получили "
-                    f"{days} дней премиума! Премиум активен до {until_str}."
-                ),
-            )
-        except Exception:
-            logger.exception("Failed to notify referrer %s", referrer_id)
+        text = (
+            f"🎉 Ваш приглашённый подключил бота! Всего: {count}. "
+            f"Награда: +{days} дн. премиума (до {until_str})."
+        )
     else:
         remaining = config.REFERRALS_PER_REWARD - (count % config.REFERRALS_PER_REWARD)
-        try:
-            await context.bot.send_message(
-                chat_id=referrer_id,
-                text=f"👥 +1 приглашённый (всего {count}). До награды осталось {remaining}.",
-            )
-        except Exception:
-            logger.exception("Failed to notify referrer %s", referrer_id)
+        text = (
+            f"👥 Ваш приглашённый подключил бота (всего {count}). "
+            f"До награды осталось {remaining}."
+        )
+    try:
+        await context.bot.send_message(chat_id=referrer_id, text=text)
+    except Exception:
+        logger.exception("Failed to notify referrer %s", referrer_id)
 
 
 async def handle_pre_checkout_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -675,7 +678,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if text.startswith("/start"):
         parts = text.split(maxsplit=1)
         if len(parts) == 2 and not was_known:
-            await _process_referral(parts[1].strip(), message, context, storage)
+            _record_pending_referral(parts[1].strip(), message.from_user.id, storage)
         # One-time free trial for brand-new users.
         if not was_known and not storage.has_trial(message.from_user.id):
             storage.mark_trial(message.from_user.id)
