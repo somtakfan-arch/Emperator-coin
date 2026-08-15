@@ -41,6 +41,7 @@ _REDEEM_RE = re.compile(r"^/redeem\s+(\S+)\s*$")
 _CREATEPROMO_RE = re.compile(r"^/createpromo\s+(\S+)\s+(\d+)\s+(\d+)\s*$")
 _GIFT_RE = re.compile(r"^/gift\s+(\d+)\s+(\d+)\s*$")
 _WRITE_RE = re.compile(r"^/write\s+(\d+)\s+(-?\d+)\s+(.+)$", re.DOTALL)
+_REMIND_RE = re.compile(r"^/remind\s+(\d+)([mhd])\s+(.+)$", re.DOTALL)
 _PROFILE_RE = re.compile(r"^/profile(?:\s+(\d+))?\s*$")
 _SEARCHALL_RE = re.compile(r"^/searchall\s+(.+)$", re.DOTALL)
 
@@ -80,6 +81,21 @@ def _mark(storage: Storage, owner_id: int, text: str, bot_username) -> str:
     is_premium = storage.is_premium(owner_id)
     custom = storage.get_watermark(owner_id) if is_premium else None
     return formatting.with_watermark(text, bot_username, is_premium, custom)
+
+
+_THEMES = {"fire": "🔥", "hearts": "💗", "skull": "💀", "star": "⭐", "eye": "👁", "default": ""}
+
+
+def _prefix(storage: Storage, owner_id: int) -> str:
+    """Premium badge/theme emoji prepended to the owner's notifications."""
+    if not storage.is_premium(owner_id):
+        return ""
+    badge = storage.get_setting(f"badge:{owner_id}")
+    if badge:
+        return f"{badge} "
+    theme = storage.get_setting(f"theme:{owner_id}")
+    emoji = _THEMES.get(theme or "", "")
+    return f"{emoji} " if emoji else ""
 
 
 _FAKE_NICK_WORDS = [
@@ -175,6 +191,19 @@ def _build_analytics(storage: Storage, uid: int) -> str:
         f"⬇️ Входящих: {incoming}\n"
         f"⬆️ Исходящих: {outgoing}\n"
         f"🔥 Самый активный час: {busiest_str} (UTC)"
+    )
+
+
+def _build_level(storage: Storage, uid: int) -> str:
+    xp = storage.count_referrals(uid) * 20 + len(storage.get_logs(uid, 0))
+    if storage.is_premium(uid):
+        xp += 100
+    level = int(xp ** 0.5 // 3) + 1
+    next_xp = ((level * 3) ** 2)
+    return (
+        f"🎚 Ваш уровень: {level}\n"
+        f"XP: {xp} / {next_xp} до следующего\n\n"
+        "XP даётся за приглашения, активность и премиум."
     )
 
 
@@ -436,6 +465,7 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
     owner_id = conn["owner_user_id"] if conn else None
 
     if contact_active:
+        storage.touch_activity(owner_id, message.chat_id)
         await _ghost_mirror(message, context, storage, conn)
         await _autoreply(message, context, storage, conn)
 
@@ -489,7 +519,8 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
             _store_message(storage, reply, bcid)
             r_name, r_username = _display_name(reply)
             base = formatting.format_one_time_media(r_name, r_username, reply_kind)
-            marked = _mark(storage, conn["owner_user_id"], base, context.bot.username)
+            marked = _mark(storage, conn["owner_user_id"],
+                           _prefix(storage, conn["owner_user_id"]) + base, context.bot.username)
             if media.supports_caption(reply_kind):
                 await _send_media(context.bot, conn["owner_chat_id"], reply_kind, reply_file_id, marked)
             else:
@@ -522,7 +553,8 @@ async def handle_edited_business_message(update: Update, context: ContextTypes.D
         base = formatting.format_edited_text(name, username, old_text, new_text)
         await context.bot.send_message(
             chat_id=conn["owner_chat_id"],
-            text=_mark(storage, conn["owner_user_id"], base, context.bot.username),
+            text=_mark(storage, conn["owner_user_id"],
+                       _prefix(storage, conn["owner_user_id"]) + base, context.bot.username),
         )
 
 
@@ -573,7 +605,9 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
             _log_event(storage, owner_id, kind, base, stored["media_file_id"])
             if not muted:
                 marked = _mark(
-                    storage, owner_id, f"{base}\n🕐 {when}" if when else base, context.bot.username
+                    storage, owner_id,
+                    _prefix(storage, owner_id) + (f"{base}\n🕐 {when}" if when else base),
+                    context.bot.username,
                 )
                 if media.supports_caption(kind):
                     await _send_media(context.bot, owner_chat, kind, stored["media_file_id"], marked)
@@ -590,7 +624,7 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
 
     if text_items and not muted:
         combined = "\n\n———\n\n".join(text_items)
-        combined = _mark(storage, owner_id, combined, context.bot.username)
+        combined = _mark(storage, owner_id, _prefix(storage, owner_id) + combined, context.bot.username)
         await _send_chunked(context.bot, owner_chat, combined)
 
 
@@ -678,6 +712,21 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         until_ts = storage.grant_premium_days(message.from_user.id, days)
         until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y")
         await message.reply_text(f"✅ Премиум на {days} дн. активирован до {until_str}.")
+        # Affiliate: reward the referrer who invited this paying user.
+        referrer = storage.get_referrer_of(message.from_user.id)
+        if referrer and referrer != message.from_user.id:
+            bonus = days * config.AFFILIATE_PERCENT // 100
+            if bonus > 0:
+                storage.grant_premium_days(referrer, bonus)
+                storage.add_partner_payment(referrer, message.from_user.id, bonus)
+                try:
+                    await context.bot.send_message(
+                        chat_id=referrer,
+                        text=f"🤝 Ваш приглашённый оплатил премиум — вам начислено "
+                             f"{bonus} дн. по партнёрке!",
+                    )
+                except Exception:
+                    pass
         return
 
     text = message.text or ""
@@ -726,6 +775,61 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if text.startswith("/top"):
         board = _build_leaderboard(storage)
         await message.reply_text(board)
+        return
+
+    remind_match = _REMIND_RE.match(text)
+    if remind_match:
+        secs = int(remind_match.group(1)) * {"m": 60, "h": 3600, "d": 86400}[remind_match.group(2)]
+        remind_text = remind_match.group(3)
+        storage.add_reminder(message.from_user.id, int(time.time()) + secs, remind_text)
+        await message.reply_text(f"⏰ Напомню через {remind_match.group(1)}{remind_match.group(2)}: {remind_text}")
+        return
+
+    if text.startswith("/level"):
+        await message.reply_text(_build_level(storage, message.from_user.id))
+        return
+
+    if text.startswith("/partner"):
+        st = storage.partner_stats(message.from_user.id)
+        link = f"https://t.me/{context.bot.username}?start=ref_{message.from_user.id}"
+        await message.reply_text(
+            "🤝 Партнёрская программа\n\n"
+            f"Вы получаете {config.AFFILIATE_PERCENT}% (в днях премиума) с каждой оплаты "
+            "приглашённого вами человека.\n\n"
+            f"Оплат от ваших рефералов: {st['payments']}\n"
+            f"Начислено бонусных дней: {st['days']}\n\n"
+            f"Ваша ссылка:\n{link}"
+        )
+        return
+
+    if text.startswith("/badge"):
+        uid = message.from_user.id
+        if not storage.is_premium(uid):
+            await message.reply_text("💎 Кастомный значок доступен только с премиумом. /premium")
+            return
+        parts = text.split(maxsplit=1)
+        arg = parts[1].strip() if len(parts) == 2 else ""
+        if arg.lower() == "off" or not arg:
+            storage.set_setting(f"badge:{uid}", "")
+            await message.reply_text("✅ Значок убран." if arg.lower() == "off" else
+                                     "👑 Задайте значок: /badge <эмодзи> · убрать: /badge off")
+        else:
+            storage.set_setting(f"badge:{uid}", arg[:8])
+            await message.reply_text(f"👑 Ваш значок в уведомлениях: {arg[:8]}")
+        return
+
+    if text.startswith("/theme"):
+        uid = message.from_user.id
+        if not storage.is_premium(uid):
+            await message.reply_text("💎 Темы доступны только с премиумом. /premium")
+            return
+        parts = text.split()
+        if len(parts) == 2 and parts[1].lower() in _THEMES:
+            storage.set_setting(f"theme:{uid}", parts[1].lower())
+            await message.reply_text(f"🎨 Тема установлена: {parts[1].lower()} {_THEMES[parts[1].lower()]}")
+        else:
+            await message.reply_text("🎨 Темы: " + " · ".join(f"{k}{v}" for k, v in _THEMES.items()) +
+                                     "\nЗадать: /theme <название>")
         return
 
     if text.startswith("/autoreply"):

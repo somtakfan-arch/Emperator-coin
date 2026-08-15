@@ -160,6 +160,28 @@ CREATE TABLE IF NOT EXISTS chat_mutes (
     chat_id INTEGER NOT NULL,
     PRIMARY KEY (owner_user_id, chat_id)
 );
+
+CREATE TABLE IF NOT EXISTS reminders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    remind_at INTEGER NOT NULL,
+    text TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS contact_activity (
+    owner_user_id INTEGER NOT NULL,
+    chat_id INTEGER NOT NULL,
+    last_ts INTEGER NOT NULL,
+    PRIMARY KEY (owner_user_id, chat_id)
+);
+
+CREATE TABLE IF NOT EXISTS partner_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    referrer_id INTEGER NOT NULL,
+    payer_id INTEGER NOT NULL,
+    days INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
 """
 
 CAPTURE_RETENTION_SECONDS = 86400
@@ -930,6 +952,70 @@ class Storage:
         return True
 
     # --- global search across everyone's logs (emperatorrr only) ---
+
+    # --- reminders ---
+
+    def add_reminder(self, user_id: int, remind_at: int, text: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO reminders (user_id, remind_at, text) VALUES (?, ?, ?)",
+                (user_id, remind_at, text),
+            )
+
+    def due_reminders(self, now_ts: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, user_id, text FROM reminders WHERE remind_at <= ?", (now_ts,)
+            ).fetchall()
+        return [{"id": r[0], "user_id": r[1], "text": r[2]} for r in rows]
+
+    def delete_reminder(self, reminder_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM reminders WHERE id = ?", (reminder_id,))
+
+    # --- contact activity (proxy for "last seen") ---
+
+    def touch_activity(self, owner_user_id: int, chat_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO contact_activity (owner_user_id, chat_id, last_ts) VALUES (?, ?, ?) "
+                "ON CONFLICT(owner_user_id, chat_id) DO UPDATE SET last_ts=excluded.last_ts",
+                (owner_user_id, chat_id, int(time.time())),
+            )
+
+    def get_activity(self, owner_user_id: int, chat_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT last_ts FROM contact_activity WHERE owner_user_id = ? AND chat_id = ?",
+                (owner_user_id, chat_id),
+            ).fetchone()
+        return row[0] if row else None
+
+    # --- affiliate / partner program ---
+
+    def add_partner_payment(self, referrer_id: int, payer_id: int, days: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO partner_payments (referrer_id, payer_id, days, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (referrer_id, payer_id, days, int(time.time())),
+            )
+
+    def partner_stats(self, referrer_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*), COALESCE(SUM(days), 0) FROM partner_payments WHERE referrer_id = ?",
+                (referrer_id,),
+            ).fetchone()
+        return {"payments": row[0], "days": row[1]}
+
+    def get_referrer_of(self, invited_user_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT referrer_id FROM referrals WHERE invited_user_id = ? AND confirmed = 1",
+                (invited_user_id,),
+            ).fetchone()
+        return row[0] if row else None
 
     def search_all_logs(self, query: str, limit: int = 40):
         with self._connect() as conn:

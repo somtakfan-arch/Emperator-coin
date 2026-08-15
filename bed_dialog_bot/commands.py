@@ -25,6 +25,13 @@ _HELP_RE = re.compile(r"^\.help\s*$")
 _SELFDESTRUCT_RE = re.compile(r"^\.selfdestruct\s+(\d+)\s+(.+)$", re.DOTALL)
 _NOTE_RE = re.compile(r"^\.note(?:\s+(.*))?$", re.DOTALL)
 _STOPSPAM_RE = re.compile(r"^\.stopspam(?:\s+(off))?\s*$")
+_FAKE_RE = re.compile(r"^\.fake\s+(.+?)\s*\|\s*(.+)$", re.DOTALL)
+_TYPE_RE = re.compile(r"^\.type\s+(\d+)\s*$")
+_ANIMATE_RE = re.compile(r"^\.animate\s+(.+)$", re.DOTALL)
+_DICE_RE = re.compile(r"^\.(dice|slot|roll|dart|ball|foot)\s*$")
+_SEEN_RE = re.compile(r"^\.seen\s*$")
+
+_DICE_EMOJI = {"dice": "🎲", "slot": "🎰", "dart": "🎯", "ball": "🏀", "foot": "⚽"}
 
 HELP_TEXT = (
     "Команды (пишутся прямо в чат с собеседником):\n\n"
@@ -184,6 +191,80 @@ async def try_handle_owner_command(
         else:
             storage.set_note(message.from_user.id, chat_id, arg)
             await _edit_command_message(context, bcid, chat_id, message_id, "📝 Заметка сохранена.")
+        return True
+
+    fake_match = _FAKE_RE.match(text)
+    if fake_match:
+        import html
+        quote = html.escape(fake_match.group(1).strip())
+        reply = html.escape(fake_match.group(2).strip())
+        try:
+            await context.bot.edit_message_text(
+                chat_id=chat_id, message_id=message_id, business_connection_id=bcid,
+                text=f"<blockquote>{quote}</blockquote>\n{reply}", parse_mode="HTML",
+            )
+        except Exception:
+            logger.exception("fake failed")
+        return True
+
+    type_match = _TYPE_RE.match(text)
+    if type_match:
+        seconds = min(int(type_match.group(1)), 60)
+        await _edit_command_message(context, bcid, chat_id, message_id, "⌨️")
+        end = time.time() + seconds
+        while time.time() < end:
+            try:
+                await context.bot.send_chat_action(chat_id=chat_id, action="typing", business_connection_id=bcid)
+            except Exception:
+                break
+            await asyncio.sleep(4)
+        return True
+
+    animate_match = _ANIMATE_RE.match(text)
+    if animate_match:
+        full = animate_match.group(1)
+        shown = ""
+        for ch in full[:200]:
+            shown += ch
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id, message_id=message_id, business_connection_id=bcid, text=shown + "▌",
+                )
+            except Exception:
+                break
+            await asyncio.sleep(0.12)
+        await _edit_command_message(context, bcid, chat_id, message_id, full[:200])
+        return True
+
+    dice_match = _DICE_RE.match(text)
+    if dice_match:
+        emoji = _DICE_EMOJI.get(dice_match.group(1))
+        if dice_match.group(1) == "roll":
+            import random
+            await _edit_command_message(context, bcid, chat_id, message_id, f"🎲 Выпало: {random.randint(1, 100)}")
+        else:
+            await _edit_command_message(context, bcid, chat_id, message_id, "🎲")
+            try:
+                await context.bot.send_dice(chat_id=chat_id, emoji=emoji, business_connection_id=bcid)
+            except Exception:
+                logger.exception("dice failed")
+        return True
+
+    if _SEEN_RE.match(text):
+        last = storage.get_activity(message.from_user.id, chat_id)
+        if last:
+            ago = int(time.time() - last)
+            if ago < 60:
+                human = f"{ago} сек назад"
+            elif ago < 3600:
+                human = f"{ago // 60} мин назад"
+            elif ago < 86400:
+                human = f"{ago // 3600} ч назад"
+            else:
+                human = f"{ago // 86400} дн назад"
+            await _edit_command_message(context, bcid, chat_id, message_id, mark(f"👀 Последнее сообщение: {human}"))
+        else:
+            await _edit_command_message(context, bcid, chat_id, message_id, mark("👀 Активность пока не зафиксирована."))
         return True
 
     if _HELP_RE.match(text):
