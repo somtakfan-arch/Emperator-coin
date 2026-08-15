@@ -490,6 +490,10 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
         # still visibly works, just without real deletion.
         until_ts = storage.get_ban(bcid, message.chat_id)
         if until_ts and until_ts > time.time():
+            # Drop it from storage first so the deleted_business_messages update
+            # our own deletion triggers finds nothing and won't notify the owner
+            # that "the contact deleted a message" — the ban did.
+            storage.delete_message(bcid, message.chat_id, message.message_id)
             try:
                 await context.bot.do_api_request(
                     "deleteBusinessMessages",

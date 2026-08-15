@@ -110,6 +110,22 @@ HELP_TEXT = (
 )
 
 
+async def _spam_send_one(context, chat_id: int, bcid: str, text: str) -> bool:
+    """Send one spam message, waiting out flood limits. Returns True if sent.
+    Never raises — a failed send must not abort the whole .spam run."""
+    for _ in range(6):
+        try:
+            await context.bot.send_message(chat_id=chat_id, business_connection_id=bcid, text=text)
+            return True
+        except RetryAfter as e:
+            await asyncio.sleep(float(getattr(e, "retry_after", 1)) + 0.5)
+        except Exception:
+            logger.exception("spam send failed")
+            await asyncio.sleep(0.5)
+            return False
+    return False
+
+
 async def _edit_command_message(context: ContextTypes.DEFAULT_TYPE, business_connection_id: str, chat_id: int, message_id: int, text: str) -> None:
     # Bot API has no way to delete a business message, only edit it — this is
     # how the raw ".command" text typed into the real chat gets hidden.
@@ -229,15 +245,28 @@ async def try_handle_owner_command(
         spam_text = spam_match.group(2)
         # Only the first message carries the watermark.
         await _edit_command_message(context, bcid, chat_id, message_id, mark(spam_text))
-        interval = 0 if is_premium else SPAM_WINDOW_SECONDS / count
+        # Telegram flood-limits messages to a single chat, so a burst of 500
+        # WILL trigger RetryAfter. Previously the single unwrapped retry threw
+        # on the 2nd RetryAfter and aborted the whole run (~30 sent). Now every
+        # message is retried through the flood wait, and other errors are logged
+        # but never abort the run — so the full count actually goes out.
+        # A small floor keeps even "premium, no delay" from tripping the limit
+        # on the very first messages.
+        interval = 0.05 if is_premium else max(0.05, SPAM_WINDOW_SECONDS / count)
+        sent = 1  # the edited command message counts as the first
         for _ in range(count - 1):
-            if interval:
-                await asyncio.sleep(interval)
+            await asyncio.sleep(interval)
+            if await _spam_send_one(context, chat_id, bcid, spam_text):
+                sent += 1
+        if sent < count:
             try:
-                await context.bot.send_message(chat_id=chat_id, business_connection_id=bcid, text=spam_text)
-            except RetryAfter as e:
-                await asyncio.sleep(e.retry_after)
-                await context.bot.send_message(chat_id=chat_id, business_connection_id=bcid, text=spam_text)
+                await context.bot.send_message(
+                    chat_id=owner_chat_id,
+                    text=f"📣 Рассылка: отправлено {sent} из {count} "
+                         f"(Telegram ограничил скорость — часть не прошла).",
+                )
+            except Exception:
+                logger.exception("Failed to send spam summary")
         return True
 
     selfdestruct_match = _SELFDESTRUCT_RE.match(text)
