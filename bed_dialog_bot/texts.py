@@ -11,9 +11,8 @@ from .formatting import format_sender
 def build_intro_text(bot_username: str) -> str:
     # HTML-styled welcome mirroring NeverDialog: bold section headers, a boxed
     # <blockquote> feature list and a quoted "how to connect" block. The
-    # green/blue button colours come from the button *types* in
-    # build_intro_keyboard (copy_text = green, url = blue) — Bot API has no way
-    # to set arbitrary button colours, the client paints them automatically.
+    # green/blue button colours are set in build_intro_keyboard via the Bot
+    # API 9.4 `style` field.
     return (
         "<b>🚀 Добро пожаловать!</b>\n"
         "<i>Я слежу за диалогами и сохраняю то, что от вас пытаются "
@@ -69,16 +68,32 @@ def build_intro_text_en(bot_username: str) -> str:
 
 
 def build_intro_keyboard(bot_username: str) -> InlineKeyboardMarkup:
+    # Bot API 9.4 (Feb 2026) added a `style` field on inline buttons:
+    # "success" = green, "primary" = blue, "danger" = red (omitted = system
+    # gray). python-telegram-bot <22 doesn't model it yet, so we pass it
+    # straight to the API via api_kwargs — the same green/blue look as Never.
+    # Recent Telegram clients render the colour; older ones fall back to gray.
     return InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
                     "📄 Скопировать",
                     copy_text=CopyTextButton(f"@{bot_username}"),
+                    api_kwargs={"style": "success"},  # green
                 ),
-                InlineKeyboardButton("🔌 Подключить", url="tg://settings/edit"),
+                InlineKeyboardButton(
+                    "🔌 Подключить",
+                    url="tg://settings/edit",
+                    api_kwargs={"style": "primary"},  # blue
+                ),
             ],
-            [InlineKeyboardButton("🆘 Поддержка", callback_data="support_info")],
+            [
+                InlineKeyboardButton(
+                    "🆘 Поддержка",
+                    callback_data="support_info",
+                    api_kwargs={"style": "primary"},  # blue
+                )
+            ],
             [InlineKeyboardButton("❓ Вопрос по Telegram", callback_data="tg_help")],
         ]
     )
