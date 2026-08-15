@@ -82,10 +82,10 @@ def _humanize_ago(last_ts) -> str:
 
 
 def kawaii_style(text: str) -> str:
-    """Turn plain text into a soft 'kawaii' variant for .kawai mode."""
-    faces = ["(◕‿◕)", "(=^･ω･^=)", "♡", "(｡•̀ᴗ-)✧", "ヾ(＾∇＾)", "(づ｡◕‿‿◕｡)づ"]
-    body = text.replace("!", "~!").replace(".", "～ ")
-    return f"{body} {random.choice(faces)}"
+    """Format the owner's message as bold + italic (HTML) for .kawai mode —
+    nothing is added, only the styling."""
+    import html
+    return f"<b><i>{html.escape(text)}</i></b>"
 
 HELP_TEXT = (
     "Команды (пишутся прямо в чат с собеседником):\n\n"
@@ -99,7 +99,7 @@ HELP_TEXT = (
     ".info — инфо о собеседнике (в личку боту)\n"
     ".status — статистика чата (в личку боту)\n"
     ".afk — вкл/выкл автоответ «AFK»\n"
-    ".kawai — вкл/выкл аниме-стиль ваших сообщений\n"
+    ".kawai — вкл/выкл жирный курсив ваших сообщений\n"
     ".spek <текст> — текст, который трудно скопировать\n"
     ".troll — подколоть собеседника\n"
     ".love · .flip · .rps · .mon · .бурмалда — приколы и игры\n"

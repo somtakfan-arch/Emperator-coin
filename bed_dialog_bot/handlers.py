@@ -458,6 +458,7 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
                     message_id=message.message_id,
                     business_connection_id=bcid,
                     text=commands.kawaii_style(message.text),
+                    parse_mode="HTML",
                 )
             except Exception:
                 logger.exception("kawai restyle failed")
