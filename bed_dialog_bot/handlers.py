@@ -581,10 +581,18 @@ async def handle_edited_business_message(update: Update, context: ContextTypes.D
     name, username = _display_name(message)
     _store_message(storage, message, bcid)
 
+    conn = await _get_connection(storage, context.bot, bcid)
+    if not conn or storage.is_blacklisted(conn["owner_user_id"]):
+        return
+
+    # Never report the OWNER's own edits — this also covers the bot's own edits
+    # (.kawai/.animate/.spam/.fake/.clone/.selfdestruct), which are sent on the
+    # owner's behalf and would otherwise ping the owner as "edited message".
+    editor = message.from_user
+    if editor and (editor.id == conn["owner_user_id"] or editor.is_bot):
+        return
+
     if old and old_text is not None and new_text is not None and old_text != new_text:
-        conn = await _get_connection(storage, context.bot, bcid)
-        if not conn or storage.is_blacklisted(conn["owner_user_id"]):
-            return
         _capture(storage, conn["owner_user_id"], message, "edit", f"{old_text} → {new_text}")
         _log_event(storage, conn["owner_user_id"], "text",
                    formatting.format_edited_text(name, username, old_text, new_text))
