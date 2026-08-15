@@ -89,8 +89,58 @@ def _humanize_ago(last_ts) -> str:
 def kawaii_style(text: str) -> str:
     """Format the owner's message as bold + italic (HTML) for .kawai mode —
     nothing is added, only the styling."""
-    import html
     return f"<b><i>{html.escape(text)}</i></b>"
+
+
+# /style — configurable formatting applied to the owner's outgoing messages.
+STYLE_TAGS = {
+    "bold": ("<b>", "</b>"),
+    "italic": ("<i>", "</i>"),
+    "underline": ("<u>", "</u>"),
+    "strike": ("<s>", "</s>"),
+    "spoiler": ("<tg-spoiler>", "</tg-spoiler>"),
+    "mono": ("<code>", "</code>"),
+}
+
+# Human labels (for the /style prompt) and accepted aliases (RU + EN).
+STYLE_LABELS = {
+    "bold": "жирный",
+    "italic": "курсив",
+    "underline": "подчёркнутый",
+    "strike": "зачёркнутый",
+    "spoiler": "спойлер",
+    "mono": "моно",
+}
+_STYLE_ALIASES = {
+    "жирный": "bold", "жирн": "bold", "bold": "bold", "b": "bold",
+    "курсив": "italic", "курс": "italic", "italic": "italic", "i": "italic",
+    "подчёркнутый": "underline", "подчеркнутый": "underline", "подч": "underline",
+    "underline": "underline", "u": "underline",
+    "зачёркнутый": "strike", "зачеркнутый": "strike", "зач": "strike",
+    "strike": "strike", "strikethrough": "strike", "s": "strike",
+    "спойлер": "spoiler", "спойл": "spoiler", "spoiler": "spoiler",
+    "моно": "mono", "mono": "mono", "code": "mono", "код": "mono",
+}
+
+
+def parse_style_names(tokens):
+    """Resolve a list of user tokens to canonical style keys, order preserved."""
+    out = []
+    for t in tokens:
+        key = _STYLE_ALIASES.get(str(t).lower().strip())
+        if key and key not in out:
+            out.append(key)
+    return out
+
+
+def apply_styles(text: str, styles) -> str:
+    """Wrap HTML-escaped text in the given style tags (nested)."""
+    inner = html.escape(text)
+    for st in styles:
+        tags = STYLE_TAGS.get(st)
+        if tags:
+            inner = tags[0] + inner + tags[1]
+    return inner
 
 HELP_TEXT = (
     "Команды (пишутся прямо в чат с собеседником):\n\n"

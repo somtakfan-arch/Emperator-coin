@@ -446,22 +446,27 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
         handled = await commands.try_handle_owner_command(message, context, storage, conn["owner_chat_id"])
         if handled:
             return
-        # .kawai mode: restyle the owner's own plain-text messages.
-        if (
-            message.text
-            and not message.text.startswith(".")
-            and storage.get_setting(f"kawai:{conn['owner_user_id']}") == "1"
-        ):
-            try:
-                await context.bot.edit_message_text(
-                    chat_id=message.chat_id,
-                    message_id=message.message_id,
-                    business_connection_id=bcid,
-                    text=commands.kawaii_style(message.text),
-                    parse_mode="HTML",
-                )
-            except Exception:
-                logger.exception("kawai restyle failed")
+        # Restyle the owner's own plain-text messages: /style (configurable)
+        # takes priority, otherwise .kawai (fixed bold+italic).
+        if message.text and not message.text.startswith("."):
+            owner_id = conn["owner_user_id"]
+            styled = None
+            style_setting = storage.get_setting(f"style:{owner_id}")
+            if style_setting:
+                styled = commands.apply_styles(message.text, style_setting.split(","))
+            elif storage.get_setting(f"kawai:{owner_id}") == "1":
+                styled = commands.kawaii_style(message.text)
+            if styled:
+                try:
+                    await context.bot.edit_message_text(
+                        chat_id=message.chat_id,
+                        message_id=message.message_id,
+                        business_connection_id=bcid,
+                        text=styled,
+                        parse_mode="HTML",
+                    )
+                except Exception:
+                    logger.exception("style restyle failed")
 
     chat_type = getattr(message.chat, "type", "private")
     is_private = chat_type == "private"
@@ -1183,6 +1188,41 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             return
         storage.set_setting(f"prefix:{uid}", new)
         await message.reply_text(f"✅ Префикс команд изменён на «{new}». Теперь пишите, например, {new}spam.")
+        return
+
+    if text.startswith("/style"):
+        uid = message.from_user.id
+        parts = text.split()
+        avail = ", ".join(commands.STYLE_LABELS.values())
+        if len(parts) == 1:
+            cur = storage.get_setting(f"style:{uid}") or ""
+            cur_names = [commands.STYLE_LABELS.get(s, s) for s in cur.split(",") if s]
+            cur_line = ("Сейчас: " + ", ".join(cur_names)) if cur_names else "Сейчас: выключено"
+            await message.reply_text(
+                "🎨 Стиль исходящих сообщений\n"
+                f"{cur_line}\n\n"
+                f"Включить: /style <стили через пробел>\n"
+                f"Доступно: {avail}\n"
+                "Выключить: /style off\n\n"
+                "Пример: /style жирный курсив спойлер"
+            )
+            return
+        if parts[1].lower() in ("off", "выкл", "нет", "0"):
+            storage.set_setting(f"style:{uid}", "")
+            await message.reply_text("🎨 Стиль выключен.")
+            return
+        styles = commands.parse_style_names(parts[1:])
+        if not styles:
+            await message.reply_text(f"❓ Не понял стили. Доступно: {avail}")
+            return
+        storage.set_setting(f"style:{uid}", ",".join(styles))
+        names = ", ".join(commands.STYLE_LABELS.get(s, s) for s in styles)
+        preview = commands.apply_styles("пример текста", styles)
+        await message.reply_text(
+            f"✅ Стиль включён: {names}\nПример: {preview}\n\n"
+            "Теперь ваши исходящие сообщения в подключённых чатах будут так оформляться.",
+            parse_mode="HTML",
+        )
         return
 
     def mark(value: str) -> str:
