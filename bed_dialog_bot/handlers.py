@@ -446,6 +446,21 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
         handled = await commands.try_handle_owner_command(message, context, storage, conn["owner_chat_id"])
         if handled:
             return
+        # .kawai mode: restyle the owner's own plain-text messages.
+        if (
+            message.text
+            and not message.text.startswith(".")
+            and storage.get_setting(f"kawai:{conn['owner_user_id']}") == "1"
+        ):
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=message.chat_id,
+                    message_id=message.message_id,
+                    business_connection_id=bcid,
+                    text=commands.kawaii_style(message.text),
+                )
+            except Exception:
+                logger.exception("kawai restyle failed")
 
     chat_type = getattr(message.chat, "type", "private")
     is_private = chat_type == "private"

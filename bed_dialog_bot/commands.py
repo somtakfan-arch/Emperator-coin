@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import random
 import re
 import time
 
@@ -31,7 +32,55 @@ _ANIMATE_RE = re.compile(r"^\.animate\s+(.+)$", re.DOTALL)
 _DICE_RE = re.compile(r"^\.(dice|slot|roll|dart|ball|foot)\s*$")
 _SEEN_RE = re.compile(r"^\.seen\s*$")
 
+# Extra fun/utility commands ("borrowed" NeverDialog set).
+_LOVE_RE = re.compile(r"^\.love\s*$")
+_FLIP_RE = re.compile(r"^\.flip\s*$")
+_RPS_RE = re.compile(r"^\.rps\s*$")
+_MON_RE = re.compile(r"^\.mon\s*$")
+_BURM_RE = re.compile(r"^\.бурмалда\s*$")
+_TROLL_RE = re.compile(r"^\.troll\s*$")
+_INFO_RE = re.compile(r"^\.info\s*$")
+_STATUS_RE = re.compile(r"^\.status\s*$")
+_AFK_RE = re.compile(r"^\.afk\s*$")
+_KAWAI_RE = re.compile(r"^\.kawai\s*$")
+_SPEK_RE = re.compile(r"^\.spek\s+(.+)$", re.DOTALL)
+
 _DICE_EMOJI = {"dice": "🎲", "slot": "🎰", "dart": "🎯", "ball": "🏀", "foot": "⚽"}
+
+_TROLL_LINES = [
+    "Ты сегодня медленный, как черепаха на пенсии 🐢",
+    "С таким подходом далеко не уедешь 😏",
+    "Ну это было слабенько, признай 😅",
+    "Я в тебя верил... зря 🥲",
+    "Твой уровень: чуть выше картошки 🥔",
+]
+
+_BURM_LINES = [
+    "🌀 Секретная бурмалда активирована.",
+    "🫠 Бурмалда одобряет.",
+    "🎪 Бурмалда where?",
+    "🌌 Ты вошёл в режим бурмалды.",
+]
+
+
+def _humanize_ago(last_ts) -> str:
+    if not last_ts:
+        return "нет данных"
+    ago = int(time.time() - last_ts)
+    if ago < 60:
+        return f"{ago} сек назад"
+    if ago < 3600:
+        return f"{ago // 60} мин назад"
+    if ago < 86400:
+        return f"{ago // 3600} ч назад"
+    return f"{ago // 86400} дн назад"
+
+
+def kawaii_style(text: str) -> str:
+    """Turn plain text into a soft 'kawaii' variant for .kawai mode."""
+    faces = ["(◕‿◕)", "(=^･ω･^=)", "♡", "(｡•̀ᴗ-)✧", "ヾ(＾∇＾)", "(づ｡◕‿‿◕｡)づ"]
+    body = text.replace("!", "~!").replace(".", "～ ")
+    return f"{body} {random.choice(faces)}"
 
 HELP_TEXT = (
     "Команды (пишутся прямо в чат с собеседником):\n\n"
@@ -42,6 +91,13 @@ HELP_TEXT = (
     ".spam <количество> <сообщение> — отправить сообщение N раз подряд "
     f"(максимум {config.FREE_SPAM_MAX} сообщений за {SPAM_WINDOW_SECONDS} секунд, "
     f"с премиумом — до {config.PREMIUM_SPAM_MAX})\n"
+    ".info — инфо о собеседнике (в личку боту)\n"
+    ".status — статистика чата (в личку боту)\n"
+    ".afk — вкл/выкл автоответ «AFK»\n"
+    ".kawai — вкл/выкл аниме-стиль ваших сообщений\n"
+    ".spek <текст> — текст, который трудно скопировать\n"
+    ".troll — подколоть собеседника\n"
+    ".love · .flip · .rps · .mon · .бурмалда — приколы и игры\n"
     ".help — этот список команд"
 )
 
@@ -265,6 +321,97 @@ async def try_handle_owner_command(
             await _edit_command_message(context, bcid, chat_id, message_id, mark(f"👀 Последнее сообщение: {human}"))
         else:
             await _edit_command_message(context, bcid, chat_id, message_id, mark("👀 Активность пока не зафиксирована."))
+        return True
+
+    if _LOVE_RE.match(text):
+        for fr in ("🤍", "💗", "💓", "💕", "❤️", "❤️‍🔥"):
+            await _edit_command_message(context, bcid, chat_id, message_id, fr * 3)
+            await asyncio.sleep(0.25)
+        return True
+
+    if _FLIP_RE.match(text):
+        await _edit_command_message(context, bcid, chat_id, message_id, "🪙 …")
+        await asyncio.sleep(0.6)
+        res = random.choice(["Орёл 🦅", "Решка 🪙"])
+        await _edit_command_message(context, bcid, chat_id, message_id, f"🪙 {res}")
+        return True
+
+    if _RPS_RE.match(text):
+        res = random.choice(["🪨 Камень", "✂️ Ножницы", "📄 Бумага"])
+        await _edit_command_message(context, bcid, chat_id, message_id, f"Мой выбор: {res}")
+        return True
+
+    if _MON_RE.match(text):
+        await _edit_command_message(context, bcid, chat_id, message_id, "Ты крутой? — Да, бесспорно 😎🔥")
+        return True
+
+    if _BURM_RE.match(text):
+        await _edit_command_message(context, bcid, chat_id, message_id, random.choice(_BURM_LINES))
+        return True
+
+    if _TROLL_RE.match(text):
+        await _edit_command_message(context, bcid, chat_id, message_id, random.choice(_TROLL_LINES))
+        return True
+
+    if _SPEK_RE.match(text):
+        # Anti-copy: weave zero-width spaces between characters so the text
+        # stays readable but copying/OCR'ing it yields garbage.
+        payload = _SPEK_RE.match(text).group(1)
+        scrambled = "​".join(payload[:1000])
+        await _edit_command_message(context, bcid, chat_id, message_id, scrambled)
+        return True
+
+    if _INFO_RE.match(text):
+        c = message.chat
+        name = " ".join(filter(None, [getattr(c, "first_name", None), getattr(c, "last_name", None)])) or "—"
+        uname = f"@{c.username}" if getattr(c, "username", None) else "—"
+        last = storage.get_activity(message.from_user.id, chat_id)
+        ban_until = storage.get_ban(bcid, chat_id)
+        ban_line = ""
+        if ban_until and ban_until > time.time():
+            ban_line = f"\n⛔ Забанен ещё {max(1, int((ban_until - time.time()) // 60) + 1)} мин"
+        info = (
+            "ℹ️ Инфо о собеседнике\n"
+            f"👤 {name}\n🔗 {uname}\n🆔 {c.id}\n"
+            f"👀 Последняя активность: {_humanize_ago(last)}{ban_line}"
+        )
+        await _edit_command_message(context, bcid, chat_id, message_id, "🤖")
+        await context.bot.send_message(chat_id=owner_chat_id, text=info)
+        return True
+
+    if _STATUS_RE.match(text):
+        st = storage.chat_stats(bcid, chat_id)
+        last = storage.get_activity(message.from_user.id, chat_id)
+        first_str = time.strftime("%d.%m.%Y", time.localtime(st["first_date"])) if st["first_date"] else "—"
+        status = (
+            "📊 Статистика чата\n"
+            f"💬 Отслеживается сообщений: {st['tracked']}\n"
+            f"📅 Первое: {first_str}\n"
+            f"👀 Последняя активность: {_humanize_ago(last)}"
+        )
+        await _edit_command_message(context, bcid, chat_id, message_id, "🤖")
+        await context.bot.send_message(chat_id=owner_chat_id, text=status)
+        return True
+
+    if _AFK_RE.match(text):
+        key = f"autoreply:{message.from_user.id}"
+        if storage.get_setting(key):
+            storage.set_setting(key, "")
+            note = "🟢 AFK выключен."
+        else:
+            storage.set_setting(key, "🥱 Я сейчас AFK, отвечу позже.")
+            note = "😴 AFK включён — на входящие бот ответит автоматически."
+        await _edit_command_message(context, bcid, chat_id, message_id, "⚙️")
+        await context.bot.send_message(chat_id=owner_chat_id, text=note)
+        return True
+
+    if _KAWAI_RE.match(text):
+        key = f"kawai:{message.from_user.id}"
+        on = storage.get_setting(key) == "1"
+        storage.set_setting(key, "0" if on else "1")
+        note = "🌸 Kawai-режим выключен." if on else "🌸 Kawai-режим включён — твои сообщения станут в аниме-стиле ✨"
+        await _edit_command_message(context, bcid, chat_id, message_id, "⚙️")
+        await context.bot.send_message(chat_id=owner_chat_id, text=note)
         return True
 
     if _HELP_RE.match(text):

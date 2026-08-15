@@ -991,6 +991,17 @@ class Storage:
             ).fetchone()
         return row[0] if row else None
 
+    def chat_stats(self, business_connection_id: str, chat_id: int):
+        """Rough per-chat stats for .status / .info (currently tracked rows;
+        deleted messages are removed from the table after being reported)."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*), MIN(date), MAX(date) FROM messages "
+                "WHERE business_connection_id = ? AND chat_id = ?",
+                (business_connection_id, chat_id),
+            ).fetchone()
+        return {"tracked": row[0] or 0, "first_date": row[1], "last_date": row[2]}
+
     # --- affiliate / partner program ---
 
     def add_partner_payment(self, referrer_id: int, payer_id: int, days: int) -> None:
