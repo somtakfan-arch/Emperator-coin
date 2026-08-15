@@ -226,6 +226,15 @@ class Storage:
             ).fetchall()
         return {r[0] for r in rows}
 
+    def get_bcid_for_owner(self, owner_user_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT business_connection_id FROM connections "
+                "WHERE owner_user_id = ? AND is_enabled = 1 ORDER BY updated_at DESC LIMIT 1",
+                (owner_user_id,),
+            ).fetchone()
+        return row[0] if row else None
+
     def get_connection(self, business_connection_id: str):
         with self._connect() as conn:
             row = conn.execute(
