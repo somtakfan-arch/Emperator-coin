@@ -424,6 +424,7 @@ async def handle_business_connection(update: Update, context: ContextTypes.DEFAU
             await context.bot.send_message(
                 chat_id=bc.user_chat_id,
                 text=text,
+                parse_mode="HTML",
                 reply_markup=texts.build_intro_keyboard(context.bot.username),
             )
         except Exception:
@@ -753,7 +754,9 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             else texts.build_intro_text(context.bot.username)
         )
         await message.reply_text(
-            intro, reply_markup=texts.build_intro_keyboard(context.bot.username)
+            intro,
+            parse_mode="HTML",
+            reply_markup=texts.build_intro_keyboard(context.bot.username),
         )
         return
 

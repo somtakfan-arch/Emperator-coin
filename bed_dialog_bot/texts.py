@@ -9,47 +9,62 @@ from .formatting import format_sender
 
 
 def build_intro_text(bot_username: str) -> str:
+    # HTML-styled welcome mirroring NeverDialog: bold section headers, a boxed
+    # <blockquote> feature list and a quoted "how to connect" block. The
+    # green/blue button colours come from the button *types* in
+    # build_intro_keyboard (copy_text = green, url = blue) — Bot API has no way
+    # to set arbitrary button colours, the client paints them automatically.
     return (
-        "🚀 Добро пожаловать!\n\n"
-        "ℹ️ Напишите /help — и увидите все команды "
-        "(а внутри диалога с собеседником — .help).\n\n"
-        "😇 Базовые функции бота бесплатны и готовы к работе.\n\n"
-        "🔥 Возможности бота\n"
+        "<b>🚀 Добро пожаловать!</b>\n"
+        "<i>Я слежу за диалогами и сохраняю то, что от вас пытаются "
+        "скрыть.</i>\n\n"
+        "😇 Базовые функции <b>бесплатны</b> и уже готовы к работе.\n"
+        "ℹ️ Все команды — /help (а внутри диалога с собеседником — <code>.help</code>).\n\n"
+        "<b>🔥 Возможности бота</b>\n"
+        "<blockquote>"
         "🗑 Удалённые сообщения, фото, видео, голосовые, кружки, GIF, стикеры\n"
         "✏️ Отслеживание изменённых сообщений\n"
-        "📸 Сохранение одноразовых медиа (если на них ответили)\n"
-        "🔕 /pause и /resume — пауза уведомлений без отключения бота\n"
-        "🆕 Команды .ban / .unban / .spam / .help прямо в чате\n\n"
-        f"💎 /premium — {config.PREMIUM_STARS_PRICE}⭐/мес: без водяных знаков в "
-        f"уведомлениях и лимит .spam до {config.PREMIUM_SPAM_MAX} (без премиума — "
-        f"до {config.FREE_SPAM_MAX})\n\n"
-        "❓ Как подключить бота\n"
-        "1. Нажмите «📄 Скопировать» — username бота скопируется в буфер.\n"
-        "2. Нажмите «🔌 Подключить».\n"
-        "3. Выберите 🤖 Автоматизация чатов.\n"
-        "4. Вставьте скопированный username в поле бота и включите право "
-        "«Просматривать сообщения».\n\n"
-        "Что-то не работает — жмите «🆘 Поддержка» ниже."
+        "📸 Сохранение одноразовых медиа\n"
+        "👁 <b>NEW</b> — /ghost, невидимое чтение без «прочитано»\n"
+        "🔕 /pause и /resume — пауза уведомлений\n"
+        "⚡️ Команды <code>.ban</code> · <code>.spam</code> · <code>.fake</code> · игры прямо в чате"
+        "</blockquote>\n"
+        f"💎 <b>/premium</b> — {config.PREMIUM_STARS_PRICE}⭐/мес: без водяных знаков "
+        f"и лимит .spam до {config.PREMIUM_SPAM_MAX} "
+        f"(без премиума — до {config.FREE_SPAM_MAX}).\n\n"
+        "<b>❓ Как подключить бота</b>\n"
+        "<blockquote>"
+        "1️⃣ Нажмите «📄 Скопировать» — username бота попадёт в буфер\n"
+        "2️⃣ Нажмите «🔌 Подключить»\n"
+        "3️⃣ Откройте 🤖 <b>Автоматизация чатов</b>\n"
+        "4️⃣ Вставьте username и включите право «Просматривать сообщения»"
+        "</blockquote>\n"
+        "Что-то не работает — жмите «🆘 Поддержка» ниже 👇"
     )
 
 
 def build_intro_text_en(bot_username: str) -> str:
     return (
-        "🚀 Welcome!\n\n"
-        "ℹ️ Type /help to see all commands "
-        "(and .help inside a dialog with a contact).\n\n"
-        "😇 The core features are free and ready to go.\n\n"
-        "🔥 Features\n"
+        "<b>🚀 Welcome!</b>\n"
+        "<i>I watch your dialogs and save what people try to hide.</i>\n\n"
+        "😇 The core features are <b>free</b> and ready to go.\n"
+        "ℹ️ Type /help for all commands (and <code>.help</code> inside a dialog).\n\n"
+        "<b>🔥 Features</b>\n"
+        "<blockquote>"
         "🗑 Deleted messages, photos, videos, voice, video notes, GIFs, stickers\n"
         "✏️ Tracking of edited messages\n"
-        "📸 Saving one-time media (if you reply to it)\n"
-        "👁 /ghost — read without a read receipt\n\n"
-        f"💎 /premium — no watermark and higher limits\n\n"
-        "❓ How to connect\n"
-        "1. Tap «📄 Copy» — the bot's username is copied.\n"
-        "2. Tap «🔌 Connect».\n"
-        "3. Choose 🤖 Chatbots (Business).\n"
-        "4. Paste the username and enable «Read messages»."
+        "📸 Saving one-time media\n"
+        "👁 <b>NEW</b> — /ghost, read without a read receipt\n"
+        "🔕 /pause and /resume — pause notifications"
+        "</blockquote>\n"
+        "💎 <b>/premium</b> — no watermark and higher limits\n\n"
+        "<b>❓ How to connect</b>\n"
+        "<blockquote>"
+        "1️⃣ Tap «📄 Copy» — the bot's username is copied\n"
+        "2️⃣ Tap «🔌 Connect»\n"
+        "3️⃣ Open 🤖 <b>Chatbots (Business)</b>\n"
+        "4️⃣ Paste the username and enable «Read messages»"
+        "</blockquote>"
     )
 
 
