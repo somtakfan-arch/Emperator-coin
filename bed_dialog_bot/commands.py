@@ -22,7 +22,7 @@ SPAM_ABUSE_WINDOW = 600
 _BAN_RE = re.compile(r"^\.ban\s+(\d+)\s*$")
 _UNBAN_RE = re.compile(r"^\.unban\s*$")
 _SPAM_RE = re.compile(r"^\.spam\s+(\d+)\s+(.+)$", re.DOTALL)
-_HELP_RE = re.compile(r"^\.help\s*$")
+_HELP_RE = re.compile(r"^\.help(?:\s+(\S+))?\s*$")
 _SELFDESTRUCT_RE = re.compile(r"^\.selfdestruct\s+(\d+)\s+(.+)$", re.DOTALL)
 _NOTE_RE = re.compile(r"^\.note(?:\s+(.*))?$", re.DOTALL)
 _STOPSPAM_RE = re.compile(r"^\.stopspam(?:\s+(off))?\s*$")
@@ -44,6 +44,11 @@ _STATUS_RE = re.compile(r"^\.status\s*$")
 _AFK_RE = re.compile(r"^\.afk\s*$")
 _KAWAI_RE = re.compile(r"^\.kawai\s*$")
 _SPEK_RE = re.compile(r"^\.spek\s+(.+)$", re.DOTALL)
+_PREFIX_RE = re.compile(r"^\.prefix\s+(\S+)\s*$")
+_CLONE_RE = re.compile(r"^\.clone\s*$")
+_UNCLONE_RE = re.compile(r"^\.unclone\s*$")
+
+_ALLOWED_PREFIXES = [".", ":", "/", "!", ",", "#", "%", "&", "~"]
 
 _DICE_EMOJI = {"dice": "🎲", "slot": "🎰", "dart": "🎯", "ball": "🏀", "foot": "⚽"}
 
@@ -98,6 +103,9 @@ HELP_TEXT = (
     ".spek <текст> — текст, который трудно скопировать\n"
     ".troll — подколоть собеседника\n"
     ".love · .flip · .rps · .mon · .бурмалда — приколы и игры\n"
+    ".clone — клон профиля собеседника (.unclone — вернуть свой)\n"
+    ".prefix <символ> — сменить префикс команд (напр. :spam)\n"
+    ".help <команда> — подробно об одной команде\n"
     ".help — этот список команд"
 )
 
@@ -122,8 +130,19 @@ async def try_handle_owner_command(
     storage: Storage,
     owner_chat_id: int,
 ) -> bool:
-    text = message.text
-    if not text or not text.startswith("."):
+    raw = message.text
+    if not raw:
+        return False
+
+    # Configurable command prefix: the owner may pick e.g. ":" or "/" instead
+    # of ".". We normalize whatever they use back to "." so the command
+    # regexes below stay simple. "." is always accepted as a fallback.
+    prefix = storage.get_setting(f"prefix:{message.from_user.id}") or "."
+    if prefix != "." and raw.startswith(prefix):
+        text = "." + raw[len(prefix):]
+    elif raw.startswith("."):
+        text = raw
+    else:
         return False
 
     bcid = message.business_connection_id
@@ -137,6 +156,23 @@ async def try_handle_owner_command(
 
     def mark(value: str) -> str:
         return formatting.with_watermark(value, bot_username, is_premium, custom_wm)
+
+    prefix_match = _PREFIX_RE.match(text)
+    if prefix_match:
+        new_prefix = prefix_match.group(1)
+        if new_prefix not in _ALLOWED_PREFIXES:
+            await _edit_command_message(
+                context, bcid, chat_id, message_id,
+                "⚙️ Разрешённые префиксы: " + " ".join(_ALLOWED_PREFIXES),
+            )
+            return True
+        storage.set_setting(f"prefix:{message.from_user.id}", new_prefix)
+        await _edit_command_message(context, bcid, chat_id, message_id, "⚙️")
+        await context.bot.send_message(
+            chat_id=owner_chat_id,
+            text=f"✅ Префикс команд изменён на «{new_prefix}». Теперь пишите, например, {new_prefix}spam.",
+        )
+        return True
 
     ban_match = _BAN_RE.match(text)
     if ban_match:
@@ -414,9 +450,87 @@ async def try_handle_owner_command(
         await context.bot.send_message(chat_id=owner_chat_id, text=note)
         return True
 
-    if _HELP_RE.match(text):
+    if _CLONE_RE.match(text):
+        import json
+        c = message.chat
+        first = getattr(c, "first_name", None) or "User"
+        last = getattr(c, "last_name", None) or ""
+        contact_bio = None
+        try:
+            full = await context.bot.get_chat(chat_id)
+            contact_bio = getattr(full, "bio", None)
+        except Exception:
+            logger.exception("clone: get contact chat failed")
+        # Back up the owner's own profile once, so .unclone can restore it.
+        if not storage.get_setting(f"clone_backup:{message.from_user.id}"):
+            try:
+                me = await context.bot.get_chat(owner_chat_id)
+                storage.set_setting(f"clone_backup:{message.from_user.id}", json.dumps({
+                    "first": getattr(me, "first_name", None),
+                    "last": getattr(me, "last_name", None),
+                    "bio": getattr(me, "bio", None),
+                }))
+            except Exception:
+                logger.exception("clone: backup owner profile failed")
+        ok = True
+        try:
+            await context.bot.do_api_request("setBusinessAccountName", api_kwargs={
+                "business_connection_id": bcid, "first_name": first, "last_name": last})
+        except Exception:
+            logger.exception("setBusinessAccountName failed")
+            ok = False
+        if contact_bio is not None:
+            try:
+                await context.bot.do_api_request("setBusinessAccountBio", api_kwargs={
+                    "business_connection_id": bcid, "bio": contact_bio})
+            except Exception:
+                logger.exception("setBusinessAccountBio failed")
+        await _edit_command_message(context, bcid, chat_id, message_id, "⚙️")
+        await context.bot.send_message(
+            chat_id=owner_chat_id,
+            text=("🧬 Профиль склонирован под собеседника. Вернуть свой — .unclone" if ok
+                  else "⚠️ Не удалось сменить профиль. Проверьте, что при подключении боту выдано право «Профиль» (изменение имени)."),
+        )
+        return True
+
+    if _UNCLONE_RE.match(text):
+        import json
+        backup = storage.get_setting(f"clone_backup:{message.from_user.id}")
+        await _edit_command_message(context, bcid, chat_id, message_id, "⚙️")
+        if not backup:
+            await context.bot.send_message(chat_id=owner_chat_id, text="Нет сохранённого профиля для восстановления.")
+            return True
+        data = json.loads(backup)
+        try:
+            await context.bot.do_api_request("setBusinessAccountName", api_kwargs={
+                "business_connection_id": bcid,
+                "first_name": data.get("first") or "User",
+                "last_name": data.get("last") or ""})
+            if data.get("bio") is not None:
+                await context.bot.do_api_request("setBusinessAccountBio", api_kwargs={
+                    "business_connection_id": bcid, "bio": data.get("bio") or ""})
+        except Exception:
+            logger.exception("unclone failed")
+        storage.set_setting(f"clone_backup:{message.from_user.id}", "")
+        await context.bot.send_message(chat_id=owner_chat_id, text="↩️ Ваш профиль восстановлен.")
+        return True
+
+    help_match = _HELP_RE.match(text)
+    if help_match:
+        arg = help_match.group(1)
         await _edit_command_message(context, bcid, chat_id, message_id, mark("🤖"))
-        await context.bot.send_message(chat_id=owner_chat_id, text=mark(HELP_TEXT))
+        if arg:
+            from . import texts  # lazy: texts imports commands at module load
+            detail = texts.find_help(arg)
+            if detail:
+                await context.bot.send_message(chat_id=owner_chat_id, text=detail, parse_mode="HTML")
+            else:
+                await context.bot.send_message(
+                    chat_id=owner_chat_id,
+                    text=f"❓ Команда «{arg}» не найдена. Полный список — {prefix}help",
+                )
+        else:
+            await context.bot.send_message(chat_id=owner_chat_id, text=mark(HELP_TEXT))
         return True
 
     return False

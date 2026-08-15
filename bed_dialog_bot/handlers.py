@@ -17,7 +17,7 @@ from telegram import (
 )
 from telegram.ext import ContextTypes
 
-from . import commands, config, formatting, media, texts
+from . import commands, config, crypto, formatting, media, texts
 from .storage import Storage
 
 _GIVE_PREMIUM_RE = re.compile(r"^/give\s+premium\s+(\d+)\s+(\d+)\s*$")
@@ -1134,6 +1134,17 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     if text.startswith("/help"):
+        parts = text.split(maxsplit=1)
+        if len(parts) == 2:
+            detail = texts.find_help(parts[1])
+            if detail:
+                await message.reply_text(
+                    detail, parse_mode="HTML",
+                    reply_markup=texts.build_help_detail_keyboard(),
+                )
+            else:
+                await message.reply_text(f"❓ Команда «{parts[1]}» не найдена. Список — /help")
+            return
         await message.reply_text(
             texts.build_help_menu_text(),
             parse_mode="HTML",
@@ -1141,6 +1152,25 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         )
         if message.from_user and message.from_user.id in config.ADMIN_USER_IDS:
             await message.reply_text(texts.build_admin_help_text())
+        return
+
+    if text.startswith("/prefix"):
+        uid = message.from_user.id
+        parts = text.split(maxsplit=1)
+        if len(parts) < 2:
+            cur = storage.get_setting(f"prefix:{uid}") or "."
+            await message.reply_text(
+                f"⚙️ Текущий префикс команд: «{cur}»\n"
+                f"Сменить: /prefix <символ>\n"
+                f"Доступно: {' '.join(commands._ALLOWED_PREFIXES)}"
+            )
+            return
+        new = parts[1].strip()
+        if new not in commands._ALLOWED_PREFIXES:
+            await message.reply_text("⚙️ Разрешённые префиксы: " + " ".join(commands._ALLOWED_PREFIXES))
+            return
+        storage.set_setting(f"prefix:{uid}", new)
+        await message.reply_text(f"✅ Префикс команд изменён на «{new}». Теперь пишите, например, {new}spam.")
         return
 
     def mark(value: str) -> str:
@@ -1318,13 +1348,23 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if text.startswith("/premium"):
         rows = []
         for idx, (label, stars, days) in enumerate(config.PREMIUM_PACKAGES):
-            rows.append([InlineKeyboardButton(f"{label} — {stars}⭐", callback_data=f"buy:{idx}")])
+            row = [InlineKeyboardButton(f"{label} — {stars}⭐", callback_data=f"buy:{idx}")]
+            if crypto.is_enabled() and idx < len(config.CRYPTO_PRICES):
+                price = config.CRYPTO_PRICES[idx]
+                row.append(InlineKeyboardButton(
+                    f"💳 {price} {config.CRYPTO_PAY_ASSET}", callback_data=f"crypto:{idx}"))
+            rows.append(row)
+        pay_line = (
+            "\nОплата: ⭐ Telegram Stars или 💳 крипта (@CryptoBot)\n"
+            if crypto.is_enabled() else ""
+        )
         await message.reply_text(
             "💎 Премиум\n\n"
             "• без водяных знаков (или свой брендинг)\n"
             f"• .spam до {config.PREMIUM_SPAM_MAX} без задержек\n"
             "• .selfdestruct, .note, /find, /stats\n"
-            "• приоритет в поддержке\n\n"
+            "• приоритет в поддержке\n"
+            f"{pay_line}\n"
             "Выберите пакет:",
             reply_markup=InlineKeyboardMarkup(rows),
         )
@@ -1727,6 +1767,36 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             currency="XTR",
             prices=[LabeledPrice(f"Premium {label}", stars)],
             provider_token="",
+        )
+    elif query.data.startswith("crypto:"):
+        await query.answer()
+        storage: Storage = context.bot_data["storage"]
+        if not crypto.is_enabled():
+            await context.bot.send_message(query.message.chat_id, "💳 Крипто-оплата пока не настроена.")
+            return
+        try:
+            idx = int(query.data.split(":", 1)[1])
+            label, _stars, days = config.PREMIUM_PACKAGES[idx]
+            amount = config.CRYPTO_PRICES[idx]
+        except (ValueError, IndexError):
+            return
+        invoice = await crypto.create_invoice(
+            amount,
+            description=f"Bed Dialog Premium ({label}) — {days} дн.",
+            payload=f"premium:{query.from_user.id}:{days}",
+        )
+        if not invoice:
+            await context.bot.send_message(query.message.chat_id, "⚠️ Не удалось создать счёт, попробуйте позже.")
+            return
+        storage.add_crypto_invoice(int(invoice["invoice_id"]), query.from_user.id, days)
+        pay_url = invoice.get("bot_invoice_url") or invoice.get("pay_url")
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=(f"💳 Оплата {amount} {config.CRYPTO_PAY_ASSET} через @CryptoBot.\n"
+                  "Нажмите кнопку, оплатите — премиум активируется автоматически в течение минуты."),
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("💳 Оплатить", url=pay_url)]]
+            ),
         )
     else:
         await query.answer()

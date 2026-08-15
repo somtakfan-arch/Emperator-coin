@@ -295,7 +295,8 @@ HELP_COMMANDS = [
     (
         "premium", "💎 /premium",
         f"<b>/premium</b>\n\nОформить премиум за {config.PREMIUM_STARS_PRICE}⭐/мес: "
-        f"без водяных знаков и увеличенные лимиты .spam.",
+        f"без водяных знаков и увеличенные лимиты .spam.\n\nОплата — ⭐ Telegram "
+        f"Stars или 💳 криптой через @CryptoBot.",
     ),
     (
         "ref", "🔗 /ref",
@@ -328,8 +329,26 @@ HELP_COMMANDS = [
     ),
     (
         "ghost", "👁 /ghost",
-        "<b>/ghost on|off</b>\n\nНевидимое чтение: смотреть сообщения, не отмечая "
-        "их «прочитано».",
+        "<b>👁 Модуль /ghost — невидимое чтение</b>\n\nПозволяет читать входящие "
+        "сообщения, не отмечая их «прочитано»: бот присылает копию каждого "
+        "нового сообщения вам в личку, и вы читаете там, не открывая диалог.\n\n"
+        "<b>Как включить:</b> напишите боту <code>/ghost on</code> "
+        "(выключить — <code>/ghost off</code>). Работает в подключённых чатах.",
+    ),
+    (
+        "clone", "🧬 .clone",
+        "<b>🧬 Модуль .clone — клон профиля</b>\n\nМеняет ваше имя и «О себе» на "
+        "данные собеседника (через права «Профиль» бизнес-подключения).\n\n"
+        "<b>Как подключить:</b> при подключении бота включите раздел "
+        "<b>«Профиль»</b> (изменение имени / «О себе»). Затем в чате — "
+        "<code>.clone</code>; вернуть свой профиль — <code>.unclone</code>.",
+    ),
+    (
+        "prefix", "⚙️ .prefix",
+        "<b>⚙️ .prefix &lt;символ&gt;</b>\n\nСменить префикс команд. Например, "
+        "<code>.prefix :</code> — и вместо <code>.spam</code> пишете "
+        "<code>:spam</code>. Доступно: . : / ! , # % &amp; ~ (в личке — "
+        "<code>/prefix</code>).",
     ),
     (
         "autoreply", "🤖 /autoreply",
@@ -441,6 +460,21 @@ def build_help_menu_keyboard() -> InlineKeyboardMarkup:
 def build_help_detail_text(key: str) -> str | None:
     entry = _HELP_INDEX.get(key)
     return entry[1] if entry else None
+
+
+def find_help(query: str):
+    """Resolve a free-form command name (e.g. 'ghost', '.ban', '/find') to its
+    help description. Returns the HTML description string, or None."""
+    q = query.strip().lstrip("./:!,#%&~").lower()
+    if not q:
+        return None
+    if q in _HELP_INDEX:
+        return _HELP_INDEX[q][1]
+    for key, label, desc in HELP_COMMANDS:
+        toks = label.lower().replace(".", " ").replace("/", " ").replace("·", " ").split()
+        if q in toks:
+            return desc
+    return None
 
 
 def build_help_detail_keyboard() -> InlineKeyboardMarkup:

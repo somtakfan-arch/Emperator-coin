@@ -182,6 +182,13 @@ CREATE TABLE IF NOT EXISTS partner_payments (
     days INTEGER NOT NULL,
     created_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS crypto_invoices (
+    invoice_id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    days INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
 """
 
 CAPTURE_RETENTION_SECONDS = 86400
@@ -990,6 +997,27 @@ class Storage:
                 (owner_user_id, chat_id),
             ).fetchone()
         return row[0] if row else None
+
+    # --- crypto (Crypto Pay / @CryptoBot) invoices ---
+
+    def add_crypto_invoice(self, invoice_id: int, user_id: int, days: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO crypto_invoices (invoice_id, user_id, days, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (invoice_id, user_id, days, int(time.time())),
+            )
+
+    def pending_crypto_invoices(self):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT invoice_id, user_id, days FROM crypto_invoices ORDER BY created_at"
+            ).fetchall()
+        return [{"invoice_id": r[0], "user_id": r[1], "days": r[2]} for r in rows]
+
+    def delete_crypto_invoice(self, invoice_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM crypto_invoices WHERE invoice_id = ?", (invoice_id,))
 
     def chat_stats(self, business_connection_id: str, chat_id: int):
         """Rough per-chat stats for .status / .info (currently tracked rows;

@@ -66,3 +66,18 @@ PREMIUM_PACKAGES = [
     ("3 месяца", int(os.environ.get("PREMIUM_PRICE_3M", "250")), 90),
     ("1 год", int(os.environ.get("PREMIUM_PRICE_1Y", "800")), 365),
 ]
+
+# Crypto payments via Crypto Pay (@CryptoBot). Empty token = feature disabled.
+# Get a token in @CryptoBot → Crypto Pay → Create App.
+CRYPTO_PAY_TOKEN = os.environ.get("CRYPTO_PAY_TOKEN", "")
+# Use the testnet host by setting CRYPTO_PAY_TESTNET=1.
+CRYPTO_PAY_BASE = (
+    "https://testnet-pay.crypt.bot/api"
+    if os.environ.get("CRYPTO_PAY_TESTNET", "0") == "1"
+    else "https://pay.crypt.bot/api"
+)
+CRYPTO_PAY_ASSET = os.environ.get("CRYPTO_PAY_ASSET", "USDT")
+# Price per package in the chosen asset, aligned with PREMIUM_PACKAGES order.
+CRYPTO_PRICES = [
+    float(x) for x in os.environ.get("CRYPTO_PRICES", "1.5,4,12").split(",") if x.strip()
+]

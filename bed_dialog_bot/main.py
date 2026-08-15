@@ -4,6 +4,7 @@ import logging
 from telegram import Update
 from telegram.ext import Application, TypeHandler
 
+from . import crypto
 from .config import BOT_TOKEN, DB_PATH
 from .handlers import dispatch
 from .storage import Storage
@@ -33,8 +34,43 @@ async def _reminder_loop(application: Application) -> None:
         await asyncio.sleep(30)
 
 
+async def _crypto_loop(application: Application) -> None:
+    """Poll pending Crypto Pay invoices and grant premium once paid."""
+    if not crypto.is_enabled():
+        return
+    storage: Storage = application.bot_data["storage"]
+    while True:
+        try:
+            pending = storage.pending_crypto_invoices()
+            if pending:
+                by_id = {p["invoice_id"]: p for p in pending}
+                invoices = await crypto.get_invoices(list(by_id.keys()))
+                for inv in invoices:
+                    inv_id = int(inv.get("invoice_id", 0))
+                    p = by_id.get(inv_id)
+                    if not p:
+                        continue
+                    status = inv.get("status")
+                    if status == "paid":
+                        until = storage.grant_premium_days(p["user_id"], p["days"])
+                        storage.delete_crypto_invoice(inv_id)
+                        try:
+                            await application.bot.send_message(
+                                chat_id=p["user_id"],
+                                text=f"✅ Оплата получена! Премиум активен на {p['days']} дн.",
+                            )
+                        except Exception:
+                            logger.exception("Failed to notify crypto payer %s", p["user_id"])
+                    elif status == "expired":
+                        storage.delete_crypto_invoice(inv_id)
+        except Exception:
+            logger.exception("Crypto loop error")
+        await asyncio.sleep(45)
+
+
 async def _post_init(application: Application) -> None:
     application.create_task(_reminder_loop(application))
+    application.create_task(_crypto_loop(application))
 
 
 def main() -> None:
