@@ -467,6 +467,40 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
 
     if contact_active:
         storage.touch_activity(owner_id, message.chat_id)
+
+        # Ban: while active, actually DELETE the contact's incoming messages
+        # via the Bot API (needs the "can_delete_all_messages" business right,
+        # granted by the owner when connecting the bot). If that right wasn't
+        # granted the call fails, so we fall back to a text notice — the ban
+        # still visibly works, just without real deletion.
+        until_ts = storage.get_ban(bcid, message.chat_id)
+        if until_ts and until_ts > time.time():
+            try:
+                await context.bot.do_api_request(
+                    "deleteBusinessMessages",
+                    api_kwargs={
+                        "business_connection_id": bcid,
+                        "message_ids": [message.message_id],
+                    },
+                )
+            except Exception:
+                logger.exception("deleteBusinessMessages failed in chat %s", message.chat_id)
+                remaining_min = max(1, int((until_ts - time.time()) // 60) + 1)
+                ban_notice = _mark(
+                    storage, owner_id,
+                    f"⛔ Вы заблокированы ещё на {remaining_min} мин.",
+                    context.bot.username,
+                )
+                try:
+                    await context.bot.send_message(
+                        chat_id=message.chat_id,
+                        business_connection_id=bcid,
+                        text=ban_notice,
+                    )
+                except Exception:
+                    logger.exception("Failed to send ban notice")
+            return
+
         await _ghost_mirror(message, context, storage, conn)
         await _autoreply(message, context, storage, conn)
 
@@ -497,21 +531,6 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
                 )
             except Exception:
                 logger.exception("Failed to deliver note popup")
-
-    if conn and is_private and not is_owner:
-        until_ts = storage.get_ban(bcid, message.chat_id)
-        if until_ts and until_ts > time.time():
-            remaining_min = max(1, int((until_ts - time.time()) // 60) + 1)
-            ban_notice = _mark(
-                storage, conn["owner_user_id"],
-                f"⛔ Вы заблокированы ещё на {remaining_min} мин.",
-                context.bot.username,
-            )
-            await context.bot.send_message(
-                chat_id=message.chat_id,
-                business_connection_id=bcid,
-                text=ban_notice,
-            )
 
     reply = message.reply_to_message
     if reply and is_private and not storage.message_exists(bcid, message.chat_id, reply.message_id):
