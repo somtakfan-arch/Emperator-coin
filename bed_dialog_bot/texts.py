@@ -349,10 +349,10 @@ HELP_COMMANDS = [
     ),
     (
         "prefix", "⚙️ .prefix",
-        "<b>⚙️ .prefix &lt;символ&gt;</b>\n\nСменить префикс команд. Например, "
-        "<code>.prefix :</code> — и вместо <code>.spam</code> пишете "
-        "<code>:spam</code>. Доступно: . : / ! , # % &amp; ~ (в личке — "
-        "<code>/prefix</code>).",
+        "<b>⚙️ .prefix &lt;символ&gt;</b>\n\nСменить префикс команд на "
+        "<b>любой</b> символ или слово. Например, <code>.prefix :</code> — и "
+        "вместо <code>.spam</code> пишете <code>:spam</code>. В личке — "
+        "<code>/prefix</code>. Точка «.» всегда работает как запасной.",
     ),
     (
         "autoreply", "🤖 /autoreply",

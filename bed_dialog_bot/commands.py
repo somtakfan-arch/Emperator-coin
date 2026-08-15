@@ -52,7 +52,8 @@ _PREFIX_RE = re.compile(r"^\.prefix\s+(\S+)\s*$")
 _CLONE_RE = re.compile(r"^\.clone\s*$")
 _UNCLONE_RE = re.compile(r"^\.unclone\s*$")
 
-_ALLOWED_PREFIXES = [".", ":", "/", "!", ",", "#", "%", "&", "~"]
+# Any prefix is allowed; only capped in length to avoid pathological input.
+MAX_PREFIX_LEN = 16
 
 _DICE_EMOJI = {"dice": "🎲", "slot": "🎰", "dart": "🎯", "ball": "🏀", "foot": "⚽"}
 
@@ -210,13 +211,7 @@ async def try_handle_owner_command(
 
     prefix_match = _PREFIX_RE.match(text)
     if prefix_match:
-        new_prefix = prefix_match.group(1)
-        if new_prefix not in _ALLOWED_PREFIXES:
-            await _edit_command_message(
-                context, bcid, chat_id, message_id,
-                "⚙️ Разрешённые префиксы: " + " ".join(_ALLOWED_PREFIXES),
-            )
-            return True
+        new_prefix = prefix_match.group(1)[:MAX_PREFIX_LEN]
         storage.set_setting(f"prefix:{message.from_user.id}", new_prefix)
         await _edit_command_message(context, bcid, chat_id, message_id, "⚙️")
         await context.bot.send_message(

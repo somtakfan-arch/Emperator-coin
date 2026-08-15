@@ -1174,13 +1174,12 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             cur = storage.get_setting(f"prefix:{uid}") or "."
             await message.reply_text(
                 f"⚙️ Текущий префикс команд: «{cur}»\n"
-                f"Сменить: /prefix <символ>\n"
-                f"Доступно: {' '.join(commands._ALLOWED_PREFIXES)}"
+                f"Сменить: /prefix <любой символ или слово>"
             )
             return
-        new = parts[1].strip()
-        if new not in commands._ALLOWED_PREFIXES:
-            await message.reply_text("⚙️ Разрешённые префиксы: " + " ".join(commands._ALLOWED_PREFIXES))
+        new = parts[1].strip()[:commands.MAX_PREFIX_LEN]
+        if not new:
+            await message.reply_text("⚙️ Укажите непустой префикс: /prefix <символ>")
             return
         storage.set_setting(f"prefix:{uid}", new)
         await message.reply_text(f"✅ Префикс команд изменён на «{new}». Теперь пишите, например, {new}spam.")
