@@ -1089,7 +1089,11 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     if text.startswith("/help"):
-        await message.reply_text(texts.build_help_text())
+        await message.reply_text(
+            texts.build_help_menu_text(),
+            parse_mode="HTML",
+            reply_markup=texts.build_help_menu_keyboard(),
+        )
         if message.from_user and message.from_user.id in config.ADMIN_USER_IDS:
             await message.reply_text(texts.build_admin_help_text())
         return
@@ -1640,6 +1644,23 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     if query.data == "support_info":
         await query.answer(text=texts.SUPPORT_PROMPT, show_alert=True)
+    elif query.data.startswith("help:"):
+        key = query.data.split(":", 1)[1]
+        await query.answer()
+        if key == "back":
+            await query.edit_message_text(
+                texts.build_help_menu_text(),
+                parse_mode="HTML",
+                reply_markup=texts.build_help_menu_keyboard(),
+            )
+        else:
+            desc = texts.build_help_detail_text(key)
+            if desc:
+                await query.edit_message_text(
+                    desc,
+                    parse_mode="HTML",
+                    reply_markup=texts.build_help_detail_keyboard(),
+                )
     elif query.data == "tg_help":
         await query.answer()
         await context.bot.send_message(
