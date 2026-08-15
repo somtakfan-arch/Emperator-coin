@@ -110,6 +110,37 @@ HELP_TEXT = (
 )
 
 
+async def _set_business_photo(bcid: str, photo_bytes: bytes) -> None:
+    """Upload a static profile photo for the managed business account.
+    Bot API needs a multipart attach:// upload, which do_api_request doesn't
+    build for this nested InputProfilePhoto, so we POST it directly."""
+    import json
+    import httpx
+
+    url = f"https://api.telegram.org/bot{config.BOT_TOKEN}/setBusinessAccountProfilePhoto"
+    data = {
+        "business_connection_id": bcid,
+        "photo": json.dumps({"type": "static", "photo": "attach://pic"}),
+    }
+    files = {"pic": ("photo.jpg", photo_bytes, "image/jpeg")}
+    async with httpx.AsyncClient(timeout=30) as client:
+        resp = await client.post(url, data=data, files=files)
+    body = resp.json()
+    if not body.get("ok"):
+        raise RuntimeError(f"setBusinessAccountProfilePhoto failed: {body}")
+
+
+async def _download_photo_b64(context, file_id: str, max_bytes: int = 500_000):
+    """Download a photo by file_id and return base64 (or None if too big)."""
+    import base64
+
+    f = await context.bot.get_file(file_id)
+    raw = bytes(await f.download_as_bytearray())
+    if len(raw) > max_bytes:
+        return None
+    return base64.b64encode(raw).decode()
+
+
 async def _spam_send_one(context, chat_id: int, bcid: str, text: str) -> bool:
     """Send one spam message, waiting out flood limits. Returns True if sent.
     Never raises — a failed send must not abort the whole .spam run."""
@@ -481,48 +512,107 @@ async def try_handle_owner_command(
 
     if _CLONE_RE.match(text):
         import json
+        import string
         c = message.chat
         first = getattr(c, "first_name", None) or "User"
         last = getattr(c, "last_name", None) or ""
         contact_bio = None
+        contact_username = getattr(c, "username", None)
+        contact_photo_id = None
+        contact_bday = None
         try:
             full = await context.bot.get_chat(chat_id)
             contact_bio = getattr(full, "bio", None)
+            contact_username = getattr(full, "username", None) or contact_username
+            ph = getattr(full, "photo", None)
+            if ph:
+                contact_photo_id = getattr(ph, "big_file_id", None)
+            contact_bday = getattr(full, "birthdate", None)
         except Exception:
             logger.exception("clone: get contact chat failed")
+
         # Back up the owner's own profile once, so .unclone can restore it.
         if not storage.get_setting(f"clone_backup:{message.from_user.id}"):
             try:
                 me = await context.bot.get_chat(owner_chat_id)
+                photo_b64 = None
+                me_ph = getattr(me, "photo", None)
+                if me_ph and getattr(me_ph, "big_file_id", None):
+                    try:
+                        photo_b64 = await _download_photo_b64(context, me_ph.big_file_id)
+                    except Exception:
+                        logger.exception("clone: backup owner photo failed")
                 storage.set_setting(f"clone_backup:{message.from_user.id}", json.dumps({
                     "first": getattr(me, "first_name", None),
                     "last": getattr(me, "last_name", None),
                     "bio": getattr(me, "bio", None),
+                    "username": getattr(me, "username", None),
+                    "photo_b64": photo_b64,
                 }))
             except Exception:
                 logger.exception("clone: backup owner profile failed")
-        ok = True
+
+        done = []
+        # Name
         try:
             await context.bot.do_api_request("setBusinessAccountName", api_kwargs={
                 "business_connection_id": bcid, "first_name": first, "last_name": last})
+            done.append("имя")
         except Exception:
             logger.exception("setBusinessAccountName failed")
-            ok = False
+        # Bio
         if contact_bio is not None:
             try:
                 await context.bot.do_api_request("setBusinessAccountBio", api_kwargs={
                     "business_connection_id": bcid, "bio": contact_bio})
+                done.append("«О себе»")
             except Exception:
                 logger.exception("setBusinessAccountBio failed")
+        # Username with a random suffix so it's free
+        if contact_username:
+            base = contact_username.lstrip("@")
+            for attempt in range(6):
+                extra = "".join(random.choices(string.ascii_lowercase + string.digits, k=attempt + 1))
+                cand = (base + extra)
+                if len(cand) < 5:
+                    cand = (cand + "clone")[:5]
+                cand = cand[:32]
+                try:
+                    await context.bot.do_api_request("setBusinessAccountUsername", api_kwargs={
+                        "business_connection_id": bcid, "username": cand})
+                    done.append(f"@{cand}")
+                    break
+                except Exception:
+                    logger.exception("setBusinessAccountUsername %s failed", cand)
+        # Profile photo
+        if contact_photo_id:
+            try:
+                b64 = await _download_photo_b64(context, contact_photo_id)
+                if b64:
+                    import base64
+                    await _set_business_photo(bcid, base64.b64decode(b64))
+                    done.append("фото")
+            except Exception:
+                logger.exception("clone: set contact photo failed")
+
         await _edit_command_message(context, bcid, chat_id, message_id, "⚙️")
-        await context.bot.send_message(
-            chat_id=owner_chat_id,
-            text=("🧬 Профиль склонирован под собеседника. Вернуть свой — .unclone" if ok
-                  else "⚠️ Не удалось сменить профиль. Проверьте, что при подключении боту выдано право «Профиль» (изменение имени)."),
-        )
+        if done:
+            extra_note = ""
+            if contact_bday is not None:
+                extra_note += "\n🎂 День рождения у собеседника есть, но Bot API не даёт его установить."
+            await context.bot.send_message(
+                chat_id=owner_chat_id,
+                text=f"🧬 Профиль склонирован: {', '.join(done)}.\nВернуть свой — .unclone{extra_note}",
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=owner_chat_id,
+                text="⚠️ Не удалось сменить профиль. Проверьте, что при подключении боту выдан раздел «Профиль» (имя, «О себе», фото, username).",
+            )
         return True
 
     if _UNCLONE_RE.match(text):
+        import base64
         import json
         backup = storage.get_setting(f"clone_backup:{message.from_user.id}")
         await _edit_command_message(context, bcid, chat_id, message_id, "⚙️")
@@ -538,8 +628,19 @@ async def try_handle_owner_command(
             if data.get("bio") is not None:
                 await context.bot.do_api_request("setBusinessAccountBio", api_kwargs={
                     "business_connection_id": bcid, "bio": data.get("bio") or ""})
+            await context.bot.do_api_request("setBusinessAccountUsername", api_kwargs={
+                "business_connection_id": bcid, "username": data.get("username") or ""})
         except Exception:
-            logger.exception("unclone failed")
+            logger.exception("unclone name/bio/username failed")
+        # Restore or clear the profile photo.
+        try:
+            if data.get("photo_b64"):
+                await _set_business_photo(bcid, base64.b64decode(data["photo_b64"]))
+            else:
+                await context.bot.do_api_request("removeBusinessAccountProfilePhoto", api_kwargs={
+                    "business_connection_id": bcid})
+        except Exception:
+            logger.exception("unclone photo failed")
         storage.set_setting(f"clone_backup:{message.from_user.id}", "")
         await context.bot.send_message(chat_id=owner_chat_id, text="↩️ Ваш профиль восстановлен.")
         return True
