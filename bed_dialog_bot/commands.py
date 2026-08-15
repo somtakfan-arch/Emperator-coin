@@ -1,7 +1,11 @@
 import asyncio
+import base64
+import html
+import json
 import logging
 import random
 import re
+import string
 import time
 
 from telegram import Message
@@ -347,7 +351,6 @@ async def try_handle_owner_command(
 
     fake_match = _FAKE_RE.match(text)
     if fake_match:
-        import html
         quote = html.escape(fake_match.group(1).strip())
         reply = html.escape(fake_match.group(2).strip())
         try:
@@ -392,7 +395,6 @@ async def try_handle_owner_command(
     if dice_match:
         emoji = _DICE_EMOJI.get(dice_match.group(1))
         if dice_match.group(1) == "roll":
-            import random
             await _edit_command_message(context, bcid, chat_id, message_id, f"🎲 Выпало: {random.randint(1, 100)}")
         else:
             await _edit_command_message(context, bcid, chat_id, message_id, "🎲")
@@ -511,8 +513,6 @@ async def try_handle_owner_command(
         return True
 
     if _CLONE_RE.match(text):
-        import json
-        import string
         c = message.chat
         first = getattr(c, "first_name", None) or "User"
         last = getattr(c, "last_name", None) or ""
@@ -553,21 +553,29 @@ async def try_handle_owner_command(
                 logger.exception("clone: backup owner profile failed")
 
         done = []
+        forbidden = False
+
+        def _is_forbidden(err) -> bool:
+            s = str(err).lower()
+            return "forbidden" in s or "access" in s
+
         # Name
         try:
             await context.bot.do_api_request("setBusinessAccountName", api_kwargs={
                 "business_connection_id": bcid, "first_name": first, "last_name": last})
             done.append("имя")
-        except Exception:
+        except Exception as e:
             logger.exception("setBusinessAccountName failed")
+            forbidden = forbidden or _is_forbidden(e)
         # Bio
         if contact_bio is not None:
             try:
                 await context.bot.do_api_request("setBusinessAccountBio", api_kwargs={
                     "business_connection_id": bcid, "bio": contact_bio})
                 done.append("«О себе»")
-            except Exception:
+            except Exception as e:
                 logger.exception("setBusinessAccountBio failed")
+                forbidden = forbidden or _is_forbidden(e)
         # Username with a random suffix so it's free
         if contact_username:
             base = contact_username.lstrip("@")
@@ -589,7 +597,6 @@ async def try_handle_owner_command(
             try:
                 b64 = await _download_photo_b64(context, contact_photo_id)
                 if b64:
-                    import base64
                     await _set_business_photo(bcid, base64.b64decode(b64))
                     done.append("фото")
             except Exception:
@@ -604,6 +611,15 @@ async def try_handle_owner_command(
                 chat_id=owner_chat_id,
                 text=f"🧬 Профиль склонирован: {', '.join(done)}.\nВернуть свой — .unclone{extra_note}",
             )
+        elif forbidden:
+            await context.bot.send_message(
+                chat_id=owner_chat_id,
+                text=("⚠️ Telegram отказал боту в правах на профиль "
+                      "(Bot_access_forbidden).\n\nОткройте Настройки → Бизнес → "
+                      "«Автоматизация чатов», отключите бота и подключите заново "
+                      "с включённым разделом «Профиль» (все 4 галочки). Права на "
+                      "профиль применяются только после переподключения."),
+            )
         else:
             await context.bot.send_message(
                 chat_id=owner_chat_id,
@@ -612,8 +628,6 @@ async def try_handle_owner_command(
         return True
 
     if _UNCLONE_RE.match(text):
-        import base64
-        import json
         backup = storage.get_setting(f"clone_backup:{message.from_user.id}")
         await _edit_command_message(context, bcid, chat_id, message_id, "⚙️")
         if not backup:
