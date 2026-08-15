@@ -361,6 +361,7 @@ def _store_message(storage: Storage, message: Message, business_connection_id: s
         media_file_id=media_file_id,
         caption=message.caption,
         date=int(message.date.timestamp()) if message.date else None,
+        is_bot=bool(message.from_user and message.from_user.is_bot),
     )
 
 
@@ -561,8 +562,8 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
                 media_file_id=stored["media_file_id"],
             )
 
-        # Don't notify the owner about their OWN deleted messages.
-        if stored["from_user_id"] == owner_id:
+        # Don't notify about the owner's OWN deleted messages or messages from bots.
+        if stored["from_user_id"] == owner_id or stored.get("is_bot"):
             storage.delete_message(bcid, deleted.chat.id, message_id)
             continue
 

@@ -181,6 +181,8 @@ class Storage:
             conn.execute("ALTER TABLE messages ADD COLUMN media_kind TEXT")
         if "media_file_id" not in columns:
             conn.execute("ALTER TABLE messages ADD COLUMN media_file_id TEXT")
+        if "is_bot" not in columns:
+            conn.execute("ALTER TABLE messages ADD COLUMN is_bot INTEGER NOT NULL DEFAULT 0")
         user_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
         if user_cols and "muted" not in user_cols:
             conn.execute("ALTER TABLE users ADD COLUMN muted INTEGER NOT NULL DEFAULT 0")
@@ -312,6 +314,7 @@ class Storage:
         media_file_id=None,
         caption,
         date,
+        is_bot=False,
     ) -> None:
         # photo_file_id / video_note_file_id kept in sync for backward-compat reads.
         photo_file_id = media_file_id if media_kind == "photo" else None
@@ -322,9 +325,9 @@ class Storage:
                 INSERT INTO messages (
                     business_connection_id, chat_id, message_id, from_user_id,
                     from_name, from_username, text, photo_file_id, video_note_file_id,
-                    media_kind, media_file_id, caption, date
+                    media_kind, media_file_id, caption, date, is_bot
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(business_connection_id, chat_id, message_id) DO UPDATE SET
                     from_user_id=excluded.from_user_id,
                     from_name=excluded.from_name,
@@ -335,7 +338,8 @@ class Storage:
                     media_kind=excluded.media_kind,
                     media_file_id=excluded.media_file_id,
                     caption=excluded.caption,
-                    date=excluded.date
+                    date=excluded.date,
+                    is_bot=excluded.is_bot
                 """,
                 (
                     business_connection_id,
@@ -351,6 +355,7 @@ class Storage:
                     media_file_id,
                     caption,
                     date,
+                    int(is_bot),
                 ),
             )
 
@@ -359,7 +364,7 @@ class Storage:
             row = conn.execute(
                 """
                 SELECT from_user_id, from_name, from_username, text, photo_file_id,
-                       video_note_file_id, media_kind, media_file_id, caption, date
+                       video_note_file_id, media_kind, media_file_id, caption, date, is_bot
                 FROM messages WHERE business_connection_id = ? AND chat_id = ? AND message_id = ?
                 """,
                 (business_connection_id, chat_id, message_id),
@@ -383,6 +388,7 @@ class Storage:
             "media_file_id": media_file_id,
             "caption": row[8],
             "date": row[9],
+            "is_bot": bool(row[10]),
         }
 
     def message_exists(self, business_connection_id: str, chat_id: int, message_id: int) -> bool:
