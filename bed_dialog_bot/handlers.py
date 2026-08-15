@@ -571,11 +571,16 @@ async def handle_edited_business_message(update: Update, context: ContextTypes.D
         if _suppressed(storage, conn["owner_user_id"]):
             return
         base = formatting.format_edited_text(name, username, old_text, new_text)
-        await context.bot.send_message(
-            chat_id=conn["owner_chat_id"],
-            text=_mark(storage, conn["owner_user_id"],
-                       _prefix(storage, conn["owner_user_id"]) + base, context.bot.username),
-        )
+        try:
+            await context.bot.send_message(
+                chat_id=conn["owner_chat_id"],
+                text=_mark(storage, conn["owner_user_id"],
+                           _prefix(storage, conn["owner_user_id"]) + base, context.bot.username),
+            )
+        except Exception:
+            # Owner may have blocked the bot or never pressed Start (403).
+            logger.exception("Failed to deliver edited-message notice to %s",
+                             conn["owner_chat_id"])
 
 
 async def handle_deleted_business_messages(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -629,11 +634,14 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
                     _prefix(storage, owner_id) + (f"{base}\n🕐 {when}" if when else base),
                     context.bot.username,
                 )
-                if media.supports_caption(kind):
-                    await _send_media(context.bot, owner_chat, kind, stored["media_file_id"], marked)
-                else:
-                    await context.bot.send_message(chat_id=owner_chat, text=marked)
-                    await _send_media(context.bot, owner_chat, kind, stored["media_file_id"])
+                try:
+                    if media.supports_caption(kind):
+                        await _send_media(context.bot, owner_chat, kind, stored["media_file_id"], marked)
+                    else:
+                        await context.bot.send_message(chat_id=owner_chat, text=marked)
+                        await _send_media(context.bot, owner_chat, kind, stored["media_file_id"])
+                except Exception:
+                    logger.exception("Failed to deliver deleted-media notice to %s", owner_chat)
         elif stored["text"]:
             base = formatting.format_deleted_text(name, username, stored["text"])
             _log_event(storage, owner_id, "text", base)
@@ -645,7 +653,10 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
     if text_items and not muted:
         combined = "\n\n———\n\n".join(text_items)
         combined = _mark(storage, owner_id, _prefix(storage, owner_id) + combined, context.bot.username)
-        await _send_chunked(context.bot, owner_chat, combined)
+        try:
+            await _send_chunked(context.bot, owner_chat, combined)
+        except Exception:
+            logger.exception("Failed to deliver deleted-text notice to %s", owner_chat)
 
 
 async def _send_chunked(bot, chat_id: int, text: str, limit: int = 4000) -> None:
