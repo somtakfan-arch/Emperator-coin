@@ -1019,6 +1019,18 @@ class Storage:
         with self._connect() as conn:
             conn.execute("DELETE FROM crypto_invoices WHERE invoice_id = ?", (invoice_id,))
 
+    def first_message(self, business_connection_id: str, chat_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT text, caption, date FROM messages "
+                "WHERE business_connection_id = ? AND chat_id = ? "
+                "ORDER BY date ASC LIMIT 1",
+                (business_connection_id, chat_id),
+            ).fetchone()
+        if not row:
+            return None
+        return {"text": row[0], "caption": row[1], "date": row[2]}
+
     def chat_stats(self, business_connection_id: str, chat_id: int):
         """Rough per-chat stats for .status / .info (currently tracked rows;
         deleted messages are removed from the table after being reported)."""

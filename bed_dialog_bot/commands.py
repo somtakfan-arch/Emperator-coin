@@ -1,18 +1,24 @@
 import asyncio
+import ast
 import base64
 import html
+import io
 import json
 import logging
+import operator
+import os
 import random
 import re
+import shutil
 import string
+import tempfile
 import time
 
 from telegram import Message
 from telegram.error import RetryAfter
 from telegram.ext import ContextTypes
 
-from . import config, formatting
+from . import config, formatting, mediautil
 from .storage import Storage
 
 logger = logging.getLogger(__name__)
@@ -45,12 +51,46 @@ _BURM_RE = re.compile(r"^\.бурмалда\s*$")
 _TROLL_RE = re.compile(r"^\.troll\s*$")
 _INFO_RE = re.compile(r"^\.info\s*$")
 _STATUS_RE = re.compile(r"^\.status\s*$")
-_AFK_RE = re.compile(r"^\.afk\s*$")
+_AFK_RE = re.compile(r"^\.afk(?:\s+(.*))?$", re.DOTALL)
 _KAWAI_RE = re.compile(r"^\.kawai\s*$")
 _SPEK_RE = re.compile(r"^\.spek\s+(.+)$", re.DOTALL)
 _PREFIX_RE = re.compile(r"^\.prefix\s+(\S+)\s*$")
 _CLONE_RE = re.compile(r"^\.clone\s*$")
 _UNCLONE_RE = re.compile(r"^\.unclone\s*$")
+_PING_RE = re.compile(r"^\.ping\s*$")
+_CALC_RE = re.compile(r"^\.calc\s+(.+)$", re.DOTALL)
+_REVERSE_RE = re.compile(r"^\.reverse(?:\s+(.+))?$", re.DOTALL)
+_MOCK_RE = re.compile(r"^\.mock(?:\s+(.+))?$", re.DOTALL)
+_PASSWORD_RE = re.compile(r"^\.password(?:\s+(\d+))?\s*$")
+_FIRST_RE = re.compile(r"^\.first\s*$")
+_STIK_RE = re.compile(r"^\.stik\s*$")
+_GIF_RE = re.compile(r"^\.gif\s*$")
+_KROM_RE = re.compile(r"^\.krom\s*$")
+_SAVE_RE = re.compile(r"^\.save\s+(\S+)\s*$")
+
+_CALC_OPS = {
+    ast.Add: operator.add, ast.Sub: operator.sub, ast.Mult: operator.mul,
+    ast.Div: operator.truediv, ast.Mod: operator.mod, ast.Pow: operator.pow,
+    ast.FloorDiv: operator.floordiv, ast.USub: operator.neg, ast.UAdd: operator.pos,
+}
+
+
+def _safe_calc(expr: str):
+    """Evaluate a basic arithmetic expression safely (no eval)."""
+    def ev(node):
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        if isinstance(node, ast.BinOp) and type(node.op) in _CALC_OPS:
+            if isinstance(node.op, ast.Pow):
+                right = ev(node.right)
+                if abs(right) > 1000:
+                    raise ValueError("exponent too large")
+                return _CALC_OPS[type(node.op)](ev(node.left), right)
+            return _CALC_OPS[type(node.op)](ev(node.left), ev(node.right))
+        if isinstance(node, ast.UnaryOp) and type(node.op) in _CALC_OPS:
+            return _CALC_OPS[type(node.op)](ev(node.operand))
+        raise ValueError("unsupported expression")
+    return ev(ast.parse(expr, mode="eval").body)
 
 # Any prefix is allowed; only capped in length to avoid pathological input.
 MAX_PREFIX_LEN = 16
@@ -158,6 +198,11 @@ HELP_TEXT = (
     ".spek <текст> — текст, который трудно скопировать\n"
     ".troll — подколоть собеседника\n"
     ".love · .flip · .rps · .mon · .бурмалда — приколы и игры\n"
+    ".calc <выражение> · .reverse · .mock · .password [длина]\n"
+    ".first — первое сообщение · .afk [причина] — автоответ\n"
+    ".stik (в ответ на фото) · .gif · .krom (в ответ на видео)\n"
+    ".save <ссылка> — скачать видео с TikTok/YouTube/Instagram\n"
+    "🛠 .ping — задержка бота (только админ)\n"
     ".clone — клон профиля собеседника (.unclone — вернуть свой)\n"
     ".prefix <символ> — сменить префикс команд (напр. :spam)\n"
     ".help <команда> — подробно об одной команде\n"
@@ -536,9 +581,17 @@ async def try_handle_owner_command(
         await context.bot.send_message(chat_id=owner_chat_id, text=status)
         return True
 
-    if _AFK_RE.match(text):
+    afk_match = _AFK_RE.match(text)
+    if afk_match:
         key = f"autoreply:{message.from_user.id}"
-        if storage.get_setting(key):
+        reason = (afk_match.group(1) or "").strip()
+        if reason.lower() in ("off", "выкл", "0"):
+            storage.set_setting(key, "")
+            note = "🟢 AFK выключен."
+        elif reason:
+            storage.set_setting(key, f"🥱 AFK: {reason}")
+            note = f"😴 AFK включён: {reason}"
+        elif storage.get_setting(key):
             storage.set_setting(key, "")
             note = "🟢 AFK выключен."
         else:
@@ -702,6 +755,137 @@ async def try_handle_owner_command(
             logger.exception("unclone photo failed")
         storage.set_setting(f"clone_backup:{message.from_user.id}", "")
         await context.bot.send_message(chat_id=owner_chat_id, text="↩️ Ваш профиль восстановлен.")
+        return True
+
+    if _PING_RE.match(text):
+        if message.from_user.id not in config.ADMIN_USER_IDS:
+            return False  # invisible to non-admins — treated as normal text
+        t0 = time.time()
+        await _edit_command_message(context, bcid, chat_id, message_id, "🏓 …")
+        dt = int((time.time() - t0) * 1000)
+        await _edit_command_message(context, bcid, chat_id, message_id, f"🏓 Pong! {dt} ms")
+        return True
+
+    calc_match = _CALC_RE.match(text)
+    if calc_match:
+        try:
+            res = _safe_calc(calc_match.group(1).strip())
+            if isinstance(res, float) and res.is_integer():
+                res = int(res)
+            await _edit_command_message(context, bcid, chat_id, message_id,
+                                        f"🧮 {calc_match.group(1).strip()} = {res}")
+        except Exception:
+            await _edit_command_message(context, bcid, chat_id, message_id, "🧮 Не могу посчитать это выражение.")
+        return True
+
+    rev_match = _REVERSE_RE.match(text)
+    if rev_match:
+        src = rev_match.group(1)
+        if not src and message.reply_to_message:
+            src = message.reply_to_message.text or message.reply_to_message.caption
+        await _edit_command_message(context, bcid, chat_id, message_id, (src or "")[::-1] or "…")
+        return True
+
+    mock_match = _MOCK_RE.match(text)
+    if mock_match:
+        src = mock_match.group(1)
+        if not src and message.reply_to_message:
+            src = message.reply_to_message.text or message.reply_to_message.caption
+        src = src or ""
+        mocked = "".join(ch.upper() if i % 2 else ch.lower() for i, ch in enumerate(src))
+        await _edit_command_message(context, bcid, chat_id, message_id, mocked or "…")
+        return True
+
+    pw_match = _PASSWORD_RE.match(text)
+    if pw_match:
+        length = min(max(int(pw_match.group(1) or 12), 4), 64)
+        alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+        pwd = "".join(random.choices(alphabet, k=length))
+        await _edit_command_message(context, bcid, chat_id, message_id, "🤖")
+        await context.bot.send_message(
+            chat_id=owner_chat_id,
+            text=f"🔐 Пароль ({length}):\n<code>{html.escape(pwd)}</code>",
+            parse_mode="HTML",
+        )
+        return True
+
+    if _FIRST_RE.match(text):
+        row = storage.first_message(bcid, chat_id)
+        await _edit_command_message(context, bcid, chat_id, message_id, "🤖")
+        if not row:
+            await context.bot.send_message(chat_id=owner_chat_id, text="🕰 Пока нет сохранённых сообщений в этом чате.")
+        else:
+            when = time.strftime("%d.%m.%Y %H:%M", time.localtime(row["date"])) if row["date"] else "—"
+            snippet = (row["text"] or row["caption"] or "[медиа]")[:300]
+            await context.bot.send_message(chat_id=owner_chat_id, text=f"🕰 Первое сообщение ({when}):\n{snippet}")
+        return True
+
+    if _STIK_RE.match(text):
+        reply = message.reply_to_message
+        if not reply or not reply.photo:
+            await _edit_command_message(context, bcid, chat_id, message_id, "Ответьте .stik на фото.")
+            return True
+        await _edit_command_message(context, bcid, chat_id, message_id, "🖼 …")
+        try:
+            f = await context.bot.get_file(reply.photo[-1].file_id)
+            raw = bytes(await f.download_as_bytearray())
+            webp = mediautil.photo_to_sticker_bytes(raw)
+            await context.bot.send_sticker(chat_id=chat_id, sticker=io.BytesIO(webp), business_connection_id=bcid)
+            await _edit_command_message(context, bcid, chat_id, message_id, "✅")
+        except Exception:
+            logger.exception("stik failed")
+            await _edit_command_message(context, bcid, chat_id, message_id, "⚠️ Не получилось сделать стикер.")
+        return True
+
+    if _KROM_RE.match(text) or _GIF_RE.match(text):
+        is_krom = bool(_KROM_RE.match(text))
+        reply = message.reply_to_message
+        src_media = None
+        if reply:
+            src_media = reply.video or reply.animation or (reply.document if reply.document else None)
+        if not src_media:
+            await _edit_command_message(context, bcid, chat_id, message_id,
+                                        f"Ответьте {'.krom' if is_krom else '.gif'} на видео.")
+            return True
+        await _edit_command_message(context, bcid, chat_id, message_id, "⭕️ …" if is_krom else "🎞 …")
+        tmpdir = tempfile.mkdtemp()
+        try:
+            f = await context.bot.get_file(src_media.file_id)
+            srcpath = os.path.join(tmpdir, "src")
+            await f.download_to_drive(srcpath)
+            if is_krom:
+                out = await mediautil.video_to_note(srcpath)
+                with open(out, "rb") as fh:
+                    await context.bot.send_video_note(chat_id=chat_id, video_note=fh, business_connection_id=bcid)
+            else:
+                out = await mediautil.video_to_gif(srcpath)
+                with open(out, "rb") as fh:
+                    await context.bot.send_animation(chat_id=chat_id, animation=fh, business_connection_id=bcid)
+            await _edit_command_message(context, bcid, chat_id, message_id, "✅")
+        except Exception:
+            logger.exception("krom/gif failed")
+            await _edit_command_message(context, bcid, chat_id, message_id,
+                                        "⚠️ Не получилось (видео больше 20 МБ бот скачать не может).")
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        return True
+
+    save_match = _SAVE_RE.match(text)
+    if save_match:
+        url = save_match.group(1)
+        await _edit_command_message(context, bcid, chat_id, message_id, "⬇️ Скачиваю…")
+        tmpdir = tempfile.mkdtemp()
+        try:
+            path = await mediautil.download_url(url, tmpdir)
+            with open(path, "rb") as fh:
+                await context.bot.send_video(chat_id=chat_id, video=fh, business_connection_id=bcid)
+            await _edit_command_message(context, bcid, chat_id, message_id, "✅")
+        except Exception:
+            logger.exception("save failed")
+            await _edit_command_message(context, bcid, chat_id, message_id,
+                                        "⚠️ Не удалось скачать (проверьте ссылку; лимит 49 МБ).")
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
         return True
 
     help_match = _HELP_RE.match(text)
