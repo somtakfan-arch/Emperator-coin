@@ -189,6 +189,13 @@ CREATE TABLE IF NOT EXISTS crypto_invoices (
     days INTEGER NOT NULL,
     created_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS troll_texts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
 """
 
 CAPTURE_RETENTION_SECONDS = 86400
@@ -1018,6 +1025,39 @@ class Storage:
     def delete_crypto_invoice(self, invoice_id: int) -> None:
         with self._connect() as conn:
             conn.execute("DELETE FROM crypto_invoices WHERE invoice_id = ?", (invoice_id,))
+
+    # --- .troll saved messages ---
+
+    def add_troll_text(self, user_id: int, text: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO troll_texts (user_id, text, created_at) VALUES (?, ?, ?)",
+                (user_id, text, int(time.time())),
+            )
+
+    def list_troll_texts(self, user_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, text FROM troll_texts WHERE user_id = ? ORDER BY id",
+                (user_id,),
+            ).fetchall()
+        return [{"id": r[0], "text": r[1]} for r in rows]
+
+    def count_troll_texts(self, user_id: int) -> int:
+        with self._connect() as conn:
+            return conn.execute(
+                "SELECT COUNT(*) FROM troll_texts WHERE user_id = ?", (user_id,)
+            ).fetchone()[0]
+
+    def delete_troll_text(self, user_id: int, text_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM troll_texts WHERE id = ? AND user_id = ?", (text_id, user_id)
+            )
+
+    def clear_troll_texts(self, user_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM troll_texts WHERE user_id = ?", (user_id,))
 
     def first_message(self, business_connection_id: str, chat_id: int):
         with self._connect() as conn:

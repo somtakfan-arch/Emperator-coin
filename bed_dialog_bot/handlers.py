@@ -795,6 +795,28 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     text = message.text or ""
 
+    # If the user tapped "➕ Добавить текст" in the .troll manager, capture their
+    # next plain messages as saved troll texts (until they press "Готово" or /).
+    awaiting = context.bot_data.setdefault("troll_await", set())
+    if message.from_user and message.from_user.id in awaiting and text and not text.startswith("/"):
+        uid = message.from_user.id
+        limit = _troll_limit(storage, uid)
+        count = storage.count_troll_texts(uid)
+        if limit is not None and count >= limit:
+            awaiting.discard(uid)
+            await message.reply_text(
+                f"⚠️ Достигнут лимит {limit}. Удалите что-нибудь или оформите /premium.\n"
+                "Открыть заготовки: /help → .troll"
+            )
+            return
+        storage.add_troll_text(uid, text[:1000])
+        count += 1
+        limit_str = "∞" if limit is None else str(limit)
+        await message.reply_text(
+            f"✅ Сохранено ({count}/{limit_str}). Пришлите ещё или откройте /help → .troll, чтобы закончить.",
+        )
+        return
+
     if text.startswith("/start"):
         parts = text.split(maxsplit=1)
         if len(parts) == 2 and not was_known:
@@ -1777,6 +1799,76 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
 
+def _troll_limit(storage: Storage, user_id: int):
+    """None = unlimited (admins); otherwise the per-user cap."""
+    if user_id in config.ADMIN_USER_IDS:
+        return None
+    return config.TROLL_PREMIUM_MAX if storage.is_premium(user_id) else config.TROLL_FREE_MAX
+
+
+async def _show_troll_menu(query, context: ContextTypes.DEFAULT_TYPE) -> None:
+    storage: Storage = context.bot_data["storage"]
+    uid = query.from_user.id
+    context.bot_data.setdefault("troll_await", set()).discard(uid)
+    count = storage.count_troll_texts(uid)
+    limit = _troll_limit(storage, uid)
+    await query.edit_message_text(
+        texts.build_troll_menu_text(count, limit),
+        parse_mode="HTML",
+        reply_markup=texts.build_troll_menu_keyboard(count > 0),
+    )
+
+
+async def _handle_troll_callback(query, context: ContextTypes.DEFAULT_TYPE) -> None:
+    storage: Storage = context.bot_data["storage"]
+    uid = query.from_user.id
+    data = query.data
+
+    if data == "troll:menu":
+        await query.answer()
+        await _show_troll_menu(query, context)
+    elif data == "troll:add":
+        limit = _troll_limit(storage, uid)
+        count = storage.count_troll_texts(uid)
+        if limit is not None and count >= limit:
+            await query.answer(f"Лимит {limit} достигнут. Удалите что-нибудь или оформите /premium.", show_alert=True)
+            return
+        await query.answer()
+        context.bot_data.setdefault("troll_await", set()).add(uid)
+        await query.edit_message_text(
+            "✍️ Пришлите текст сообщением. Можно несколько подряд — каждое сохранится.\n"
+            "Когда закончите — нажмите «Готово».",
+            reply_markup=texts.build_troll_add_keyboard(),
+        )
+    elif data == "troll:list":
+        await query.answer()
+        items = storage.list_troll_texts(uid)
+        await query.edit_message_text(
+            texts.build_troll_list_text(items),
+            parse_mode="HTML",
+            reply_markup=texts.build_troll_list_keyboard(items),
+        )
+    elif data == "troll:clear":
+        storage.clear_troll_texts(uid)
+        await query.answer("Очищено.")
+        await _show_troll_menu(query, context)
+    elif data.startswith("trolldel:"):
+        try:
+            tid = int(data.split(":", 1)[1])
+            storage.delete_troll_text(uid, tid)
+        except ValueError:
+            pass
+        await query.answer("Удалено.")
+        items = storage.list_troll_texts(uid)
+        await query.edit_message_text(
+            texts.build_troll_list_text(items),
+            parse_mode="HTML",
+            reply_markup=texts.build_troll_list_keyboard(items),
+        )
+    else:
+        await query.answer()
+
+
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if query.data == "support_info":
@@ -1790,6 +1882,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 parse_mode="HTML",
                 reply_markup=texts.build_help_menu_keyboard(),
             )
+        elif key == "troll":
+            await _show_troll_menu(query, context)
         else:
             desc = texts.build_help_detail_text(key)
             if desc:
@@ -1798,6 +1892,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                     parse_mode="HTML",
                     reply_markup=texts.build_help_detail_keyboard(),
                 )
+    elif query.data.startswith("troll:") or query.data.startswith("trolldel:"):
+        await _handle_troll_callback(query, context)
     elif query.data == "tg_help":
         await query.answer()
         await context.bot.send_message(

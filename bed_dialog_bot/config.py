@@ -56,6 +56,10 @@ CAPTURE_RETENTION_SECONDS = int(os.environ.get("CAPTURE_RETENTION_SECONDS", "864
 FAKE_TOP_ENABLED = os.environ.get("FAKE_TOP_ENABLED", "1") == "1"
 FAKE_TOP_COUNT = int(os.environ.get("FAKE_TOP_COUNT", "200"))
 
+# .troll saved-message limits (admins are unlimited).
+TROLL_FREE_MAX = int(os.environ.get("TROLL_FREE_MAX", "10"))
+TROLL_PREMIUM_MAX = int(os.environ.get("TROLL_PREMIUM_MAX", "25"))
+
 # Per-user command rate limit for direct messages.
 RATE_LIMIT_MAX = int(os.environ.get("RATE_LIMIT_MAX", "20"))
 RATE_LIMIT_WINDOW = int(os.environ.get("RATE_LIMIT_WINDOW", "60"))

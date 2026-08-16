@@ -97,14 +97,6 @@ MAX_PREFIX_LEN = 16
 
 _DICE_EMOJI = {"dice": "🎲", "slot": "🎰", "dart": "🎯", "ball": "🏀", "foot": "⚽"}
 
-_TROLL_LINES = [
-    "Ты сегодня медленный, как черепаха на пенсии 🐢",
-    "С таким подходом далеко не уедешь 😏",
-    "Ну это было слабенько, признай 😅",
-    "Я в тебя верил... зря 🥲",
-    "Твой уровень: чуть выше картошки 🥔",
-]
-
 _BURM_LINES = [
     "🌀 Секретная бурмалда активирована.",
     "🫠 Бурмалда одобряет.",
@@ -538,7 +530,19 @@ async def try_handle_owner_command(
         return True
 
     if _TROLL_RE.match(text):
-        await _edit_command_message(context, bcid, chat_id, message_id, random.choice(_TROLL_LINES))
+        saved = [t["text"] for t in storage.list_troll_texts(message.from_user.id)]
+        if not saved:
+            await _edit_command_message(
+                context, bcid, chat_id, message_id,
+                "🚀 Нет заготовок. Добавьте их: в личке с ботом /help → кнопка «🚀 .troll».",
+            )
+            return True
+        # Send the saved lines one by one, like .spam.
+        await _edit_command_message(context, bcid, chat_id, message_id, saved[0])
+        interval = 0.1 if is_premium else max(0.3, SPAM_WINDOW_SECONDS / max(len(saved), 1))
+        for line in saved[1:]:
+            await asyncio.sleep(interval)
+            await _spam_send_one(context, chat_id, bcid, line)
         return True
 
     if _SPEK_RE.match(text):

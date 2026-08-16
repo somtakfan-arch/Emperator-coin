@@ -270,7 +270,10 @@ HELP_COMMANDS = [
     ),
     (
         "troll", "🚀 .troll",
-        "<b>.troll</b>\n\nОтправить собеседнику случайную подколку.",
+        "<b>🚀 .troll — заготовки сообщений</b>\n\nНажмите кнопку «🚀 .troll» в "
+        "меню /help, добавьте свои тексты (без премиума до 10, с премиумом 25, "
+        "у админов без лимита). Затем в чате напишите <code>.troll</code> — бот "
+        "отправит их по очереди, как .spam.",
     ),
     (
         "tools", "🧰 .calc · .password",
@@ -513,6 +516,59 @@ def build_help_detail_keyboard() -> InlineKeyboardMarkup:
         [[InlineKeyboardButton("⬅️ К списку команд", callback_data="help:back",
                                api_kwargs={"style": "primary"})]]
     )
+
+
+# --- .troll saved-message manager (opened from the /help .troll button) ---
+
+def _limit_str(limit) -> str:
+    return "∞" if limit is None else str(limit)
+
+
+def build_troll_menu_text(count: int, limit) -> str:
+    return (
+        "<b>🚀 .troll — заготовки</b>\n\n"
+        "Добавьте свои тексты, и когда в чате напишете <code>.troll</code>, "
+        "бот отправит их по очереди (как .spam).\n\n"
+        f"Сохранено: <b>{count}/{_limit_str(limit)}</b>"
+    )
+
+
+def build_troll_menu_keyboard(has_items: bool) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton("➕ Добавить текст", callback_data="troll:add",
+                                  api_kwargs={"style": "success"})]]
+    if has_items:
+        rows.append([InlineKeyboardButton("📋 Мои тексты", callback_data="troll:list",
+                                          api_kwargs={"style": "primary"})])
+        rows.append([InlineKeyboardButton("🗑 Очистить всё", callback_data="troll:clear",
+                                          api_kwargs={"style": "danger"})])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="help:back",
+                                      api_kwargs={"style": "primary"})])
+    return InlineKeyboardMarkup(rows)
+
+
+def build_troll_add_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [[InlineKeyboardButton("✅ Готово", callback_data="troll:menu",
+                               api_kwargs={"style": "success"})]]
+    )
+
+
+def build_troll_list_text(items) -> str:
+    if not items:
+        return "📋 Пока нет заготовок."
+    import html as _html
+    lines = [f"{i}. {_html.escape(it['text'][:80])}" for i, it in enumerate(items, 1)]
+    return "<b>📋 Ваши заготовки .troll</b>\n\n" + "\n".join(lines)
+
+
+def build_troll_list_keyboard(items) -> InlineKeyboardMarkup:
+    rows = []
+    for i, it in enumerate(items, 1):
+        rows.append([InlineKeyboardButton(f"🗑 Удалить #{i}", callback_data=f"trolldel:{it['id']}",
+                                          api_kwargs={"style": "danger"})])
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="troll:menu",
+                                      api_kwargs={"style": "primary"})])
+    return InlineKeyboardMarkup(rows)
 
 
 def build_status_text(premium_until) -> str:
