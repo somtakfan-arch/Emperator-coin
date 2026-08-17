@@ -14,7 +14,7 @@ from telegram import (
     InputMediaPhoto,
 )
 
-from . import config, texts
+from . import commands, config, texts
 
 _ASSETS = os.path.join(os.path.dirname(__file__), "assets")
 
@@ -162,6 +162,25 @@ def cap_cmds(uid, storage, bot_username) -> str:
     return texts.build_help_menu_text()
 
 
+_STYLE_ORDER = ["bold", "italic", "strike", "underline", "mono", "spoiler"]
+
+
+def _style_keys(uid, storage):
+    return [k for k in (storage.get_setting(f"style:{uid}") or "").split(",") if k]
+
+
+def cap_style(uid, storage, bot_username) -> str:
+    keys = _style_keys(uid, storage)
+    names = ", ".join(commands.STYLE_LABELS.get(k, k) for k in keys) if keys else "выключено"
+    preview = commands.apply_styles("пример текста", keys) if keys else "пример текста"
+    return (
+        "<b>🎨 Форматирование текста</b>\n"
+        "<i>Выберите, как будет выглядеть ваш текст.</i>\n\n"
+        f"Активно: <b>{names}</b>\n"
+        f"Пример: {preview}"
+    )
+
+
 # ---------------- keyboards ----------------
 
 def kb_main() -> InlineKeyboardMarkup:
@@ -210,7 +229,7 @@ def kb_ref() -> InlineKeyboardMarkup:
 
 def kb_funcs() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [_btn("👁 Ghost", "func:ghost", "primary"), _btn("🎨 Стиль", "func:style", "primary")],
+        [_btn("👁 Ghost", "func:ghost", "primary"), _btn("🎨 Стиль", "menu:style", "primary")],
         [_btn("🤖 Автоответчик", "func:autoreply", "primary")],
         _BACK,
     ])
@@ -224,6 +243,22 @@ def kb_cmds() -> InlineKeyboardMarkup:
     return texts.build_cmds_keyboard()
 
 
+def kb_style(uid, storage) -> InlineKeyboardMarkup:
+    active = set(_style_keys(uid, storage))
+
+    def sb(key):
+        on = key in active
+        label = commands.STYLE_LABELS.get(key, key).capitalize()
+        return _btn(("✅ " if on else "") + label, f"style:{key}", "success" if on else "danger")
+
+    return InlineKeyboardMarkup([
+        [sb("bold"), sb("italic")],
+        [sb("strike"), sb("underline")],
+        [sb("mono"), sb("spoiler")],
+        _BACK,
+    ])
+
+
 # section -> (banner name, caption fn, keyboard fn)
 SECTIONS = {
     "main": ("main", cap_main, kb_main),
@@ -235,7 +270,16 @@ SECTIONS = {
     "funcs": ("funcs", cap_funcs, kb_funcs),
     "archive": ("archive", cap_archive, kb_archive),
     "cmds": ("cmds", cap_cmds, kb_cmds),
+    "style": ("style", cap_style, kb_style),
 }
+
+
+def _build_kb(kb_fn, uid, storage):
+    """Some keyboards need per-user state (e.g. style toggles); others don't."""
+    try:
+        return kb_fn(uid, storage)
+    except TypeError:
+        return kb_fn()
 
 
 def _cache_fid(context, name, message):
@@ -261,7 +305,7 @@ async def send_section(context, chat_id, section, uid, storage, bot_username):
     photo = fid if fid else open(_banner(name), "rb")
     msg = await context.bot.send_photo(
         chat_id=chat_id, photo=photo, caption=caption,
-        parse_mode="HTML", reply_markup=kb_fn(),
+        parse_mode="HTML", reply_markup=_build_kb(kb_fn, uid, storage),
     )
     _cache_fid(context, name, msg)
     return msg
@@ -273,7 +317,7 @@ async def edit_section(context, query, section, uid, storage, bot_username):
     caption = cap_fn(uid, storage, bot_username)
     try:
         msg = await query.edit_message_media(
-            media=_media(context, name, caption), reply_markup=kb_fn(),
+            media=_media(context, name, caption), reply_markup=_build_kb(kb_fn, uid, storage),
         )
         _cache_fid(context, name, msg)
     except Exception as e:

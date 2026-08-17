@@ -1281,17 +1281,8 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         parts = text.split()
         avail = ", ".join(commands.STYLE_LABELS.values())
         if len(parts) == 1:
-            cur = storage.get_setting(f"style:{uid}") or ""
-            cur_names = [commands.STYLE_LABELS.get(s, s) for s in cur.split(",") if s]
-            cur_line = ("Сейчас: " + ", ".join(cur_names)) if cur_names else "Сейчас: выключено"
-            await message.reply_text(
-                "🎨 Стиль исходящих сообщений\n"
-                f"{cur_line}\n\n"
-                f"Включить: /style <стили через пробел>\n"
-                f"Доступно: {avail}\n"
-                "Выключить: /style off\n\n"
-                "Пример: /style жирный курсив спойлер"
-            )
+            await menus.send_section(
+                context, message.chat_id, "style", uid, storage, context.bot.username)
             return
         if parts[1].lower() in ("off", "выкл", "нет", "0"):
             storage.set_setting(f"style:{uid}", "")
@@ -1993,6 +1984,20 @@ async def _handle_func_callback(query, context: ContextTypes.DEFAULT_TYPE) -> No
     await menus.edit_section(context, query, "funcs", uid, storage, context.bot.username)
 
 
+async def _handle_style_callback(query, context: ContextTypes.DEFAULT_TYPE) -> None:
+    storage: Storage = context.bot_data["storage"]
+    uid = query.from_user.id
+    key = query.data.split(":", 1)[1]
+    cur = [k for k in (storage.get_setting(f"style:{uid}") or "").split(",") if k]
+    if key in cur:
+        cur.remove(key)
+    elif key in commands.STYLE_TAGS:
+        cur.append(key)
+    storage.set_setting(f"style:{uid}", ",".join(cur))
+    await query.answer("Готово ✅")
+    await menus.edit_section(context, query, "style", uid, storage, context.bot.username)
+
+
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if query.data == "support_info":
@@ -2014,6 +2019,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await _handle_menu_callback(query, context)
     elif query.data.startswith("func:"):
         await _handle_func_callback(query, context)
+    elif query.data.startswith("style:"):
+        await _handle_style_callback(query, context)
     elif query.data == "cmds:open":
         await query.answer()
         await context.bot.send_message(
