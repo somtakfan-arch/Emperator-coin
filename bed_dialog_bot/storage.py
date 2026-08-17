@@ -1036,11 +1036,13 @@ class Storage:
     # --- .troll saved messages ---
 
     def add_troll_item(self, user_id: int, kind: str = "text", text=None, file_id=None) -> None:
+        # Store "" rather than NULL: on volumes created before the schema change
+        # troll_texts.text is still NOT NULL, and media items have no text.
         with self._connect() as conn:
             conn.execute(
                 "INSERT INTO troll_texts (user_id, text, kind, file_id, created_at) "
                 "VALUES (?, ?, ?, ?, ?)",
-                (user_id, text, kind, file_id, int(time.time())),
+                (user_id, text if text is not None else "", kind, file_id, int(time.time())),
             )
 
     def list_troll_items(self, user_id: int):
