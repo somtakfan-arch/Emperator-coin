@@ -1,6 +1,7 @@
 import asyncio
 import io
 import logging
+import os
 import re
 import time
 from datetime import datetime
@@ -19,6 +20,23 @@ from telegram.ext import ContextTypes
 
 from . import commands, config, crypto, formatting, media, texts
 from .storage import Storage
+
+_ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
+BANNER_MAIN = os.path.join(_ASSETS_DIR, "banner_main.png")
+BANNER_CONNECT = os.path.join(_ASSETS_DIR, "banner_connect.png")
+
+
+async def _send_banner(context, chat_id, path, caption=None, reply_markup=None, parse_mode=None) -> bool:
+    try:
+        with open(path, "rb") as fh:
+            await context.bot.send_photo(
+                chat_id=chat_id, photo=fh, caption=caption,
+                reply_markup=reply_markup, parse_mode=parse_mode,
+            )
+        return True
+    except Exception:
+        logger.exception("Failed to send banner %s", path)
+        return False
 
 _GIVE_PREMIUM_RE = re.compile(r"^/give\s+premium\s+(\d+)\s+(\d+)\s*$")
 _SUPPORT_RE = re.compile(r"^/support(?:\s+(.+))?$", re.DOTALL)
@@ -823,6 +841,25 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             )
             return
 
+    # Gate: until the bot is connected via Business, only the connect menu is
+    # available. Admins and a few always-allowed commands are exempt.
+    if message.from_user:
+        uid = message.from_user.id
+        is_admin = uid in config.ADMIN_USER_IDS
+        connected = storage.get_bcid_for_owner(uid) is not None
+        allowed_pre = (
+            text.startswith("/start")
+            or text.startswith("/support")
+            or text.startswith("/ask")
+        )
+        if not is_admin and not connected and not allowed_pre:
+            await _send_banner(
+                context, message.chat_id, BANNER_CONNECT,
+                caption="🔌 Сначала подключите бота — тогда откроются все функции.",
+                reply_markup=texts.build_intro_keyboard(context.bot.username),
+            )
+            return
+
     if text.startswith("/start"):
         parts = text.split(maxsplit=1)
         if len(parts) == 2 and not was_known:
@@ -844,6 +881,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             texts.build_intro_text_en(context.bot.username) if lang == "en"
             else texts.build_intro_text(context.bot.username)
         )
+        await _send_banner(context, message.chat_id, BANNER_MAIN)
         await message.reply_text(
             intro,
             parse_mode="HTML",
