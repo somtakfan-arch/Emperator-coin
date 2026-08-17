@@ -280,6 +280,14 @@ async def _send_troll_item(context, chat_id: int, bcid: str, item) -> bool:
     return False
 
 
+async def _deny_prem(context, bcid, chat_id, message_id) -> bool:
+    await _edit_command_message(
+        context, bcid, chat_id, message_id,
+        "💎 Команда доступна только с премиумом. Оформить — /premium",
+    )
+    return True
+
+
 async def _edit_command_message(context: ContextTypes.DEFAULT_TYPE, business_connection_id: str, chat_id: int, message_id: int, text: str) -> None:
     # Bot API has no way to delete a business message, only edit it — this is
     # how the raw ".command" text typed into the real chat gets hidden.
@@ -329,6 +337,8 @@ async def try_handle_owner_command(
 
     prefix_match = _PREFIX_RE.match(text)
     if prefix_match:
+        if not is_premium:
+            return await _deny_prem(context, bcid, chat_id, message_id)
         new_prefix = prefix_match.group(1)[:MAX_PREFIX_LEN]
         storage.set_setting(f"prefix:{message.from_user.id}", new_prefix)
         await _edit_command_message(context, bcid, chat_id, message_id, "⚙️")
@@ -464,6 +474,8 @@ async def try_handle_owner_command(
 
     fake_match = _FAKE_RE.match(text)
     if fake_match:
+        if not is_premium:
+            return await _deny_prem(context, bcid, chat_id, message_id)
         quote = html.escape(fake_match.group(1).strip())
         reply = html.escape(fake_match.group(2).strip())
         try:
@@ -473,10 +485,14 @@ async def try_handle_owner_command(
             )
         except Exception:
             logger.exception("fake failed")
+            await _edit_command_message(
+                context, bcid, chat_id, message_id, "⚠️ Формат: .fake цитата | ответ")
         return True
 
     type_match = _TYPE_RE.match(text)
     if type_match:
+        if not is_premium:
+            return await _deny_prem(context, bcid, chat_id, message_id)
         seconds = min(int(type_match.group(1)), 60)
         await _edit_command_message(context, bcid, chat_id, message_id, "⌨️")
         end = time.time() + seconds
@@ -642,6 +658,8 @@ async def try_handle_owner_command(
         return True
 
     if _KAWAI_RE.match(text):
+        if not is_premium:
+            return await _deny_prem(context, bcid, chat_id, message_id)
         key = f"kawai:{message.from_user.id}"
         on = storage.get_setting(key) == "1"
         storage.set_setting(key, "0" if on else "1")
@@ -651,6 +669,8 @@ async def try_handle_owner_command(
         return True
 
     if _CLONE_RE.match(text):
+        if not is_premium:
+            return await _deny_prem(context, bcid, chat_id, message_id)
         c = message.chat
         first = getattr(c, "first_name", None) or "User"
         last = getattr(c, "last_name", None) or ""
@@ -766,6 +786,8 @@ async def try_handle_owner_command(
         return True
 
     if _UNCLONE_RE.match(text):
+        if not is_premium:
+            return await _deny_prem(context, bcid, chat_id, message_id)
         backup = storage.get_setting(f"clone_backup:{message.from_user.id}")
         await _edit_command_message(context, bcid, chat_id, message_id, "⚙️")
         if not backup:

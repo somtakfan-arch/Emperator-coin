@@ -466,7 +466,7 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
             return
         # Restyle the owner's own plain-text messages: /style (configurable)
         # takes priority, otherwise .kawai (fixed bold+italic).
-        if message.text and not message.text.startswith("."):
+        if message.text and not message.text.startswith(".") and storage.is_premium(conn["owner_user_id"]):
             owner_id = conn["owner_user_id"]
             styled = None
             style_setting = storage.get_setting(f"style:{owner_id}")
@@ -1015,6 +1015,9 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     if text.startswith("/topdelete") or text.startswith("/palevo"):
+        if not storage.is_premium(message.from_user.id):
+            await message.reply_text("💎 Топ «палевок» доступен только с премиумом. /premium")
+            return
         flaggers = storage.top_flaggers(message.from_user.id)
         if not flaggers:
             await message.reply_text("Пока нет данных (палевок не зафиксировано).")
@@ -1024,6 +1027,9 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     if text.startswith("/digest"):
+        if not storage.is_premium(message.from_user.id):
+            await message.reply_text("💎 Дайджест доступен только с премиумом. /premium")
+            return
         await message.reply_text(_build_digest(storage, message.from_user.id))
         return
 
@@ -1129,6 +1135,9 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     if text.startswith("/alert") or text.startswith("/unalert"):
+        if not storage.is_premium(message.from_user.id):
+            await message.reply_text("💎 Алерты по ключевым словам доступны только с премиумом. /premium")
+            return
         parts = text.split(maxsplit=1)
         word = parts[1].strip().lower() if len(parts) == 2 else ""
         if not word:
@@ -1278,6 +1287,9 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     if text.startswith("/style"):
         uid = message.from_user.id
+        if not storage.is_premium(uid):
+            await message.reply_text("💎 Форматирование сообщений доступно только с премиумом. /premium")
+            return
         parts = text.split()
         avail = ", ".join(commands.STYLE_LABELS.values())
         if len(parts) == 1:
@@ -1936,6 +1948,9 @@ async def _handle_menu_callback(query, context: ContextTypes.DEFAULT_TYPE) -> No
     storage: Storage = context.bot_data["storage"]
     uid = query.from_user.id
     section = query.data.split(":", 1)[1]
+    if section == "style" and not storage.is_premium(uid):
+        await query.answer("💎 Форматирование доступно только с премиумом. /premium", show_alert=True)
+        return
     if section in menus.SECTIONS:
         await query.answer()
         await menus.edit_section(context, query, section, uid, storage, context.bot.username)
@@ -1987,6 +2002,9 @@ async def _handle_func_callback(query, context: ContextTypes.DEFAULT_TYPE) -> No
 async def _handle_style_callback(query, context: ContextTypes.DEFAULT_TYPE) -> None:
     storage: Storage = context.bot_data["storage"]
     uid = query.from_user.id
+    if not storage.is_premium(uid):
+        await query.answer("💎 Только для премиума. /premium", show_alert=True)
+        return
     key = query.data.split(":", 1)[1]
     cur = [k for k in (storage.get_setting(f"style:{uid}") or "").split(",") if k]
     if key in cur:

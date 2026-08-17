@@ -460,14 +460,13 @@ HELP_COMMANDS = [
 
 _HELP_INDEX = {key: (label, desc) for key, label, desc in HELP_COMMANDS}
 
-# Rotate through the Bot API 9.4 button colours so the menu is multicoloured.
-_STYLE_CYCLE = ("success", "primary", "danger")
-
-
-def _styled_button(text: str, data: str, idx: int) -> InlineKeyboardButton:
-    return InlineKeyboardButton(
-        text, callback_data=data, api_kwargs={"style": _STYLE_CYCLE[idx % 3]}
-    )
+# Premium features: their buttons are painted blue; free ones alternate
+# green/red. Keys correspond to HELP_COMMANDS entries.
+PREMIUM_HELP_KEYS = {
+    "selfdestruct", "note", "stopspam", "fake", "type", "kawai", "clone",
+    "prefix", "style", "watermark", "stats", "find", "alert", "digest",
+    "topdelete",
+}
 
 
 def build_help_menu_text() -> str:
@@ -483,12 +482,17 @@ def build_help_menu_text() -> str:
 
 def build_help_menu_keyboard() -> InlineKeyboardMarkup:
     rows = []
-    idx = 0
+    free_idx = 0
     for i in range(0, len(HELP_COMMANDS), 2):
         row = []
         for key, label, _ in HELP_COMMANDS[i : i + 2]:
-            row.append(_styled_button(label, f"help:{key}", idx))
-            idx += 1
+            if key in PREMIUM_HELP_KEYS:
+                style = "primary"  # blue = premium
+            else:
+                style = "success" if free_idx % 2 == 0 else "danger"  # green/red
+                free_idx += 1
+            row.append(InlineKeyboardButton(
+                label, callback_data=f"help:{key}", api_kwargs={"style": style}))
         rows.append(row)
     return InlineKeyboardMarkup(rows)
 

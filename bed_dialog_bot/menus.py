@@ -229,8 +229,8 @@ def kb_ref() -> InlineKeyboardMarkup:
 
 def kb_funcs() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
-        [_btn("👁 Ghost", "func:ghost", "primary"), _btn("🎨 Стиль", "menu:style", "primary")],
-        [_btn("🤖 Автоответчик", "func:autoreply", "primary")],
+        [_btn("👁 Ghost", "func:ghost", "success"), _btn("💎 Стиль", "menu:style", "primary")],
+        [_btn("🤖 Автоответчик", "func:autoreply", "danger")],
         _BACK,
     ])
 
