@@ -795,27 +795,33 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     text = message.text or ""
 
-    # If the user tapped "➕ Добавить текст" in the .troll manager, capture their
-    # next plain messages as saved troll texts (until they press "Готово" or /).
+    # If the user tapped "➕ Добавить" in the .troll manager, capture their next
+    # messages (text OR media — sticker/photo/кружок/видео/…) as saved items,
+    # until they press "Готово" or send a / command.
     awaiting = context.bot_data.setdefault("troll_await", set())
-    if message.from_user and message.from_user.id in awaiting and text and not text.startswith("/"):
-        uid = message.from_user.id
-        limit = _troll_limit(storage, uid)
-        count = storage.count_troll_texts(uid)
-        if limit is not None and count >= limit:
-            awaiting.discard(uid)
+    if message.from_user and message.from_user.id in awaiting and not text.startswith("/"):
+        m_kind, m_file_id = media.extract_media(message)
+        if text or m_kind:
+            uid = message.from_user.id
+            limit = _troll_limit(storage, uid)
+            count = storage.count_troll_texts(uid)
+            if limit is not None and count >= limit:
+                awaiting.discard(uid)
+                await message.reply_text(
+                    f"⚠️ Достигнут лимит {limit}. Удалите что-нибудь или оформите /premium.\n"
+                    "Открыть заготовки: /help → .troll"
+                )
+                return
+            if m_kind:
+                storage.add_troll_item(uid, m_kind, text=(message.caption or None), file_id=m_file_id)
+            else:
+                storage.add_troll_item(uid, "text", text=text[:1000])
+            count += 1
+            limit_str = "∞" if limit is None else str(limit)
             await message.reply_text(
-                f"⚠️ Достигнут лимит {limit}. Удалите что-нибудь или оформите /premium.\n"
-                "Открыть заготовки: /help → .troll"
+                f"✅ Сохранено ({count}/{limit_str}). Пришлите ещё или откройте /help → .troll, чтобы закончить.",
             )
             return
-        storage.add_troll_text(uid, text[:1000])
-        count += 1
-        limit_str = "∞" if limit is None else str(limit)
-        await message.reply_text(
-            f"✅ Сохранено ({count}/{limit_str}). Пришлите ещё или откройте /help → .troll, чтобы закончить.",
-        )
-        return
 
     if text.startswith("/start"):
         parts = text.split(maxsplit=1)
@@ -1836,13 +1842,15 @@ async def _handle_troll_callback(query, context: ContextTypes.DEFAULT_TYPE) -> N
         await query.answer()
         context.bot_data.setdefault("troll_await", set()).add(uid)
         await query.edit_message_text(
-            "✍️ Пришлите текст сообщением. Можно несколько подряд — каждое сохранится.\n"
+            "✍️ Пришлите <b>текст или медиа</b> (фото, стикер, кружок, видео, "
+            "голосовое). Можно несколько подряд — каждое сохранится.\n"
             "Когда закончите — нажмите «Готово».",
+            parse_mode="HTML",
             reply_markup=texts.build_troll_add_keyboard(),
         )
     elif data == "troll:list":
         await query.answer()
-        items = storage.list_troll_texts(uid)
+        items = storage.list_troll_items(uid)
         await query.edit_message_text(
             texts.build_troll_list_text(items),
             parse_mode="HTML",
@@ -1859,7 +1867,7 @@ async def _handle_troll_callback(query, context: ContextTypes.DEFAULT_TYPE) -> N
         except ValueError:
             pass
         await query.answer("Удалено.")
-        items = storage.list_troll_texts(uid)
+        items = storage.list_troll_items(uid)
         await query.edit_message_text(
             texts.build_troll_list_text(items),
             parse_mode="HTML",

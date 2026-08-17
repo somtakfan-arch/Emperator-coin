@@ -193,7 +193,9 @@ CREATE TABLE IF NOT EXISTS crypto_invoices (
 CREATE TABLE IF NOT EXISTS troll_texts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
-    text TEXT NOT NULL,
+    text TEXT,
+    kind TEXT NOT NULL DEFAULT 'text',
+    file_id TEXT,
     created_at INTEGER NOT NULL
 );
 """
@@ -232,6 +234,11 @@ class Storage:
         if ref_cols and "confirmed" not in ref_cols:
             # Existing referrals were credited on /start — keep them confirmed.
             conn.execute("ALTER TABLE referrals ADD COLUMN confirmed INTEGER NOT NULL DEFAULT 1")
+        troll_cols = {row[1] for row in conn.execute("PRAGMA table_info(troll_texts)")}
+        if troll_cols and "kind" not in troll_cols:
+            conn.execute("ALTER TABLE troll_texts ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'")
+        if troll_cols and "file_id" not in troll_cols:
+            conn.execute("ALTER TABLE troll_texts ADD COLUMN file_id TEXT")
 
     @contextmanager
     def _connect(self):
@@ -1028,20 +1035,21 @@ class Storage:
 
     # --- .troll saved messages ---
 
-    def add_troll_text(self, user_id: int, text: str) -> None:
+    def add_troll_item(self, user_id: int, kind: str = "text", text=None, file_id=None) -> None:
         with self._connect() as conn:
             conn.execute(
-                "INSERT INTO troll_texts (user_id, text, created_at) VALUES (?, ?, ?)",
-                (user_id, text, int(time.time())),
+                "INSERT INTO troll_texts (user_id, text, kind, file_id, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (user_id, text, kind, file_id, int(time.time())),
             )
 
-    def list_troll_texts(self, user_id: int):
+    def list_troll_items(self, user_id: int):
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT id, text FROM troll_texts WHERE user_id = ? ORDER BY id",
+                "SELECT id, text, kind, file_id FROM troll_texts WHERE user_id = ? ORDER BY id",
                 (user_id,),
             ).fetchall()
-        return [{"id": r[0], "text": r[1]} for r in rows]
+        return [{"id": r[0], "text": r[1], "kind": r[2] or "text", "file_id": r[3]} for r in rows]
 
     def count_troll_texts(self, user_id: int) -> int:
         with self._connect() as conn:

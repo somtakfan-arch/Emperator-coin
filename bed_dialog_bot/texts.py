@@ -271,9 +271,10 @@ HELP_COMMANDS = [
     (
         "troll", "🚀 .troll",
         "<b>🚀 .troll — заготовки сообщений</b>\n\nНажмите кнопку «🚀 .troll» в "
-        "меню /help, добавьте свои тексты (без премиума до 10, с премиумом 25, "
-        "у админов без лимита). Затем в чате напишите <code>.troll</code> — бот "
-        "отправит их по очереди, как .spam.",
+        "меню /help, добавьте тексты <b>или медиа</b> (фото, стикеры, кружки, "
+        "видео, голосовые) — без премиума до 10, с премиумом 25, у админов без "
+        "лимита. Затем в чате напишите <code>.troll</code> — бот отправит их по "
+        "очереди, как .spam.",
     ),
     (
         "tools", "🧰 .calc · .password",
@@ -528,10 +529,18 @@ def _limit_str(limit) -> str:
 def build_troll_menu_text(count: int, limit) -> str:
     return (
         "<b>🚀 .troll — заготовки</b>\n\n"
-        "Добавьте свои тексты, и когда в чате напишете <code>.troll</code>, "
-        "бот отправит их по очереди (как .spam).\n\n"
+        "Добавьте тексты <b>или медиа</b> (фото, стикеры, кружки, видео, "
+        "голосовые), и когда в чате напишете <code>.troll</code>, бот отправит "
+        "их по очереди (как .spam).\n\n"
         f"Сохранено: <b>{count}/{_limit_str(limit)}</b>"
     )
+
+
+_TROLL_KIND_LABELS = {
+    "text": "💬", "photo": "📷 фото", "sticker": "🎨 стикер",
+    "video_note": "⭕️ кружок", "video": "🎥 видео", "animation": "🎞 GIF",
+    "voice": "🎤 голос", "audio": "🎵 аудио", "document": "📄 файл",
+}
 
 
 def build_troll_menu_keyboard(has_items: bool) -> InlineKeyboardMarkup:
@@ -558,7 +567,14 @@ def build_troll_list_text(items) -> str:
     if not items:
         return "📋 Пока нет заготовок."
     import html as _html
-    lines = [f"{i}. {_html.escape(it['text'][:80])}" for i, it in enumerate(items, 1)]
+    lines = []
+    for i, it in enumerate(items, 1):
+        if it.get("kind", "text") == "text":
+            lines.append(f"{i}. {_html.escape((it.get('text') or '')[:80])}")
+        else:
+            label = _TROLL_KIND_LABELS.get(it["kind"], it["kind"])
+            cap = f" — {_html.escape(it['text'][:40])}" if it.get("text") else ""
+            lines.append(f"{i}. {label}{cap}")
     return "<b>📋 Ваши заготовки .troll</b>\n\n" + "\n".join(lines)
 
 

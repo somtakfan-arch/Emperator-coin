@@ -249,6 +249,37 @@ async def _spam_send_one(context, chat_id: int, bcid: str, text: str) -> bool:
     return False
 
 
+_CAPTIONED_KINDS = {"photo", "video", "animation", "audio", "document"}
+
+
+async def _send_troll_item(context, chat_id: int, bcid: str, item) -> bool:
+    """Send one saved .troll item (text or media) into the chat. Never raises."""
+    kind = item.get("kind", "text")
+    fid = item.get("file_id")
+    txt = item.get("text")
+    for _ in range(4):
+        try:
+            if kind == "text" or not fid:
+                await context.bot.send_message(chat_id=chat_id, business_connection_id=bcid, text=txt or "")
+            else:
+                # kind doubles as the send_<kind> method name and its file kwarg.
+                send = getattr(context.bot, f"send_{kind}", None)
+                if send is None:
+                    await context.bot.send_message(chat_id=chat_id, business_connection_id=bcid, text=txt or "")
+                    return True
+                kwargs = {"chat_id": chat_id, "business_connection_id": bcid, kind: fid}
+                if kind in _CAPTIONED_KINDS and txt:
+                    kwargs["caption"] = txt
+                await send(**kwargs)
+            return True
+        except RetryAfter as e:
+            await asyncio.sleep(float(getattr(e, "retry_after", 1)) + 0.5)
+        except Exception:
+            logger.exception("troll item send failed (kind=%s)", kind)
+            return False
+    return False
+
+
 async def _edit_command_message(context: ContextTypes.DEFAULT_TYPE, business_connection_id: str, chat_id: int, message_id: int, text: str) -> None:
     # Bot API has no way to delete a business message, only edit it — this is
     # how the raw ".command" text typed into the real chat gets hidden.
@@ -530,19 +561,24 @@ async def try_handle_owner_command(
         return True
 
     if _TROLL_RE.match(text):
-        saved = [t["text"] for t in storage.list_troll_texts(message.from_user.id)]
+        saved = storage.list_troll_items(message.from_user.id)
         if not saved:
             await _edit_command_message(
                 context, bcid, chat_id, message_id,
                 "🚀 Нет заготовок. Добавьте их: в личке с ботом /help → кнопка «🚀 .troll».",
             )
             return True
-        # Send the saved lines one by one, like .spam.
-        await _edit_command_message(context, bcid, chat_id, message_id, saved[0])
+        # Hide the ".troll" command, then send every saved item in order.
+        first = saved[0]
+        if first["kind"] == "text":
+            await _edit_command_message(context, bcid, chat_id, message_id, first["text"] or "")
+        else:
+            await _edit_command_message(context, bcid, chat_id, message_id, "🚀")
+            await _send_troll_item(context, chat_id, bcid, first)
         interval = 0.1 if is_premium else max(0.3, SPAM_WINDOW_SECONDS / max(len(saved), 1))
-        for line in saved[1:]:
+        for item in saved[1:]:
             await asyncio.sleep(interval)
-            await _spam_send_one(context, chat_id, bcid, line)
+            await _send_troll_item(context, chat_id, bcid, item)
         return True
 
     if _SPEK_RE.match(text):
