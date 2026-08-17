@@ -1,0 +1,283 @@
+"""Inline-menu system: photo banner + HTML caption + coloured button nav.
+
+Navigation edits the same message's media/caption/keyboard in place. Banner
+file_ids are cached in bot_data after the first upload so later edits reuse
+them instead of re-uploading.
+"""
+import os
+import time
+from datetime import datetime
+
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InputMediaPhoto,
+)
+
+from . import config
+
+_ASSETS = os.path.join(os.path.dirname(__file__), "assets")
+
+
+def _banner(name: str) -> str:
+    return os.path.join(_ASSETS, f"banner_{name}.png")
+
+
+def _btn(text: str, data: str, style: str = None) -> InlineKeyboardButton:
+    kw = {"style": style} if style else None
+    return InlineKeyboardButton(text, callback_data=data, api_kwargs=kw)
+
+
+_BACK = [_btn("⬅️ Назад", "menu:main", "danger")]
+
+
+# ---------------- captions ----------------
+
+def _fmt_dt(ts):
+    return datetime.fromtimestamp(ts).strftime("%d.%m.%Y") if ts else "—"
+
+
+def cap_main(uid, storage, bot_username) -> str:
+    return (
+        "<b>🏛 Главное</b>\n"
+        "<i>Бот подключён и следит за вашими диалогами.</i>\n\n"
+        "<blockquote>🗑 Удалённые и изменённые сообщения\n"
+        "🕓 Одноразовые фото, видео и кружки\n"
+        "⚡️ Команды прямо в чате (.help)\n"
+        "🆕 Уникальные функции бота</blockquote>\n"
+        "Выберите раздел ниже 👇"
+    )
+
+
+def cap_profile(uid, storage, bot_username) -> str:
+    prem_until = storage.get_premium_until(uid)
+    prem = (f"💎 до {_fmt_dt(prem_until)}" if prem_until and prem_until > time.time() else "нет")
+    connected = "✅ подключён" if storage.get_bcid_for_owner(uid) else "❌ не подключён"
+    return (
+        "<b>👤 Профиль</b>\n\n"
+        "<blockquote>"
+        f"🆔 ID: <code>{uid}</code>\n"
+        f"💎 Подписка: <b>{prem}</b>\n"
+        f"🔌 Бот: {connected}\n"
+        f"🎯 Заготовок .troll: {storage.count_troll_texts(uid)}\n"
+        f"👥 Приглашено: {storage.count_referrals(uid)}"
+        "</blockquote>\n"
+        "Спасибо, что с нами ❤️"
+    )
+
+
+def cap_stats(uid, storage, bot_username) -> str:
+    bcid = storage.get_bcid_for_owner(uid)
+    tracked = 0
+    if bcid:
+        # aggregate is not per-chat here; show a light summary
+        pass
+    return (
+        "<b>📊 Статистика</b>\n\n"
+        "<blockquote>"
+        f"👥 Приглашено друзей: {storage.count_referrals(uid)}\n"
+        f"🎯 Заготовок .troll: {storage.count_troll_texts(uid)}\n"
+        f"💎 Премиум: {'да' if storage.is_premium(uid) else 'нет'}"
+        "</blockquote>\n"
+        "<i>Подробная статистика диалога — команда .status прямо в чате.</i>"
+    )
+
+
+def cap_support(uid, storage, bot_username) -> str:
+    return (
+        "<b>🆘 Поддержка</b>\n\n"
+        "Опишите вопрос или проблему одним сообщением — команда "
+        "<code>/support &lt;текст&gt;</code>.\n\n"
+        "<i>Можно предложить и новую функцию — опишите идею подробнее, "
+        "рассмотрим.</i>"
+    )
+
+
+def cap_sub(uid, storage, bot_username) -> str:
+    return (
+        "<b>💎 Подписка</b>\n"
+        "<i>Больше возможностей бота:</i>\n\n"
+        "<blockquote>"
+        "🚫 Убирает водяные знаки\n"
+        f"⚡️ .spam без задержек, лимит до {config.PREMIUM_SPAM_MAX}\n"
+        "🎯 .troll до 25 заготовок\n"
+        "🎨 Свой стиль, водяной знак, заметки\n"
+        "🔎 Поиск по истории, аналитика\n"
+        "🎁 Можно подарить другому"
+        "</blockquote>\n"
+        f"Оформить — <b>/premium</b> ({config.PREMIUM_STARS_PRICE}⭐ или крипта)."
+    )
+
+
+def cap_ref(uid, storage, bot_username) -> str:
+    link = f"https://t.me/{bot_username}?start=ref_{uid}"
+    return (
+        "<b>👥 Реферальная программа</b>\n\n"
+        "Приглашайте друзей и получайте награды за их покупки.\n\n"
+        "🔗 <b>Ваша ссылка</b>\n"
+        f"<code>{link}</code>\n\n"
+        "<blockquote>"
+        f"🤝 Партнёрка: {config.AFFILIATE_PERCENT}% с покупок приглашённых\n"
+        f"🎁 {config.REFERRALS_PER_REWARD} друзей = "
+        f"{config.REFERRAL_REWARD_DAYS} дней премиума\n"
+        f"👥 Приглашено вами: {storage.count_referrals(uid)}"
+        "</blockquote>"
+    )
+
+
+def cap_funcs(uid, storage, bot_username) -> str:
+    def on(v):
+        return "🟢 вкл" if v else "⚪️ выкл"
+    ghost = storage.get_setting(f"ghost:{uid}") == "1"
+    style = bool(storage.get_setting(f"style:{uid}"))
+    autoreply = bool(storage.get_setting(f"autoreply:{uid}"))
+    return (
+        "<b>⚙️ Функции</b>\n"
+        "<i>Быстрые переключатели:</i>\n\n"
+        "<blockquote>"
+        f"👁 Невидимое чтение (/ghost): {on(ghost)}\n"
+        f"🎨 Стиль сообщений (/style): {on(style)}\n"
+        f"🤖 Автоответчик (/autoreply): {on(autoreply)}"
+        "</blockquote>\n"
+        "Управление — командами выше или кнопками ниже."
+    )
+
+
+def cap_archive(uid, storage, bot_username) -> str:
+    return (
+        "<b>🗄 Архив</b>\n\n"
+        "Здесь копятся удалённые, изменённые и одноразовые сообщения из ваших "
+        "диалогов — бот присылает их вам автоматически.\n\n"
+        "<blockquote>📤 Выгрузить всё файлом — команда /export\n"
+        "🔎 Поиск по истории (премиум) — /find &lt;слово&gt;</blockquote>"
+    )
+
+
+def cap_cmds(uid, storage, bot_username) -> str:
+    return (
+        "<b>📟 Команды</b>\n\n"
+        "Нажмите кнопку ниже — откроется полный список команд с описанием "
+        "каждой (в чате с собеседником работает <code>.help</code>)."
+    )
+
+
+# ---------------- keyboards ----------------
+
+def kb_main() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [_btn("🗄 Архив", "menu:archive", "success")],
+        [_btn("👤 Профиль", "menu:profile", "success")],
+        [_btn("⚙️ Функции", "menu:funcs", "primary"), _btn("📊 Статистика", "menu:stats", "primary")],
+        [_btn("👥 Рефералы", "menu:ref", "primary"), _btn("📟 Команды", "menu:cmds", "primary")],
+        [_btn("💎 Подписка", "menu:sub", "primary")],
+        [_btn("🆘 Поддержка", "menu:support", "success")],
+    ])
+
+
+def kb_profile() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [_btn("🔔 Уведомления", "menu:funcs", "primary")],
+        [_btn("🗑 Удалить мои данные", "menu:wipe", "danger")],
+        _BACK,
+    ])
+
+
+def kb_stats() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [_btn("👥 Рефералы", "menu:ref", "primary"), _btn("💎 Подписка", "menu:sub", "primary")],
+        _BACK,
+    ])
+
+
+def kb_support() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [_btn("✈️ Связаться", "menu:contact", "success")],
+        _BACK,
+    ])
+
+
+def kb_sub() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [_btn("👤 Себе", "menu:buyself", "success"), _btn("🎁 Подарить", "menu:gift", "success")],
+        _BACK,
+    ])
+
+
+def kb_ref() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[_btn("📊 Статистика", "menu:stats", "primary")], _BACK])
+
+
+def kb_funcs() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [_btn("👁 Ghost", "func:ghost", "primary"), _btn("🎨 Стиль", "func:style", "primary")],
+        [_btn("🤖 Автоответчик", "func:autoreply", "primary")],
+        _BACK,
+    ])
+
+
+def kb_archive() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([_BACK])
+
+
+def kb_cmds() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [_btn("📖 Открыть список команд", "cmds:open", "success")],
+        _BACK,
+    ])
+
+
+# section -> (banner name, caption fn, keyboard fn)
+SECTIONS = {
+    "main": ("main", cap_main, kb_main),
+    "profile": ("profile", cap_profile, kb_profile),
+    "stats": ("stats", cap_stats, kb_stats),
+    "support": ("support", cap_support, kb_support),
+    "sub": ("sub", cap_sub, kb_sub),
+    "ref": ("ref", cap_ref, kb_ref),
+    "funcs": ("funcs", cap_funcs, kb_funcs),
+    "archive": ("archive", cap_archive, kb_archive),
+    "cmds": ("cmds", cap_cmds, kb_cmds),
+}
+
+
+def _cache_fid(context, name, message):
+    try:
+        if message and message.photo:
+            context.bot_data.setdefault("banner_fid", {})[name] = message.photo[-1].file_id
+    except Exception:
+        pass
+
+
+def _media(context, name, caption):
+    fid = context.bot_data.setdefault("banner_fid", {}).get(name)
+    if fid:
+        return InputMediaPhoto(media=fid, caption=caption, parse_mode="HTML")
+    return InputMediaPhoto(media=open(_banner(name), "rb"), caption=caption, parse_mode="HTML")
+
+
+async def send_section(context, chat_id, section, uid, storage, bot_username):
+    """Send a section as a new photo message."""
+    name, cap_fn, kb_fn = SECTIONS[section]
+    caption = cap_fn(uid, storage, bot_username)
+    fid = context.bot_data.setdefault("banner_fid", {}).get(name)
+    photo = fid if fid else open(_banner(name), "rb")
+    msg = await context.bot.send_photo(
+        chat_id=chat_id, photo=photo, caption=caption,
+        parse_mode="HTML", reply_markup=kb_fn(),
+    )
+    _cache_fid(context, name, msg)
+    return msg
+
+
+async def edit_section(context, query, section, uid, storage, bot_username):
+    """Morph the current menu message into another section."""
+    name, cap_fn, kb_fn = SECTIONS[section]
+    caption = cap_fn(uid, storage, bot_username)
+    try:
+        msg = await query.edit_message_media(
+            media=_media(context, name, caption), reply_markup=kb_fn(),
+        )
+        _cache_fid(context, name, msg)
+    except Exception:
+        # Fallback (e.g. original message wasn't a photo): send a fresh one.
+        await send_section(context, query.message.chat_id, section, uid, storage, bot_username)

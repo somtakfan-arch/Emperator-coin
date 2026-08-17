@@ -18,7 +18,7 @@ from telegram import (
 )
 from telegram.ext import ContextTypes
 
-from . import commands, config, crypto, formatting, media, texts
+from . import commands, config, crypto, formatting, media, menus, texts
 from .storage import Storage
 
 _ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
@@ -876,17 +876,38 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
                 )
             except Exception:
                 logger.exception("Failed to send trial notice")
+        if storage.get_bcid_for_owner(message.from_user.id):
+            # Connected — open the main menu.
+            await menus.send_section(
+                context, message.chat_id, "main",
+                message.from_user.id, storage, context.bot.username,
+            )
+            return
         lang = storage.get_setting(f"lang:{message.from_user.id}", "ru")
         intro = (
             texts.build_intro_text_en(context.bot.username) if lang == "en"
             else texts.build_intro_text(context.bot.username)
         )
-        await _send_banner(context, message.chat_id, BANNER_MAIN)
+        await _send_banner(context, message.chat_id, BANNER_CONNECT)
         await message.reply_text(
             intro,
             parse_mode="HTML",
             reply_markup=texts.build_intro_keyboard(context.bot.username),
         )
+        return
+
+    if text.startswith("/menu"):
+        if storage.get_bcid_for_owner(message.from_user.id):
+            await menus.send_section(
+                context, message.chat_id, "main",
+                message.from_user.id, storage, context.bot.username,
+            )
+        else:
+            await _send_banner(
+                context, message.chat_id, BANNER_CONNECT,
+                caption="🔌 Сначала подключите бота.",
+                reply_markup=texts.build_intro_keyboard(context.bot.username),
+            )
         return
 
     if text.startswith("/ref") or text.startswith("/invite"):
@@ -1915,6 +1936,58 @@ async def _handle_troll_callback(query, context: ContextTypes.DEFAULT_TYPE) -> N
         await query.answer()
 
 
+async def _handle_menu_callback(query, context: ContextTypes.DEFAULT_TYPE) -> None:
+    storage: Storage = context.bot_data["storage"]
+    uid = query.from_user.id
+    section = query.data.split(":", 1)[1]
+    if section in menus.SECTIONS:
+        await query.answer()
+        await menus.edit_section(context, query, section, uid, storage, context.bot.username)
+    elif section == "contact":
+        await query.answer(text=texts.SUPPORT_PROMPT, show_alert=True)
+    elif section == "gift":
+        await query.answer("Подарить премиум: /gift <id> <дней>", show_alert=True)
+    elif section == "wipe":
+        await query.answer(
+            "Чтобы удалить свои данные, напишите в поддержку: /support удалить мои данные.",
+            show_alert=True,
+        )
+    elif section == "buyself":
+        await query.answer()
+        rows = []
+        for idx, (label, stars, days) in enumerate(config.PREMIUM_PACKAGES):
+            row = [InlineKeyboardButton(f"{label} — {stars}⭐", callback_data=f"buy:{idx}")]
+            if crypto.is_enabled() and idx < len(config.CRYPTO_PRICES):
+                row.append(InlineKeyboardButton(
+                    f"💳 {config.CRYPTO_PRICES[idx]} {config.CRYPTO_PAY_ASSET}",
+                    callback_data=f"crypto:{idx}"))
+            rows.append(row)
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text="💎 Выберите пакет премиума:",
+            reply_markup=InlineKeyboardMarkup(rows),
+        )
+    else:
+        await query.answer()
+
+
+async def _handle_func_callback(query, context: ContextTypes.DEFAULT_TYPE) -> None:
+    storage: Storage = context.bot_data["storage"]
+    uid = query.from_user.id
+    what = query.data.split(":", 1)[1]
+    if what == "ghost":
+        cur = storage.get_setting(f"ghost:{uid}") == "1"
+        storage.set_setting(f"ghost:{uid}", "0" if cur else "1")
+    elif what == "autoreply":
+        cur = bool(storage.get_setting(f"autoreply:{uid}"))
+        storage.set_setting(f"autoreply:{uid}", "" if cur else "🥱 Я сейчас AFK, отвечу позже.")
+    elif what == "style":
+        cur = bool(storage.get_setting(f"style:{uid}"))
+        storage.set_setting(f"style:{uid}", "" if cur else "bold,italic")
+    await query.answer("Готово ✅")
+    await menus.edit_section(context, query, "funcs", uid, storage, context.bot.username)
+
+
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if query.data == "support_info":
@@ -1940,6 +2013,17 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 )
     elif query.data.startswith("troll:") or query.data.startswith("trolldel:"):
         await _handle_troll_callback(query, context)
+    elif query.data.startswith("menu:"):
+        await _handle_menu_callback(query, context)
+    elif query.data.startswith("func:"):
+        await _handle_func_callback(query, context)
+    elif query.data == "cmds:open":
+        await query.answer()
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=texts.build_help_menu_text(), parse_mode="HTML",
+            reply_markup=texts.build_help_menu_keyboard(),
+        )
     elif query.data == "tg_help":
         await query.answer()
         await context.bot.send_message(
