@@ -161,6 +161,8 @@ def build_help_text() -> str:
 def build_admin_help_text() -> str:
     return (
         "🛠 Админ-команды\n\n"
+        "👑 /admin grant <id> <ранг> — выдать ранг (супер-админ)\n"
+        "👑 /admin revoke <id> · /admin list · /admin ranks\n"
         "/give premium <id> <дней> — выдать премиум\n"
         "/list — список всех пользователей (@username — id)\n"
         "/log <id> <1h|1d|1w> — .txt со всеми логами пользователя\n"

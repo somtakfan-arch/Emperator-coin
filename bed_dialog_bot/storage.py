@@ -198,6 +198,12 @@ CREATE TABLE IF NOT EXISTS troll_texts (
     file_id TEXT,
     created_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS admin_roles (
+    user_id INTEGER PRIMARY KEY,
+    rank TEXT NOT NULL,
+    granted_at INTEGER NOT NULL
+);
 """
 
 CAPTURE_RETENTION_SECONDS = 86400
@@ -1034,6 +1040,34 @@ class Storage:
             conn.execute("DELETE FROM crypto_invoices WHERE invoice_id = ?", (invoice_id,))
 
     # --- .troll saved messages ---
+
+    # --- admin roles ---
+
+    def set_admin_rank(self, user_id: int, rank: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO admin_roles (user_id, rank, granted_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET rank=excluded.rank, granted_at=excluded.granted_at",
+                (user_id, rank, int(time.time())),
+            )
+
+    def get_admin_rank(self, user_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT rank FROM admin_roles WHERE user_id = ?", (user_id,)
+            ).fetchone()
+        return row[0] if row else None
+
+    def remove_admin_rank(self, user_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM admin_roles WHERE user_id = ?", (user_id,))
+
+    def list_admin_roles(self):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT user_id, rank FROM admin_roles ORDER BY granted_at"
+            ).fetchall()
+        return [{"user_id": r[0], "rank": r[1]} for r in rows]
 
     def add_troll_item(self, user_id: int, kind: str = "text", text=None, file_id=None) -> None:
         # Store "" rather than NULL: on volumes created before the schema change

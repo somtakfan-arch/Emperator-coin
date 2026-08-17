@@ -18,8 +18,19 @@ from telegram import (
 )
 from telegram.ext import ContextTypes
 
-from . import commands, config, crypto, formatting, media, menus, texts
+from . import admin, commands, config, crypto, formatting, media, menus, texts
 from .storage import Storage
+
+
+async def _require_perm(message, storage: Storage, perm: str) -> bool:
+    """True if the sender may run a command needing `perm`. Ranked admins who
+    lack it get a notice; non-admins are ignored silently (command stays hidden)."""
+    uid = message.from_user.id
+    if admin.has_perm(storage, uid, perm):
+        return True
+    if admin.is_admin(storage, uid):
+        await message.reply_text("⛔ Недостаточно прав для этой команды.")
+    return False
 
 _ASSETS_DIR = os.path.join(os.path.dirname(__file__), "assets")
 BANNER_MAIN = os.path.join(_ASSETS_DIR, "banner_main.png")
@@ -271,9 +282,11 @@ def _rate_limited(context, uid: int) -> bool:
 
 
 def _can_access_logs(storage: Storage, uid: int, target_id: int) -> bool:
-    if uid == config.COMPETITORS_ADMIN_ID:
+    # Super admins and admins with the "saves" permission see any capture;
+    # other admins only after being granted access for a user (via /accept).
+    if admin.is_super(uid) or admin.has_perm(storage, uid, "saves"):
         return True
-    return uid in config.ADMIN_USER_IDS and storage.has_log_access(uid, target_id)
+    return admin.is_admin(storage, uid) and storage.has_log_access(uid, target_id)
 
 
 def _capture(storage: Storage, owner_id: int, message: Message, action: str, content: str) -> None:
@@ -762,7 +775,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     if (
         message.from_user
-        and message.from_user.id not in config.ADMIN_USER_IDS
+        and not admin.is_admin(storage, message.from_user.id)
         and storage.is_blacklisted(message.from_user.id)
     ):
         return
@@ -770,7 +783,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     # Rate limit: protect the bot from command floods (admins exempt).
     if (
         message.from_user
-        and message.from_user.id not in config.ADMIN_USER_IDS
+        and not admin.is_admin(storage, message.from_user.id)
         and not message.successful_payment
         and _rate_limited(context, message.from_user.id)
     ):
@@ -841,7 +854,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     # available. Admins and a few always-allowed commands are exempt.
     if message.from_user:
         uid = message.from_user.id
-        is_admin = uid in config.ADMIN_USER_IDS
+        is_admin = admin.is_admin(storage, uid)
         connected = storage.get_bcid_for_owner(uid) is not None
         allowed_pre = (
             text.startswith("/start")
@@ -1259,7 +1272,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             context, message.chat_id, "cmds",
             message.from_user.id, storage, context.bot.username,
         )
-        if message.from_user and message.from_user.id in config.ADMIN_USER_IDS:
+        if message.from_user and admin.is_admin(storage, message.from_user.id):
             await message.reply_text(texts.build_admin_help_text())
         return
 
@@ -1314,7 +1327,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return _mark(storage, message.from_user.id, value, context.bot.username)
 
     if text.startswith("/status"):
-        if message.from_user.id in config.ADMIN_USER_IDS:
+        if admin.is_admin(storage, message.from_user.id):
             users = storage.list_users()
             connected = storage.connected_owner_ids()
             on = [u for u in users if u["user_id"] in connected]
@@ -1418,7 +1431,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             f"Принять (даёт доступ к логам): /accept {ticket_id}\n"
             f"Ответить: /reply {ticket_id} <текст>"
         )
-        for admin_id in config.ADMIN_USER_IDS:
+        for admin_id in admin.admin_ids_with(storage, "tickets"):
             try:
                 await context.bot.send_message(chat_id=admin_id, text=notify)
             except Exception:
@@ -1445,7 +1458,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         notify_text = badge + texts.build_ticket_notification(
             ticket_id, name, username, ticket_message, message.from_user.id, check_logs
         )
-        for admin_id in config.ADMIN_USER_IDS:
+        for admin_id in admin.admin_ids_with(storage, "tickets"):
             try:
                 await context.bot.send_message(chat_id=admin_id, text=notify_text)
             except Exception:
@@ -1454,7 +1467,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     reply_match = _REPLY_RE.match(text)
     if reply_match:
-        if message.from_user.id not in config.ADMIN_USER_IDS:
+        if not await _require_perm(message, storage, "tickets"):
             return
         ticket_id = int(reply_match.group(1))
         reply_text = reply_match.group(2)
@@ -1509,7 +1522,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     give_match = _GIVE_PREMIUM_RE.match(text)
     if give_match:
-        if message.from_user.id not in config.ADMIN_USER_IDS:
+        if not await _require_perm(message, storage, "premium"):
             return
         target_id = int(give_match.group(1))
         days = int(give_match.group(2))
@@ -1520,7 +1533,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     createpromo_match = _CREATEPROMO_RE.match(text)
     if createpromo_match:
-        if message.from_user.id not in config.ADMIN_USER_IDS:
+        if not await _require_perm(message, storage, "promo"):
             return
         code = createpromo_match.group(1).upper()
         days = int(createpromo_match.group(2))
@@ -1532,8 +1545,54 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return
 
+    if text == "/admin" or text.startswith("/admin "):
+        uid = message.from_user.id
+        if not admin.is_super(uid):
+            if admin.is_admin(storage, uid):
+                await message.reply_text("⛔ Управлять рангами может только супер-админ.")
+            return
+        parts = text.split()
+        if len(parts) >= 4 and parts[1] == "grant" and parts[2].lstrip("-").isdigit():
+            target = int(parts[2])
+            rank = " ".join(parts[3:]).lower()
+            if rank not in config.ADMIN_RANKS:
+                await message.reply_text("Неизвестный ранг. Доступно: " + ", ".join(config.ADMIN_RANKS))
+                return
+            storage.set_admin_rank(target, rank)
+            perms = ", ".join(sorted(config.ADMIN_RANKS[rank]))
+            await message.reply_text(f"✅ Пользователю {target} выдан ранг «{rank}».\nПрава: {perms}")
+            try:
+                await context.bot.send_message(target, f"🛡 Вам выдан ранг администратора «{rank}».\nПрава: {perms}")
+            except Exception:
+                pass
+            return
+        if len(parts) >= 3 and parts[1] == "revoke" and parts[2].lstrip("-").isdigit():
+            storage.remove_admin_rank(int(parts[2]))
+            await message.reply_text(f"✅ Ранг у {parts[2]} снят.")
+            return
+        if len(parts) >= 2 and parts[1] == "list":
+            roles = storage.list_admin_roles()
+            lines = ["👑 Супер: " + ", ".join(str(x) for x in config.ADMIN_USER_IDS)]
+            lines += [f"• {r['user_id']} — {r['rank']}" for r in roles] or ["(рангов нет)"]
+            await message.reply_text("🛡 Администраторы:\n" + "\n".join(lines))
+            return
+        if len(parts) >= 2 and parts[1] == "ranks":
+            lines = [f"<b>{rank}</b>: {', '.join(sorted(perms))}"
+                     for rank, perms in config.ADMIN_RANKS.items()]
+            await message.reply_text("🎖 Ранги и их права:\n" + "\n".join(lines), parse_mode="HTML")
+            return
+        await message.reply_text(
+            "🛡 Управление админами (только супер-админ):\n\n"
+            "/admin grant <id> <ранг> — выдать ранг\n"
+            "/admin revoke <id> — снять ранг\n"
+            "/admin list — список админов\n"
+            "/admin ranks — ранги и их права\n\n"
+            "Ранги: " + ", ".join(config.ADMIN_RANKS)
+        )
+        return
+
     if text.startswith("/adminstats"):
-        if message.from_user.id not in config.ADMIN_USER_IDS:
+        if not await _require_perm(message, storage, "users"):
             return
         total = storage.count_users()
         connected = len(storage.connected_owner_ids())
@@ -1551,7 +1610,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     if text.startswith("/winback"):
-        if message.from_user.id not in config.ADMIN_USER_IDS:
+        if not await _require_perm(message, storage, "promo"):
             return
         targets = storage.lapsed_premium_users()
         if not targets:
@@ -1580,7 +1639,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if timeline_match:
         target_id = int(timeline_match.group(1))
         if not _can_access_logs(storage, message.from_user.id, target_id):
-            if message.from_user.id in config.ADMIN_USER_IDS:
+            if admin.is_admin(storage, message.from_user.id):
                 await message.reply_text("⛔ Нет доступа к логам этого пользователя.")
             return
         caps = storage.get_captures(target_id)
@@ -1596,7 +1655,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     blacklist_match = _BLACKLIST_RE.match(text)
     if blacklist_match:
-        if message.from_user.id not in config.ADMIN_USER_IDS:
+        if not await _require_perm(message, storage, "moderation"):
             return
         target_id = int(blacklist_match.group(1))
         reason = blacklist_match.group(2)
@@ -1606,7 +1665,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     unblacklist_match = _UNBLACKLIST_RE.match(text)
     if unblacklist_match:
-        if message.from_user.id not in config.ADMIN_USER_IDS:
+        if not await _require_perm(message, storage, "moderation"):
             return
         target_id = int(unblacklist_match.group(1))
         storage.unblacklist_user(target_id)
@@ -1614,7 +1673,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     if text.startswith("/list"):
-        if message.from_user.id not in config.ADMIN_USER_IDS:
+        if not await _require_perm(message, storage, "users"):
             return
         users = storage.list_users()
         total = len(users)
@@ -1638,7 +1697,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     broadcast_match = _BROADCAST_RE.match(text)
     if broadcast_match:
-        if message.from_user.id not in config.ADMIN_USER_IDS:
+        if not await _require_perm(message, storage, "broadcast"):
             return
         payload = broadcast_match.group(1)
         recipients = storage.all_user_ids()
@@ -1655,7 +1714,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     if text.startswith("/tickets"):
-        if message.from_user.id not in config.ADMIN_USER_IDS:
+        if not await _require_perm(message, storage, "tickets"):
             return
         tickets = storage.list_open_tickets()
         if not tickets:
@@ -1677,7 +1736,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     close_match = _CLOSE_RE.match(text)
     if close_match:
-        if message.from_user.id not in config.ADMIN_USER_IDS:
+        if not await _require_perm(message, storage, "tickets"):
             return
         ticket_id = int(close_match.group(1))
         ticket = storage.get_ticket(ticket_id)
@@ -1696,7 +1755,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     log_match = _LOG_RE.match(text)
     if log_match:
-        if message.from_user.id not in config.ADMIN_USER_IDS:
+        if not await _require_perm(message, storage, "logs"):
             return
         target_id = int(log_match.group(1))
         window = f"{log_match.group(2)}{log_match.group(3)}"
@@ -1725,7 +1784,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     photolog_match = _PHOTOLOG_RE.match(text)
     if photolog_match:
-        if message.from_user.id not in config.ADMIN_USER_IDS:
+        if not await _require_perm(message, storage, "logs"):
             return
         target_id = int(photolog_match.group(1))
         window = f"{photolog_match.group(2)}{photolog_match.group(3)}"
@@ -1752,7 +1811,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     clearlog_match = _CLEARLOG_RE.match(text)
     if clearlog_match:
-        if message.from_user.id not in config.ADMIN_USER_IDS:
+        if not await _require_perm(message, storage, "moderation"):
             return
         target = clearlog_match.group(1)
         if target == "all":
@@ -1767,7 +1826,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if getlog_match:
         target_id = int(getlog_match.group(1))
         if not _can_access_logs(storage, message.from_user.id, target_id):
-            if message.from_user.id in config.ADMIN_USER_IDS:
+            if admin.is_admin(storage, message.from_user.id):
                 await message.reply_text("⛔ Нет доступа к логам этого пользователя.")
             return
         if target_id in config.LOG_EXCLUDE_USER_IDS:
@@ -1788,7 +1847,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             continue
         target_id = int(m.group(1))
         if not _can_access_logs(storage, message.from_user.id, target_id):
-            if message.from_user.id in config.ADMIN_USER_IDS:
+            if admin.is_admin(storage, message.from_user.id):
                 await message.reply_text("⛔ Нет доступа к логам этого пользователя.")
             return
         if stop:
@@ -1811,7 +1870,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if photologcheck_match:
         target_id = int(photologcheck_match.group(1))
         if not _can_access_logs(storage, message.from_user.id, target_id):
-            if message.from_user.id in config.ADMIN_USER_IDS:
+            if admin.is_admin(storage, message.from_user.id):
                 await message.reply_text("⛔ Нет доступа к логам этого пользователя.")
             return
         media_caps = [
@@ -1839,7 +1898,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     accept_match = _ACCEPT_RE.match(text)
     if accept_match:
-        if message.from_user.id not in config.ADMIN_USER_IDS:
+        if not await _require_perm(message, storage, "tickets"):
             return
         ticket_id = int(accept_match.group(1))
         ticket = storage.get_ticket(ticket_id)
@@ -1879,7 +1938,7 @@ async def _edit_msg(query, text, reply_markup=None, parse_mode="HTML") -> None:
 
 def _troll_limit(storage: Storage, user_id: int):
     """None = unlimited (admins); otherwise the per-user cap."""
-    if user_id in config.ADMIN_USER_IDS:
+    if admin.is_admin(storage, user_id):
         return None
     return config.TROLL_PREMIUM_MAX if storage.is_premium(user_id) else config.TROLL_FREE_MAX
 

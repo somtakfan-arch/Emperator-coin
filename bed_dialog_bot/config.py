@@ -7,10 +7,33 @@ load_dotenv()
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 DB_PATH = os.environ.get("DB_PATH", "bed_dialog.db")
 
+# Super administrators: full access and the only ones who can grant ranks.
+# Everyone else becomes an admin only via /admin grant <id> <rank>.
 ADMIN_USER_IDS = {
     int(uid)
-    for uid in os.environ.get("ADMIN_USER_IDS", "7563505180,6816666906").split(",")
+    for uid in os.environ.get("SUPER_ADMIN_IDS", "7563505180").split(",")
     if uid.strip()
+}
+
+# All fine-grained admin permissions.
+ADMIN_PERMS = {
+    "logs",        # /log /photolog /checklog /photologcheck /timeline
+    "saves",       # /getlog /stoplog (полная запись/сохранёнки)
+    "tickets",     # /tickets /reply /close /accept
+    "moderation",  # /blacklist /unblacklist /clearlog
+    "premium",     # /give premium
+    "users",       # /list /adminstats
+    "promo",       # /createpromo /winback
+    "broadcast",   # /broadcast
+}
+
+# Ranks and the permissions each grants. Super admins have everything.
+ADMIN_RANKS = {
+    "стажер": {"logs"},
+    "поддержка": {"tickets", "logs"},
+    "модератор": {"logs", "tickets", "moderation"},
+    "администратор": {"logs", "saves", "tickets", "moderation", "premium",
+                      "users", "promo", "broadcast"},
 }
 
 # Users whose activity is never written to the logs table (privacy — even
