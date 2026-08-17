@@ -1,4 +1,5 @@
 import asyncio
+import html
 import io
 import logging
 import os
@@ -917,6 +918,15 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
                 caption="🔌 Сначала подключите бота.",
                 reply_markup=texts.build_intro_keyboard(context.bot.username),
             )
+        return
+
+    if text.startswith("/adminmenu") or text.startswith("/apanel"):
+        if not admin.is_admin(storage, message.from_user.id):
+            return
+        await menus.send_section(
+            context, message.chat_id, "admin",
+            message.from_user.id, storage, context.bot.username,
+        )
         return
 
     if text.startswith("/ref") or text.startswith("/invite"):
@@ -2006,6 +2016,9 @@ async def _handle_menu_callback(query, context: ContextTypes.DEFAULT_TYPE) -> No
     if section == "style" and not storage.is_premium(uid):
         await query.answer("💎 Форматирование доступно только с премиумом. /premium", show_alert=True)
         return
+    if section == "admin" and not admin.is_admin(storage, uid):
+        await query.answer("⛔ Раздел только для администраторов.", show_alert=True)
+        return
     if section in menus.SECTIONS:
         await query.answer()
         await menus.edit_section(context, query, section, uid, storage, context.bot.username)
@@ -2071,6 +2084,91 @@ async def _handle_style_callback(query, context: ContextTypes.DEFAULT_TYPE) -> N
     await menus.edit_section(context, query, "style", uid, storage, context.bot.username)
 
 
+_ADMIN_HINTS = {
+    "logs": ("logs", "📜 Логи:\n/log <id> <1h|1d|1w>\n/photolog <id> <1h|1d|1w>\n/checklog <id>\n/timeline <id>"),
+    "saves": ("saves", "💾 Сохранёнки:\n/getlog <id> — включить запись\n/stoplog <id> — файл\n/photologcheck <id>"),
+    "mod": ("moderation", "⛔ Модерация:\n/blacklist <id> [причина]\n/unblacklist <id>\n/clearlog <id|all>"),
+    "premium": ("premium", "💎 /give premium <id> <дней>\n/gift <id> <дней>"),
+    "broadcast": ("broadcast", "📢 /broadcast <текст>"),
+    "promo": ("promo", "🎟 /createpromo <код> <дней> <активаций>\n/winback"),
+}
+
+
+async def _handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE) -> None:
+    storage: Storage = context.bot_data["storage"]
+    uid = query.from_user.id
+    if not admin.is_admin(storage, uid):
+        await query.answer("⛔ Только для администраторов.", show_alert=True)
+        return
+    what = query.data.split(":", 1)[1]
+    perms = admin.perms_of(storage, uid)
+
+    if what in _ADMIN_HINTS:
+        need, msg = _ADMIN_HINTS[what]
+        await query.answer(msg if need in perms else "⛔ Нет прав.", show_alert=True)
+        return
+
+    if what == "dash":
+        if "users" not in perms:
+            await query.answer("⛔ Нет прав.", show_alert=True)
+            return
+        await query.answer()
+        txt = (
+            "<b>📊 Дашборд</b>\n\n<blockquote>"
+            f"👥 Пользователей: {storage.count_users()}\n"
+            f"🔌 Подключений: {len(storage.connected_owner_ids())}\n"
+            f"💎 С премиумом: {storage.count_premium()}\n"
+            f"🎁 Пробников: {storage.count_trials()}\n"
+            f"🎫 Открытых тикетов: {storage.count_open_tickets()}\n"
+            f"⛔ В чёрном списке: {storage.count_blacklisted()}</blockquote>"
+        )
+        await _edit_msg(query, txt, menus.kb_admin_back())
+    elif what == "users":
+        if "users" not in perms:
+            await query.answer("⛔ Нет прав.", show_alert=True)
+            return
+        await query.answer()
+        await _edit_msg(
+            query,
+            f"<b>👥 Пользователи</b>\n\nВсего: <b>{storage.count_users()}</b>\n\n"
+            "Полный список файлом — команда /list.",
+            menus.kb_admin_back(),
+        )
+    elif what == "tickets":
+        if "tickets" not in perms:
+            await query.answer("⛔ Нет прав.", show_alert=True)
+            return
+        await query.answer()
+        tickets = storage.list_open_tickets()
+        if not tickets:
+            body = "Открытых тикетов нет."
+        else:
+            lines = []
+            for t in tickets[:10]:
+                handle = f"@{t['username']}" if t["username"] else (t["name"] or str(t["user_id"]))
+                lines.append(f"#{t['id']} · {html.escape(str(handle))} ({t['user_id']})")
+            if len(tickets) > 10:
+                lines.append(f"… ещё {len(tickets) - 10}")
+            body = "\n".join(lines) + "\n\nОтветить: /reply <id> <текст> · Закрыть: /close <id>"
+        await _edit_msg(query, f"<b>🎫 Открытые тикеты ({len(tickets)})</b>\n\n{body}", menus.kb_admin_back())
+    elif what == "admins":
+        if not admin.is_super(uid):
+            await query.answer("⛔ Только супер-админ.", show_alert=True)
+            return
+        await query.answer()
+        roles = storage.list_admin_roles()
+        lines = ["👑 Супер: " + ", ".join(str(x) for x in config.ADMIN_USER_IDS)]
+        lines += [f"• {r['user_id']} — {r['rank']}" for r in roles] or ["(рангов нет)"]
+        txt = (
+            "<b>👑 Управление админами</b>\n\n<blockquote>" + "\n".join(lines) + "</blockquote>\n"
+            "Выдать: <code>/admin grant &lt;id&gt; &lt;ранг&gt;</code>\n"
+            "Снять: <code>/admin revoke &lt;id&gt;</code>\nРанги: /admin ranks"
+        )
+        await _edit_msg(query, txt, menus.kb_admin_back())
+    else:
+        await query.answer()
+
+
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if query.data == "support_info":
@@ -2094,6 +2192,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await _handle_func_callback(query, context)
     elif query.data.startswith("style:"):
         await _handle_style_callback(query, context)
+    elif query.data.startswith("adm:"):
+        await _handle_admin_callback(query, context)
     elif query.data == "cmds:open":
         await query.answer()
         await context.bot.send_message(

@@ -14,7 +14,7 @@ from telegram import (
     InputMediaPhoto,
 )
 
-from . import commands, config, texts
+from . import admin, commands, config, texts
 
 _ASSETS = os.path.join(os.path.dirname(__file__), "assets")
 
@@ -162,6 +162,56 @@ def cap_cmds(uid, storage, bot_username) -> str:
     return texts.build_help_menu_text()
 
 
+def cap_admin(uid, storage, bot_username) -> str:
+    rank = admin.rank_of(storage, uid) or "—"
+    perms = ", ".join(sorted(admin.perms_of(storage, uid))) or "—"
+    return (
+        "<b>🛡 Админ-панель</b>\n\n"
+        "<blockquote>"
+        f"🎖 Ранг: <b>{rank}</b>\n"
+        f"🔑 Права: {perms}"
+        "</blockquote>\n"
+        "Выберите раздел ниже 👇"
+    )
+
+
+def kb_admin(uid, storage) -> InlineKeyboardMarkup:
+    p = admin.perms_of(storage, uid)
+    rows = []
+    live = []  # buttons that open a view
+    if "users" in p:
+        live.append(_btn("📊 Дашборд", "adm:dash", "primary"))
+        live.append(_btn("👥 Пользователи", "adm:users", "primary"))
+    if "tickets" in p:
+        live.append(_btn("🎫 Тикеты", "adm:tickets", "success"))
+    # pack live buttons 2 per row
+    for i in range(0, len(live), 2):
+        rows.append(live[i:i + 2])
+    hints = []
+    if "logs" in p:
+        hints.append(_btn("📜 Логи", "adm:logs", "primary"))
+    if "saves" in p:
+        hints.append(_btn("💾 Сохранёнки", "adm:saves", "primary"))
+    if "moderation" in p:
+        hints.append(_btn("⛔ Модерация", "adm:mod", "danger"))
+    if "premium" in p:
+        hints.append(_btn("💎 Премиум", "adm:premium", "success"))
+    if "broadcast" in p:
+        hints.append(_btn("📢 Рассылка", "adm:broadcast", "danger"))
+    if "promo" in p:
+        hints.append(_btn("🎟 Промо", "adm:promo", "success"))
+    for i in range(0, len(hints), 2):
+        rows.append(hints[i:i + 2])
+    if admin.is_super(uid):
+        rows.append([_btn("👑 Управление админами", "adm:admins", "danger")])
+    rows.append([_btn("⬅️ Назад", "menu:main", "danger")])
+    return InlineKeyboardMarkup(rows)
+
+
+def kb_admin_back() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[_btn("⬅️ В админку", "menu:admin", "primary")]])
+
+
 _STYLE_ORDER = ["bold", "italic", "strike", "underline", "mono", "spoiler"]
 
 
@@ -183,15 +233,18 @@ def cap_style(uid, storage, bot_username) -> str:
 
 # ---------------- keyboards ----------------
 
-def kb_main() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
+def kb_main(uid=None, storage=None) -> InlineKeyboardMarkup:
+    rows = [
         [_btn("🗄 Архив", "menu:archive", "success")],
         [_btn("👤 Профиль", "menu:profile", "success")],
         [_btn("⚙️ Функции", "menu:funcs", "primary"), _btn("📊 Статистика", "menu:stats", "primary")],
         [_btn("👥 Рефералы", "menu:ref", "primary"), _btn("📟 Команды", "menu:cmds", "primary")],
         [_btn("💎 Подписка", "menu:sub", "primary")],
         [_btn("🆘 Поддержка", "menu:support", "success")],
-    ])
+    ]
+    if storage is not None and uid is not None and admin.is_admin(storage, uid):
+        rows.append([_btn("🛡 Админ-панель", "menu:admin", "danger")])
+    return InlineKeyboardMarkup(rows)
 
 
 def kb_profile() -> InlineKeyboardMarkup:
@@ -271,6 +324,7 @@ SECTIONS = {
     "archive": ("archive", cap_archive, kb_archive),
     "cmds": ("cmds", cap_cmds, kb_cmds),
     "style": ("style", cap_style, kb_style),
+    "admin": ("admin", cap_admin, kb_admin),
 }
 
 
