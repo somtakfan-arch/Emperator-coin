@@ -514,10 +514,20 @@ def find_help(query: str):
 
 
 def build_help_detail_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        [[InlineKeyboardButton("⬅️ К списку команд", callback_data="help:back",
-                               api_kwargs={"style": "primary"})]]
-    )
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("⬅️ К списку команд", callback_data="help:back",
+                              api_kwargs={"style": "primary"})],
+        [InlineKeyboardButton("🏛 В меню", callback_data="menu:main",
+                              api_kwargs={"style": "danger"})],
+    ])
+
+
+def build_cmds_keyboard() -> InlineKeyboardMarkup:
+    """The /help command grid plus a 'back to main menu' button."""
+    rows = [list(r) for r in build_help_menu_keyboard().inline_keyboard]
+    rows.append([InlineKeyboardButton("🏛 В меню", callback_data="menu:main",
+                                      api_kwargs={"style": "danger"})])
+    return InlineKeyboardMarkup(rows)
 
 
 # --- .troll saved-message manager (opened from the /help .troll button) ---

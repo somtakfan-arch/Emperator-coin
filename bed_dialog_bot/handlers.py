@@ -1250,10 +1250,9 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             else:
                 await message.reply_text(f"❓ Команда «{parts[1]}» не найдена. Список — /help")
             return
-        await message.reply_text(
-            texts.build_help_menu_text(),
-            parse_mode="HTML",
-            reply_markup=texts.build_help_menu_keyboard(),
+        await menus.send_section(
+            context, message.chat_id, "cmds",
+            message.from_user.id, storage, context.bot.username,
         )
         if message.from_user and message.from_user.id in config.ADMIN_USER_IDS:
             await message.reply_text(texts.build_admin_help_text())
@@ -1864,6 +1863,21 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
 
+async def _edit_msg(query, text, reply_markup=None, parse_mode="HTML") -> None:
+    """Edit a message in place, using caption if it's a photo, text otherwise."""
+    try:
+        if query.message and query.message.photo:
+            await query.edit_message_caption(
+                caption=text, parse_mode=parse_mode, reply_markup=reply_markup)
+        else:
+            await query.edit_message_text(
+                text, parse_mode=parse_mode, reply_markup=reply_markup)
+    except Exception as e:
+        if "not modified" in str(e).lower():
+            return
+        logger.exception("_edit_msg failed")
+
+
 def _troll_limit(storage: Storage, user_id: int):
     """None = unlimited (admins); otherwise the per-user cap."""
     if user_id in config.ADMIN_USER_IDS:
@@ -1877,11 +1891,8 @@ async def _show_troll_menu(query, context: ContextTypes.DEFAULT_TYPE) -> None:
     context.bot_data.setdefault("troll_await", set()).discard(uid)
     count = storage.count_troll_texts(uid)
     limit = _troll_limit(storage, uid)
-    await query.edit_message_text(
-        texts.build_troll_menu_text(count, limit),
-        parse_mode="HTML",
-        reply_markup=texts.build_troll_menu_keyboard(count > 0),
-    )
+    await _edit_msg(query, texts.build_troll_menu_text(count, limit),
+                    texts.build_troll_menu_keyboard(count > 0))
 
 
 async def _handle_troll_callback(query, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1900,21 +1911,18 @@ async def _handle_troll_callback(query, context: ContextTypes.DEFAULT_TYPE) -> N
             return
         await query.answer()
         context.bot_data.setdefault("troll_await", set()).add(uid)
-        await query.edit_message_text(
+        await _edit_msg(
+            query,
             "✍️ Пришлите <b>текст или медиа</b> (фото, стикер, кружок, видео, "
             "голосовое). Можно несколько подряд — каждое сохранится.\n"
             "Когда закончите — нажмите «Готово».",
-            parse_mode="HTML",
-            reply_markup=texts.build_troll_add_keyboard(),
+            texts.build_troll_add_keyboard(),
         )
     elif data == "troll:list":
         await query.answer()
         items = storage.list_troll_items(uid)
-        await query.edit_message_text(
-            texts.build_troll_list_text(items),
-            parse_mode="HTML",
-            reply_markup=texts.build_troll_list_keyboard(items),
-        )
+        await _edit_msg(query, texts.build_troll_list_text(items),
+                        texts.build_troll_list_keyboard(items))
     elif data == "troll:clear":
         storage.clear_troll_texts(uid)
         await query.answer("Очищено.")
@@ -1927,11 +1935,8 @@ async def _handle_troll_callback(query, context: ContextTypes.DEFAULT_TYPE) -> N
             pass
         await query.answer("Удалено.")
         items = storage.list_troll_items(uid)
-        await query.edit_message_text(
-            texts.build_troll_list_text(items),
-            parse_mode="HTML",
-            reply_markup=texts.build_troll_list_keyboard(items),
-        )
+        await _edit_msg(query, texts.build_troll_list_text(items),
+                        texts.build_troll_list_keyboard(items))
     else:
         await query.answer()
 
@@ -1996,21 +2001,13 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         key = query.data.split(":", 1)[1]
         await query.answer()
         if key == "back":
-            await query.edit_message_text(
-                texts.build_help_menu_text(),
-                parse_mode="HTML",
-                reply_markup=texts.build_help_menu_keyboard(),
-            )
+            await _edit_msg(query, texts.build_help_menu_text(), texts.build_cmds_keyboard())
         elif key == "troll":
             await _show_troll_menu(query, context)
         else:
             desc = texts.build_help_detail_text(key)
             if desc:
-                await query.edit_message_text(
-                    desc,
-                    parse_mode="HTML",
-                    reply_markup=texts.build_help_detail_keyboard(),
-                )
+                await _edit_msg(query, desc, texts.build_help_detail_keyboard())
     elif query.data.startswith("troll:") or query.data.startswith("trolldel:"):
         await _handle_troll_callback(query, context)
     elif query.data.startswith("menu:"):

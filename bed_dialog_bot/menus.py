@@ -14,7 +14,7 @@ from telegram import (
     InputMediaPhoto,
 )
 
-from . import config
+from . import config, texts
 
 _ASSETS = os.path.join(os.path.dirname(__file__), "assets")
 
@@ -34,7 +34,12 @@ _BACK = [_btn("⬅️ Назад", "menu:main", "danger")]
 # ---------------- captions ----------------
 
 def _fmt_dt(ts):
-    return datetime.fromtimestamp(ts).strftime("%d.%m.%Y") if ts else "—"
+    if not ts:
+        return "—"
+    try:
+        return datetime.fromtimestamp(ts).strftime("%d.%m.%Y")
+    except (ValueError, OverflowError, OSError):
+        return "надолго"
 
 
 def cap_main(uid, storage, bot_username) -> str:
@@ -154,11 +159,7 @@ def cap_archive(uid, storage, bot_username) -> str:
 
 
 def cap_cmds(uid, storage, bot_username) -> str:
-    return (
-        "<b>📟 Команды</b>\n\n"
-        "Нажмите кнопку ниже — откроется полный список команд с описанием "
-        "каждой (в чате с собеседником работает <code>.help</code>)."
-    )
+    return texts.build_help_menu_text()
 
 
 # ---------------- keyboards ----------------
@@ -220,10 +221,7 @@ def kb_archive() -> InlineKeyboardMarkup:
 
 
 def kb_cmds() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
-        [_btn("📖 Открыть список команд", "cmds:open", "success")],
-        _BACK,
-    ])
+    return texts.build_cmds_keyboard()
 
 
 # section -> (banner name, caption fn, keyboard fn)
@@ -278,6 +276,8 @@ async def edit_section(context, query, section, uid, storage, bot_username):
             media=_media(context, name, caption), reply_markup=kb_fn(),
         )
         _cache_fid(context, name, msg)
-    except Exception:
+    except Exception as e:
+        if "not modified" in str(e).lower():
+            return
         # Fallback (e.g. original message wasn't a photo): send a fresh one.
         await send_section(context, query.message.chat_id, section, uid, storage, bot_username)
