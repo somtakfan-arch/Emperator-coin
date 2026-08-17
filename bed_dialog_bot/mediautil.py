@@ -44,6 +44,29 @@ def photo_to_sticker_bytes(image_bytes: bytes) -> bytes:
     return buf.getvalue()
 
 
+async def to_video_sticker(src_path: str) -> str:
+    """Video/round-note → .webm VP9 video sticker (≤3s, longest side 512)."""
+    out = src_path + ".sticker.webm"
+    await _run(
+        "ffmpeg", "-y", "-i", src_path, "-t", "3", "-an",
+        "-vf", "scale='if(gte(iw,ih),512,-2)':'if(gte(iw,ih),-2,512)',fps=30",
+        "-c:v", "libvpx-vp9", "-b:v", "320k", out,
+    )
+    return out
+
+
+async def photo_to_note(image_path: str) -> str:
+    """Static image → a short square (384px) mp4 usable as a video note."""
+    out = image_path + ".note.mp4"
+    await _run(
+        "ffmpeg", "-y", "-loop", "1", "-i", image_path, "-t", "3",
+        "-vf", "scale=384:384:force_original_aspect_ratio=increase,crop=384:384",
+        "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+        "-movflags", "+faststart", out,
+    )
+    return out
+
+
 async def video_to_note(src_path: str) -> str:
     """Square, ≤60s, 384px round-video-note-ready mp4."""
     out = src_path + ".note.mp4"

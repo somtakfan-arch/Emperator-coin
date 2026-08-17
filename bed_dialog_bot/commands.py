@@ -192,7 +192,7 @@ HELP_TEXT = (
     ".love · .flip · .rps · .mon · .бурмалда — приколы и игры\n"
     ".calc <выражение> · .reverse · .mock · .password [длина]\n"
     ".first — первое сообщение · .afk [причина] — автоответ\n"
-    ".stik (в ответ на фото) · .gif · .krom (в ответ на видео)\n"
+    ".stik (фото/видео/кружок→стикер) · .gif · .krom (видео/фото→кружок)\n"
     ".save <ссылка> — скачать видео с TikTok/YouTube/Instagram\n"
     "🛠 .ping — задержка бота (только админ)\n"
     ".clone — клон профиля собеседника (.unclone — вернуть свой)\n"
@@ -826,50 +826,77 @@ async def try_handle_owner_command(
 
     if _STIK_RE.match(text):
         reply = message.reply_to_message
-        if not reply or not reply.photo:
-            await _edit_command_message(context, bcid, chat_id, message_id, "Ответьте .stik на фото.")
+        vid = None
+        if reply:
+            vid = reply.video_note or reply.video or reply.animation
+        if not reply or not (reply.photo or vid):
+            await _edit_command_message(context, bcid, chat_id, message_id,
+                                        "Ответьте .stik на фото, видео или кружок.")
             return True
         await _edit_command_message(context, bcid, chat_id, message_id, "🖼 …")
+        tmpdir = tempfile.mkdtemp()
         try:
-            f = await context.bot.get_file(reply.photo[-1].file_id)
-            raw = bytes(await f.download_as_bytearray())
-            webp = mediautil.photo_to_sticker_bytes(raw)
-            await context.bot.send_sticker(chat_id=chat_id, sticker=io.BytesIO(webp), business_connection_id=bcid)
+            if reply.photo:
+                # Static image → WEBP sticker.
+                f = await context.bot.get_file(reply.photo[-1].file_id)
+                raw = bytes(await f.download_as_bytearray())
+                webp = mediautil.photo_to_sticker_bytes(raw)
+                await context.bot.send_sticker(chat_id=chat_id, sticker=io.BytesIO(webp), business_connection_id=bcid)
+            else:
+                # Video / round note → WEBM video sticker.
+                f = await context.bot.get_file(vid.file_id)
+                srcpath = os.path.join(tmpdir, "src")
+                await f.download_to_drive(srcpath)
+                out = await mediautil.to_video_sticker(srcpath)
+                with open(out, "rb") as fh:
+                    await context.bot.send_sticker(chat_id=chat_id, sticker=fh, business_connection_id=bcid)
             await _edit_command_message(context, bcid, chat_id, message_id, "✅")
         except Exception:
             logger.exception("stik failed")
-            await _edit_command_message(context, bcid, chat_id, message_id, "⚠️ Не получилось сделать стикер.")
+            await _edit_command_message(context, bcid, chat_id, message_id,
+                                        "⚠️ Не получилось сделать стикер (медиа до 20 МБ).")
+        finally:
+            shutil.rmtree(tmpdir, ignore_errors=True)
         return True
 
     if _KROM_RE.match(text) or _GIF_RE.match(text):
         is_krom = bool(_KROM_RE.match(text))
         reply = message.reply_to_message
+        photo_src = reply.photo if (reply and is_krom and reply.photo) else None
         src_media = None
-        if reply:
-            src_media = reply.video or reply.animation or (reply.document if reply.document else None)
-        if not src_media:
-            await _edit_command_message(context, bcid, chat_id, message_id,
-                                        f"Ответьте {'.krom' if is_krom else '.gif'} на видео.")
+        if reply and not photo_src:
+            src_media = reply.video or reply.animation or reply.video_note or reply.document
+        if not photo_src and not src_media:
+            hint = "фото или видео" if is_krom else "видео"
+            await _edit_command_message(context, bcid, chat_id, message_id, f"Ответьте {'.krom' if is_krom else '.gif'} на {hint}.")
             return True
         await _edit_command_message(context, bcid, chat_id, message_id, "⭕️ …" if is_krom else "🎞 …")
         tmpdir = tempfile.mkdtemp()
         try:
-            f = await context.bot.get_file(src_media.file_id)
             srcpath = os.path.join(tmpdir, "src")
-            await f.download_to_drive(srcpath)
-            if is_krom:
-                out = await mediautil.video_to_note(srcpath)
+            if photo_src:
+                # Photo → a short square looping video note.
+                f = await context.bot.get_file(photo_src[-1].file_id)
+                await f.download_to_drive(srcpath)
+                out = await mediautil.photo_to_note(srcpath)
                 with open(out, "rb") as fh:
                     await context.bot.send_video_note(chat_id=chat_id, video_note=fh, business_connection_id=bcid)
             else:
-                out = await mediautil.video_to_gif(srcpath)
-                with open(out, "rb") as fh:
-                    await context.bot.send_animation(chat_id=chat_id, animation=fh, business_connection_id=bcid)
+                f = await context.bot.get_file(src_media.file_id)
+                await f.download_to_drive(srcpath)
+                if is_krom:
+                    out = await mediautil.video_to_note(srcpath)
+                    with open(out, "rb") as fh:
+                        await context.bot.send_video_note(chat_id=chat_id, video_note=fh, business_connection_id=bcid)
+                else:
+                    out = await mediautil.video_to_gif(srcpath)
+                    with open(out, "rb") as fh:
+                        await context.bot.send_animation(chat_id=chat_id, animation=fh, business_connection_id=bcid)
             await _edit_command_message(context, bcid, chat_id, message_id, "✅")
         except Exception:
             logger.exception("krom/gif failed")
             await _edit_command_message(context, bcid, chat_id, message_id,
-                                        "⚠️ Не получилось (видео больше 20 МБ бот скачать не может).")
+                                        "⚠️ Не получилось (медиа до 20 МБ бот может скачать).")
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
         return True
