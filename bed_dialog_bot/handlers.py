@@ -306,26 +306,22 @@ def _fmt_time(ts) -> str:
 
 
 async def _ghost_mirror(message: Message, context: ContextTypes.DEFAULT_TYPE, storage: Storage, conn) -> None:
-    """Mirror an incoming message to the owner's bot chat so they can read it
-    without opening the real dialog (no read receipt is sent)."""
+    """Ghost mode: instantly mark each incoming message as read, so the sender
+    always sees it as read immediately and can't tell when you actually read it
+    — the real read time is masked."""
     if storage.get_setting(f"ghost:{conn['owner_user_id']}") != "1":
         return
-    c_name, _ = _display_name(message)
-    header = f"👁 {c_name}:"
-    body = message.text or message.caption or ""
-    kind, file_id = media.extract_media(message)
     try:
-        if kind:
-            cap = f"{header} {body}".strip()
-            if media.supports_caption(kind):
-                await _send_media(context.bot, conn["owner_chat_id"], kind, file_id, cap)
-            else:
-                await context.bot.send_message(chat_id=conn["owner_chat_id"], text=cap)
-                await _send_media(context.bot, conn["owner_chat_id"], kind, file_id)
-        elif body:
-            await context.bot.send_message(chat_id=conn["owner_chat_id"], text=f"{header}\n{body}")
+        await context.bot.do_api_request(
+            "readBusinessMessage",
+            api_kwargs={
+                "business_connection_id": message.business_connection_id,
+                "chat_id": message.chat_id,
+                "message_id": message.message_id,
+            },
+        )
     except Exception:
-        logger.exception("Failed to ghost-mirror message")
+        logger.exception("Failed to mark business message read (ghost)")
 
 
 async def _autoreply(message: Message, context: ContextTypes.DEFAULT_TYPE, storage: Storage, conn) -> None:
@@ -1378,19 +1374,19 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             storage.set_setting(f"ghost:{uid}", "1" if parts[1].lower() == "on" else "0")
             if parts[1].lower() == "on":
                 await message.reply_text(
-                    "👁 Режим невидимого чтения включён.\n\n"
-                    "Все входящие сообщения будут дублироваться сюда — читайте их "
-                    "здесь и НЕ открывайте сам диалог, тогда собеседник не увидит "
-                    "«прочитано». Выключить: /ghost off"
+                    "👁 Режим Ghost включён.\n\n"
+                    "Все входящие сообщения будут мгновенно помечаться как "
+                    "«прочитано» — собеседник всегда видит прочтение сразу и не "
+                    "узнает, когда вы реально прочитали. Выключить: /ghost off"
                 )
             else:
-                await message.reply_text("👁 Режим невидимого чтения выключен.")
+                await message.reply_text("👁 Режим Ghost выключен.")
             return
         state = "включён" if storage.get_setting(f"ghost:{uid}") == "1" else "выключен"
         await message.reply_text(
-            f"👁 Невидимое чтение: сейчас {state}.\n"
-            "Бот дублирует входящие сюда, чтобы читать не открывая диалог "
-            "(без отметки «прочитано»).\nВключить: /ghost on · Выключить: /ghost off"
+            f"👁 Ghost: сейчас {state}.\n"
+            "Мгновенно ставит «прочитано» на все входящие, чтобы скрыть реальное "
+            "время прочтения.\nВключить: /ghost on · Выключить: /ghost off"
         )
         return
 

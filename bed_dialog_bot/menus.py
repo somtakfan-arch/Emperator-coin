@@ -140,7 +140,7 @@ def cap_funcs(uid, storage, bot_username) -> str:
         "<b>⚙️ Функции</b>\n"
         "<i>Быстрые переключатели:</i>\n\n"
         "<blockquote>"
-        f"👁 Невидимое чтение (/ghost): {on(ghost)}\n"
+        f"👁 Ghost — мгновенное «прочитано» (/ghost): {on(ghost)}\n"
         f"🎨 Стиль сообщений (/style): {on(style)}\n"
         f"🤖 Автоответчик (/autoreply): {on(autoreply)}"
         "</blockquote>\n"
