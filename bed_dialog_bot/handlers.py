@@ -19,7 +19,7 @@ from telegram import (
 )
 from telegram.ext import ContextTypes
 
-from . import admin, commands, config, crypto, formatting, media, menus, texts
+from . import admin, bedcoin, commands, config, crypto, formatting, media, menus, texts
 from .storage import Storage
 
 
@@ -796,9 +796,19 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         storage.upsert_user(message.from_user.id, name, username)
 
     if message.successful_payment:
-        days = config.PREMIUM_DURATION_DAYS
         payload = message.successful_payment.invoice_payload or ""
         parts = payload.split(":")
+        # BedCoin purchase: credit balance and nudge the demand price up.
+        if parts and parts[0] == "bed" and len(parts) >= 3 and parts[2].isdigit():
+            amount = int(parts[2])
+            new_bal = storage.add_bed(message.from_user.id, amount)
+            bedcoin.record_sale(storage, amount)
+            await message.reply_text(
+                f"✅ Куплено {amount} BED! Баланс: {new_bal} BED.\n"
+                f"📈 Новый курс: {bedcoin.fmt_price(storage)}⭐ за BED."
+            )
+            return
+        days = config.PREMIUM_DURATION_DAYS
         if len(parts) >= 3 and parts[2].isdigit():
             days = int(parts[2])
         until_ts = storage.grant_premium_days(message.from_user.id, days)
@@ -2169,6 +2179,55 @@ async def _handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE) -> N
         await query.answer()
 
 
+async def _handle_bed_callback(query, context: ContextTypes.DEFAULT_TYPE) -> None:
+    storage: Storage = context.bot_data["storage"]
+    uid = query.from_user.id
+    parts = query.data.split(":")
+    if len(parts) < 3:
+        await query.answer()
+        return
+    action, arg = parts[1], parts[2]
+    if action == "buy":
+        try:
+            amount = int(arg)
+        except ValueError:
+            await query.answer()
+            return
+        if amount not in config.BED_BUY_PACKAGES:
+            await query.answer()
+            return
+        cost = bedcoin.cost_stars(storage, amount)
+        await query.answer()
+        await context.bot.send_invoice(
+            chat_id=query.message.chat_id,
+            title=f"{amount} BedCoin",
+            description=f"Покупка {amount} BED по курсу {bedcoin.fmt_price(storage)}⭐ за BED.",
+            payload=f"bed:{uid}:{amount}",
+            currency="XTR",
+            prices=[LabeledPrice(f"{amount} BED", cost)],
+            provider_token="",
+        )
+    elif action == "sub":
+        try:
+            idx = int(arg)
+            label, bed, days = config.BED_PREMIUM_PACKAGES[idx]
+        except (ValueError, IndexError):
+            await query.answer()
+            return
+        if not storage.spend_bed(uid, bed):
+            await query.answer(
+                f"Не хватает BED: нужно {bed}, у вас {storage.get_bed(uid)}. Пополните кошелёк.",
+                show_alert=True,
+            )
+            return
+        until = storage.grant_premium_days(uid, days)
+        until_str = datetime.fromtimestamp(until).strftime("%d.%m.%Y")
+        await query.answer(f"✅ Премиум {label} активирован до {until_str}!", show_alert=True)
+        await menus.edit_section(context, query, "wallet", uid, storage, context.bot.username)
+    else:
+        await query.answer()
+
+
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     if query.data == "support_info":
@@ -2194,6 +2253,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await _handle_style_callback(query, context)
     elif query.data.startswith("adm:"):
         await _handle_admin_callback(query, context)
+    elif query.data.startswith("bed:"):
+        await _handle_bed_callback(query, context)
     elif query.data == "cmds:open":
         await query.answer()
         await context.bot.send_message(

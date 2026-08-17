@@ -94,6 +94,22 @@ PREMIUM_PACKAGES = [
     ("1 год", int(os.environ.get("PREMIUM_PRICE_1Y", "800")), 365),
 ]
 
+# --- BedCoin (BED jetton on TON) ---
+BED_JETTON_ADDRESS = os.environ.get(
+    "BED_JETTON_ADDRESS", "EQD7Atapy0DsS88yqP4vCXEiU6Tu_DFsw9KNFjKdfiNr_MKQ")
+# Starting price: 10 ⭐ per 1 BED (i.e. 100000⭐ = 10000 BED).
+BED_BASE_PRICE_STARS = float(os.environ.get("BED_BASE_PRICE_STARS", "10"))
+# Demand curve: price = base * (1 + total_sold / scale). Bigger = slower growth.
+BED_DEMAND_SCALE = float(os.environ.get("BED_DEMAND_SCALE", "3000"))
+# BED amounts offered for purchase.
+BED_BUY_PACKAGES = [int(x) for x in os.environ.get("BED_BUY_PACKAGES", "100,500,1000").split(",")]
+# Premium priced in BED: (label, bed, days) — ~equivalent to the ⭐ packages.
+BED_PREMIUM_PACKAGES = [
+    ("1 месяц", int(os.environ.get("BED_PRICE_1M", "10")), 30),
+    ("3 месяца", int(os.environ.get("BED_PRICE_3M", "25")), 90),
+    ("1 год", int(os.environ.get("BED_PRICE_1Y", "80")), 365),
+]
+
 # Crypto payments via Crypto Pay (@CryptoBot). Empty token = feature disabled.
 # Get a token in @CryptoBot → Crypto Pay → Create App.
 CRYPTO_PAY_TOKEN = os.environ.get("CRYPTO_PAY_TOKEN", "")

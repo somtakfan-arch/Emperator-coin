@@ -14,7 +14,7 @@ from telegram import (
     InputMediaPhoto,
 )
 
-from . import admin, commands, config, texts
+from . import admin, bedcoin, commands, config, texts
 
 _ASSETS = os.path.join(os.path.dirname(__file__), "assets")
 
@@ -162,6 +162,33 @@ def cap_cmds(uid, storage, bot_username) -> str:
     return texts.build_help_menu_text()
 
 
+def cap_wallet(uid, storage, bot_username) -> str:
+    bal = storage.get_bed(uid)
+    price = bedcoin.fmt_price(storage)
+    sold = int(bedcoin.total_sold(storage))
+    return (
+        "<b>🪙 Кошелёк BedCoin</b>\n\n"
+        "<blockquote>"
+        f"💰 Баланс: <b>{bal} BED</b>\n"
+        f"📈 Курс: <b>{price} ⭐ за 1 BED</b>\n"
+        f"🔥 Продано всего: {sold} BED"
+        "</blockquote>\n"
+        "<i>Цена растёт со спросом — чем больше куплено, тем дороже.</i>\n"
+        "Купите BED или оплатите подписку монетами 👇"
+    )
+
+
+def kb_wallet(uid, storage) -> InlineKeyboardMarkup:
+    rows = []
+    for amount in config.BED_BUY_PACKAGES:
+        cost = bedcoin.cost_stars(storage, amount)
+        rows.append([_btn(f"🪙 Купить {amount} BED · {cost}⭐", f"bed:buy:{amount}", "success")])
+    for idx, (label, bed, _days) in enumerate(config.BED_PREMIUM_PACKAGES):
+        rows.append([_btn(f"💎 Премиум {label} · {bed} BED", f"bed:sub:{idx}", "primary")])
+    rows.append([_btn("⬅️ Назад", "menu:main", "danger")])
+    return InlineKeyboardMarkup(rows)
+
+
 def cap_admin(uid, storage, bot_username) -> str:
     rank = admin.rank_of(storage, uid) or "—"
     perms = ", ".join(sorted(admin.perms_of(storage, uid))) or "—"
@@ -239,7 +266,7 @@ def kb_main(uid=None, storage=None) -> InlineKeyboardMarkup:
         [_btn("👤 Профиль", "menu:profile", "success")],
         [_btn("⚙️ Функции", "menu:funcs", "primary"), _btn("📊 Статистика", "menu:stats", "primary")],
         [_btn("👥 Рефералы", "menu:ref", "primary"), _btn("📟 Команды", "menu:cmds", "primary")],
-        [_btn("💎 Подписка", "menu:sub", "primary")],
+        [_btn("💎 Подписка", "menu:sub", "primary"), _btn("🪙 Кошелёк", "menu:wallet", "success")],
         [_btn("🆘 Поддержка", "menu:support", "success")],
     ]
     if storage is not None and uid is not None and admin.is_admin(storage, uid):
@@ -325,6 +352,7 @@ SECTIONS = {
     "cmds": ("cmds", cap_cmds, kb_cmds),
     "style": ("style", cap_style, kb_style),
     "admin": ("admin", cap_admin, kb_admin),
+    "wallet": ("wallet", cap_wallet, kb_wallet),
 }
 
 

@@ -204,6 +204,11 @@ CREATE TABLE IF NOT EXISTS admin_roles (
     rank TEXT NOT NULL,
     granted_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS bed_balances (
+    user_id INTEGER PRIMARY KEY,
+    balance INTEGER NOT NULL DEFAULT 0
+);
 """
 
 CAPTURE_RETENTION_SECONDS = 86400
@@ -1040,6 +1045,41 @@ class Storage:
             conn.execute("DELETE FROM crypto_invoices WHERE invoice_id = ?", (invoice_id,))
 
     # --- .troll saved messages ---
+
+    # --- BedCoin balances ---
+
+    def get_bed(self, user_id: int) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT balance FROM bed_balances WHERE user_id = ?", (user_id,)
+            ).fetchone()
+        return row[0] if row else 0
+
+    def add_bed(self, user_id: int, amount: int) -> int:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO bed_balances (user_id, balance) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET balance = balance + excluded.balance",
+                (user_id, amount),
+            )
+            row = conn.execute(
+                "SELECT balance FROM bed_balances WHERE user_id = ?", (user_id,)
+            ).fetchone()
+        return row[0] if row else 0
+
+    def spend_bed(self, user_id: int, amount: int) -> bool:
+        """Deduct `amount` BED atomically; returns False if the balance is short."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT balance FROM bed_balances WHERE user_id = ?", (user_id,)
+            ).fetchone()
+            if not row or row[0] < amount:
+                return False
+            conn.execute(
+                "UPDATE bed_balances SET balance = balance - ? WHERE user_id = ?",
+                (amount, user_id),
+            )
+        return True
 
     # --- admin roles ---
 
