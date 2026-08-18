@@ -110,6 +110,25 @@ BED_PREMIUM_PACKAGES = [
     ("1 год", int(os.environ.get("BED_PRICE_1Y", "80")), 365),
 ]
 
+# --- On-chain BedCoin treasury (real BED jetton on TON) ---
+# Secrets live ONLY in the environment, never in git.
+TON_TREASURY_MNEMONIC = os.environ.get("TON_TREASURY_MNEMONIC", "")
+TON_API_KEY = os.environ.get("TON_API_KEY", "")
+TON_TESTNET = os.environ.get("TON_TESTNET", "0") == "1"
+BED_DECIMALS = int(os.environ.get("BED_DECIMALS", "9"))
+# On-chain withdrawals master switch. Keep OFF until the treasury holds a BED
+# reserve + a little TON for gas and the "test on 1 BED" run has passed.
+TON_WITHDRAWALS_ENABLED = os.environ.get("TON_WITHDRAWALS_ENABLED", "0") == "1"
+# Withdrawal guard rails (whole BED).
+BED_MIN_WITHDRAW = int(os.environ.get("BED_MIN_WITHDRAW", "1"))
+BED_MAX_WITHDRAW = int(os.environ.get("BED_MAX_WITHDRAW", "100"))
+# TON attached to each outgoing jetton transfer for gas.
+TON_WITHDRAW_GAS = float(os.environ.get("TON_WITHDRAW_GAS", "0.05"))
+# Deposit matching: users include "<prefix><their id>" as the transfer comment.
+BED_DEPOSIT_PREFIX = os.environ.get("BED_DEPOSIT_PREFIX", "BED")
+# How often (seconds) to poll for incoming deposits.
+TON_DEPOSIT_POLL_SECONDS = int(os.environ.get("TON_DEPOSIT_POLL_SECONDS", "40"))
+
 # Crypto payments via Crypto Pay (@CryptoBot). Empty token = feature disabled.
 # Get a token in @CryptoBot → Crypto Pay → Create App.
 CRYPTO_PAY_TOKEN = os.environ.get("CRYPTO_PAY_TOKEN", "")

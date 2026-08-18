@@ -4,7 +4,7 @@ import logging
 from telegram import Update
 from telegram.ext import Application, TypeHandler
 
-from . import crypto
+from . import config, crypto, ton
 from .config import BOT_TOKEN, DB_PATH
 from .handlers import dispatch
 from .storage import Storage
@@ -68,9 +68,44 @@ async def _crypto_loop(application: Application) -> None:
         await asyncio.sleep(45)
 
 
+async def _deposit_loop(application: Application) -> None:
+    """Poll the TON treasury for incoming BED deposits and credit balances."""
+    if not ton.configured():
+        return
+    storage: Storage = application.bot_data["storage"]
+    while True:
+        try:
+            for d in await ton.fetch_deposits(40):
+                tx = d.get("tx_hash")
+                if not tx or storage.deposit_seen(tx):
+                    continue
+                uid = ton.match_user(d.get("comment"))
+                amount = int(d.get("amount") or 0)  # whole BED
+                if uid and amount > 0:
+                    storage.record_deposit(tx, uid, amount, 1)
+                    new_bal = storage.add_bed(uid, amount)
+                    try:
+                        await application.bot.send_message(
+                            chat_id=uid,
+                            text=f"✅ Зачислено {amount} BED! Баланс: {new_bal} BED.",
+                        )
+                    except Exception:
+                        logger.exception("Failed to notify depositor %s", uid)
+                else:
+                    # Unmatched (no/bad comment): record without crediting so a
+                    # super-admin can resolve it with /credit.
+                    storage.record_deposit(tx, uid or 0, amount, 0)
+                    logger.warning("Unmatched BED deposit %s amount=%s comment=%r",
+                                   tx, amount, d.get("comment"))
+        except Exception:
+            logger.exception("Deposit loop error")
+        await asyncio.sleep(config.TON_DEPOSIT_POLL_SECONDS)
+
+
 async def _post_init(application: Application) -> None:
     application.create_task(_reminder_loop(application))
     application.create_task(_crypto_loop(application))
+    application.create_task(_deposit_loop(application))
 
 
 def main() -> None:

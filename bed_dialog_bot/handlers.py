@@ -19,7 +19,7 @@ from telegram import (
 )
 from telegram.ext import ContextTypes
 
-from . import admin, bedcoin, commands, config, crypto, formatting, media, menus, texts
+from . import admin, bedcoin, commands, config, crypto, formatting, media, menus, texts, ton
 from .storage import Storage
 
 
@@ -833,6 +833,19 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     text = message.text or ""
 
+    # If the user started a BED withdrawal, capture their address+amount reply.
+    wd_await = context.bot_data.setdefault("bed_wd_await", set())
+    if (
+        message.from_user
+        and message.from_user.id in wd_await
+        and text
+        and (not text.startswith("/") or text.startswith("/cancel"))
+    ):
+        await _process_bed_withdraw(message, context)
+        return
+    if message.from_user and message.from_user.id in wd_await and text.startswith("/"):
+        wd_await.discard(message.from_user.id)  # any other command aborts the flow
+
     # If the user tapped "➕ Добавить" in the .troll manager, capture their next
     # messages (text OR media — sticker/photo/кружок/видео/…) as saved items,
     # until they press "Готово" or send a / command.
@@ -1551,6 +1564,23 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         await message.reply_text(f"✅ Премиум для {target_id} выдан до {until_str}.")
         return
 
+    if text.startswith("/credit"):
+        if not admin.is_super(message.from_user.id):
+            await message.reply_text("Только супер-админ может начислять BED вручную.")
+            return
+        parts = text.split()
+        if len(parts) != 3 or not parts[1].isdigit() or not parts[2].isdigit():
+            await message.reply_text("Использование: /credit <user_id> <BED>")
+            return
+        target_id, amount = int(parts[1]), int(parts[2])
+        new_bal = storage.add_bed(target_id, amount)
+        await message.reply_text(f"✅ Начислено {amount} BED пользователю {target_id}. Баланс: {new_bal} BED.")
+        try:
+            await context.bot.send_message(target_id, f"💎 Вам зачислено {amount} BED. Баланс: {new_bal} BED.")
+        except Exception:
+            pass
+        return
+
     createpromo_match = _CREATEPROMO_RE.match(text)
     if createpromo_match:
         if not await _require_perm(message, storage, "promo"):
@@ -2224,8 +2254,127 @@ async def _handle_bed_callback(query, context: ContextTypes.DEFAULT_TYPE) -> Non
         until_str = datetime.fromtimestamp(until).strftime("%d.%m.%Y")
         await query.answer(f"✅ Премиум {label} активирован до {until_str}!", show_alert=True)
         await menus.edit_section(context, query, "wallet", uid, storage, context.bot.username)
+    elif action == "deposit":
+        await _handle_bed_deposit(query, context)
+    elif action == "withdraw":
+        await _handle_bed_withdraw_start(query, context)
     else:
         await query.answer()
+
+
+async def _handle_bed_deposit(query, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show the treasury address + the unique comment the user must attach."""
+    uid = query.from_user.id
+    if not ton.configured():
+        await query.answer("On-chain пополнение пока не настроено.", show_alert=True)
+        return
+    await query.answer()
+    try:
+        addr = await ton.treasury_address()
+    except Exception:
+        logger.exception("treasury address failed")
+        await context.bot.send_message(query.message.chat_id, "⚠️ Не удалось получить адрес казны, попробуйте позже.")
+        return
+    comment = ton.deposit_comment(uid)
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=(
+            "<b>💎 Пополнение BedCoin</b>\n\n"
+            "Отправьте <b>BED</b> на адрес казны, обязательно указав комментарий "
+            "(memo) — иначе мы не поймём, кому зачислить:\n\n"
+            f"📮 Адрес:\n<code>{html.escape(addr)}</code>\n\n"
+            f"✏️ Комментарий (обязательно):\n<code>{html.escape(comment)}</code>\n\n"
+            "<i>Пришлите ровно этот комментарий вместе с переводом. Баланс "
+            "пополнится автоматически в течение пары минут.</i>"
+        ),
+        parse_mode="HTML",
+    )
+
+
+async def _handle_bed_withdraw_start(query, context: ContextTypes.DEFAULT_TYPE) -> None:
+    uid = query.from_user.id
+    storage: Storage = context.bot_data["storage"]
+    if not ton.configured():
+        await query.answer("On-chain вывод пока не настроен.", show_alert=True)
+        return
+    if not config.TON_WITHDRAWALS_ENABLED:
+        await query.answer(
+            "📤 Вывод BED скоро откроется (идёт тестирование). Скоро всё заработает!",
+            show_alert=True,
+        )
+        return
+    bal = storage.get_bed(uid)
+    if bal < config.BED_MIN_WITHDRAW:
+        await query.answer(
+            f"Недостаточно BED для вывода (минимум {config.BED_MIN_WITHDRAW}).",
+            show_alert=True,
+        )
+        return
+    await query.answer()
+    context.bot_data.setdefault("bed_wd_await", set()).add(uid)
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=(
+            "<b>📤 Вывод BedCoin</b>\n\n"
+            f"Ваш баланс: <b>{bal} BED</b>\n"
+            f"Лимиты: от {config.BED_MIN_WITHDRAW} до {config.BED_MAX_WITHDRAW} BED за раз.\n\n"
+            "Пришлите одним сообщением:\n"
+            "<code>TON-адрес количество</code>\n\n"
+            "Например:\n<code>UQ... 5</code>\n\n"
+            "Отмена — /cancel"
+        ),
+        parse_mode="HTML",
+    )
+
+
+async def _process_bed_withdraw(message, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the address+amount reply for a pending withdrawal."""
+    storage: Storage = context.bot_data["storage"]
+    uid = message.from_user.id
+    awaiting = context.bot_data.setdefault("bed_wd_await", set())
+    text = (message.text or "").strip()
+    if text.startswith("/cancel"):
+        awaiting.discard(uid)
+        await message.reply_text("Вывод отменён.")
+        return
+    parts = text.split()
+    if len(parts) < 2 or not parts[-1].isdigit():
+        await message.reply_text(
+            "Неверный формат. Пришлите: <code>TON-адрес количество</code>, например "
+            "<code>UQ... 5</code>. Отмена — /cancel",
+            parse_mode="HTML",
+        )
+        return
+    address = parts[0]
+    amount = int(parts[-1])
+    if amount < config.BED_MIN_WITHDRAW or amount > config.BED_MAX_WITHDRAW:
+        await message.reply_text(
+            f"Сумма вне лимита ({config.BED_MIN_WITHDRAW}–{config.BED_MAX_WITHDRAW} BED)."
+        )
+        return
+    # Reserve funds atomically before touching the chain; refund on failure.
+    if not storage.spend_bed(uid, amount):
+        awaiting.discard(uid)
+        await message.reply_text(f"Недостаточно BED. Баланс: {storage.get_bed(uid)} BED.")
+        return
+    awaiting.discard(uid)
+    wid = storage.create_withdrawal(uid, address, amount)
+    await message.reply_text(f"⏳ Отправляю {amount} BED на\n{address} …")
+    try:
+        tx_hash = await ton.send_bed(address, amount, comment=f"BedCoin withdrawal #{wid}")
+        storage.set_withdrawal_status(wid, "sent", tx_hash=str(tx_hash))
+        await message.reply_text(
+            f"✅ Отправлено {amount} BED!\nБаланс: {storage.get_bed(uid)} BED.\n"
+            f"Транзакция принята сетью."
+        )
+    except Exception as exc:
+        logger.exception("BED withdrawal %s failed", wid)
+        storage.add_bed(uid, amount)  # refund
+        storage.set_withdrawal_status(wid, "failed", error=str(exc)[:300])
+        await message.reply_text(
+            "⚠️ Не удалось отправить перевод — средства возвращены на баланс. "
+            "Проверьте адрес и попробуйте позже."
+        )
 
 
 async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -209,6 +209,25 @@ CREATE TABLE IF NOT EXISTS bed_balances (
     user_id INTEGER PRIMARY KEY,
     balance INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS ton_deposits (
+    tx_hash TEXT PRIMARY KEY,
+    user_id INTEGER,
+    amount INTEGER NOT NULL,
+    credited INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ton_withdrawals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    address TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    tx_hash TEXT,
+    error TEXT,
+    created_at INTEGER NOT NULL
+);
 """
 
 CAPTURE_RETENTION_SECONDS = 86400
@@ -1080,6 +1099,41 @@ class Storage:
                 (amount, user_id),
             )
         return True
+
+    # --- on-chain BED deposits / withdrawals ---
+
+    def deposit_seen(self, tx_hash: str) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM ton_deposits WHERE tx_hash = ?", (tx_hash,)
+            ).fetchone()
+        return row is not None
+
+    def record_deposit(self, tx_hash: str, user_id, amount: int, credited: int) -> None:
+        import time as _t
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO ton_deposits "
+                "(tx_hash, user_id, amount, credited, created_at) VALUES (?, ?, ?, ?, ?)",
+                (tx_hash, user_id, amount, credited, int(_t.time())),
+            )
+
+    def create_withdrawal(self, user_id: int, address: str, amount: int) -> int:
+        import time as _t
+        with self._connect() as conn:
+            cur = conn.execute(
+                "INSERT INTO ton_withdrawals (user_id, address, amount, status, created_at) "
+                "VALUES (?, ?, ?, 'pending', ?)",
+                (user_id, address, amount, int(_t.time())),
+            )
+            return cur.lastrowid
+
+    def set_withdrawal_status(self, wid: int, status: str, tx_hash=None, error=None) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE ton_withdrawals SET status = ?, tx_hash = ?, error = ? WHERE id = ?",
+                (status, tx_hash, error, wid),
+            )
 
     # --- admin roles ---
 

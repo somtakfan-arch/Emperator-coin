@@ -14,7 +14,7 @@ from telegram import (
     InputMediaPhoto,
 )
 
-from . import admin, bedcoin, commands, config, texts
+from . import admin, bedcoin, commands, config, texts, ton
 
 _ASSETS = os.path.join(os.path.dirname(__file__), "assets")
 
@@ -175,6 +175,8 @@ def cap_wallet(uid, storage, bot_username) -> str:
         "</blockquote>\n"
         "<i>Цена растёт со спросом — чем больше куплено, тем дороже.</i>\n"
         "Купите BED или оплатите подписку монетами 👇"
+        + ("\n\n<i>💎 BED — реальный TON-джеттон: можно пополнить и вывести on-chain.</i>"
+           if ton.configured() else "")
     )
 
 
@@ -185,6 +187,11 @@ def kb_wallet(uid, storage) -> InlineKeyboardMarkup:
         rows.append([_btn(f"🪙 Купить {amount} BED · {cost}⭐", f"bed:buy:{amount}", "success")])
     for idx, (label, bed, _days) in enumerate(config.BED_PREMIUM_PACKAGES):
         rows.append([_btn(f"💎 Премиум {label} · {bed} BED", f"bed:sub:{idx}", "primary")])
+    if ton.configured():
+        rows.append([
+            _btn("💎 Пополнить BED", "bed:deposit:0", "success"),
+            _btn("📤 Вывести BED", "bed:withdraw:0", "primary"),
+        ])
     rows.append([_btn("⬅️ Назад", "menu:main", "danger")])
     return InlineKeyboardMarkup(rows)
 
