@@ -79,7 +79,7 @@ async def _resolve_version():
             score = 0.0
             try:
                 jw = await JettonMaster.get_wallet_address(client, addr, config.BED_JETTON_ADDRESS)
-                score += float(await JettonWallet.get_balance(client, jw)) * 1_000_000.0
+                score += await _wallet_bed_balance(client, jw) * 1_000_000.0
             except Exception:
                 pass
             try:
@@ -109,12 +109,21 @@ async def treasury_address() -> str:
     return _treasury_addr
 
 
+async def _wallet_bed_balance(client, jetton_wallet) -> float:
+    """Accurate BED balance via get_wallet_data (tonutils get_balance mis-scales
+    large values for this jetton's wallet code)."""
+    from tonutils.jetton import JettonWallet
+    addr = jetton_wallet.to_str() if hasattr(jetton_wallet, "to_str") else jetton_wallet
+    data = await JettonWallet.get_wallet_data(client, addr)
+    return float(data.balance) / (10 ** config.BED_DECIMALS)
+
+
 async def treasury_bed_balance() -> float:
-    from tonutils.jetton import JettonMaster, JettonWallet
+    from tonutils.jetton import JettonMaster
     client = _client()
     addr = await treasury_address()
     jw = await JettonMaster.get_wallet_address(client, addr, config.BED_JETTON_ADDRESS)
-    return float(await JettonWallet.get_balance(client, jw))
+    return await _wallet_bed_balance(client, jw)
 
 
 async def treasury_ton_balance() -> float:
