@@ -309,7 +309,7 @@ POWERS_TEXT = (
     "(перед списанием бот спросит подтверждение в личке):\n\n"
     "💥 .boom <текст> — сообщение «взрывается»\n"
     "🟢 .matrix <текст> — текст проявляется как в «Матрице»\n"
-    "💻 .hack <текст> — фейковый взлом, потом текст\n"
+    "💻 .hack — «сливает» IP и город собеседника и тут же стирает\n"
     "🕵️ .vanish <сек> <текст> — самоуничтожается у обоих\n"
     "🔫 .roulette <текст> — русская рулетка (1 к 6)\n\n"
     "😱 Напугать собеседника:\n"
@@ -383,11 +383,31 @@ async def run_power(context, storage, data) -> bool:
         await edit(target)
 
     elif cmd_name == "hack":
-        for frame in ("💻 Инициализация…", "🔓 Подбор доступа ▓▒░░",
-                      "🔓 Подбор доступа ▓▓▓▒", "🛰 Перехват канала…", "✅ Доступ получен"):
-            await edit(frame)
-            await asyncio.sleep(0.45)
-        await edit(f"📡 {arg[:300]}" if arg else "🧠 Система под контролем.")
+        # Flash the contact's "IP" and city into the chat, then instantly delete
+        # each — the contact sees them pop up and vanish. IP is randomised.
+        await edit("💻")
+        for flash in (f"🌐 IP: {_fake_ip()}", "📍 Город: Москва"):
+            try:
+                sent = await context.bot.send_message(
+                    chat_id=chat_id, business_connection_id=bcid, text=flash,
+                )
+            except Exception:
+                logger.exception("hack flash send failed")
+                break
+            await asyncio.sleep(1.5)
+            try:
+                storage.delete_message(bcid, chat_id, sent.message_id)
+            except Exception:
+                pass
+            try:
+                await context.bot.do_api_request(
+                    "deleteBusinessMessages",
+                    api_kwargs={"business_connection_id": bcid, "message_ids": [sent.message_id]},
+                )
+            except Exception:
+                pass
+            await asyncio.sleep(0.5)
+        await edit("💻 …я знаю о тебе всё.")
 
     elif cmd_name == "vanish":
         m = re.match(r"(\d+)\s+(.+)", arg, re.S)
