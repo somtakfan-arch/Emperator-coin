@@ -2345,6 +2345,54 @@ def _build_bed_top(storage, viewer_id: int = 0) -> str:
     return "\n".join(lines)
 
 
+async def _handle_bedcmd_callback(query, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Owner confirms/cancels a paid power command (prompted privately)."""
+    storage: Storage = context.bot_data["storage"]
+    parts = query.data.split(":")
+    if len(parts) != 3:
+        await query.answer()
+        return
+    action, token = parts[1], parts[2]
+    pending = context.bot_data.setdefault("bed_pending", {})
+    data = pending.pop(token, None)
+    if not data:
+        await query.answer("Запрос устарел", show_alert=False)
+        try:
+            await query.edit_message_text("⌛ Запрос устарел.")
+        except Exception:
+            pass
+        return
+    if query.from_user.id != data["owner_id"]:
+        await query.answer()
+        return
+    if action == "no":
+        await query.answer("Отменено")
+        try:
+            await query.edit_message_text("❌ Отменено — BED не потрачен.")
+        except Exception:
+            pass
+        try:  # tidy the placeholder left in the contact's chat
+            await context.bot.edit_message_text(
+                chat_id=data["chat_id"], message_id=data["message_id"],
+                business_connection_id=data["bcid"], text="…",
+            )
+        except Exception:
+            pass
+        return
+    await query.answer()
+    ran = await commands.run_power(context, storage, data)
+    bal = storage.get_bed(data["owner_id"])
+    try:
+        if ran:
+            await query.edit_message_text(
+                f"✅ «.{data['cmd']}» применён. Списано {config.BED_COMMAND_COST} BED. Баланс: {bal} BED."
+            )
+        else:
+            await query.edit_message_text(f"🪙 Недостаточно BED. Баланс: {bal} BED.")
+    except Exception:
+        pass
+
+
 async def _handle_bed_chain_start(query, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Begin a 'buy BED straight to your TON wallet' flow — ask for the address."""
     uid = query.from_user.id
@@ -2567,6 +2615,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await _handle_style_callback(query, context)
     elif query.data.startswith("adm:"):
         await _handle_admin_callback(query, context)
+    elif query.data.startswith("bedcmd:"):
+        await _handle_bedcmd_callback(query, context)
     elif query.data.startswith("bedchain:"):
         await _handle_bedchain_callback(query, context)
     elif query.data.startswith("bed:"):

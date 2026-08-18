@@ -13,8 +13,9 @@ import shutil
 import string
 import tempfile
 import time
+import uuid
 
-from telegram import Message
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from telegram.error import RetryAfter
 from telegram.ext import ContextTypes
 
@@ -199,7 +200,8 @@ HELP_TEXT = (
     ".prefix <символ> — сменить префикс команд (напр. :spam)\n"
     ".help <команда> — подробно об одной команде\n"
     ".help — этот список команд\n"
-    "🎇 .powers — платные BedCoin-приколы (.boom .matrix .hack .vanish .roulette)"
+    "🎇 .powers — платные BedCoin-приколы, в т.ч. напугать: "
+    ".trace .seen .phantom .hacked .virus"
 )
 
 
@@ -290,20 +292,43 @@ async def _deny_prem(context, bcid, chat_id, message_id) -> bool:
 
 
 # --- BedCoin-powered "power" commands ---------------------------------------
-# Each use burns BED from the owner's balance. Names must not collide with the
-# plain commands above.
-_POWER_COMMANDS = {"boom", "matrix", "hack", "vanish", "roulette"}
+# Each use burns BED from the owner's balance and asks the owner to confirm the
+# spend first (privately, so the contact never sees the prompt). Names must not
+# collide with the plain commands above.
+_POWER_COMMANDS = {
+    "boom", "matrix", "hack", "vanish", "roulette",   # effects
+    "trace", "seen", "phantom", "hacked", "virus",    # scare the contact
+}
 _MATRIX_GLYPHS = "01#$%&@*ｦｧｨｩｪｫﾊﾋﾎﾐﾑ日ﾒﾓ"
+_FAKE_CITIES = ["Москва", "Санкт-Петербург", "Казань", "Новосибирск", "Екатеринбург",
+                "Краснодар", "Самара", "Ростов-на-Дону", "Уфа", "Пермь"]
+_FAKE_ISP = ["Ростелеком", "МТС", "Билайн", "МегаФон", "Tele2", "ДомRu"]
 
 POWERS_TEXT = (
-    "🎇 BedCoin Power-Ups — тратят BED прямо в чате с собеседником:\n\n"
-    "💥 .boom <текст> — сообщение взрывается анимацией\n"
+    "🎇 BedCoin Power-Ups — тратят BED прямо в чате с собеседником "
+    "(перед списанием бот спросит подтверждение в личке):\n\n"
+    "💥 .boom <текст> — сообщение «взрывается»\n"
     "🟢 .matrix <текст> — текст проявляется как в «Матрице»\n"
     "💻 .hack <текст> — фейковый взлом, потом текст\n"
     "🕵️ .vanish <сек> <текст> — самоуничтожается у обоих\n"
     "🔫 .roulette <текст> — русская рулетка (1 к 6)\n\n"
+    "😱 Напугать собеседника:\n"
+    "📍 .trace — «вычисляю» IP и город собеседника\n"
+    "👁 .seen — жутко раскрываю его реальные данные\n"
+    "👻 .phantom [n] — призрачные сообщения, что тут же исчезают\n"
+    "☠️ .hacked — фейковый взлом его устройства\n"
+    "🦠 .virus — фейковое заражение вирусом\n\n"
     "Каждое применение стоит BED. Баланс и пополнение — /menu → 🪙 Кошелёк"
 )
+
+
+def _power_valid(cmd_name: str, arg: str):
+    """(ok, error_text). Only well-formed commands reach the paid confirm step."""
+    if cmd_name in ("boom", "matrix") and not arg:
+        return False, f"⚠️ Формат: .{cmd_name} текст"
+    if cmd_name == "vanish" and not re.match(r"\d+\s+.+", arg, re.S):
+        return False, "⚠️ Формат: .vanish 5 текст"
+    return True, None
 
 
 async def _charge_bed(context, storage, owner_id, bcid, chat_id, message_id) -> bool:
@@ -320,64 +345,55 @@ async def _charge_bed(context, storage, owner_id, bcid, chat_id, message_id) -> 
     return True
 
 
-async def _handle_power_command(
-    cmd_name, arg, context, storage, message, bcid, chat_id, message_id, owner_chat_id,
-) -> bool:
-    owner_id = message.from_user.id
+def _fake_ip() -> str:
+    return f"{random.randint(46, 213)}.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(1, 254)}"
+
+
+async def run_power(context, storage, data) -> bool:
+    """Charge BED and run a confirmed power command. Returns False if the
+    balance turned out short at execution time (nothing runs, nothing charged)."""
+    owner_id = data["owner_id"]
+    bcid = data["bcid"]
+    chat_id = data["chat_id"]
+    message_id = data["message_id"]
+    cmd_name = data["cmd"]
+    arg = data.get("arg", "")
+    if not await _charge_bed(context, storage, owner_id, bcid, chat_id, message_id):
+        return False
+
+    async def edit(txt):
+        await _edit_command_message(context, bcid, chat_id, message_id, txt)
+
+    name = data.get("contact_name") or "друг"
+    uname = f"@{data['contact_username']}" if data.get("contact_username") else "без ника"
 
     if cmd_name == "boom":
-        if not arg:
-            await _edit_command_message(context, bcid, chat_id, message_id, "⚠️ Формат: .boom текст")
-            return True
-        if not await _charge_bed(context, storage, owner_id, bcid, chat_id, message_id):
-            return True
         for frame in ("💣", "💣💣", "💣 💥", "💥💥💥", "🔥💥🔥"):
-            await _edit_command_message(context, bcid, chat_id, message_id, frame)
+            await edit(frame)
             await asyncio.sleep(0.35)
-        await _edit_command_message(context, bcid, chat_id, message_id, f"💥 {arg[:300]}")
-        return True
+        await edit(f"💥 {arg[:300]}")
 
-    if cmd_name == "matrix":
-        if not arg:
-            await _edit_command_message(context, bcid, chat_id, message_id, "⚠️ Формат: .matrix текст")
-            return True
-        if not await _charge_bed(context, storage, owner_id, bcid, chat_id, message_id):
-            return True
+    elif cmd_name == "matrix":
         target = arg[:120]
-        steps = 8
-        for s in range(1, steps + 1):
-            cut = len(target) * s // steps
+        for s in range(1, 9):
+            cut = len(target) * s // 8
             noise = "".join(random.choice(_MATRIX_GLYPHS) for _ in range(min(4, len(target) - cut)))
-            await _edit_command_message(context, bcid, chat_id, message_id, target[:cut] + noise)
+            await edit(target[:cut] + noise)
             await asyncio.sleep(0.22)
-        await _edit_command_message(context, bcid, chat_id, message_id, target)
-        return True
+        await edit(target)
 
-    if cmd_name == "hack":
-        if not await _charge_bed(context, storage, owner_id, bcid, chat_id, message_id):
-            return True
-        for frame in (
-            "💻 Инициализация…",
-            "🔓 Подбор доступа ▓▒░░",
-            "🔓 Подбор доступа ▓▓▓▒",
-            "🛰 Перехват канала…",
-            "✅ Доступ получен",
-        ):
-            await _edit_command_message(context, bcid, chat_id, message_id, frame)
+    elif cmd_name == "hack":
+        for frame in ("💻 Инициализация…", "🔓 Подбор доступа ▓▒░░",
+                      "🔓 Подбор доступа ▓▓▓▒", "🛰 Перехват канала…", "✅ Доступ получен"):
+            await edit(frame)
             await asyncio.sleep(0.45)
-        await _edit_command_message(context, bcid, chat_id, message_id, f"📡 {arg[:300]}" if arg else "🧠 Система под контролем.")
-        return True
+        await edit(f"📡 {arg[:300]}" if arg else "🧠 Система под контролем.")
 
-    if cmd_name == "vanish":
+    elif cmd_name == "vanish":
         m = re.match(r"(\d+)\s+(.+)", arg, re.S)
-        if not m:
-            await _edit_command_message(context, bcid, chat_id, message_id, "⚠️ Формат: .vanish 5 текст")
-            return True
         secs = max(1, min(int(m.group(1)), 60))
         body = m.group(2).strip()[:400]
-        if not await _charge_bed(context, storage, owner_id, bcid, chat_id, message_id):
-            return True
-        await _edit_command_message(context, bcid, chat_id, message_id, "🕵️")
+        await edit("🕵️")
         try:
             sent = await context.bot.send_message(
                 chat_id=chat_id, business_connection_id=bcid,
@@ -385,6 +401,7 @@ async def _handle_power_command(
             )
         except Exception:
             logger.exception("vanish send failed")
+            storage.add_bed(owner_id, config.BED_COMMAND_COST)  # refund
             return True
         await asyncio.sleep(secs)
         try:
@@ -405,22 +422,81 @@ async def _handle_power_command(
                 )
             except Exception:
                 pass
-        return True
 
-    if cmd_name == "roulette":
-        if not await _charge_bed(context, storage, owner_id, bcid, chat_id, message_id):
-            return True
-        await _edit_command_message(context, bcid, chat_id, message_id, "🔫 крутим барабан…")
+    elif cmd_name == "roulette":
+        await edit("🔫 крутим барабан…")
         await asyncio.sleep(0.5)
-        await _edit_command_message(context, bcid, chat_id, message_id, "🔫 …")
+        await edit("🔫 …")
         await asyncio.sleep(0.5)
         if random.randint(1, 6) == 1:
-            await _edit_command_message(context, bcid, chat_id, message_id, f"💥 БАХ! {arg[:200]}".strip())
+            await edit(f"💥 БАХ! {arg[:200]}".strip())
         else:
-            await _edit_command_message(context, bcid, chat_id, message_id, "🔫 щёлк… пронесло 😮‍💨")
-        return True
+            await edit("🔫 щёлк… пронесло 😮‍💨")
 
-    return False
+    elif cmd_name == "trace":
+        for frame in ("🛰 Устанавливаю соединение…", "📡 Перехват трафика…",
+                      f"📡 IP: {_fake_ip()}", f"🌐 Провайдер: {random.choice(_FAKE_ISP)}",
+                      f"📍 Город: {random.choice(_FAKE_CITIES)}, точность 8 м", "🔺 Триангуляция сигнала…"):
+            await edit(frame)
+            await asyncio.sleep(0.5)
+        await edit(f"✅ Ты найден, {name}. Я знаю, где ты. 👁📍")
+
+    elif cmd_name == "seen":
+        await edit("👁 …")
+        await asyncio.sleep(0.7)
+        await edit(
+            "👁 Я вижу тебя.\n"
+            f"{name} · {uname}\n"
+            f"🆔 {data.get('contact_id', '—')}\n"
+            f"🕓 Последняя активность: {data.get('last_ago', '—')}\n\n"
+            "Я читаю всё, что ты пишешь. Даже удалённое. 🩸"
+        )
+
+    elif cmd_name == "phantom":
+        n = 3
+        if arg.strip().isdigit():
+            n = max(1, min(int(arg.strip()), 5))
+        phrases = ["…", "я здесь", "ты не один", "обернись", "👁", "я всё вижу"]
+        await edit("👻")
+        for _ in range(n):
+            try:
+                sent = await context.bot.send_message(
+                    chat_id=chat_id, business_connection_id=bcid, text=random.choice(phrases),
+                )
+            except Exception:
+                logger.exception("phantom send failed")
+                break
+            await asyncio.sleep(1.2)
+            try:
+                storage.delete_message(bcid, chat_id, sent.message_id)
+            except Exception:
+                pass
+            try:
+                await context.bot.do_api_request(
+                    "deleteBusinessMessages",
+                    api_kwargs={"business_connection_id": bcid, "message_ids": [sent.message_id]},
+                )
+            except Exception:
+                pass
+            await asyncio.sleep(0.5)
+
+    elif cmd_name == "hacked":
+        for frame in ("☠️ СИСТЕМА ВЗЛОМАНА", "🔓 Обход защиты… 34%", "🔓 Обход защиты… 88%",
+                      "📸 Доступ к камере получен", "📁 Копирование данных…", f"✅ Данные {name} у меня."):
+            await edit(frame)
+            await asyncio.sleep(0.55)
+        await asyncio.sleep(0.6)
+        await edit("…шучу. Или нет. 😏")
+
+    elif cmd_name == "virus":
+        for frame in ("🦠 Отправка файла…", "🦠 [▓▒▒▒▒▒▒▒▒▒] 12%", "🦠 [▓▓▓▓▓▒▒▒▒▒] 54%",
+                      "🦠 [▓▓▓▓▓▓▓▓▓▓] 100%", "⚠️ Устройство заражено."):
+            await edit(frame)
+            await asyncio.sleep(0.5)
+        await asyncio.sleep(0.6)
+        await edit("🦠 …ладно, это шутка 😈")
+
+    return True
 
 
 async def _edit_command_message(context: ContextTypes.DEFAULT_TYPE, business_connection_id: str, chat_id: int, message_id: int, text: str) -> None:
@@ -1139,8 +1215,41 @@ async def try_handle_owner_command(
         await context.bot.send_message(chat_id=owner_chat_id, text=POWERS_TEXT)
         return True
     if _pname in _POWER_COMMANDS:
-        return await _handle_power_command(
-            _pname, _parg, context, storage, message, bcid, chat_id, message_id, owner_chat_id,
+        okv, err = _power_valid(_pname, _parg)
+        if not okv:
+            await _edit_command_message(context, bcid, chat_id, message_id, err)
+            return True
+        # Hide the raw command from the contact immediately, then ask the owner
+        # to confirm the BED spend privately (contact never sees the prompt).
+        await _edit_command_message(context, bcid, chat_id, message_id, "💭")
+        c = message.chat
+        cname = " ".join(filter(None, [getattr(c, "first_name", None), getattr(c, "last_name", None)])) or "друг"
+        token = uuid.uuid4().hex[:8]
+        _pend = context.bot_data.setdefault("bed_pending", {})
+        # Drop stale, never-confirmed requests (older than an hour).
+        now = time.time()
+        for k in [k for k, v in _pend.items() if now - v.get("ts", 0) > 3600]:
+            _pend.pop(k, None)
+        _pend[token] = {
+            "cmd": _pname, "arg": _parg, "bcid": bcid, "chat_id": chat_id,
+            "message_id": message_id, "owner_id": message.from_user.id,
+            "contact_name": cname, "contact_username": getattr(c, "username", None) or "",
+            "contact_id": c.id,
+            "last_ago": _humanize_ago(storage.get_activity(message.from_user.id, chat_id)),
+            "ts": time.time(),
+        }
+        cost = config.BED_COMMAND_COST
+        bal = storage.get_bed(message.from_user.id)
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton(f"✅ Потратить {cost} BED", callback_data=f"bedcmd:ok:{token}"),
+            InlineKeyboardButton("❌ Отмена", callback_data=f"bedcmd:no:{token}"),
+        ]])
+        await context.bot.send_message(
+            chat_id=owner_chat_id,
+            text=(f"⚡️ Применить «.{_pname}» к собеседнику ({cname})?\n"
+                  f"Спишется {cost} BED. Ваш баланс: {bal} BED."),
+            reply_markup=kb,
         )
+        return True
 
     return False
