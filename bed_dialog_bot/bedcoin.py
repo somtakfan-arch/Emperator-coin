@@ -34,3 +34,50 @@ def record_sale(storage, bed_amount: int) -> None:
 def fmt_price(storage) -> str:
     p = price_stars(storage)
     return f"{p:.2f}".rstrip("0").rstrip(".")
+
+
+# Imperial holder tiers by BED balance — cosmetic flavour for the Wallet.
+_RANKS = [
+    (1000, "🏰 Император BedCoin"),
+    (500, "💎 Герцог"),
+    (100, "👑 Граф"),
+    (50, "🎖 Барон"),
+    (10, "🛡 Рыцарь"),
+    (1, "🌾 Крестьянин"),
+    (0, "👻 Нищий"),
+]
+
+
+def holder_rank(balance: int) -> str:
+    for threshold, title in _RANKS:
+        if balance >= threshold:
+            return title
+    return _RANKS[-1][1]
+
+
+def next_rank(balance: int):
+    """(title, needed) for the next tier up, or None at the top."""
+    higher = [(t, title) for t, title in _RANKS if t > balance]
+    if not higher:
+        return None
+    threshold, title = min(higher, key=lambda x: x[0])
+    return (title, threshold - balance)
+
+
+# --- treasury stats cache (written by the deposit loop, read by menus) ---
+
+def cache_treasury(storage, bed: float, ton: float, addr: str) -> None:
+    storage.set_setting("bed_treasury_bed", f"{bed:.9f}")
+    storage.set_setting("bed_treasury_ton", f"{ton:.9f}")
+    storage.set_setting("bed_treasury_addr", addr or "")
+
+
+def treasury_cache(storage):
+    """(bed, ton, addr) last snapshot, or (None, None, '') if never cached."""
+    def _f(key):
+        v = storage.get_setting(key, None)
+        try:
+            return float(v) if v is not None else None
+        except (TypeError, ValueError):
+            return None
+    return _f("bed_treasury_bed"), _f("bed_treasury_ton"), (storage.get_setting("bed_treasury_addr", "") or "")

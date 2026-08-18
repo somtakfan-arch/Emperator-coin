@@ -166,18 +166,32 @@ def cap_wallet(uid, storage, bot_username) -> str:
     bal = storage.get_bed(uid)
     price = bedcoin.fmt_price(storage)
     sold = int(bedcoin.total_sold(storage))
-    return (
+    rank = bedcoin.holder_rank(bal)
+    nxt = bedcoin.next_rank(bal)
+    nxt_line = f"\n🎯 До «{nxt[0]}»: ещё {nxt[1]} BED" if nxt else "\n🏆 Высший титул достигнут!"
+    dust = storage.get_bed_dust(uid) if hasattr(storage, "get_bed_dust") else 0.0
+    dust_line = f"\n💫 В копилке: {dust:.4f} BED".replace(".0000", "") if dust > 1e-6 else ""
+    text = (
         "<b>🪙 Кошелёк BedCoin</b>\n\n"
         "<blockquote>"
         f"💰 Баланс: <b>{bal} BED</b>\n"
+        f"{rank}{nxt_line}{dust_line}\n"
         f"📈 Курс: <b>{price} ⭐ за 1 BED</b>\n"
         f"🔥 Продано всего: {sold} BED"
         "</blockquote>\n"
         "<i>Цена растёт со спросом — чем больше куплено, тем дороже.</i>\n"
-        "Купите BED или оплатите подписку монетами 👇"
-        + ("\n\n<i>💎 BED — реальный TON-джеттон: можно пополнить и вывести on-chain.</i>"
-           if ton.configured() else "")
     )
+    if ton.configured():
+        t_bed, t_ton, _addr = bedcoin.treasury_cache(storage)
+        if t_bed is not None:
+            text += (
+                "\n<blockquote>🏛 <b>Казна BedCoin</b>\n"
+                f"🪙 Резерв: {int(t_bed)} BED\n"
+                f"⛽️ Газ: {t_ton:.2f} TON</blockquote>\n"
+            )
+        text += "<i>💎 BED — реальный TON-джеттон: можно купить на кошелёк, пополнить и вывести on-chain.</i>\n"
+    text += "Выберите действие 👇"
+    return text
 
 
 def kb_wallet(uid, storage) -> InlineKeyboardMarkup:
@@ -193,6 +207,11 @@ def kb_wallet(uid, storage) -> InlineKeyboardMarkup:
             _btn("💎 Пополнить BED", "bed:deposit:0", "success"),
             _btn("📤 Вывести BED", "bed:withdraw:0", "primary"),
         ])
+    rows.append([_btn("🏆 Топ держателей", "bed:top:0", "primary")])
+    if ton.configured():
+        _, _, addr = bedcoin.treasury_cache(storage)
+        if addr:
+            rows.append([InlineKeyboardButton("🔎 Казна в TON-скане", url=f"https://tonviewer.com/{addr}")])
     rows.append([_btn("⬅️ Назад", "menu:main", "danger")])
     return InlineKeyboardMarkup(rows)
 

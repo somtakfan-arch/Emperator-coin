@@ -978,6 +978,26 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             )
         return
 
+    if text.startswith("/bed"):
+        uid = message.from_user.id
+        bal = storage.get_bed(uid)
+        rank = bedcoin.holder_rank(bal)
+        price = bedcoin.fmt_price(storage)
+        lines = [
+            "🪙 <b>BedCoin — ваш кошелёк</b>\n",
+            f"💰 Баланс: <b>{bal} BED</b>",
+            f"🎖 Титул: {rank}",
+            f"📈 Курс: <b>{price} ⭐</b> за 1 BED",
+        ]
+        nxt = bedcoin.next_rank(bal)
+        if nxt:
+            lines.append(f"🎯 До «{nxt[0]}»: ещё {nxt[1]} BED")
+        if ton.configured():
+            lines.append(f"\n💎 Пополнить с комментарием: <code>{ton.deposit_comment(uid)}</code>")
+        lines.append("\nОткрыть кошелёк: /menu → 🪙 Кошелёк")
+        await message.reply_text("\n".join(lines), parse_mode="HTML")
+        return
+
     if text.startswith("/adminmenu") or text.startswith("/apanel"):
         if not admin.is_admin(storage, message.from_user.id):
             return
@@ -2295,8 +2315,34 @@ async def _handle_bed_callback(query, context: ContextTypes.DEFAULT_TYPE) -> Non
         await _handle_bed_withdraw_start(query, context)
     elif action == "chain":
         await _handle_bed_chain_start(query, context)
+    elif action == "top":
+        await query.answer()
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=_build_bed_top(storage, uid),
+            parse_mode="HTML",
+        )
     else:
         await query.answer()
+
+
+def _build_bed_top(storage, viewer_id: int = 0) -> str:
+    holders = storage.top_bed_holders(10)
+    total = storage.count_bed_holders()
+    if not holders:
+        return "🏆 <b>Топ держателей BedCoin</b>\n\nПока пусто — стань первым бароном казны! 👑"
+    medals = ["🥇", "🥈", "🥉"] + ["🏅"] * 7
+    lines = ["🏆 <b>Топ держателей BedCoin</b>\n"]
+    for i, h in enumerate(holders):
+        raw = h.get("username") or h.get("name") or f"id{h['user_id']}"
+        who = html.escape(str(raw))
+        if len(who) > 3:
+            who = who[:3] + "•••"  # light privacy mask
+        me = " ← вы" if h["user_id"] == viewer_id else ""
+        rank = bedcoin.holder_rank(h["balance"])
+        lines.append(f"{medals[i]} {who} — <b>{h['balance']} BED</b> · {rank}{me}")
+    lines.append(f"\n<i>Всего держателей: {total}</i>")
+    return "\n".join(lines)
 
 
 async def _handle_bed_chain_start(query, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -210,6 +210,11 @@ CREATE TABLE IF NOT EXISTS bed_balances (
     balance INTEGER NOT NULL DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS bed_dust (
+    user_id INTEGER PRIMARY KEY,
+    dust REAL NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS ton_deposits (
     tx_hash TEXT PRIMARY KEY,
     user_id INTEGER,
@@ -1099,6 +1104,62 @@ class Storage:
                 (amount, user_id),
             )
         return True
+
+    def credit_bed_fractional(self, user_id: int, amount: float):
+        """Add a possibly-fractional BED deposit. Whole BED go to the balance,
+        the remainder is carried as dust. Returns (new_balance, dust, credited)."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT dust FROM bed_dust WHERE user_id = ?", (user_id,)
+            ).fetchone()
+            dust = row[0] if row else 0.0
+            total = dust + float(amount)
+            credited = int(total + 1e-9)  # guard binary-float drift
+            remainder = round(total - credited, 9)
+            if remainder < 0:
+                remainder = 0.0
+            if credited > 0:
+                conn.execute(
+                    "INSERT INTO bed_balances (user_id, balance) VALUES (?, ?) "
+                    "ON CONFLICT(user_id) DO UPDATE SET balance = balance + excluded.balance",
+                    (user_id, credited),
+                )
+            conn.execute(
+                "INSERT INTO bed_dust (user_id, dust) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET dust = excluded.dust",
+                (user_id, remainder),
+            )
+            bal = conn.execute(
+                "SELECT balance FROM bed_balances WHERE user_id = ?", (user_id,)
+            ).fetchone()
+        return (bal[0] if bal else 0, remainder, credited)
+
+    def get_bed_dust(self, user_id: int) -> float:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT dust FROM bed_dust WHERE user_id = ?", (user_id,)
+            ).fetchone()
+        return float(row[0]) if row else 0.0
+
+    def top_bed_holders(self, limit: int = 10):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT b.user_id, b.balance, u.name, u.username "
+                "FROM bed_balances b LEFT JOIN users u ON u.user_id = b.user_id "
+                "WHERE b.balance > 0 ORDER BY b.balance DESC, b.user_id ASC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [
+            {"user_id": r[0], "balance": r[1], "name": r[2], "username": r[3]}
+            for r in rows
+        ]
+
+    def count_bed_holders(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM bed_balances WHERE balance > 0"
+            ).fetchone()
+        return row[0] if row else 0
 
     # --- on-chain BED deposits / withdrawals ---
 

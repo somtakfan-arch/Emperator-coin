@@ -4,7 +4,7 @@ import logging
 from telegram import Update
 from telegram.ext import Application, TypeHandler
 
-from . import config, crypto, ton
+from . import bedcoin, config, crypto, ton
 from .config import BOT_TOKEN, DB_PATH
 from .handlers import dispatch
 from .storage import Storage
@@ -80,23 +80,32 @@ async def _deposit_loop(application: Application) -> None:
                 if not tx or storage.deposit_seen(tx):
                     continue
                 uid = ton.match_user(d.get("comment"))
-                amount = int(d.get("amount") or 0)  # whole BED
+                amount = float(d.get("amount") or 0)  # may be fractional
                 if uid and amount > 0:
-                    storage.record_deposit(tx, uid, amount, 1)
-                    new_bal = storage.add_bed(uid, amount)
+                    new_bal, dust, credited = storage.credit_bed_fractional(uid, amount)
+                    storage.record_deposit(tx, uid, credited, 1)
+                    tail = f"\n💫 В копилке ещё {dust:.4f} BED (зачислю с добора)." if dust > 1e-6 else ""
                     try:
                         await application.bot.send_message(
                             chat_id=uid,
-                            text=f"✅ Зачислено {amount} BED! Баланс: {new_bal} BED.",
+                            text=f"✅ Пополнение {amount:.4f} BED! Баланс: {new_bal} BED.{tail}".replace(".0000", ""),
                         )
                     except Exception:
                         logger.exception("Failed to notify depositor %s", uid)
                 else:
                     # Unmatched (no/bad comment): record without crediting so a
                     # super-admin can resolve it with /credit.
-                    storage.record_deposit(tx, uid or 0, amount, 0)
+                    storage.record_deposit(tx, uid or 0, int(amount), 0)
                     logger.warning("Unmatched BED deposit %s amount=%s comment=%r",
                                    tx, amount, d.get("comment"))
+            # Refresh cached treasury stats for the Wallet menu.
+            try:
+                bed = await ton.treasury_bed_balance()
+                ton_bal = await ton.treasury_ton_balance()
+                addr = await ton.treasury_address()
+                bedcoin.cache_treasury(storage, bed, ton_bal, addr)
+            except Exception:
+                logger.exception("Treasury stats refresh failed")
         except Exception:
             logger.exception("Deposit loop error")
         await asyncio.sleep(config.TON_DEPOSIT_POLL_SECONDS)
