@@ -52,6 +52,18 @@ def match_user(comment: str):
     return None
 
 
+def valid_address(text: str) -> bool:
+    """True if `text` parses as a TON address (UQ/EQ/raw forms)."""
+    if not text:
+        return False
+    try:
+        from pytoniq_core import Address
+        Address(text.strip())
+        return True
+    except Exception:
+        return False
+
+
 def _client():
     from tonutils.client import ToncenterClient
     return ToncenterClient(api_key=config.TON_API_KEY or None, is_testnet=config.TON_TESTNET)

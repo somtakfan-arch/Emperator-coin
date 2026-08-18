@@ -128,6 +128,9 @@ TON_WITHDRAW_GAS = float(os.environ.get("TON_WITHDRAW_GAS", "0.05"))
 BED_DEPOSIT_PREFIX = os.environ.get("BED_DEPOSIT_PREFIX", "BED")
 # How often (seconds) to poll for incoming deposits.
 TON_DEPOSIT_POLL_SECONDS = int(os.environ.get("TON_DEPOSIT_POLL_SECONDS", "40"))
+# BED amounts offered for "buy straight to your TON wallet" (paid in Stars,
+# delivered on-chain). Kept small so a 1 BED test costs ~10⭐.
+BED_CHAIN_PACKAGES = [int(x) for x in os.environ.get("BED_CHAIN_PACKAGES", "1,5,10,50,100").split(",") if x.strip()]
 
 # Crypto payments via Crypto Pay (@CryptoBot). Empty token = feature disabled.
 # Get a token in @CryptoBot → Crypto Pay → Create App.

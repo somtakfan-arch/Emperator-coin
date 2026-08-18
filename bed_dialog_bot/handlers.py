@@ -798,6 +798,28 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if message.successful_payment:
         payload = message.successful_payment.invoice_payload or ""
         parts = payload.split(":")
+        # BedCoin purchase delivered on-chain to the buyer's TON wallet.
+        if parts and parts[0] == "bedchain" and len(parts) >= 3 and parts[1].isdigit():
+            amount = int(parts[1])
+            address = ":".join(parts[2:])  # raw addrs contain a colon (0:...)
+            bedcoin.record_sale(storage, amount)
+            await message.reply_text(f"⏳ Оплата получена. Отправляю {amount} BED на\n{address} …")
+            try:
+                tx_hash = await ton.send_bed(address, amount, comment="BedCoin purchase")
+                await message.reply_text(
+                    f"✅ Отправлено {amount} BED на ваш кошелёк!\n"
+                    f"Транзакция принята сетью TON. Монеты придут в течение минуты."
+                )
+                logger.info("bedchain delivered %s BED to %s tx=%s", amount, address, tx_hash)
+            except Exception:
+                logger.exception("bedchain delivery failed for %s", message.from_user.id)
+                new_bal = storage.add_bed(message.from_user.id, amount)
+                await message.reply_text(
+                    "⚠️ Не удалось отправить on-chain — зачислил "
+                    f"{amount} BED на внутренний баланс (стало {new_bal} BED). "
+                    "Вывести можно из «Кошелька»."
+                )
+            return
         # BedCoin purchase: credit balance and nudge the demand price up.
         if parts and parts[0] == "bed" and len(parts) >= 3 and parts[2].isdigit():
             amount = int(parts[2])
@@ -845,6 +867,19 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
     if message.from_user and message.from_user.id in wd_await and text.startswith("/"):
         wd_await.discard(message.from_user.id)  # any other command aborts the flow
+
+    # Buy-to-wallet: capture the destination TON address the user sends.
+    chain_await = context.bot_data.setdefault("bed_chain_await", set())
+    if (
+        message.from_user
+        and message.from_user.id in chain_await
+        and text
+        and (not text.startswith("/") or text.startswith("/cancel"))
+    ):
+        await _process_bed_chain_address(message, context)
+        return
+    if message.from_user and message.from_user.id in chain_await and text.startswith("/"):
+        chain_await.discard(message.from_user.id)
 
     # If the user tapped "➕ Добавить" in the .troll manager, capture their next
     # messages (text OR media — sticker/photo/кружок/видео/…) as saved items,
@@ -2258,8 +2293,92 @@ async def _handle_bed_callback(query, context: ContextTypes.DEFAULT_TYPE) -> Non
         await _handle_bed_deposit(query, context)
     elif action == "withdraw":
         await _handle_bed_withdraw_start(query, context)
+    elif action == "chain":
+        await _handle_bed_chain_start(query, context)
     else:
         await query.answer()
+
+
+async def _handle_bed_chain_start(query, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Begin a 'buy BED straight to your TON wallet' flow — ask for the address."""
+    uid = query.from_user.id
+    if not ton.configured():
+        await query.answer("On-chain покупка пока не настроена.", show_alert=True)
+        return
+    await query.answer()
+    context.bot_data.setdefault("bed_chain_await", set()).add(uid)
+    await context.bot.send_message(
+        chat_id=query.message.chat_id,
+        text=(
+            "<b>💳 Купить BED на свой кошелёк</b>\n\n"
+            "Пришлите ваш <b>TON-адрес</b> (начинается на <code>UQ…</code> или "
+            "<code>EQ…</code>) — туда придёт реальный BED сразу после оплаты ⭐.\n\n"
+            "Отмена — /cancel"
+        ),
+        parse_mode="HTML",
+    )
+
+
+async def _process_bed_chain_address(message, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Validate the address, then show on-chain buy denominations."""
+    storage: Storage = context.bot_data["storage"]
+    uid = message.from_user.id
+    awaiting = context.bot_data.setdefault("bed_chain_await", set())
+    text = (message.text or "").strip()
+    if text.startswith("/cancel"):
+        awaiting.discard(uid)
+        await message.reply_text("Отменено.")
+        return
+    address = text.split()[0] if text else ""
+    if not ton.valid_address(address):
+        await message.reply_text(
+            "Это не похоже на TON-адрес. Пришлите адрес вида <code>UQ…</code>/<code>EQ…</code> "
+            "или /cancel.",
+            parse_mode="HTML",
+        )
+        return
+    awaiting.discard(uid)
+    context.bot_data.setdefault("bed_chain_addr", {})[uid] = address
+    rows = []
+    for amount in config.BED_CHAIN_PACKAGES:
+        cost = bedcoin.cost_stars(storage, amount)
+        rows.append([InlineKeyboardButton(
+            f"🪙 {amount} BED · {cost}⭐", callback_data=f"bedchain:buy:{amount}",
+        )])
+    await message.reply_text(
+        f"✅ Адрес принят:\n<code>{html.escape(address)}</code>\n\n"
+        f"Сколько BED купить и отправить сюда? Курс: {bedcoin.fmt_price(storage)}⭐ за BED.",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+async def _handle_bedchain_callback(query, context: ContextTypes.DEFAULT_TYPE) -> None:
+    storage: Storage = context.bot_data["storage"]
+    uid = query.from_user.id
+    parts = query.data.split(":")
+    if len(parts) != 3 or parts[1] != "buy" or not parts[2].isdigit():
+        await query.answer()
+        return
+    amount = int(parts[2])
+    if amount not in config.BED_CHAIN_PACKAGES:
+        await query.answer()
+        return
+    address = context.bot_data.setdefault("bed_chain_addr", {}).get(uid)
+    if not address:
+        await query.answer("Сессия истекла — начните заново из «Кошелька».", show_alert=True)
+        return
+    cost = bedcoin.cost_stars(storage, amount)
+    await query.answer()
+    await context.bot.send_invoice(
+        chat_id=query.message.chat_id,
+        title=f"{amount} BedCoin на кошелёк",
+        description=f"Покупка {amount} BED с доставкой на ваш TON-кошелёк.",
+        payload=f"bedchain:{amount}:{address}",
+        currency="XTR",
+        prices=[LabeledPrice(f"{amount} BED", cost)],
+        provider_token="",
+    )
 
 
 async def _handle_bed_deposit(query, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -2402,6 +2521,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await _handle_style_callback(query, context)
     elif query.data.startswith("adm:"):
         await _handle_admin_callback(query, context)
+    elif query.data.startswith("bedchain:"):
+        await _handle_bedchain_callback(query, context)
     elif query.data.startswith("bed:"):
         await _handle_bed_callback(query, context)
     elif query.data == "cmds:open":

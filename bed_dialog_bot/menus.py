@@ -188,6 +188,7 @@ def kb_wallet(uid, storage) -> InlineKeyboardMarkup:
     for idx, (label, bed, _days) in enumerate(config.BED_PREMIUM_PACKAGES):
         rows.append([_btn(f"💎 Премиум {label} · {bed} BED", f"bed:sub:{idx}", "primary")])
     if ton.configured():
+        rows.append([_btn("💳 Купить BED на свой TON-кошелёк ⭐", "bed:chain:0", "success")])
         rows.append([
             _btn("💎 Пополнить BED", "bed:deposit:0", "success"),
             _btn("📤 Вывести BED", "bed:withdraw:0", "primary"),
