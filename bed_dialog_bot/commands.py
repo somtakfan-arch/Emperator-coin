@@ -198,7 +198,8 @@ HELP_TEXT = (
     ".clone — клон профиля собеседника (.unclone — вернуть свой)\n"
     ".prefix <символ> — сменить префикс команд (напр. :spam)\n"
     ".help <команда> — подробно об одной команде\n"
-    ".help — этот список команд"
+    ".help — этот список команд\n"
+    "🎇 .powers — платные BedCoin-приколы (.boom .matrix .hack .vanish .roulette)"
 )
 
 
@@ -286,6 +287,140 @@ async def _deny_prem(context, bcid, chat_id, message_id) -> bool:
         "💎 Команда доступна только с премиумом. Оформить — /premium",
     )
     return True
+
+
+# --- BedCoin-powered "power" commands ---------------------------------------
+# Each use burns BED from the owner's balance. Names must not collide with the
+# plain commands above.
+_POWER_COMMANDS = {"boom", "matrix", "hack", "vanish", "roulette"}
+_MATRIX_GLYPHS = "01#$%&@*ｦｧｨｩｪｫﾊﾋﾎﾐﾑ日ﾒﾓ"
+
+POWERS_TEXT = (
+    "🎇 BedCoin Power-Ups — тратят BED прямо в чате с собеседником:\n\n"
+    "💥 .boom <текст> — сообщение взрывается анимацией\n"
+    "🟢 .matrix <текст> — текст проявляется как в «Матрице»\n"
+    "💻 .hack <текст> — фейковый взлом, потом текст\n"
+    "🕵️ .vanish <сек> <текст> — самоуничтожается у обоих\n"
+    "🔫 .roulette <текст> — русская рулетка (1 к 6)\n\n"
+    "Каждое применение стоит BED. Баланс и пополнение — /menu → 🪙 Кошелёк"
+)
+
+
+async def _charge_bed(context, storage, owner_id, bcid, chat_id, message_id) -> bool:
+    """Burn the per-command BED cost from the owner; deny in-place if short."""
+    cost = config.BED_COMMAND_COST
+    if not storage.spend_bed(owner_id, cost):
+        bal = storage.get_bed(owner_id)
+        await _edit_command_message(
+            context, bcid, chat_id, message_id,
+            f"🪙 Недостаточно BED: нужно {cost}, у вас {bal}. "
+            "Пополнить — /menu → 🪙 Кошелёк",
+        )
+        return False
+    return True
+
+
+async def _handle_power_command(
+    cmd_name, arg, context, storage, message, bcid, chat_id, message_id, owner_chat_id,
+) -> bool:
+    owner_id = message.from_user.id
+
+    if cmd_name == "boom":
+        if not arg:
+            await _edit_command_message(context, bcid, chat_id, message_id, "⚠️ Формат: .boom текст")
+            return True
+        if not await _charge_bed(context, storage, owner_id, bcid, chat_id, message_id):
+            return True
+        for frame in ("💣", "💣💣", "💣 💥", "💥💥💥", "🔥💥🔥"):
+            await _edit_command_message(context, bcid, chat_id, message_id, frame)
+            await asyncio.sleep(0.35)
+        await _edit_command_message(context, bcid, chat_id, message_id, f"💥 {arg[:300]}")
+        return True
+
+    if cmd_name == "matrix":
+        if not arg:
+            await _edit_command_message(context, bcid, chat_id, message_id, "⚠️ Формат: .matrix текст")
+            return True
+        if not await _charge_bed(context, storage, owner_id, bcid, chat_id, message_id):
+            return True
+        target = arg[:120]
+        steps = 8
+        for s in range(1, steps + 1):
+            cut = len(target) * s // steps
+            noise = "".join(random.choice(_MATRIX_GLYPHS) for _ in range(min(4, len(target) - cut)))
+            await _edit_command_message(context, bcid, chat_id, message_id, target[:cut] + noise)
+            await asyncio.sleep(0.22)
+        await _edit_command_message(context, bcid, chat_id, message_id, target)
+        return True
+
+    if cmd_name == "hack":
+        if not await _charge_bed(context, storage, owner_id, bcid, chat_id, message_id):
+            return True
+        for frame in (
+            "💻 Инициализация…",
+            "🔓 Подбор доступа ▓▒░░",
+            "🔓 Подбор доступа ▓▓▓▒",
+            "🛰 Перехват канала…",
+            "✅ Доступ получен",
+        ):
+            await _edit_command_message(context, bcid, chat_id, message_id, frame)
+            await asyncio.sleep(0.45)
+        await _edit_command_message(context, bcid, chat_id, message_id, f"📡 {arg[:300]}" if arg else "🧠 Система под контролем.")
+        return True
+
+    if cmd_name == "vanish":
+        m = re.match(r"(\d+)\s+(.+)", arg, re.S)
+        if not m:
+            await _edit_command_message(context, bcid, chat_id, message_id, "⚠️ Формат: .vanish 5 текст")
+            return True
+        secs = max(1, min(int(m.group(1)), 60))
+        body = m.group(2).strip()[:400]
+        if not await _charge_bed(context, storage, owner_id, bcid, chat_id, message_id):
+            return True
+        await _edit_command_message(context, bcid, chat_id, message_id, "🕵️")
+        try:
+            sent = await context.bot.send_message(
+                chat_id=chat_id, business_connection_id=bcid,
+                text=f"{body}\n\n⏳ самоуничтожится через {secs}с",
+            )
+        except Exception:
+            logger.exception("vanish send failed")
+            return True
+        await asyncio.sleep(secs)
+        try:
+            storage.delete_message(bcid, chat_id, sent.message_id)
+        except Exception:
+            pass
+        try:
+            await context.bot.do_api_request(
+                "deleteBusinessMessages",
+                api_kwargs={"business_connection_id": bcid, "message_ids": [sent.message_id]},
+            )
+        except Exception:
+            logger.exception("vanish delete failed")
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id, message_id=sent.message_id, business_connection_id=bcid,
+                    text="🕊️ сообщение исчезло",
+                )
+            except Exception:
+                pass
+        return True
+
+    if cmd_name == "roulette":
+        if not await _charge_bed(context, storage, owner_id, bcid, chat_id, message_id):
+            return True
+        await _edit_command_message(context, bcid, chat_id, message_id, "🔫 крутим барабан…")
+        await asyncio.sleep(0.5)
+        await _edit_command_message(context, bcid, chat_id, message_id, "🔫 …")
+        await asyncio.sleep(0.5)
+        if random.randint(1, 6) == 1:
+            await _edit_command_message(context, bcid, chat_id, message_id, f"💥 БАХ! {arg[:200]}".strip())
+        else:
+            await _edit_command_message(context, bcid, chat_id, message_id, "🔫 щёлк… пронесло 😮‍💨")
+        return True
+
+    return False
 
 
 async def _edit_command_message(context: ContextTypes.DEFAULT_TYPE, business_connection_id: str, chat_id: int, message_id: int, text: str) -> None:
@@ -994,5 +1129,18 @@ async def try_handle_owner_command(
         else:
             await context.bot.send_message(chat_id=owner_chat_id, text=mark(HELP_TEXT))
         return True
+
+    # BedCoin power-ups (paid per use). ".powers" lists them for free.
+    _pparts = text.split(None, 1)
+    _pname = _pparts[0][1:].lower()
+    _parg = _pparts[1].strip() if len(_pparts) > 1 else ""
+    if _pname == "powers":
+        await _edit_command_message(context, bcid, chat_id, message_id, "🎇")
+        await context.bot.send_message(chat_id=owner_chat_id, text=POWERS_TEXT)
+        return True
+    if _pname in _POWER_COMMANDS:
+        return await _handle_power_command(
+            _pname, _parg, context, storage, message, bcid, chat_id, message_id, owner_chat_id,
+        )
 
     return False
