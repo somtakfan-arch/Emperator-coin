@@ -625,6 +625,13 @@ async def handle_edited_business_message(update: Update, context: ContextTypes.D
     if editor and (editor.id == conn["owner_user_id"] or editor.is_bot):
         return
 
+    # Ignore edits authored by a contact who ALSO runs this bot: their "edit" is
+    # almost always Bed Dialog's own restyle (.kawai/.style/.animate) applied on
+    # their side, not a manual edit — otherwise the owner gets spammed on every
+    # message that contact sends while they have kawai/style on.
+    if editor and storage.get_bcid_for_owner(editor.id):
+        return
+
     if old and old_text is not None and new_text is not None and old_text != new_text:
         _capture(storage, conn["owner_user_id"], message, "edit", f"{old_text} → {new_text}")
         _log_event(storage, conn["owner_user_id"], "text",
