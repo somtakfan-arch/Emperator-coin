@@ -1,0 +1,50 @@
+# Развёртывание Discord-сервера семьи Emperium прямо из браузера,
+# без компьютера: Actions -> "Развернуть Discord-сервер Emperium" -> Run workflow.
+#
+# Требуются секреты репозитория (Settings -> Secrets and variables -> Actions):
+#   DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_ID
+
+name: Развернуть Discord-сервер Emperium
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Только показать план, ничего не менять на сервере
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: discord
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: discord/package-lock.json
+
+      - name: Установить зависимости
+        run: npm ci
+
+      - name: Проверить права доступа
+        run: npm test
+
+      - name: Показать план
+        run: npm run setup:dry
+
+      - name: Развернуть структуру на сервере
+        if: ${{ !inputs.dry_run }}
+        env:
+          DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
+          DISCORD_CLIENT_ID: ${{ secrets.DISCORD_CLIENT_ID }}
+          DISCORD_GUILD_ID: ${{ secrets.DISCORD_GUILD_ID }}
+        run: npm run setup
