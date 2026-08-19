@@ -191,6 +191,11 @@ async function postDoc(channel, key, log, extraComponents) {
     log(`    документ уже опубликован: #${channel.name}`);
     return;
   }
+  await sendDoc(channel, blocks, extraComponents);
+  log(`    документ опубликован: #${channel.name}`);
+}
+
+async function sendDoc(channel, blocks, extraComponents) {
   for (const [i, block] of blocks.entries()) {
     const isLast = i === blocks.length - 1;
     await channel.send({
@@ -198,7 +203,18 @@ async function postDoc(channel, key, log, extraComponents) {
       ...(isLast && extraComponents ? { components: extraComponents } : {}),
     });
   }
-  log(`    документ опубликован: #${channel.name}`);
+}
+
+// Переопубликовать документ: убирает прошлые сообщения бота в канале и шлёт свежие.
+// Нужно, когда текст в src/texts.js поменялся.
+export async function republishDoc(channel, key, extraComponents) {
+  const blocks = DOCS[key];
+  if (!blocks) throw new Error(`Неизвестный документ: ${key}`);
+  const history = await channel.messages.fetch({ limit: 50 }).catch(() => null);
+  const own = history?.filter((m) => m.author.id === channel.client.user.id) ?? [];
+  for (const message of own.values?.() ?? own) await message.delete().catch(() => {});
+  await sendDoc(channel, blocks, extraComponents);
+  return { removed: own.size ?? own.length, posted: blocks.length };
 }
 
 export async function applyStructure(guild, config, { log = console.log, components = {} } = {}) {

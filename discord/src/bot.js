@@ -8,7 +8,7 @@ import {
   GatewayIntentBits, MessageFlags, ModalBuilder, Partials, PermissionFlagsBits as P, REST, Routes,
   SlashCommandBuilder, TextInputBuilder, TextInputStyle,
 } from 'discord.js';
-import { applyStructure, mapped, roleGroups } from './structure.js';
+import { applyStructure, mapped, republishDoc } from './structure.js';
 import { requireEnv } from './env.js';
 import { Store, disciplineSummary } from './store.js';
 import { ACCEPTED, WELCOME } from './texts.js';
@@ -16,7 +16,7 @@ import { ACCEPTED, WELCOME } from './texts.js';
 const EPH = { flags: MessageFlags.Ephemeral };
 const eph = (value) => (value ? EPH : {});
 
-const PURPLE = 0x6a0dad;
+const SILVER = 0xd9d9d9;
 const RED = 0xc0392b;
 const GREEN = 0x27ae60;
 const DAY = 24 * 60 * 60 * 1000;
@@ -25,6 +25,10 @@ const config = JSON.parse(await readFile(new URL('../config/server.json', import
 const store = await new Store(process.env.DATA_FILE ?? './data/store.json').load();
 
 const rankSpecs = config.roles.filter((r) => r.rank).sort((a, b) => b.rank - a.rank);
+const docChannels = config.categories
+  .flatMap((category) => category.channels)
+  .filter((channel) => channel.post)
+  .map((channel) => ({ name: channel.name, post: channel.post }));
 const rankChoices = rankSpecs.map((r) => ({ name: `${r.rank} — ${r.name}`, value: String(r.rank) }));
 const roleByName = (guild, name) => guild.roles.cache.find((r) => r.name === name) ?? null;
 const roleByKey = (guild, key) => {
@@ -122,6 +126,12 @@ const commands = [
     .setDescription('Выдать или снять роль союзника')
     .setDefaultMemberPermissions(P.ManageRoles)
     .addUserOption((o) => o.setName('кто').setDescription('Пользователь').setRequired(true)),
+  new SlashCommandBuilder()
+    .setName('publish')
+    .setDescription('Переопубликовать документ в его канале после правок текста')
+    .setDefaultMemberPermissions(P.ManageGuild)
+    .addStringOption((o) => o.setName('документ').setDescription('Какой документ обновить').setRequired(true)
+      .addChoices(...docChannels.map((c) => ({ name: `#${c.name}`, value: c.post })))),
   new SlashCommandBuilder().setName('info').setDescription('Информация о семье: цвет, прикрытие, ранги'),
 ].map((c) => c.toJSON());
 
@@ -183,7 +193,7 @@ async function handleApplyModal(interaction) {
 
   const embed = new EmbedBuilder()
     .setTitle('📥 Заявка на вступление')
-    .setColor(PURPLE)
+    .setColor(SILVER)
     .setThumbnail(interaction.user.displayAvatarURL())
     .addFields(
       { name: 'Discord', value: `<@${application.userId}> (\`${interaction.user.tag}\`)` },
@@ -257,7 +267,7 @@ function musterEmbed(data) {
   const list = (ids) => (ids.length ? ids.map((id) => `<@${id}>`).join('\n') : '—');
   return new EmbedBuilder()
     .setTitle(`⚔️ Сбор: ${data.type}`)
-    .setColor(PURPLE)
+    .setColor(SILVER)
     .setDescription(`**Время:** ${data.time}\n${data.note ? `**Детали:** ${data.note}\n` : ''}**Форма и цвет обязательны.**`)
     .addFields(
       { name: `${MUSTER_KINDS.yes} (${data.yes.length})`, value: list(data.yes), inline: true },
@@ -343,7 +353,7 @@ async function handleRoster(interaction) {
 
   const embed = new EmbedBuilder()
     .setTitle(`👥 Состав ${config.family.name}`)
-    .setColor(PURPLE)
+    .setColor(SILVER)
     .setDescription(lines.join('\n').slice(0, 4000))
     .setFooter({ text: `Всего в составе: ${total}` })
     .setTimestamp();
@@ -380,7 +390,7 @@ async function handleRank(interaction) {
   store.queueSave();
 
   await interaction.reply(`${target} → **${spec.name}** (ранг ${rank}${prev ? `, было ${prev}` : ''}).`);
-  await logTo(interaction.guild, new EmbedBuilder().setColor(PURPLE)
+  await logTo(interaction.guild, new EmbedBuilder().setColor(SILVER)
     .setDescription(`${interaction.user} выдал ${target} ранг **${spec.name}**`));
 }
 
@@ -451,7 +461,7 @@ async function handleDossier(interaction) {
 
   const embed = new EmbedBuilder()
     .setTitle(`📄 Досье: ${member?.displayName ?? user.tag}`)
-    .setColor(PURPLE)
+    .setColor(SILVER)
     .setThumbnail(user.displayAvatarURL())
     .addFields(
       { name: 'Персонаж', value: data.name ? `${data.name} | ${data.static}` : '—', inline: true },
@@ -480,12 +490,27 @@ async function handleAlly(interaction) {
   await interaction.reply({ content: `${target}: роль союзника ${had ? 'снята' : 'выдана'}.`, ...EPH });
 }
 
+async function handlePublish(interaction) {
+  await interaction.deferReply({ ...EPH });
+  const key = interaction.options.getString('документ');
+  const spec = docChannels.find((c) => c.post === key);
+  const channel = interaction.guild.channels.cache.find((c) => c.name === spec.name);
+  if (!channel) {
+    await interaction.editReply(`Канал #${spec.name} не найден — сначала /setup.`);
+    return;
+  }
+  const result = await republishDoc(channel, key, key === 'recruit' ? applyButton() : undefined);
+  await interaction.editReply(
+    `Документ обновлён в ${channel}: удалено старых сообщений ${result.removed}, опубликовано ${result.posted}.`,
+  );
+}
+
 async function handleInfo(interaction) {
   const { family } = config;
   await interaction.reply({
     embeds: [new EmbedBuilder()
       .setTitle(`⚜️ ${family.name}`)
-      .setColor(PURPLE)
+      .setColor(SILVER)
       .addFields(
         { name: 'Проект', value: family.project, inline: true },
         { name: 'Тип', value: family.type, inline: true },
@@ -511,6 +536,7 @@ const handlers = {
     await channel.send({ components: applyButton() });
     await interaction.reply({ content: `Панель опубликована в ${channel}.`, ...EPH });
   },
+  publish: handlePublish,
   sbor: handleMuster,
   aktiv: handleActivity,
   sostav: handleRoster,

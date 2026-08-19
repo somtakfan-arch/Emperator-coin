@@ -2,115 +2,384 @@
   "family": {
     "name": "Emperium",
     "tag": "EMP",
-    "color": "#6A0DAD",
-    "colorRgb": "106-13-173",
+    "color": "#FFFFFF",
+    "colorRgb": "255-255-255",
     "type": "Криминальная",
     "cover": "Легальная торговля оружием — оружейный магазин и лицензированные поставки",
     "project": "RMRP (GTA 5)"
   },
   "roles": [
-    { "key": "kurator", "name": "👁 Куратор RMRP", "color": "#FFFFFF", "hoist": true, "mentionable": false, "permissions": ["Administrator"] },
-    { "key": "r8", "name": "👑 Император", "color": "#6A0DAD", "hoist": true, "mentionable": true, "rank": 8, "permissions": ["Administrator"] },
-    { "key": "r7", "name": "🩸 Смотрящий", "color": "#7B2FF7", "hoist": true, "mentionable": true, "rank": 7, "staff": true,
-      "permissions": ["ManageMessages", "KickMembers", "ModerateMembers", "ManageNicknames", "MuteMembers", "MoveMembers", "MentionEveryone"] },
-    { "key": "r6", "name": "🔫 Оружейник", "color": "#8A4FFF", "hoist": true, "mentionable": true, "rank": 6, "staff": true,
-      "permissions": ["ManageMessages", "MuteMembers", "MoveMembers", "MentionEveryone"] },
-    { "key": "r5", "name": "💼 Ствольщик", "color": "#9A6BFF", "hoist": true, "mentionable": true, "rank": 5 },
-    { "key": "r4", "name": "🏍 Гонец", "color": "#A883FF", "hoist": true, "mentionable": true, "rank": 4 },
-    { "key": "r3", "name": "💊 Барыга", "color": "#B79BFF", "hoist": true, "mentionable": true, "rank": 3 },
-    { "key": "r2", "name": "🚬 Шестёрка", "color": "#C6B3FF", "hoist": true, "mentionable": true, "rank": 2 },
-    { "key": "r1", "name": "🕳 Пустой", "color": "#D5CBFF", "hoist": true, "mentionable": true, "rank": 1 },
-    { "key": "media", "name": "🎥 Медиа", "color": "#E1BEE7", "hoist": false, "mentionable": true },
-    { "key": "vacation", "name": "🌙 В отпуске", "color": "#7A7A8C", "hoist": false, "mentionable": true },
-    { "key": "ally", "name": "🤝 Союзник", "color": "#4FC3F7", "hoist": true, "mentionable": true },
-    { "key": "guest", "name": "👤 Гость", "color": "#5C6370", "hoist": false, "mentionable": true }
+    {
+      "key": "kurator",
+      "name": "👁 Куратор RMRP",
+      "color": "#D4AF37",
+      "hoist": true,
+      "mentionable": false,
+      "permissions": [
+        "Administrator"
+      ]
+    },
+    {
+      "key": "r8",
+      "name": "👑 Император",
+      "color": "#FFFFFF",
+      "hoist": true,
+      "mentionable": true,
+      "rank": 8,
+      "permissions": [
+        "Administrator"
+      ]
+    },
+    {
+      "key": "r7",
+      "name": "🩸 Смотрящий",
+      "color": "#EDEDED",
+      "hoist": true,
+      "mentionable": true,
+      "rank": 7,
+      "staff": true,
+      "permissions": [
+        "ManageMessages",
+        "KickMembers",
+        "ModerateMembers",
+        "ManageNicknames",
+        "MuteMembers",
+        "MoveMembers",
+        "MentionEveryone"
+      ]
+    },
+    {
+      "key": "r6",
+      "name": "🔫 Оружейник",
+      "color": "#DCDCDC",
+      "hoist": true,
+      "mentionable": true,
+      "rank": 6,
+      "staff": true,
+      "permissions": [
+        "ManageMessages",
+        "MuteMembers",
+        "MoveMembers",
+        "MentionEveryone"
+      ]
+    },
+    {
+      "key": "r5",
+      "name": "💼 Ствольщик",
+      "color": "#C8C8C8",
+      "hoist": true,
+      "mentionable": true,
+      "rank": 5
+    },
+    {
+      "key": "r4",
+      "name": "🏍 Гонец",
+      "color": "#B4B4B4",
+      "hoist": true,
+      "mentionable": true,
+      "rank": 4
+    },
+    {
+      "key": "r3",
+      "name": "💊 Барыга",
+      "color": "#A0A0A0",
+      "hoist": true,
+      "mentionable": true,
+      "rank": 3
+    },
+    {
+      "key": "r2",
+      "name": "🚬 Шестёрка",
+      "color": "#8C8C8C",
+      "hoist": true,
+      "mentionable": true,
+      "rank": 2
+    },
+    {
+      "key": "r1",
+      "name": "🕳 Пустой",
+      "color": "#787878",
+      "hoist": true,
+      "mentionable": true,
+      "rank": 1
+    },
+    {
+      "key": "media",
+      "name": "🎥 Медиа",
+      "color": "#C9A227",
+      "hoist": false,
+      "mentionable": true
+    },
+    {
+      "key": "vacation",
+      "name": "🌙 В отпуске",
+      "color": "#5A5A5A",
+      "hoist": false,
+      "mentionable": true
+    },
+    {
+      "key": "ally",
+      "name": "🤝 Союзник",
+      "color": "#9DB4C0",
+      "hoist": true,
+      "mentionable": true
+    },
+    {
+      "key": "guest",
+      "name": "👤 Гость",
+      "color": "#4F4F4F",
+      "hoist": false,
+      "mentionable": true
+    }
   ],
   "categories": [
     {
       "name": "📌 ИНФОРМАЦИЯ",
       "preset": "public-read",
       "channels": [
-        { "name": "правила-семьи", "type": "text", "topic": "Устав Emperium. Вступил — значит согласен.", "post": "ustav" },
-        { "name": "правила-рмрп", "type": "text", "topic": "Выжимка правил проекта по семьям. Полная версия — на форуме.", "post": "rmrp" },
-        { "name": "ранги", "type": "text", "topic": "Ранговая система 1-8 и условия повышения.", "post": "ranks" },
-        { "name": "дресс-код-и-цвет", "type": "text", "topic": "Цвет семьи #6A0DAD, форма одежды, цвет авто.", "post": "dresscode" },
-        { "name": "титул-и-база", "type": "text", "topic": "Титульная территория и правила поведения на ней.", "post": "titul" },
-        { "name": "объявления", "type": "text", "topic": "Пишет только руководство. Читать обязательно." },
-        { "name": "союзы", "type": "text", "topic": "Действующие союзы и договоры. Обновляет руководство." }
+        {
+          "name": "правила-семьи",
+          "type": "text",
+          "topic": "Устав Emperium. Вступил — значит согласен.",
+          "post": "ustav"
+        },
+        {
+          "name": "правила-рмрп",
+          "type": "text",
+          "topic": "Выжимка правил проекта по семьям. Полная версия — на форуме.",
+          "post": "rmrp"
+        },
+        {
+          "name": "ранги",
+          "type": "text",
+          "topic": "Ранговая система 1-8 и условия повышения.",
+          "post": "ranks"
+        },
+        {
+          "name": "дресс-код-и-цвет",
+          "type": "text",
+          "topic": "Цвет семьи белый #FFFFFF, форма одежды, цвет авто.",
+          "post": "dresscode"
+        },
+        {
+          "name": "титул-и-база",
+          "type": "text",
+          "topic": "Титульная территория и правила поведения на ней.",
+          "post": "titul"
+        },
+        {
+          "name": "объявления",
+          "type": "text",
+          "topic": "Пишет только руководство. Читать обязательно."
+        },
+        {
+          "name": "союзы",
+          "type": "text",
+          "topic": "Действующие союзы и договоры. Обновляет руководство."
+        }
       ]
     },
     {
       "name": "🚪 ГОСТЕВАЯ",
       "preset": "guest",
       "channels": [
-        { "name": "гостевой-чат", "type": "text", "topic": "Общение с гостями. Хамство — на выход.", "slowmode": 5 },
-        { "name": "заявка-на-вступление", "type": "text", "topic": "Жми кнопку и заполняй анкету.", "preset": "guest-read", "post": "recruit" },
-        { "name": "вопросы", "type": "text", "topic": "Вопросы к составу и руководству." },
-        { "name": "Переговорная", "type": "voice", "preset": "guest" }
+        {
+          "name": "гостевой-чат",
+          "type": "text",
+          "topic": "Общение с гостями. Хамство — на выход.",
+          "slowmode": 5
+        },
+        {
+          "name": "заявка-на-вступление",
+          "type": "text",
+          "topic": "Жми кнопку и заполняй анкету.",
+          "preset": "guest-read",
+          "post": "recruit"
+        },
+        {
+          "name": "вопросы",
+          "type": "text",
+          "topic": "Вопросы к составу и руководству."
+        },
+        {
+          "name": "Переговорная",
+          "type": "voice",
+          "preset": "guest"
+        }
       ]
     },
     {
       "name": "🤝 СОЮЗЫ",
       "preset": "allies",
       "channels": [
-        { "name": "союзный-чат", "type": "text", "topic": "Канал для союзников. Только по согласованию с куратором (п. 5.10)." },
-        { "name": "Союзная рация", "type": "voice", "preset": "allies" }
+        {
+          "name": "союзный-чат",
+          "type": "text",
+          "topic": "Канал для союзников. Только по согласованию с куратором (п. 5.10)."
+        },
+        {
+          "name": "Союзная рация",
+          "type": "voice",
+          "preset": "allies"
+        }
       ]
     },
     {
       "name": "👥 СОСТАВ",
       "preset": "members",
       "channels": [
-        { "name": "общий-чат", "type": "text", "topic": "Основной чат семьи." },
-        { "name": "медиа", "type": "text", "topic": "Скрины, клипы, нарезки. Роль Медиа выдаёт руководство." },
-        { "name": "памятка", "type": "text", "preset": "members-read", "topic": "Карты точек, позиции, схемы заходов. Пишет руководство." },
-        { "name": "состав", "type": "text", "preset": "members-read", "topic": "Актуальный состав по рангам. Обновляет команда /sostav." },
-        { "name": "заявка-на-повышение", "type": "text", "topic": "Заявка по шаблону из канала ранги." },
-        { "name": "отпуск-афк", "type": "text", "topic": "Уходишь в АФК — пиши срок и причину." },
-        { "name": "флудилка", "type": "text", "topic": "Оффтоп. В общем чате — по делу." }
+        {
+          "name": "общий-чат",
+          "type": "text",
+          "topic": "Основной чат семьи."
+        },
+        {
+          "name": "медиа",
+          "type": "text",
+          "topic": "Скрины, клипы, нарезки. Роль Медиа выдаёт руководство."
+        },
+        {
+          "name": "памятка",
+          "type": "text",
+          "preset": "members-read",
+          "topic": "Карты точек, позиции, схемы заходов. Пишет руководство."
+        },
+        {
+          "name": "состав",
+          "type": "text",
+          "preset": "members-read",
+          "topic": "Актуальный состав по рангам. Обновляет команда /sostav."
+        },
+        {
+          "name": "заявка-на-повышение",
+          "type": "text",
+          "topic": "Заявка по шаблону из канала ранги."
+        },
+        {
+          "name": "отпуск-афк",
+          "type": "text",
+          "topic": "Уходишь в АФК — пиши срок и причину."
+        },
+        {
+          "name": "флудилка",
+          "type": "text",
+          "topic": "Оффтоп. В общем чате — по делу."
+        }
       ]
     },
     {
       "name": "⚔️ ДВИЖ",
       "preset": "members",
       "channels": [
-        { "name": "сбор", "type": "text", "topic": "Сборы на движ. Команда /sbor." },
-        { "name": "bizwar", "type": "text", "topic": "Расписание BizWar, составы, разбор." },
-        { "name": "налёты-и-ограбления", "type": "text", "topic": "Налёты, ограбления, поставки." },
-        { "name": "airdrop-и-краз", "type": "text", "topic": "AirDrop, война за КрАЗ, захваты территорий." },
-        { "name": "цели-и-конфликты", "type": "text", "topic": "Кто в контре, с кем не воюем, актуальные цели." },
-        { "name": "отчёты-актив", "type": "text", "topic": "Отчёты об активностях. Команда /aktiv. Без активности 3 дня семья уходит в неактив (п. 1.3)." }
+        {
+          "name": "сбор",
+          "type": "text",
+          "topic": "Сборы на движ. Команда /sbor."
+        },
+        {
+          "name": "bizwar",
+          "type": "text",
+          "topic": "Расписание BizWar, составы, разбор."
+        },
+        {
+          "name": "налёты-и-ограбления",
+          "type": "text",
+          "topic": "Налёты, ограбления, поставки."
+        },
+        {
+          "name": "airdrop-и-краз",
+          "type": "text",
+          "topic": "AirDrop, война за КрАЗ, захваты территорий."
+        },
+        {
+          "name": "цели-и-конфликты",
+          "type": "text",
+          "topic": "Кто в контре, с кем не воюем, актуальные цели."
+        },
+        {
+          "name": "отчёты-актив",
+          "type": "text",
+          "topic": "Отчёты об активностях. Команда /aktiv. Без активности 3 дня семья уходит в неактив (п. 1.3)."
+        }
       ]
     },
     {
       "name": "🎙 ГОЛОСОВЫЕ",
       "preset": "members",
       "channels": [
-        { "name": "📻 Общая рация", "type": "voice" },
-        { "name": "⚔️ Сбор", "type": "voice" },
-        { "name": "🎧 Тусовка 1", "type": "voice" },
-        { "name": "🎧 Тусовка 2", "type": "voice" },
-        { "name": "😴 AFK", "type": "voice" }
+        {
+          "name": "📻 Общая рация",
+          "type": "voice"
+        },
+        {
+          "name": "⚔️ Сбор",
+          "type": "voice"
+        },
+        {
+          "name": "🎧 Тусовка 1",
+          "type": "voice"
+        },
+        {
+          "name": "🎧 Тусовка 2",
+          "type": "voice"
+        },
+        {
+          "name": "😴 AFK",
+          "type": "voice"
+        }
       ]
     },
     {
       "name": "🛡 РУКОВОДСТВО",
       "preset": "staff",
       "channels": [
-        { "name": "чат-руководства", "type": "text", "topic": "Закрытый чат старшего состава." },
-        { "name": "задачи", "type": "text", "topic": "Задачи от лидера и куратора, сроки." },
-        { "name": "выговоры", "type": "text", "topic": "Учёт предупреждений и выговоров. Команды /warn, /unwarn, /dossier." },
-        { "name": "архив-заявок", "type": "text", "topic": "Анкеты на вступление с кнопками решения." },
-        { "name": "логи", "type": "text", "topic": "Действия бота: приёмы, повышения, выговоры, отчёты." },
-        { "name": "🎙 Планёрка", "type": "voice", "preset": "staff" }
+        {
+          "name": "чат-руководства",
+          "type": "text",
+          "topic": "Закрытый чат старшего состава."
+        },
+        {
+          "name": "задачи",
+          "type": "text",
+          "topic": "Задачи от лидера и куратора, сроки."
+        },
+        {
+          "name": "выговоры",
+          "type": "text",
+          "topic": "Учёт предупреждений и выговоров. Команды /warn, /unwarn, /dossier."
+        },
+        {
+          "name": "архив-заявок",
+          "type": "text",
+          "topic": "Анкеты на вступление с кнопками решения."
+        },
+        {
+          "name": "логи",
+          "type": "text",
+          "topic": "Действия бота: приёмы, повышения, выговоры, отчёты."
+        },
+        {
+          "name": "🎙 Планёрка",
+          "type": "voice",
+          "preset": "staff"
+        }
       ]
     },
     {
       "name": "🏛 АДМИНИСТРАЦИЯ RMRP",
       "preset": "kurator",
       "channels": [
-        { "name": "связь-с-куратором", "type": "text", "topic": "Канал для Главного администратора семей и его заместителя (п. 3.11)." },
-        { "name": "документы-семьи", "type": "text", "topic": "Заявка на регистрацию, RP-биография, RP-ситуация, состав, форма одежды.", "post": "docs" }
+        {
+          "name": "связь-с-куратором",
+          "type": "text",
+          "topic": "Канал для Главного администратора семей и его заместителя (п. 3.11)."
+        },
+        {
+          "name": "документы-семьи",
+          "type": "text",
+          "topic": "Заявка на регистрацию, RP-биография, RP-ситуация, состав, форма одежды.",
+          "post": "docs"
+        }
       ]
     }
   ],
