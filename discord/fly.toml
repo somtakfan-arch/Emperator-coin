@@ -1,0 +1,21 @@
+# Деплой: fly launch --no-deploy, затем
+#   fly secrets set DISCORD_TOKEN=... DISCORD_CLIENT_ID=... DISCORD_GUILD_ID=...
+#   fly volumes create emperium_data --size 1
+#   fly deploy
+app = "emperium-bot"
+primary_region = "waw"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  DATA_FILE = "/data/store.json"
+
+[mounts]
+  source = "emperium_data"
+  destination = "/data"
+
+# Бот держит вебсокет к Discord, поэтому его нельзя усыплять.
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
