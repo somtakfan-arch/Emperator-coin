@@ -2328,6 +2328,24 @@ def _build_bed_top(storage, viewer_id: int = 0) -> str:
     return "\n".join(lines)
 
 
+async def _refresh_usernames(context: ContextTypes.DEFAULT_TYPE, storage: Storage) -> int:
+    """Re-fetch each known user's current profile via get_chat and update the
+    stored name/username (best-effort; skips users the bot can't resolve)."""
+    updated = 0
+    for u in storage.list_users():
+        try:
+            chat = await context.bot.get_chat(u["user_id"])
+        except Exception:
+            continue
+        name = " ".join(filter(None, [getattr(chat, "first_name", None),
+                                       getattr(chat, "last_name", None)])) or None
+        username = getattr(chat, "username", None)
+        if (username or "") != (u.get("username") or "") or (name or "") != (u.get("name") or ""):
+            storage.update_user_identity(u["user_id"], name, username)
+            updated += 1
+    return updated
+
+
 async def _send_connection_list(message, context: ContextTypes.DEFAULT_TYPE, storage: Storage) -> None:
     """Send the live connected / not-connected breakdown (as a .txt if long)."""
     users = storage.list_users()
@@ -2355,6 +2373,8 @@ async def _status_reload(message, context: ContextTypes.DEFAULT_TYPE, storage: S
     """Admin: force-refresh live data (on-chain treasury + economy + bot stats)
     and send the updated snapshot."""
     note = await message.reply_text("🔄 Обновляю данные…")
+
+    refreshed = await _refresh_usernames(context, storage)
 
     connected = len(storage.connected_owner_ids())
     users = storage.count_users()
@@ -2392,6 +2412,7 @@ async def _status_reload(message, context: ContextTypes.DEFAULT_TYPE, storage: S
 
     report = (
         "🔄 <b>Данные обновлены</b>\n\n"
+        f"🔁 Профилей обновлено: {refreshed}\n\n"
         "👥 <b>Пользователи</b>\n"
         f"• Подключено ботов: {connected}\n"
         f"• Всего юзеров: {users}\n"

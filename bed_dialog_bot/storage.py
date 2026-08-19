@@ -573,6 +573,14 @@ class Storage:
                 (user_id, name, username, int(time.time())),
             )
 
+    def update_user_identity(self, user_id: int, name=None, username=None) -> None:
+        """Refresh a user's name/username without touching last_seen."""
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE users SET name = ?, username = ? WHERE user_id = ?",
+                (name, username, user_id),
+            )
+
     def list_users(self, limit=None):
         query = "SELECT user_id, name, username, last_seen FROM users ORDER BY last_seen DESC"
         params = ()
