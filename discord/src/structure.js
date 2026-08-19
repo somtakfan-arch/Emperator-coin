@@ -103,15 +103,24 @@ async function ensureRoles(guild, config, log) {
     }
   }
 
-  // Порядок ролей: первая в конфиге — самая высокая.
+  // Порядок ролей: первая в конфиге — самая высокая, но всё равно ниже роли бота:
+  // Discord не даёт двигать роли выше собственной.
   try {
+    const top = guild.members.me?.roles.highest.position ?? config.roles.length + 1;
     const positions = config.roles
-      .map((spec, i) => ({ role: roles.get(spec.key), position: config.roles.length - i }))
+      .map((spec, i) => ({ role: roles.get(spec.key), position: Math.max(1, top - 1 - i) }))
       .filter((p) => p.role);
-    await guild.roles.setPositions(positions);
-    log('  порядок ролей выставлен');
-  } catch {
-    log('  ⚠️  не удалось выставить порядок ролей — перетащи роль бота выше остальных и запусти ещё раз');
+    if (top <= config.roles.length) {
+      log(`  ⚠️  роль бота стоит на позиции ${top}, а ролей семьи ${config.roles.length}.`);
+      log('     Discord не даёт боту двигать роли не ниже собственной, и поднять себя бот не может.');
+      log('     Настройки сервера → Роли → перетащи роль бота на самый верх и запусти развёртывание ещё раз.');
+    } else {
+      await guild.roles.setPositions(positions);
+      log('  порядок ролей выставлен');
+    }
+  } catch (err) {
+    log(`  ⚠️  не удалось выставить порядок ролей: ${err.message}`);
+    log('     Обычно помогает: Настройки сервера → Роли → роль бота на самый верх, затем запустить заново.');
   }
   return roles;
 }
@@ -195,6 +204,7 @@ async function postDoc(channel, key, log, extraComponents) {
 export async function applyStructure(guild, config, { log = console.log, components = {} } = {}) {
   log(`\n▸ Сервер: ${guild.name}`);
   await guild.channels.fetch();
+  await guild.members.fetchMe().catch(() => log('  ⚠️  не удалось получить участника-бота'));
 
   log('\n▸ Роли');
   const roles = await ensureRoles(guild, config, log);
