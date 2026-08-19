@@ -5,6 +5,7 @@
 import 'dotenv/config';
 import { readFile } from 'node:fs/promises';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, Client, Events, GatewayIntentBits } from 'discord.js';
+import { requireEnv } from './env.js';
 import { applyStructure } from './structure.js';
 
 const config = JSON.parse(await readFile(new URL('../config/server.json', import.meta.url), 'utf8'));
@@ -39,11 +40,7 @@ if (dryRun) {
   process.exit(0);
 }
 
-const { DISCORD_TOKEN, DISCORD_GUILD_ID } = process.env;
-if (!DISCORD_TOKEN || !DISCORD_GUILD_ID) {
-  console.error('Нужны DISCORD_TOKEN и DISCORD_GUILD_ID. Скопируй .env.example в .env и заполни.');
-  process.exit(1);
-}
+const { DISCORD_TOKEN, DISCORD_GUILD_ID } = requireEnv(['DISCORD_TOKEN', 'DISCORD_GUILD_ID']);
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 

@@ -9,6 +9,7 @@ import {
   SlashCommandBuilder, TextInputBuilder, TextInputStyle,
 } from 'discord.js';
 import { applyStructure, mapped, roleGroups } from './structure.js';
+import { requireEnv } from './env.js';
 import { Store, disciplineSummary } from './store.js';
 import { ACCEPTED, WELCOME } from './texts.js';
 
@@ -577,9 +578,5 @@ function startActivityWatcher(c) {
   setInterval(check, 6 * 60 * 60 * 1000);
 }
 
-const missing = ['DISCORD_TOKEN', 'DISCORD_GUILD_ID'].filter((key) => !process.env[key]);
-if (missing.length) {
-  console.error(`Не заданы переменные: ${missing.join(', ')}. Скопируй .env.example в .env и заполни.`);
-  process.exit(1);
-}
-await client.login(process.env.DISCORD_TOKEN);
+const env = requireEnv(['DISCORD_TOKEN', 'DISCORD_GUILD_ID']);
+await client.login(env.DISCORD_TOKEN);
