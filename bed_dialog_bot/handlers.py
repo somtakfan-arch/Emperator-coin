@@ -1419,27 +1419,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             if text[len("/status"):].strip().lower().startswith("reload"):
                 await _status_reload(message, context, storage)
                 return
-            users = storage.list_users()
-            connected = storage.connected_owner_ids()
-            on = [u for u in users if u["user_id"] in connected]
-            off = [u for u in users if u["user_id"] not in connected]
-
-            def fmt(u):
-                handle = f"@{u['username']}" if u["username"] else (u["name"] or "—")
-                return f"{handle} — {u['user_id']}"
-
-            body = (
-                f"📊 Подключений: {len(on)} из {len(users)}\n\n"
-                "✅ Подключён бот:\n" + ("\n".join(fmt(u) for u in on) or "—") +
-                "\n\n❌ Не подключён:\n" + ("\n".join(fmt(u) for u in off) or "—")
-            )
-            if len(body) > 3500:
-                buf = io.BytesIO(body.encode("utf-8"))
-                await context.bot.send_document(
-                    chat_id=message.chat_id, document=buf, filename="status.txt"
-                )
-            else:
-                await message.reply_text(body)
+            await _send_connection_list(message, context, storage)
             return
         premium_until = storage.get_premium_until(message.from_user.id)
         await message.reply_text(mark(texts.build_status_text(premium_until)))
@@ -2348,6 +2328,29 @@ def _build_bed_top(storage, viewer_id: int = 0) -> str:
     return "\n".join(lines)
 
 
+async def _send_connection_list(message, context: ContextTypes.DEFAULT_TYPE, storage: Storage) -> None:
+    """Send the live connected / not-connected breakdown (as a .txt if long)."""
+    users = storage.list_users()
+    connected = storage.connected_owner_ids()
+    on = [u for u in users if u["user_id"] in connected]
+    off = [u for u in users if u["user_id"] not in connected]
+
+    def fmt(u):
+        handle = f"@{u['username']}" if u["username"] else (u["name"] or "—")
+        return f"{handle} — {u['user_id']}"
+
+    body = (
+        f"📊 Подключений: {len(on)} из {len(users)}\n\n"
+        "✅ Подключён бот:\n" + ("\n".join(fmt(u) for u in on) or "—") +
+        "\n\n❌ Не подключён:\n" + ("\n".join(fmt(u) for u in off) or "—")
+    )
+    if len(body) > 3500:
+        buf = io.BytesIO(body.encode("utf-8"))
+        await context.bot.send_document(chat_id=message.chat_id, document=buf, filename="status.txt")
+    else:
+        await message.reply_text(body)
+
+
 async def _status_reload(message, context: ContextTypes.DEFAULT_TYPE, storage: Storage) -> None:
     """Admin: force-refresh live data (on-chain treasury + economy + bot stats)
     and send the updated snapshot."""
@@ -2408,6 +2411,8 @@ async def _status_reload(message, context: ContextTypes.DEFAULT_TYPE, storage: S
         await note.edit_text(report, parse_mode="HTML")
     except Exception:
         await message.reply_text(report, parse_mode="HTML")
+    # Also refresh and dump the live connection list.
+    await _send_connection_list(message, context, storage)
 
 
 async def _handle_bedcmd_callback(query, context: ContextTypes.DEFAULT_TYPE) -> None:
