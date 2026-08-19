@@ -1416,6 +1416,9 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     if text.startswith("/status"):
         if admin.is_admin(storage, message.from_user.id):
+            if text[len("/status"):].strip().lower().startswith("reload"):
+                await _status_reload(message, context, storage)
+                return
             users = storage.list_users()
             connected = storage.connected_owner_ids()
             on = [u for u in users if u["user_id"] in connected]
@@ -2343,6 +2346,68 @@ def _build_bed_top(storage, viewer_id: int = 0) -> str:
         lines.append(f"{medals[i]} {who} — <b>{h['balance']} BED</b> · {rank}{me}")
     lines.append(f"\n<i>Всего держателей: {total}</i>")
     return "\n".join(lines)
+
+
+async def _status_reload(message, context: ContextTypes.DEFAULT_TYPE, storage: Storage) -> None:
+    """Admin: force-refresh live data (on-chain treasury + economy + bot stats)
+    and send the updated snapshot."""
+    note = await message.reply_text("🔄 Обновляю данные…")
+
+    connected = len(storage.connected_owner_ids())
+    users = storage.count_users()
+    premium = storage.count_premium()
+    trials = storage.count_trials()
+    blacklisted = storage.count_blacklisted()
+    tickets = storage.count_open_tickets()
+
+    price = bedcoin.fmt_price(storage)
+    sold = int(bedcoin.total_sold(storage))
+    holders = storage.count_bed_holders()
+    top = storage.top_bed_holders(1)
+    if top:
+        h = top[0]
+        who = html.escape(str(h.get("username") or h.get("name") or f"id{h['user_id']}"))
+        top_line = f"{who} · {h['balance']} BED"
+    else:
+        top_line = "—"
+
+    treasury = "не настроена"
+    if ton.configured():
+        try:
+            bed = await ton.treasury_bed_balance()
+            ton_bal = await ton.treasury_ton_balance()
+            addr = await ton.treasury_address()
+            bedcoin.cache_treasury(storage, bed, ton_bal, addr)
+            treasury = (
+                f"🪙 Резерв: {int(bed)} BED\n"
+                f"⛽️ Газ: {ton_bal:.3f} TON\n"
+                f"📮 <code>{html.escape(addr)}</code>"
+            )
+        except Exception:
+            logger.exception("status reload treasury failed")
+            treasury = "⚠️ ошибка запроса on-chain"
+
+    report = (
+        "🔄 <b>Данные обновлены</b>\n\n"
+        "👥 <b>Пользователи</b>\n"
+        f"• Подключено ботов: {connected}\n"
+        f"• Всего юзеров: {users}\n"
+        f"• Премиум: {premium}\n"
+        f"• Триалов выдано: {trials}\n"
+        f"• В чёрном списке: {blacklisted}\n"
+        f"• Открытых тикетов: {tickets}\n\n"
+        "🪙 <b>BedCoin</b>\n"
+        f"• Курс: {price} ⭐ за 1 BED\n"
+        f"• Продано всего: {sold} BED\n"
+        f"• Держателей: {holders}\n"
+        f"• Топ-1: {top_line}\n\n"
+        "🏛 <b>Казна (on-chain, только что запрошено)</b>\n"
+        f"{treasury}"
+    )
+    try:
+        await note.edit_text(report, parse_mode="HTML")
+    except Exception:
+        await message.reply_text(report, parse_mode="HTML")
 
 
 async def _handle_bedcmd_callback(query, context: ContextTypes.DEFAULT_TYPE) -> None:
