@@ -119,10 +119,51 @@ def _humanize_ago(last_ts) -> str:
     return f"{ago // 86400} дн назад"
 
 
+# .kawai — turn the owner's message "как няшка": stutters, drawn-out vowels and
+# a big pool of cute decorations sprinkled in. 50+ "заготовки" to pick from.
+_KAWAII_DECOR = [
+    "🥺", "🥰", "😊", "😳", "😖", "😩", "🤗", "🥶", "😽", "💗", "💕", "💞", "💓",
+    "💖", "✨", "🌸", "🌺", "🐾", "🍡", "🍬", "🍭", "🧸", "🎀", "💫", "⭐️", "🌈",
+    "☁️", "🫶", "🙈", "😚", "😘", "😻", "💝", "💘", "💟", "🫂", "😆", "🥴", "😼",
+    "🐱", "🐰", "🦋", "🌷", "🍓", "🫧", "💦", "😝", "😜", "🌙", "💜", "🍥",
+    "(◕‿◕)", "(≧◡≦)", "(´｡• ᵕ •｡`)", "ʕっ•ᴥ•ʔっ", "(๑>ᴗ<๑)", ">///<", "uwu",
+    "owo", "~", "nya~", ">.<", "(*ﾉ▽ﾉ)", "(⁄ ⁄•⁄ω⁄•⁄ ⁄)",
+]
+_RU_VOWELS = "аеёиоуыэюяАЕЁИОУЫЭЮЯ"
+_KAWAII_TAIL_PUNCT = ",.!?…:;"
+
+
+def _kawaii_word(word: str) -> str:
+    if not word.strip():
+        return word
+    # peel trailing punctuation so decorations land before it
+    core = word.rstrip(_KAWAII_TAIL_PUNCT)
+    punct = word[len(core):]
+    if not core:
+        return word
+    # stutter the first letter: привет -> п-привет
+    if len(core) >= 2 and core[0].isalpha() and random.random() < 0.4:
+        core = core[0] + "-" + core
+    # draw out a vowel or two: делаешь -> дееелаеешь
+    if random.random() < 0.5:
+        idxs = [i for i, ch in enumerate(core) if ch in _RU_VOWELS]
+        random.shuffle(idxs)
+        for i in sorted(idxs[:random.randint(1, 2)], reverse=True):
+            core = core[:i] + core[i] * random.randint(2, 3) + core[i + 1:]
+    tail = ""
+    if random.random() < 0.3:
+        tail += ")" * random.randint(1, 2)
+    if random.random() < 0.55:
+        tail += random.choice(_KAWAII_DECOR) * random.randint(1, 3)
+    return core + tail + punct
+
+
 def kawaii_style(text: str) -> str:
-    """Format the owner's message as bold + italic (HTML) for .kawai mode —
-    nothing is added, only the styling."""
-    return f"<b><i>{html.escape(text)}</i></b>"
+    """Rewrite the owner's message in a cutesy "няшка" style (HTML-safe)."""
+    cute = " ".join(_kawaii_word(w) for w in text.split(" "))
+    if random.random() < 0.6:
+        cute += " " + random.choice(_KAWAII_DECOR)
+    return html.escape(cute)
 
 
 # /style — configurable formatting applied to the owner's outgoing messages.
@@ -166,14 +207,39 @@ def parse_style_names(tokens):
     return out
 
 
+# Emoji / pictographic ranges — these are left OUT of /style formatting so
+# emojis and emoji-only messages render normally (no strike/spoiler over them).
+_EMOJI_RE = re.compile(
+    "(?:[\U0001F000-\U0001FAFF\U00002600-\U000027BF\U00002B00-\U00002BFF"
+    "\U00002190-\U000021FF\U00002300-\U000023FF\U00002460-\U000024FF"
+    "\U0001F1E6-\U0001F1FF\U0000FE00-\U0000FE0F\U0000200D\U000020E3\U0000FE0F]"
+    "[\U0000FE00-\U0000FE0F\U0000200D\U000020E3]*)+"
+)
+
+
 def apply_styles(text: str, styles) -> str:
-    """Wrap HTML-escaped text in the given style tags (nested)."""
-    inner = html.escape(text)
-    for st in styles:
-        tags = STYLE_TAGS.get(st)
-        if tags:
-            inner = tags[0] + inner + tags[1]
-    return inner
+    """Wrap text in the given style tags (nested), but skip over emojis so they
+    stay unstyled. Emoji-only text is returned unchanged."""
+    tag_pairs = [STYLE_TAGS[s] for s in styles if s in STYLE_TAGS]
+    if not tag_pairs:
+        return html.escape(text)
+
+    def wrap(segment: str) -> str:
+        if not segment:
+            return ""
+        inner = html.escape(segment)
+        for open_t, close_t in tag_pairs:
+            inner = open_t + inner + close_t
+        return inner
+
+    parts = []
+    last = 0
+    for m in _EMOJI_RE.finditer(text):
+        parts.append(wrap(text[last:m.start()]))
+        parts.append(m.group(0))  # emoji run, left as-is
+        last = m.end()
+    parts.append(wrap(text[last:]))
+    return "".join(parts)
 
 HELP_TEXT = (
     "Команды (пишутся прямо в чат с собеседником):\n\n"
@@ -187,7 +253,7 @@ HELP_TEXT = (
     ".info — инфо о собеседнике (в личку боту)\n"
     ".status — статистика чата (в личку боту)\n"
     ".afk — вкл/выкл автоответ «AFK»\n"
-    ".kawai — вкл/выкл жирный курсив ваших сообщений\n"
+    ".kawai — вкл/выкл няшный стиль ваших сообщений (з-заикания, растяяяжка, эмодзи)\n"
     ".spek <текст> — текст, который трудно скопировать\n"
     ".troll — подколоть собеседника\n"
     ".love · .flip · .rps · .mon · .бурмалда — приколы и игры\n"
