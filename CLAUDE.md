@@ -65,6 +65,24 @@ python3 .claude/skills/check/check.py
 поднят, если изменились закэшированные ассеты. Гоняй его перед каждым
 коммитом — CI этого не делает.
 
+## Дымовой прогон в браузере
+
+```
+pip install playwright                      # один раз в сессии
+python3 .claude/skills/smoke/smoke.py       # + --shots для скриншотов
+```
+
+Открывает все четыре приложения в headless Chromium и ловит то, что
+статическая проверка не видит: исключения JS, ошибки консоли, 404.
+`playwright install` запускать не надо — браузер уже в образе. Подробности и
+обязательные флаги запуска — в скилле `smoke`.
+
+## Скиллы в .claude/skills
+
+Свои: `bump-sw`, `new-minigame`, `icons`, `check`, `smoke`.
+Вендоренные из github.com/anthropics/skills (Apache 2.0, без изменений):
+`webapp-testing`, `frontend-design` — см. `.claude/skills/VENDOR.md`.
+
 ## Деплой
 
 `.github/workflows/deploy-pages.yml` собирает `_site` из явного списка путей
