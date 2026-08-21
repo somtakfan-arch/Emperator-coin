@@ -46,6 +46,9 @@ async def redeem_token(token: str):
     if not data.get("valid"):
         return False, "ключ недействителен или уже использован"
     info = data.get("info") or {}
+    # Log the link id so the owner can lock WORKINK_LINK_ID to their link.
+    log.info("work.ink token valid: linkId=%s expiresAfter=%s",
+             info.get("linkId"), info.get("expiresAfter"))
     if config.WORKINK_LINK_ID and int(info.get("linkId", 0)) != config.WORKINK_LINK_ID:
         return False, "ключ не от нашей ссылки"
     return True, "ok"
