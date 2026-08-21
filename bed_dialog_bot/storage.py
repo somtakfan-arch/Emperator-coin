@@ -239,6 +239,12 @@ CREATE TABLE IF NOT EXISTS stalker_chats (
     chat_id INTEGER NOT NULL,
     PRIMARY KEY (business_connection_id, chat_id)
 );
+
+CREATE TABLE IF NOT EXISTS workink_redemptions (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
 """
 
 CAPTURE_RETENTION_SECONDS = 86400
@@ -1174,6 +1180,32 @@ class Storage:
                 "SELECT COUNT(*) FROM bed_balances WHERE balance > 0"
             ).fetchone()
         return row[0] if row else 0
+
+    # --- work.ink redemptions ---
+
+    def workink_redeemed(self, token: str) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM workink_redemptions WHERE token = ?", (token,)
+            ).fetchone()
+        return row is not None
+
+    def add_workink_redemption(self, token: str, user_id: int) -> None:
+        import time as _t
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO workink_redemptions (token, user_id, created_at) "
+                "VALUES (?, ?, ?)",
+                (token, user_id, int(_t.time())),
+            )
+
+    def last_workink_redemption(self, user_id: int) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT MAX(created_at) FROM workink_redemptions WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+        return (row[0] or 0) if row else 0
 
     # --- .stalker (per-chat "передумал написать" watch) ---
 

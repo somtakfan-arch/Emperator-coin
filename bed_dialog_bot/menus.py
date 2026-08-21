@@ -14,7 +14,7 @@ from telegram import (
     InputMediaPhoto,
 )
 
-from . import admin, bedcoin, commands, config, texts, ton
+from . import admin, bedcoin, commands, config, texts, ton, workink
 
 _ASSETS = os.path.join(os.path.dirname(__file__), "assets")
 
@@ -324,10 +324,13 @@ def kb_support() -> InlineKeyboardMarkup:
 
 
 def kb_sub() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
+    rows = [
         [_btn("👤 Себе", "menu:buyself", "success"), _btn("🎁 Подарить", "menu:gift", "success")],
-        _BACK,
-    ])
+    ]
+    if workink.enabled():
+        rows.append([_btn("🎁 Бесплатно за work.ink", "wink:info", "primary")])
+    rows.append(_BACK)
+    return InlineKeyboardMarkup(rows)
 
 
 def kb_ref() -> InlineKeyboardMarkup:

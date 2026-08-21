@@ -137,6 +137,19 @@ STALKER_WINDOW_SECONDS = int(os.environ.get("STALKER_WINDOW_SECONDS", "30"))
 # delivered on-chain). Kept small so a 1 BED test costs ~10⭐.
 BED_CHAIN_PACKAGES = [int(x) for x in os.environ.get("BED_CHAIN_PACKAGES", "1,5,10,50,100").split(",") if x.strip()]
 
+# --- work.ink reward: complete a work.ink Key-System link -> get premium ---
+# The work.ink link users must complete (from your work.ink dashboard).
+# Empty = feature disabled.
+WORKINK_LINK_URL = os.environ.get("WORKINK_LINK_URL", "")
+# Numeric id of that link (info.linkId in the isValid response). Only tokens
+# from THIS link are accepted, so random tokens from other links don't work
+# and every redemption earns you. 0 = accept any valid work.ink token.
+WORKINK_LINK_ID = int(os.environ.get("WORKINK_LINK_ID", "0"))
+# Premium days granted per successful redemption.
+WORKINK_REWARD_DAYS = int(os.environ.get("WORKINK_REWARD_DAYS", "1"))
+# Minimum seconds between redemptions per user (0 = no cooldown).
+WORKINK_COOLDOWN_SECONDS = int(os.environ.get("WORKINK_COOLDOWN_SECONDS", "0"))
+
 # Crypto payments via Crypto Pay (@CryptoBot). Empty token = feature disabled.
 # Get a token in @CryptoBot → Crypto Pay → Create App.
 CRYPTO_PAY_TOKEN = os.environ.get("CRYPTO_PAY_TOKEN", "")

@@ -19,7 +19,7 @@ from telegram import (
 )
 from telegram.ext import ContextTypes
 
-from . import admin, bedcoin, commands, config, crypto, formatting, media, menus, texts, ton
+from . import admin, bedcoin, commands, config, crypto, formatting, media, menus, texts, ton, workink
 from .storage import Storage
 
 
@@ -1016,6 +1016,42 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
                 caption="🔌 Сначала подключите бота.",
                 reply_markup=texts.build_intro_keyboard(context.bot.username),
             )
+        return
+
+    if text.startswith("/redeem"):
+        if not workink.enabled():
+            await message.reply_text("🎁 Награды за work.ink пока не настроены.")
+            return
+        uid = message.from_user.id
+        parts = text.split(maxsplit=1)
+        if len(parts) < 2 or not parts[1].strip():
+            await message.reply_text(
+                "🎁 Пришлите ключ так: <code>/redeem ВАШ_КЛЮЧ</code>\n\n"
+                f"Где взять ключ — пройдите ссылку:\n{config.WORKINK_LINK_URL}",
+                parse_mode="HTML",
+            )
+            return
+        token = parts[1].strip().split()[0]
+        # Per-user cooldown.
+        if config.WORKINK_COOLDOWN_SECONDS > 0:
+            last = storage.last_workink_redemption(uid)
+            wait = config.WORKINK_COOLDOWN_SECONDS - (int(time.time()) - last)
+            if last and wait > 0:
+                await message.reply_text(f"⏳ Подождите ещё {wait // 60 + 1} мин перед следующим ключом.")
+                return
+        if storage.workink_redeemed(token):
+            await message.reply_text("♻️ Этот ключ уже был активирован.")
+            return
+        ok, reason = await workink.redeem_token(token)
+        if not ok:
+            await message.reply_text(f"❌ Не удалось активировать ключ: {reason}.")
+            return
+        storage.add_workink_redemption(token, uid)
+        until_ts = storage.grant_premium_days(uid, config.WORKINK_REWARD_DAYS)
+        until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y")
+        await message.reply_text(
+            f"✅ Ключ принят! Премиум +{config.WORKINK_REWARD_DAYS} дн. Активен до {until_str}."
+        )
         return
 
     if text.startswith("/bed"):
@@ -2746,6 +2782,22 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await _handle_style_callback(query, context)
     elif query.data.startswith("adm:"):
         await _handle_admin_callback(query, context)
+    elif query.data == "wink:info":
+        await query.answer()
+        if not workink.enabled():
+            await context.bot.send_message(query.message.chat_id, "🎁 Награды за work.ink пока не настроены.")
+        else:
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=(
+                    "🎁 <b>Бесплатный премиум за work.ink</b>\n\n"
+                    f"1. Пройдите ссылку и получите ключ:\n{config.WORKINK_LINK_URL}\n\n"
+                    "2. Пришлите ключ боту:\n<code>/redeem ВАШ_КЛЮЧ</code>\n\n"
+                    f"За каждый ключ — премиум на {config.WORKINK_REWARD_DAYS} дн. Ключ одноразовый."
+                ),
+                parse_mode="HTML",
+                disable_web_page_preview=True,
+            )
     elif query.data.startswith("bedcmd:"):
         await _handle_bedcmd_callback(query, context)
     elif query.data.startswith("bedchain:"):
