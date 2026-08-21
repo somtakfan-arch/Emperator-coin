@@ -296,6 +296,8 @@ def kb_main(uid=None, storage=None) -> InlineKeyboardMarkup:
         [_btn("💎 Подписка", "menu:sub", "primary"), _btn("🪙 Кошелёк", "menu:wallet", "success")],
         [_btn("🆘 Поддержка", "menu:support", "success")],
     ]
+    if workink.enabled():
+        rows.append([_btn("🎁 Бесплатный премиум за work.ink", "wink:info", "danger")])
     if storage is not None and uid is not None and admin.is_admin(storage, uid):
         rows.append([_btn("🛡 Админ-панель", "menu:admin", "danger")])
     return InlineKeyboardMarkup(rows)
@@ -324,13 +326,10 @@ def kb_support() -> InlineKeyboardMarkup:
 
 
 def kb_sub() -> InlineKeyboardMarkup:
-    rows = [
+    return InlineKeyboardMarkup([
         [_btn("👤 Себе", "menu:buyself", "success"), _btn("🎁 Подарить", "menu:gift", "success")],
-    ]
-    if workink.enabled():
-        rows.append([_btn("🎁 Бесплатно за work.ink", "wink:info", "primary")])
-    rows.append(_BACK)
-    return InlineKeyboardMarkup(rows)
+        _BACK,
+    ])
 
 
 def kb_ref() -> InlineKeyboardMarkup:
