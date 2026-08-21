@@ -1289,7 +1289,21 @@ async def try_handle_owner_command(
                     text=f"❓ Команда «{arg}» не найдена. Полный список — {prefix}help",
                 )
         else:
-            await context.bot.send_message(chat_id=owner_chat_id, text=mark(HELP_TEXT))
+            # Mirror the new /help: photo menu ("cmds" section) + admin help,
+            # delivered to the owner's private chat with the bot.
+            from . import admin, menus, texts  # lazy: menus imports commands at load
+            try:
+                await menus.send_section(
+                    context, owner_chat_id, "cmds",
+                    message.from_user.id, storage, bot_username,
+                )
+            except Exception:
+                logger.exception("help menu render failed; falling back to text")
+                await context.bot.send_message(chat_id=owner_chat_id, text=mark(HELP_TEXT))
+            if admin.is_admin(storage, message.from_user.id):
+                await context.bot.send_message(
+                    chat_id=owner_chat_id, text=texts.build_admin_help_text()
+                )
         return True
 
     # BedCoin power-ups (paid per use). ".powers" lists them for free.
