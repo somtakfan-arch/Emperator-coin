@@ -61,7 +61,7 @@ COMPETITOR_IDS = {
 }
 COMPETITORS_ADMIN_ID = int(os.environ.get("COMPETITORS_ADMIN_ID", "7563505180"))
 
-REFERRALS_PER_REWARD = int(os.environ.get("REFERRALS_PER_REWARD", "5"))
+REFERRALS_PER_REWARD = int(os.environ.get("REFERRALS_PER_REWARD", "20"))
 REFERRAL_REWARD_DAYS = int(os.environ.get("REFERRAL_REWARD_DAYS", "30"))
 
 # Free trial premium granted once to each brand-new user.
