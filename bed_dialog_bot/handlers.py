@@ -82,6 +82,14 @@ _DURATION_UNITS = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
 logger = logging.getLogger(__name__)
 
 
+def _fmt_premium(ts) -> str:
+    """Format a premium-until timestamp, guarding huge/overflowing values."""
+    try:
+        return datetime.fromtimestamp(ts).strftime("%d.%m.%Y")
+    except (ValueError, OverflowError, OSError, TypeError):
+        return "надолго"
+
+
 def _parse_duration(amount: str, unit: str) -> int:
     return int(amount) * _DURATION_UNITS[unit]
 
@@ -178,7 +186,7 @@ def _build_profile(storage: Storage, uid: int) -> str:
     connected = uid in storage.connected_owner_ids()
     prem = storage.get_premium_until(uid)
     prem_str = (
-        datetime.fromtimestamp(prem).strftime("%d.%m.%Y") if prem and prem > time.time() else "нет"
+        _fmt_premium(prem) if prem and prem > time.time() else "нет"
     )
     refs = storage.count_referrals(uid)
     caps = len(storage.get_captures(uid))
@@ -789,7 +797,7 @@ async def _confirm_referral(invited_id: int, context: ContextTypes.DEFAULT_TYPE,
         days = (earned - rewarded) * config.REFERRAL_REWARD_DAYS
         until_ts = storage.grant_premium_days(referrer_id, days)
         storage.set_ref_rewarded(referrer_id, earned)
-        until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y")
+        until_str = _fmt_premium(until_ts)
         text = (
             f"🎉 Ваш приглашённый подключил бота! Всего: {count}. "
             f"Награда: +{days} дн. премиума (до {until_str})."
@@ -874,7 +882,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         if len(parts) >= 3 and parts[2].isdigit():
             days = int(parts[2])
         until_ts = storage.grant_premium_days(message.from_user.id, days)
-        until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y")
+        until_str = _fmt_premium(until_ts)
         await message.reply_text(f"✅ Премиум на {days} дн. активирован до {until_str}.")
         # Affiliate: reward the referrer who invited this paying user.
         referrer = storage.get_referrer_of(message.from_user.id)
@@ -976,7 +984,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         if config.TRIAL_DAYS > 0 and not was_known and not storage.has_trial(message.from_user.id):
             storage.mark_trial(message.from_user.id)
             until_ts = storage.grant_premium_days(message.from_user.id, config.TRIAL_DAYS)
-            until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y %H:%M")
+            until_str = _fmt_premium(until_ts)
             try:
                 await message.reply_text(
                     f"🎁 Вам активирован пробный премиум на {config.TRIAL_DAYS} дн. "
@@ -1048,7 +1056,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             return
         storage.add_workink_redemption(token, uid)
         until_ts = storage.grant_premium_days(uid, config.WORKINK_REWARD_DAYS)
-        until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y")
+        until_str = _fmt_premium(until_ts)
         await message.reply_text(
             f"✅ Успешно активировано! Премиум +{config.WORKINK_REWARD_DAYS} дн. Активен до {until_str}."
         )
@@ -1356,7 +1364,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             await message.reply_text("❌ Промокод недействителен, исчерпан или уже использован.")
             return
         until_ts = storage.grant_premium_days(message.from_user.id, days)
-        until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y")
+        until_str = _fmt_premium(until_ts)
         await message.reply_text(f"🎉 Промокод активирован: +{days} дн. премиума (до {until_str}).")
         return
 
@@ -1674,7 +1682,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         target_id = int(give_match.group(1))
         days = int(give_match.group(2))
         until_ts = storage.grant_premium_days(target_id, days)
-        until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y")
+        until_str = _fmt_premium(until_ts)
         await message.reply_text(f"✅ Премиум для {target_id} выдан до {until_str}.")
         return
 
@@ -2365,7 +2373,7 @@ async def _handle_bed_callback(query, context: ContextTypes.DEFAULT_TYPE) -> Non
             )
             return
         until = storage.grant_premium_days(uid, days)
-        until_str = datetime.fromtimestamp(until).strftime("%d.%m.%Y")
+        until_str = _fmt_premium(until)
         await query.answer(f"✅ Премиум {label} активирован до {until_str}!", show_alert=True)
         await menus.edit_section(context, query, "wallet", uid, storage, context.bot.username)
     elif action == "deposit":
