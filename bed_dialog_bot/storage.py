@@ -233,6 +233,12 @@ CREATE TABLE IF NOT EXISTS ton_withdrawals (
     error TEXT,
     created_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS stalker_chats (
+    business_connection_id TEXT NOT NULL,
+    chat_id INTEGER NOT NULL,
+    PRIMARY KEY (business_connection_id, chat_id)
+);
 """
 
 CAPTURE_RETENTION_SECONDS = 86400
@@ -1168,6 +1174,35 @@ class Storage:
                 "SELECT COUNT(*) FROM bed_balances WHERE balance > 0"
             ).fetchone()
         return row[0] if row else 0
+
+    # --- .stalker (per-chat "передумал написать" watch) ---
+
+    def is_stalker(self, business_connection_id: str, chat_id: int) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM stalker_chats WHERE business_connection_id = ? AND chat_id = ?",
+                (business_connection_id, chat_id),
+            ).fetchone()
+        return row is not None
+
+    def toggle_stalker(self, business_connection_id: str, chat_id: int) -> bool:
+        """Flip the stalker watch for a chat; returns the new state (True=on)."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM stalker_chats WHERE business_connection_id = ? AND chat_id = ?",
+                (business_connection_id, chat_id),
+            ).fetchone()
+            if row:
+                conn.execute(
+                    "DELETE FROM stalker_chats WHERE business_connection_id = ? AND chat_id = ?",
+                    (business_connection_id, chat_id),
+                )
+                return False
+            conn.execute(
+                "INSERT INTO stalker_chats (business_connection_id, chat_id) VALUES (?, ?)",
+                (business_connection_id, chat_id),
+            )
+            return True
 
     # --- on-chain BED deposits / withdrawals ---
 

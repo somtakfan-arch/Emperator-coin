@@ -130,6 +130,9 @@ BED_DEPOSIT_PREFIX = os.environ.get("BED_DEPOSIT_PREFIX", "BED")
 TON_DEPOSIT_POLL_SECONDS = int(os.environ.get("TON_DEPOSIT_POLL_SECONDS", "40"))
 # Cost (in BED) of one use of a paid "power" command in a business chat.
 BED_COMMAND_COST = int(os.environ.get("BED_COMMAND_COST", "1"))
+# .stalker: a send-then-delete within this many seconds counts as the contact
+# "хотел написать, но передумал" (Bot API can't see typing, only messages).
+STALKER_WINDOW_SECONDS = int(os.environ.get("STALKER_WINDOW_SECONDS", "30"))
 # BED amounts offered for "buy straight to your TON wallet" (paid in Stars,
 # delivered on-chain). Kept small so a 1 BED test costs ~10⭐.
 BED_CHAIN_PACKAGES = [int(x) for x in os.environ.get("BED_CHAIN_PACKAGES", "1,5,10,50,100").split(",") if x.strip()]

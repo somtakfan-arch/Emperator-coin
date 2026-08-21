@@ -42,6 +42,7 @@ _TYPE_RE = re.compile(r"^\.type\s+(\d+)\s*$")
 _ANIMATE_RE = re.compile(r"^\.animate\s+(.+)$", re.DOTALL)
 _DICE_RE = re.compile(r"^\.(dice|slot|roll|dart|ball|foot)\s*$")
 _SEEN_RE = re.compile(r"^\.seen\s*$")
+_STALKER_RE = re.compile(r"^\.stalker\s*$")
 
 # Extra fun/utility commands ("borrowed" NeverDialog set).
 _LOVE_RE = re.compile(r"^\.love\s*$")
@@ -253,6 +254,7 @@ HELP_TEXT = (
     ".info — инфо о собеседнике (в личку боту)\n"
     ".status — статистика чата (в личку боту)\n"
     ".afk — вкл/выкл автоответ «AFK»\n"
+    ".stalker — вкл/выкл: сообщу, если собеседник напишет и быстро удалит (передумал)\n"
     ".kawai — вкл/выкл няшный стиль ваших сообщений (з-заикания, растяяяжка, эмодзи)\n"
     ".spek <текст> — текст, который трудно скопировать\n"
     ".troll — подколоть собеседника\n"
@@ -657,6 +659,22 @@ async def try_handle_owner_command(
     if _UNBAN_RE.match(text):
         storage.clear_ban(bcid, chat_id)
         await _edit_command_message(context, bcid, chat_id, message_id, mark("Вы разбанены."))
+        return True
+
+    if _STALKER_RE.match(text):
+        on = storage.toggle_stalker(bcid, chat_id)
+        await _edit_command_message(context, bcid, chat_id, message_id, mark("🕵️"))
+        if on:
+            note = (
+                "🕵️ <b>Сталкер включён</b> для этого чата.\n\n"
+                "Telegram не сообщает ботам, что человек «печатает», поэтому "
+                "ловлю единственный доступный сигнал: если собеседник "
+                "<b>отправит сообщение и быстро его удалит</b> — пришлю уведомление, "
+                "что он хотел что-то написать, но передумал (даже в тихом режиме)."
+            )
+        else:
+            note = "🕵️ Сталкер выключен для этого чата."
+        await context.bot.send_message(chat_id=owner_chat_id, text=note, parse_mode="HTML")
         return True
 
     spam_match = _SPAM_RE.match(text)

@@ -692,6 +692,29 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
             storage.delete_message(bcid, deleted.chat.id, message_id)
             continue
 
+        # .stalker: a quick send-then-delete by the contact = "хотел написать,
+        # но передумал". Fires even when muted (it's an explicit opt-in watch),
+        # and replaces the plain delete notice for this message.
+        if storage.is_stalker(bcid, deleted.chat.id):
+            age = time.time() - (stored["date"] or 0)
+            if 0 <= age <= config.STALKER_WINDOW_SECONDS:
+                content = stored["text"] or stored["caption"] or (
+                    f"[{stored['media_kind']}]" if stored["media_kind"] else "")
+                if content:
+                    notice = (f"🕵️ {name} хотел(а) что-то написать, но передумал(а) "
+                              f"и удалил(а):\n«{content}»")
+                else:
+                    notice = f"🕵️ {name} хотел(а) что-то написать, но передумал(а)."
+                try:
+                    await context.bot.send_message(
+                        chat_id=owner_chat,
+                        text=_mark(storage, owner_id, notice, context.bot.username),
+                    )
+                except Exception:
+                    logger.exception("Failed to deliver stalker notice to %s", owner_chat)
+                storage.delete_message(bcid, deleted.chat.id, message_id)
+                continue
+
         if stored["media_kind"]:
             kind = stored["media_kind"]
             base = formatting.format_deleted_media(name, username, kind, stored["caption"])
