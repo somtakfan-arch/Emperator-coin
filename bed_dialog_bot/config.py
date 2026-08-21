@@ -65,7 +65,7 @@ REFERRALS_PER_REWARD = int(os.environ.get("REFERRALS_PER_REWARD", "20"))
 REFERRAL_REWARD_DAYS = int(os.environ.get("REFERRAL_REWARD_DAYS", "30"))
 
 # Free trial premium granted once to each brand-new user.
-TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "1"))
+TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "0"))
 
 # Affiliate: referrer gets this % of a referred user's purchased days.
 AFFILIATE_PERCENT = int(os.environ.get("AFFILIATE_PERCENT", "30"))

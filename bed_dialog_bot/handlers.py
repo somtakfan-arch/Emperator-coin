@@ -972,8 +972,8 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         parts = text.split(maxsplit=1)
         if len(parts) == 2 and not was_known:
             _record_pending_referral(parts[1].strip(), message.from_user.id, storage)
-        # One-time free trial for brand-new users.
-        if not was_known and not storage.has_trial(message.from_user.id):
+        # One-time free trial for brand-new users (disabled when TRIAL_DAYS<=0).
+        if config.TRIAL_DAYS > 0 and not was_known and not storage.has_trial(message.from_user.id):
             storage.mark_trial(message.from_user.id)
             until_ts = storage.grant_premium_days(message.from_user.id, config.TRIAL_DAYS)
             until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y %H:%M")
@@ -1050,7 +1050,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         until_ts = storage.grant_premium_days(uid, config.WORKINK_REWARD_DAYS)
         until_str = datetime.fromtimestamp(until_ts).strftime("%d.%m.%Y")
         await message.reply_text(
-            f"✅ Ключ принят! Премиум +{config.WORKINK_REWARD_DAYS} дн. Активен до {until_str}."
+            f"✅ Успешно активировано! Премиум +{config.WORKINK_REWARD_DAYS} дн. Активен до {until_str}."
         )
         return
 
@@ -2791,8 +2791,14 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                 chat_id=query.message.chat_id,
                 text=(
                     "🎁 <b>Бесплатный премиум за work.ink</b>\n\n"
-                    f"1. Пройдите ссылку и получите ключ:\n{config.WORKINK_LINK_URL}\n\n"
-                    "2. Пришлите ключ боту:\n<code>/redeem ВАШ_КЛЮЧ</code>\n\n"
+                    f"1. Пройдите ссылку:\n{config.WORKINK_LINK_URL}\n"
+                    "2. Отключите впн\n"
+                    "3. Нажмите go to destination\n"
+                    "4. Подождите 60 секунд\n"
+                    "5. Нажмите на кнопку watch ad\n"
+                    "6. Посмотрите рекламу\n"
+                    "7. Скопируйте ключ\n"
+                    "8. Пришлите ключ боту:\n<code>/redeem ВАШ_КЛЮЧ</code>\n\n"
                     f"За каждый ключ — премиум на {config.WORKINK_REWARD_DAYS} дн. Ключ одноразовый."
                 ),
                 parse_mode="HTML",
