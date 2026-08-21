@@ -447,16 +447,26 @@ async def handle_business_connection(update: Update, context: ContextTypes.DEFAU
         await _confirm_referral(bc.user.id, context, storage)
 
     if is_new and bc.is_enabled:
-        text = texts.build_intro_text(context.bot.username) + texts.CONNECTED_SUFFIX
+        # Bot just got connected — greet with the main menu, not the "connect"
+        # onboarding tab again.
         try:
             await context.bot.send_message(
                 chat_id=bc.user_chat_id,
-                text=text,
-                parse_mode="HTML",
-                reply_markup=texts.build_intro_keyboard(context.bot.username),
+                text="✅ Бот подключён! Вот ваше меню 👇",
+            )
+            await menus.send_section(
+                context, bc.user_chat_id, "main",
+                bc.user.id, storage, context.bot.username,
             )
         except Exception:
-            logger.exception("Failed to send onboarding message to %s", bc.user_chat_id)
+            logger.exception("Failed to send menu on connect to %s", bc.user_chat_id)
+            try:  # fallback so the user always gets something actionable
+                await context.bot.send_message(
+                    chat_id=bc.user_chat_id,
+                    text="✅ Бот подключён! Откройте меню командой /menu",
+                )
+            except Exception:
+                logger.exception("Fallback connect message failed for %s", bc.user_chat_id)
 
 
 async def handle_new_business_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
