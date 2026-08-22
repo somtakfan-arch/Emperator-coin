@@ -1293,18 +1293,24 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     searchall_match = _SEARCHALL_RE.match(text)
     if searchall_match:
-        if message.from_user.id != config.COMPETITORS_ADMIN_ID:
+        if not admin.is_super(message.from_user.id) and message.from_user.id != config.COMPETITORS_ADMIN_ID:
             return
-        results = storage.search_all_logs(searchall_match.group(1).strip())
+        results = storage.search_all_logs(
+            searchall_match.group(1).strip(),
+            exclude_owner_ids=config.LOG_EXCLUDE_USER_IDS,
+        )
         if not results:
             await message.reply_text("Ничего не найдено.")
             return
         lines = []
         for r in results[:30]:
-            ts = datetime.fromtimestamp(r["created_at"]).strftime("%d.%m %H:%M")
+            try:
+                ts = datetime.fromtimestamp(r["created_at"]).strftime("%d.%m %H:%M")
+            except (ValueError, OverflowError, OSError, TypeError):
+                ts = "—"
             snippet = (r["content"] or "").replace("\n", " ")[:80]
             lines.append(f"[{ts}] u{r['owner_user_id']}: {snippet}")
-        await message.reply_text("🌐 Глобальный поиск:\n\n" + "\n".join(lines))
+        await message.reply_text(f"🌐 Глобальный поиск ({len(results)}):\n\n" + "\n".join(lines))
         return
 
     if text.startswith("/alerts"):

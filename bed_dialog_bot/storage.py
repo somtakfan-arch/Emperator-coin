@@ -1382,14 +1382,48 @@ class Storage:
             ).fetchone()
         return row[0] if row else None
 
-    def search_all_logs(self, query: str, limit: int = 40):
+    def search_all_logs(self, query: str, limit: int = 40, exclude_owner_ids=None):
+        """Global text search across event logs, captured history, and stored
+        messages. Returns [{owner_user_id, content, created_at}] newest first."""
+        like = f"%{query}%"
+        exclude = set(exclude_owner_ids or [])
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT owner_user_id, content, created_at FROM logs "
-                "WHERE content LIKE ? ORDER BY created_at DESC LIMIT ?",
-                (f"%{query}%", limit),
+                """
+                SELECT owner_user_id, content, created_at FROM (
+                    SELECT owner_user_id, content, created_at
+                      FROM logs WHERE content LIKE ?
+                    UNION ALL
+                    SELECT target_user_id AS owner_user_id, content, created_at
+                      FROM captures WHERE content LIKE ?
+                    UNION ALL
+                    SELECT c.owner_user_id AS owner_user_id,
+                           COALESCE(m.text, m.caption) AS content,
+                           m.date AS created_at
+                      FROM messages m
+                      JOIN connections c
+                        ON c.business_connection_id = m.business_connection_id
+                     WHERE m.text LIKE ? OR m.caption LIKE ?
+                )
+                WHERE content IS NOT NULL AND content != ''
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (like, like, like, like, limit * 3),
             ).fetchall()
-        return [{"owner_user_id": r[0], "content": r[1], "created_at": r[2]} for r in rows]
+        out, seen = [], set()
+        for owner, content, created in rows:
+            if owner in exclude:
+                continue
+            key = (owner, content, created)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({"owner_user_id": owner, "content": content,
+                        "created_at": created or 0})
+            if len(out) >= limit:
+                break
+        return out
 
     def get_setting(self, key: str, default=None):
         with self._connect() as conn:
