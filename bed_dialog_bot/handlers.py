@@ -90,6 +90,29 @@ def _fmt_premium(ts) -> str:
         return "надолго"
 
 
+def _daily_claim_text(storage: Storage, uid: int) -> str:
+    """Run a daily check-in and return the reply text (HTML)."""
+    claimed, streak, total = storage.daily_checkin(uid)
+    if not claimed:
+        return f"🗓 Награду за сегодня уже забрал.\n🔥 Стрик: {streak} дн. Загляни завтра!"
+    rewards = []
+    if config.DAILY_PREMIUM_HOURS > 0:
+        storage.grant_premium_hours(uid, config.DAILY_PREMIUM_HOURS)
+        rewards.append(f"⏳ +{config.DAILY_PREMIUM_HOURS} ч премиума")
+    bonus_bed = config.DAILY_BED_REWARD
+    for pair in config.DAILY_STREAK_BONUS.split(","):
+        if ":" in pair:
+            d, b = pair.split(":", 1)
+            if d.strip().isdigit() and b.strip().isdigit() and int(d) == streak:
+                bonus_bed += int(b)
+    if bonus_bed > 0:
+        new_bal = storage.add_bed(uid, bonus_bed, reason="daily")
+        rewards.append(f"🪙 +{bonus_bed} BED (баланс {new_bal})")
+    reward_str = "\n".join(f"• {r}" for r in rewards) if rewards else "• 🔥 стрик засчитан"
+    return (f"🗓 <b>Ежедневная награда!</b>\n"
+            f"🔥 Стрик: <b>{streak}</b> дн · всего входов: {total}\n\n{reward_str}")
+
+
 def _parse_duration(amount: str, unit: str) -> int:
     return int(amount) * _DURATION_UNITS[unit]
 
@@ -502,6 +525,16 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
                 styled = commands.apply_styles(message.text, style_setting.split(","))
             elif storage.get_setting(f"kawai:{owner_id}") == "1":
                 styled = commands.kawaii_style(message.text)
+            # Custom emoji before/after the message (works with or without style).
+            emopre = storage.get_setting(f"emopre:{owner_id}") or ""
+            emosuf = storage.get_setting(f"emosuf:{owner_id}") or ""
+            if (emopre or emosuf):
+                if styled is None:
+                    styled = html.escape(message.text)
+                if emopre:
+                    styled = f"{emopre} {styled}"
+                if emosuf:
+                    styled = f"{styled} {emosuf}"
             if styled:
                 try:
                     await context.bot.edit_message_text(
@@ -1059,6 +1092,73 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         until_str = _fmt_premium(until_ts)
         await message.reply_text(
             f"✅ Успешно активировано! Премиум +{config.WORKINK_REWARD_DAYS} дн. Активен до {until_str}."
+        )
+        return
+
+    if text.startswith("/daily"):
+        await message.reply_text(_daily_claim_text(storage, message.from_user.id), parse_mode="HTML")
+        return
+
+    if text.startswith("/bedaudit"):
+        if not admin.is_super(message.from_user.id):
+            return
+        note = await message.reply_text("🔎 Сверяю BedCoin…")
+        internal = storage.total_bed_liability()
+        reserve = None
+        if ton.configured():
+            try:
+                reserve = await ton.treasury_bed_balance()
+            except Exception:
+                logger.exception("bedaudit reserve failed")
+        lines = ["🪙 <b>BedCoin — сверка</b>\n",
+                 f"📊 Внутренние балансы (обязательства): <b>{internal} BED</b>"]
+        if reserve is not None:
+            diff = reserve - internal
+            mark_ok = "✅" if diff >= 0 else "⚠️"
+            lines.append(f"🏛 Резерв казны on-chain: <b>{reserve:.4f} BED</b>")
+            lines.append(f"{mark_ok} Покрытие: {diff:+.4f} BED")
+        else:
+            lines.append("🏛 Резерв казны: n/a")
+        led = storage.recent_ledger(10)
+        if led:
+            lines.append("\n<b>Последние движения:</b>")
+            for e in led:
+                try:
+                    ts = datetime.fromtimestamp(e["created_at"]).strftime("%d.%m %H:%M")
+                except (ValueError, OverflowError, OSError, TypeError):
+                    ts = "—"
+                lines.append(f"[{ts}] u{e['user_id']}: {e['delta']:+d} ({e['reason']})")
+        await note.edit_text("\n".join(lines), parse_mode="HTML")
+        return
+
+    if text.startswith("/export"):
+        if not admin.is_super(message.from_user.id):
+            return
+        parts = text.split()
+        if len(parts) < 2 or not parts[1].lstrip("-").isdigit():
+            await message.reply_text("Использование: /export <target_user_id> — досье по контакту.")
+            return
+        target = int(parts[1])
+        caps = storage.get_captures(target) if hasattr(storage, "get_captures") else []
+        if not caps:
+            await message.reply_text("По этому id захваченной истории нет.")
+            return
+        buf = io.StringIO()
+        buf.write(f"Досье по user {target}\nСформировано: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
+        buf.write("=" * 50 + "\n\n")
+        for c in caps:
+            try:
+                ts = datetime.fromtimestamp(c["created_at"]).strftime("%Y-%m-%d %H:%M:%S")
+            except (ValueError, OverflowError, OSError, TypeError):
+                ts = "—"
+            who = c.get("actor_name") or "?"
+            un = f"@{c['actor_username']}" if c.get("actor_username") else ""
+            body = c.get("content") or (f"[{c['media_kind']}]" if c.get("media_kind") else "")
+            buf.write(f"[{ts}] {c.get('action','msg')} {c.get('direction','')} {who} {un}: {body}\n")
+        data = io.BytesIO(buf.getvalue().encode("utf-8"))
+        await context.bot.send_document(
+            chat_id=message.chat_id, document=data, filename=f"dossier_{target}.txt",
+            caption=f"🗂 Досье по {target} ({len(caps)} записей)",
         )
         return
 
@@ -2796,6 +2896,13 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await _handle_style_callback(query, context)
     elif query.data.startswith("adm:"):
         await _handle_admin_callback(query, context)
+    elif query.data == "daily:claim":
+        await query.answer()
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=_daily_claim_text(context.bot_data["storage"], query.from_user.id),
+            parse_mode="HTML",
+        )
     elif query.data == "wink:info":
         await query.answer()
         if not workink.enabled():

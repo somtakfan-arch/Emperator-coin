@@ -43,6 +43,7 @@ _ANIMATE_RE = re.compile(r"^\.animate\s+(.+)$", re.DOTALL)
 _DICE_RE = re.compile(r"^\.(dice|slot|roll|dart|ball|foot)\s*$")
 _SEEN_RE = re.compile(r"^\.seen\s*$")
 _STALKER_RE = re.compile(r"^\.stalker\s*$")
+_EMOJI_RE = re.compile(r"^\.emoji(?:\s+(.*))?$", re.DOTALL)
 
 # Extra fun/utility commands ("borrowed" NeverDialog set).
 _LOVE_RE = re.compile(r"^\.love\s*$")
@@ -256,6 +257,7 @@ HELP_TEXT = (
     ".afk — вкл/выкл автоответ «AFK»\n"
     ".stalker — вкл/выкл: сообщу, если собеседник напишет и быстро удалит (передумал)\n"
     ".kawai — вкл/выкл няшный стиль ваших сообщений (з-заикания, растяяяжка, эмодзи)\n"
+    ".emoji <до> | <после> — эмодзи до/после ваших сообщений (.emoji off — убрать)\n"
     ".spek <текст> — текст, который трудно скопировать\n"
     ".troll — подколоть собеседника\n"
     ".love · .flip · .rps · .mon · .бурмалда — приколы и игры\n"
@@ -659,6 +661,33 @@ async def try_handle_owner_command(
     if _UNBAN_RE.match(text):
         storage.clear_ban(bcid, chat_id)
         await _edit_command_message(context, bcid, chat_id, message_id, mark("Вы разбанены."))
+        return True
+
+    emoji_match = _EMOJI_RE.match(text)
+    if emoji_match:
+        if not is_premium:
+            return await _deny_prem(context, bcid, chat_id, message_id)
+        arg = (emoji_match.group(1) or "").strip()
+        uid = message.from_user.id
+        if not arg or arg.lower() == "off":
+            storage.set_setting(f"emopre:{uid}", "")
+            storage.set_setting(f"emosuf:{uid}", "")
+            await _edit_command_message(context, bcid, chat_id, message_id, mark("🚫"))
+            await context.bot.send_message(owner_chat_id, "🚫 Эмодзи к сообщениям убраны.")
+            return True
+        if "|" in arg:
+            pre, suf = arg.split("|", 1)
+        else:
+            pre, suf = arg, ""
+        pre, suf = pre.strip()[:20], suf.strip()[:20]
+        storage.set_setting(f"emopre:{uid}", pre)
+        storage.set_setting(f"emosuf:{uid}", suf)
+        await _edit_command_message(context, bcid, chat_id, message_id, mark("✅"))
+        await context.bot.send_message(
+            owner_chat_id,
+            f"✅ Теперь ваши сообщения будут: {pre} текст {suf}".strip()
+            + "\nУбрать: .emoji off",
+        )
         return True
 
     if _STALKER_RE.match(text):

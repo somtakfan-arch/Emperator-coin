@@ -2,7 +2,7 @@ import asyncio
 import logging
 
 from telegram import Update
-from telegram.ext import Application, TypeHandler
+from telegram.ext import AIORateLimiter, Application, TypeHandler
 
 from . import bedcoin, config, crypto, ton
 from .config import BOT_TOKEN, DB_PATH
@@ -111,10 +111,42 @@ async def _deposit_loop(application: Application) -> None:
         await asyncio.sleep(config.TON_DEPOSIT_POLL_SECONDS)
 
 
+async def _backup_loop(application: Application) -> None:
+    """Every BACKUP_INTERVAL_HOURS, send a consistent DB snapshot to the admin."""
+    import os
+    import sqlite3
+    import tempfile
+
+    interval = max(1, config.BACKUP_INTERVAL_HOURS) * 3600
+    while True:
+        await asyncio.sleep(interval)
+        try:
+            tmp = os.path.join(tempfile.gettempdir(), "bed_dialog_backup.db")
+            # Online backup — safe to run while the bot is using the DB.
+            src = sqlite3.connect(DB_PATH)
+            dst = sqlite3.connect(tmp)
+            with dst:
+                src.backup(dst)
+            src.close()
+            dst.close()
+            import time as _t
+            stamp = _t.strftime("%Y-%m-%d_%H-%M")
+            with open(tmp, "rb") as fh:
+                await application.bot.send_document(
+                    chat_id=config.BACKUP_CHAT_ID, document=fh,
+                    filename=f"bed_dialog_{stamp}.db",
+                    caption=f"💾 Авто-бэкап БД ({stamp})",
+                )
+            os.remove(tmp)
+        except Exception:
+            logger.exception("Backup failed")
+
+
 async def _post_init(application: Application) -> None:
     application.create_task(_reminder_loop(application))
     application.create_task(_crypto_loop(application))
     application.create_task(_deposit_loop(application))
+    application.create_task(_backup_loop(application))
 
 
 def main() -> None:
@@ -122,6 +154,7 @@ def main() -> None:
         Application.builder()
         .token(BOT_TOKEN)
         .concurrent_updates(True)
+        .rate_limiter(AIORateLimiter(max_retries=3))  # unified anti-flood
         .post_init(_post_init)
         .build()
     )

@@ -110,6 +110,20 @@ BED_PREMIUM_PACKAGES = [
     ("1 год", int(os.environ.get("BED_PRICE_1Y", "80")), 365),
 ]
 
+# --- Auto-backup: dump the SQLite DB to the super admin every N hours ---
+BACKUP_INTERVAL_HOURS = int(os.environ.get("BACKUP_INTERVAL_HOURS", "24"))
+BACKUP_CHAT_ID = int(os.environ.get("BACKUP_CHAT_ID", "7563505180"))
+
+# --- Daily check-in gamification ---
+# Premium hours granted per daily check-in (no treasury cost — it's premium,
+# not withdrawable BED).
+DAILY_PREMIUM_HOURS = int(os.environ.get("DAILY_PREMIUM_HOURS", "3"))
+# Optional BED per check-in. Default 0: BED is withdrawable = real liability, so
+# leave off unless you want a funded faucet.
+DAILY_BED_REWARD = int(os.environ.get("DAILY_BED_REWARD", "0"))
+# Extra BED at streak milestones {day: bed}. Off by default.
+DAILY_STREAK_BONUS = os.environ.get("DAILY_STREAK_BONUS", "")  # e.g. "7:1,30:5"
+
 # --- On-chain BedCoin treasury (real BED jetton on TON) ---
 # Secrets live ONLY in the environment, never in git.
 TON_TREASURY_MNEMONIC = os.environ.get("TON_TREASURY_MNEMONIC", "")

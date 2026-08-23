@@ -245,6 +245,21 @@ CREATE TABLE IF NOT EXISTS workink_redemptions (
     user_id INTEGER NOT NULL,
     created_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS bed_ledger (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    delta INTEGER NOT NULL,
+    reason TEXT,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS daily_checkins (
+    user_id INTEGER PRIMARY KEY,
+    streak INTEGER NOT NULL DEFAULT 0,
+    last_day INTEGER NOT NULL DEFAULT 0,
+    total INTEGER NOT NULL DEFAULT 0
+);
 """
 
 CAPTURE_RETENTION_SECONDS = 86400
@@ -374,6 +389,19 @@ class Storage:
     def is_premium(self, user_id: int) -> bool:
         until = self.get_premium_until(user_id)
         return bool(until and until > time.time())
+
+    def grant_premium_hours(self, user_id: int, hours: int) -> int:
+        now = int(time.time())
+        current = self.get_premium_until(user_id)
+        base = current if current and current > now else now
+        new_until = base + hours * 3600
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO premium (user_id, premium_until) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET premium_until=excluded.premium_until",
+                (user_id, new_until),
+            )
+        return new_until
 
     def grant_premium_days(self, user_id: int, days: int) -> int:
         now = int(time.time())
@@ -1099,19 +1127,27 @@ class Storage:
             ).fetchone()
         return row[0] if row else 0
 
-    def add_bed(self, user_id: int, amount: int) -> int:
+    def _ledger(self, conn, user_id: int, delta: int, reason: str) -> None:
+        import time as _t
+        conn.execute(
+            "INSERT INTO bed_ledger (user_id, delta, reason, created_at) VALUES (?, ?, ?, ?)",
+            (user_id, delta, reason, int(_t.time())),
+        )
+
+    def add_bed(self, user_id: int, amount: int, reason: str = "add") -> int:
         with self._connect() as conn:
             conn.execute(
                 "INSERT INTO bed_balances (user_id, balance) VALUES (?, ?) "
                 "ON CONFLICT(user_id) DO UPDATE SET balance = balance + excluded.balance",
                 (user_id, amount),
             )
+            self._ledger(conn, user_id, amount, reason)
             row = conn.execute(
                 "SELECT balance FROM bed_balances WHERE user_id = ?", (user_id,)
             ).fetchone()
         return row[0] if row else 0
 
-    def spend_bed(self, user_id: int, amount: int) -> bool:
+    def spend_bed(self, user_id: int, amount: int, reason: str = "spend") -> bool:
         """Deduct `amount` BED atomically; returns False if the balance is short."""
         with self._connect() as conn:
             row = conn.execute(
@@ -1123,7 +1159,44 @@ class Storage:
                 "UPDATE bed_balances SET balance = balance - ? WHERE user_id = ?",
                 (amount, user_id),
             )
+            self._ledger(conn, user_id, -amount, reason)
         return True
+
+    def total_bed_liability(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COALESCE(SUM(balance), 0) FROM bed_balances").fetchone()
+        return row[0] if row else 0
+
+    def recent_ledger(self, limit: int = 15):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT user_id, delta, reason, created_at FROM bed_ledger "
+                "ORDER BY id DESC LIMIT ?", (limit,),
+            ).fetchall()
+        return [{"user_id": r[0], "delta": r[1], "reason": r[2], "created_at": r[3]} for r in rows]
+
+    def daily_checkin(self, user_id: int):
+        """Register a daily check-in. Returns (claimed, streak, total).
+        claimed=False if already checked in today."""
+        import time as _t
+        today = int(_t.time()) // 86400
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT streak, last_day, total FROM daily_checkins WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+            streak, last_day, total = (row[0], row[1], row[2]) if row else (0, 0, 0)
+            if last_day == today:
+                return (False, streak, total)
+            streak = streak + 1 if last_day == today - 1 else 1
+            total += 1
+            conn.execute(
+                "INSERT INTO daily_checkins (user_id, streak, last_day, total) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET streak=excluded.streak, "
+                "last_day=excluded.last_day, total=excluded.total",
+                (user_id, streak, today, total),
+            )
+        return (True, streak, total)
 
     def credit_bed_fractional(self, user_id: int, amount: float):
         """Add a possibly-fractional BED deposit. Whole BED go to the balance,
@@ -1144,6 +1217,7 @@ class Storage:
                     "ON CONFLICT(user_id) DO UPDATE SET balance = balance + excluded.balance",
                     (user_id, credited),
                 )
+                self._ledger(conn, user_id, credited, "deposit")
             conn.execute(
                 "INSERT INTO bed_dust (user_id, dust) VALUES (?, ?) "
                 "ON CONFLICT(user_id) DO UPDATE SET dust = excluded.dust",
