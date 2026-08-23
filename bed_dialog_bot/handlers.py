@@ -19,7 +19,7 @@ from telegram import (
 )
 from telegram.ext import ContextTypes
 
-from . import admin, bedcoin, commands, config, crypto, formatting, media, menus, texts, ton, workink
+from . import admin, bedcoin, commands, config, crypto, formatting, i18n, media, menus, texts, ton, workink
 from .storage import Storage
 
 
@@ -1092,6 +1092,16 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         until_str = _fmt_premium(until_ts)
         await message.reply_text(
             f"✅ Успешно активировано! Премиум +{config.WORKINK_REWARD_DAYS} дн. Активен до {until_str}."
+        )
+        return
+
+    if text.startswith("/lang"):
+        rows = [[InlineKeyboardButton(label, callback_data=f"lang:set:{code}")]
+                for code, label in i18n.LANGS.items()]
+        cur = i18n.LANGS.get(i18n.get_lang(storage, message.from_user.id))
+        await message.reply_text(
+            f"🌐 Текущий язык: {cur}\nВыберите / Choose / Оберіть:",
+            reply_markup=InlineKeyboardMarkup(rows),
         )
         return
 
@@ -2896,6 +2906,30 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await _handle_style_callback(query, context)
     elif query.data.startswith("adm:"):
         await _handle_admin_callback(query, context)
+    elif query.data == "lang:menu":
+        await query.answer()
+        rows = [[InlineKeyboardButton(label, callback_data=f"lang:set:{code}")]
+                for code, label in i18n.LANGS.items()]
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text="🌐 Выберите язык / Choose language / Оберіть мову:",
+            reply_markup=InlineKeyboardMarkup(rows),
+        )
+    elif query.data.startswith("lang:set:"):
+        code = query.data.split(":")[-1]
+        if code in i18n.LANGS:
+            i18n.set_lang(context.bot_data["storage"], query.from_user.id, code)
+            await query.answer("✅")
+            try:
+                await query.edit_message_text(f"✅ {i18n.LANGS[code]}")
+            except Exception:
+                pass
+            await menus.send_section(
+                context, query.message.chat_id, "main",
+                query.from_user.id, context.bot_data["storage"], context.bot.username,
+            )
+        else:
+            await query.answer()
     elif query.data == "daily:claim":
         await query.answer()
         await context.bot.send_message(

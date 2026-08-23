@@ -260,6 +260,11 @@ CREATE TABLE IF NOT EXISTS daily_checkins (
     last_day INTEGER NOT NULL DEFAULT 0,
     total INTEGER NOT NULL DEFAULT 0
 );
+
+CREATE TABLE IF NOT EXISTS tr_cache (
+    k TEXT PRIMARY KEY,
+    v TEXT NOT NULL
+);
 """
 
 CAPTURE_RETENTION_SECONDS = 86400
@@ -1498,6 +1503,19 @@ class Storage:
             if len(out) >= limit:
                 break
         return out
+
+    def get_tr(self, key: str):
+        with self._connect() as conn:
+            row = conn.execute("SELECT v FROM tr_cache WHERE k = ?", (key,)).fetchone()
+        return row[0] if row else None
+
+    def set_tr(self, key: str, value: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO tr_cache (k, v) VALUES (?, ?) "
+                "ON CONFLICT(k) DO UPDATE SET v=excluded.v",
+                (key, value),
+            )
 
     def get_setting(self, key: str, default=None):
         with self._connect() as conn:

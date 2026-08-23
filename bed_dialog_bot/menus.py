@@ -14,7 +14,7 @@ from telegram import (
     InputMediaPhoto,
 )
 
-from . import admin, bedcoin, commands, config, texts, ton, workink
+from . import admin, bedcoin, commands, config, i18n, texts, ton, workink
 
 _ASSETS = os.path.join(os.path.dirname(__file__), "assets")
 
@@ -295,7 +295,7 @@ def kb_main(uid=None, storage=None) -> InlineKeyboardMarkup:
         [_btn("👥 Рефералы", "menu:ref", "primary"), _btn("📟 Команды", "menu:cmds", "primary")],
         [_btn("💎 Подписка", "menu:sub", "primary"), _btn("🪙 Кошелёк", "menu:wallet", "success")],
         [_btn("🗓 Ежедневная награда", "daily:claim", "success")],
-        [_btn("🆘 Поддержка", "menu:support", "success")],
+        [_btn("🆘 Поддержка", "menu:support", "success"), _btn("🌐 Язык", "lang:menu", "primary")],
     ]
     if workink.enabled():
         rows.append([_btn("🎁 Бесплатный премиум за work.ink", "wink:info", "danger")])
@@ -409,16 +409,40 @@ def _media(context, name, caption):
     return InputMediaPhoto(media=open(_banner(name), "rb"), caption=caption, parse_mode="HTML")
 
 
+async def _localize(storage, uid, caption, kb):
+    """Translate caption + keyboard to the user's language (cached). Falls back
+    to the originals on any failure so the menu never breaks."""
+    lang = i18n.get_lang(storage, uid)
+    if lang == i18n.DEFAULT:
+        return caption, kb
+    try:
+        caption = await i18n.tr(storage, caption, lang)
+        kb = await i18n.localize_keyboard(storage, kb, lang)
+    except Exception:
+        pass
+    return caption, kb
+
+
 async def send_section(context, chat_id, section, uid, storage, bot_username):
     """Send a section as a new photo message."""
     name, cap_fn, kb_fn = SECTIONS[section]
     caption = cap_fn(uid, storage, bot_username)
+    kb = _build_kb(kb_fn, uid, storage)
+    caption, kb = await _localize(storage, uid, caption, kb)
     fid = context.bot_data.setdefault("banner_fid", {}).get(name)
     photo = fid if fid else open(_banner(name), "rb")
-    msg = await context.bot.send_photo(
-        chat_id=chat_id, photo=photo, caption=caption,
-        parse_mode="HTML", reply_markup=_build_kb(kb_fn, uid, storage),
-    )
+    try:
+        msg = await context.bot.send_photo(
+            chat_id=chat_id, photo=photo, caption=caption,
+            parse_mode="HTML", reply_markup=kb,
+        )
+    except Exception:
+        # Translated caption may have produced invalid HTML — retry in Russian.
+        photo2 = context.bot_data.setdefault("banner_fid", {}).get(name) or open(_banner(name), "rb")
+        msg = await context.bot.send_photo(
+            chat_id=chat_id, photo=photo2, caption=cap_fn(uid, storage, bot_username),
+            parse_mode="HTML", reply_markup=_build_kb(kb_fn, uid, storage),
+        )
     _cache_fid(context, name, msg)
     return msg
 
@@ -427,9 +451,11 @@ async def edit_section(context, query, section, uid, storage, bot_username):
     """Morph the current menu message into another section."""
     name, cap_fn, kb_fn = SECTIONS[section]
     caption = cap_fn(uid, storage, bot_username)
+    kb = _build_kb(kb_fn, uid, storage)
+    caption, kb = await _localize(storage, uid, caption, kb)
     try:
         msg = await query.edit_message_media(
-            media=_media(context, name, caption), reply_markup=_build_kb(kb_fn, uid, storage),
+            media=_media(context, name, caption), reply_markup=kb,
         )
         _cache_fid(context, name, msg)
     except Exception as e:
