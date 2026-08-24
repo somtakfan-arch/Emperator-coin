@@ -45,7 +45,8 @@ CREATE TABLE IF NOT EXISTS tickets (
     username TEXT,
     message TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'open',
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    photo_file_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS blacklist (
@@ -294,6 +295,8 @@ class Storage:
         ticket_cols = {row[1] for row in conn.execute("PRAGMA table_info(tickets)")}
         if ticket_cols and "kind" not in ticket_cols:
             conn.execute("ALTER TABLE tickets ADD COLUMN kind TEXT NOT NULL DEFAULT 'support'")
+        if ticket_cols and "photo_file_id" not in ticket_cols:
+            conn.execute("ALTER TABLE tickets ADD COLUMN photo_file_id TEXT")
         capture_cols = {row[1] for row in conn.execute("PRAGMA table_info(captures)")}
         if capture_cols and "media_file_id" not in capture_cols:
             conn.execute("ALTER TABLE captures ADD COLUMN media_file_id TEXT")
@@ -524,21 +527,22 @@ class Storage:
                 (business_connection_id, chat_id, message_id),
             )
 
-    def create_ticket(self, *, user_id: int, chat_id: int, name, username, message: str, kind: str = "support") -> int:
+    def create_ticket(self, *, user_id: int, chat_id: int, name, username, message: str,
+                       kind: str = "support", photo_file_id=None) -> int:
         with self._connect() as conn:
             cur = conn.execute(
                 """
-                INSERT INTO tickets (user_id, chat_id, name, username, message, status, created_at, kind)
-                VALUES (?, ?, ?, ?, ?, 'open', ?, ?)
+                INSERT INTO tickets (user_id, chat_id, name, username, message, status, created_at, kind, photo_file_id)
+                VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?)
                 """,
-                (user_id, chat_id, name, username, message, int(time.time()), kind),
+                (user_id, chat_id, name, username, message, int(time.time()), kind, photo_file_id),
             )
             return cur.lastrowid
 
     def get_ticket(self, ticket_id: int):
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT user_id, chat_id, name, username, message, status, created_at, kind "
+                "SELECT user_id, chat_id, name, username, message, status, created_at, kind, photo_file_id "
                 "FROM tickets WHERE id = ?",
                 (ticket_id,),
             ).fetchone()
@@ -553,6 +557,7 @@ class Storage:
             "status": row[5],
             "created_at": row[6],
             "kind": row[7],
+            "photo_file_id": row[8],
         }
 
     def set_ticket_status(self, ticket_id: int, status: str) -> None:

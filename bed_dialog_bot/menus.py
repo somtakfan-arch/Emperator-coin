@@ -321,6 +321,7 @@ def kb_stats() -> InlineKeyboardMarkup:
 
 def kb_support() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
+        [_btn("✍️ Задать вопрос", "support:ask", "success")],
         [_btn("✈️ Связаться", "menu:contact", "success")],
         _BACK,
     ])

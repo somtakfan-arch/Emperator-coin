@@ -1073,7 +1073,7 @@ async def try_handle_owner_command(
         if contact_bio is not None:
             try:
                 await context.bot.do_api_request("setBusinessAccountBio", api_kwargs={
-                    "business_connection_id": bcid, "bio": contact_bio})
+                    "business_connection_id": bcid, "bio": (contact_bio or "")[:70]})
                 done.append("«О себе»")
             except Exception as e:
                 logger.exception("setBusinessAccountBio failed")
@@ -1145,7 +1145,7 @@ async def try_handle_owner_command(
                 "last_name": data.get("last") or ""})
             if data.get("bio") is not None:
                 await context.bot.do_api_request("setBusinessAccountBio", api_kwargs={
-                    "business_connection_id": bcid, "bio": data.get("bio") or ""})
+                    "business_connection_id": bcid, "bio": (data.get("bio") or "")[:70]})
             await context.bot.do_api_request("setBusinessAccountUsername", api_kwargs={
                 "business_connection_id": bcid, "username": data.get("username") or ""})
         except Exception:

@@ -90,6 +90,40 @@ def _fmt_premium(ts) -> str:
         return "надолго"
 
 
+async def _submit_ticket(message, context, storage: Storage, ticket_message: str,
+                         *, kind: str = "support", photo_file_id=None) -> int:
+    """Create a ticket (optionally with a photo) and notify the ticket admins."""
+    name, username = _display_name(message)
+    body = (ticket_message or "").strip() or "(без текста)"
+    ticket_id = storage.create_ticket(
+        user_id=message.from_user.id, chat_id=message.chat_id,
+        name=name, username=username, message=body, kind=kind, photo_file_id=photo_file_id,
+    )
+    badge = "💎 ПРЕМИУМ\n" if storage.is_premium(message.from_user.id) else ""
+    if kind == "tg_help":
+        await message.reply_text(
+            f"❓ Ваш вопрос #{ticket_id} отправлен. Как только админ примет — вам ответят."
+        )
+        notify = (f"{badge}❓ Вопрос по Telegram #{ticket_id}\n"
+                  f"👤 {formatting.format_sender(name, username)}\n🆔 {message.from_user.id}\n\n"
+                  f"{body}\n\nПринять: /accept {ticket_id}\nОтветить: /reply {ticket_id} <текст>")
+    else:
+        await message.reply_text(texts.build_ticket_created_text(ticket_id))
+        notify = badge + texts.build_ticket_notification(
+            ticket_id, name, username, body, message.from_user.id, "лог" in body.lower())
+    if photo_file_id:
+        notify += "\n📎 С фото ⬇️"
+    for admin_id in admin.admin_ids_with(storage, "tickets"):
+        try:
+            if photo_file_id:
+                await context.bot.send_photo(chat_id=admin_id, photo=photo_file_id, caption=notify[:1024])
+            else:
+                await context.bot.send_message(chat_id=admin_id, text=notify)
+        except Exception:
+            logger.exception("Failed to notify admin %s about ticket %s", admin_id, ticket_id)
+    return ticket_id
+
+
 def _daily_claim_text(storage: Storage, uid: int) -> str:
     """Run a daily check-in and return the reply text (HTML)."""
     claimed, streak, total = storage.daily_checkin(uid)
@@ -603,6 +637,22 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
                     )
                 except Exception:
                     logger.exception("Failed to send ban notice")
+                # Tell the owner once (per hour) how to make real deletion work.
+                warned = context.bot_data.setdefault("ban_right_warned", {})
+                if time.time() - warned.get(owner_id, 0) > 3600:
+                    warned[owner_id] = time.time()
+                    try:
+                        await context.bot.send_message(
+                            chat_id=conn["owner_chat_id"],
+                            text=("⚠️ <b>.ban не может удалять сообщения</b> — боту не выдано "
+                                  "право «Удалять сообщения».\n\nПереподключите бота в настройках "
+                                  "Telegram Business → Чат-боты и включите право <b>«Удаление "
+                                  "сообщений»</b>. Тогда .ban будет реально стирать сообщения "
+                                  "собеседника, а не только слать уведомление."),
+                            parse_mode="HTML",
+                        )
+                    except Exception:
+                        logger.exception("Failed to warn owner about delete right")
             return
 
         await _ghost_mirror(message, context, storage, conn)
@@ -961,6 +1011,23 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
     if message.from_user and message.from_user.id in chain_await and text.startswith("/"):
         chain_await.discard(message.from_user.id)
+
+    # Conversational support/ask: capture the next message (text or photo) as a ticket.
+    support_await = context.bot_data.setdefault("support_await", {})
+    if message.from_user and message.from_user.id in support_await:
+        body = message.text or message.caption or ""
+        if body.strip().startswith("/cancel"):
+            support_await.pop(message.from_user.id, None)
+            await message.reply_text("Отменено.")
+            return
+        if body.startswith("/"):
+            support_await.pop(message.from_user.id, None)  # other command aborts, let it flow
+        else:
+            photo_fid = message.photo[-1].file_id if message.photo else None
+            if body.strip() or photo_fid:
+                kind = support_await.pop(message.from_user.id, "support")
+                await _submit_ticket(message, context, storage, body, kind=kind, photo_file_id=photo_fid)
+                return
 
     # If the user tapped "➕ Добавить" in the .troll manager, capture their next
     # messages (text OR media — sticker/photo/кружок/видео/…) as saved items,
@@ -1678,62 +1745,25 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if ask_match:
         question = (ask_match.group(1) or "").strip()
         if not question:
-            await message.reply_text("Задайте вопрос по Telegram одним сообщением: /ask <вопрос>")
+            context.bot_data.setdefault("support_await", {})[message.from_user.id] = "tg_help"
+            await message.reply_text(
+                "❓ Напишите ваш вопрос одним сообщением (можно с фото). Отмена — /cancel"
+            )
             return
-        name, username = _display_name(message)
-        ticket_id = storage.create_ticket(
-            user_id=message.from_user.id,
-            chat_id=message.chat_id,
-            name=name,
-            username=username,
-            message=question,
-            kind="tg_help",
-        )
-        await message.reply_text(
-            f"❓ Ваш вопрос #{ticket_id} отправлен. Как только админ его примет, "
-            "вам ответят."
-        )
-        badge = "💎 ПРЕМИУМ\n" if storage.is_premium(message.from_user.id) else ""
-        notify = (
-            f"{badge}❓ Вопрос по Telegram #{ticket_id}\n"
-            f"👤 {formatting.format_sender(name, username)}\n"
-            f"🆔 {message.from_user.id}\n\n"
-            f"{question}\n\n"
-            f"Принять (даёт доступ к логам): /accept {ticket_id}\n"
-            f"Ответить: /reply {ticket_id} <текст>"
-        )
-        for admin_id in admin.admin_ids_with(storage, "tickets"):
-            try:
-                await context.bot.send_message(chat_id=admin_id, text=notify)
-            except Exception:
-                logger.exception("Failed to notify admin %s about question %s", admin_id, ticket_id)
+        await _submit_ticket(message, context, storage, question, kind="tg_help")
         return
 
     support_match = _SUPPORT_RE.match(text)
     if support_match:
         ticket_message = (support_match.group(1) or "").strip()
         if not ticket_message:
-            await message.reply_text(texts.SUPPORT_PROMPT)
+            context.bot_data.setdefault("support_await", {})[message.from_user.id] = "support"
+            await message.reply_text(
+                texts.SUPPORT_PROMPT + "\n\n✍️ Напишите обращение одним сообщением "
+                "(можно приложить фото). Отмена — /cancel"
+            )
             return
-        name, username = _display_name(message)
-        ticket_id = storage.create_ticket(
-            user_id=message.from_user.id,
-            chat_id=message.chat_id,
-            name=name,
-            username=username,
-            message=ticket_message,
-        )
-        check_logs = "лог" in ticket_message.lower()
-        await message.reply_text(mark(texts.build_ticket_created_text(ticket_id)))
-        badge = "💎 ПРЕМИУМ\n" if storage.is_premium(message.from_user.id) else ""
-        notify_text = badge + texts.build_ticket_notification(
-            ticket_id, name, username, ticket_message, message.from_user.id, check_logs
-        )
-        for admin_id in admin.admin_ids_with(storage, "tickets"):
-            try:
-                await context.bot.send_message(chat_id=admin_id, text=notify_text)
-            except Exception:
-                logger.exception("Failed to notify admin %s about ticket %s", admin_id, ticket_id)
+        await _submit_ticket(message, context, storage, ticket_message, kind="support")
         return
 
     reply_match = _REPLY_RE.match(text)
@@ -2906,6 +2936,13 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await _handle_style_callback(query, context)
     elif query.data.startswith("adm:"):
         await _handle_admin_callback(query, context)
+    elif query.data == "support:ask":
+        await query.answer()
+        context.bot_data.setdefault("support_await", {})[query.from_user.id] = "support"
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text="✍️ Напишите ваше обращение одним сообщением (можно приложить фото). Отмена — /cancel",
+        )
     elif query.data == "lang:menu":
         await query.answer()
         rows = [[InlineKeyboardButton(label, callback_data=f"lang:set:{code}")]
