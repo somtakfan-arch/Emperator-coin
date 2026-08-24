@@ -19,7 +19,7 @@ from telegram import (
 )
 from telegram.ext import ContextTypes
 
-from . import admin, bedcoin, commands, config, crypto, formatting, i18n, media, menus, texts, ton, workink
+from . import admin, adlink, bedcoin, commands, config, crypto, formatting, i18n, media, menus, texts, ton, workink
 from .storage import Storage
 
 
@@ -122,6 +122,61 @@ async def _submit_ticket(message, context, storage: Storage, ticket_message: str
         except Exception:
             logger.exception("Failed to notify admin %s about ticket %s", admin_id, ticket_id)
     return ticket_id
+
+
+async def _redeem_adlink(message, context, storage: Storage, token: str) -> None:
+    """Grant premium when a user returns to the bot after the ad-link."""
+    uid = message.from_user.id
+    if config.ADLINK_COOLDOWN_SECONDS > 0:
+        last = storage.last_adlink_reward(uid)
+        wait = config.ADLINK_COOLDOWN_SECONDS - (int(time.time()) - last)
+        if last and wait > 0:
+            await message.reply_text(f"⏳ Следующий бесплатный премиум будет доступен через ~{wait // 3600 + 1} ч.")
+            return
+    if not storage.use_adlink_token(token, uid):
+        await message.reply_text("❌ Ссылка недействительна или уже использована. Возьмите новую в меню.")
+        return
+    until = storage.grant_premium_days(uid, config.ADLINK_REWARD_DAYS)
+    await message.reply_text(
+        f"✅ Спасибо! Премиум +{config.ADLINK_REWARD_DAYS} дн. Активен до {_fmt_premium(until)}. 🎉"
+    )
+
+
+async def _send_reward_link(query_or_msg, context, storage: Storage, uid: int, chat_id: int) -> None:
+    """Send the easiest available free-premium flow (ad-link preferred)."""
+    if adlink.enabled():
+        if config.ADLINK_COOLDOWN_SECONDS > 0:
+            last = storage.last_adlink_reward(uid)
+            wait = config.ADLINK_COOLDOWN_SECONDS - (int(time.time()) - last)
+            if last and wait > 0:
+                await context.bot.send_message(chat_id, f"⏳ Следующий бесплатный премиум через ~{wait // 3600 + 1} ч.")
+                return
+        token = adlink.new_token()
+        short = await adlink.shorten(adlink.deep_link(token, context.bot.username))
+        if not short:
+            await context.bot.send_message(chat_id, "⚠️ Не удалось создать ссылку, попробуйте позже.")
+            return
+        storage.create_adlink_token(token, uid)
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=(f"🎁 <b>Бесплатный премиум на {config.ADLINK_REWARD_DAYS} дн.</b>\n\n"
+                  "Всё просто:\n1️⃣ Откройте ссылку\n2️⃣ Посмотрите рекламу и нажмите «Continue»\n"
+                  "3️⃣ Вас вернёт в бота — премиум зачислится автоматически ✅\n\n"
+                  "<i>Ссылка одноразовая.</i>"),
+            parse_mode="HTML", disable_web_page_preview=True,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🎬 Открыть и посмотреть", url=short)]]),
+        )
+    elif workink.enabled():
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=("🎁 <b>Бесплатный премиум за work.ink</b>\n\n"
+                  f"1. Пройдите ссылку:\n{config.WORKINK_LINK_URL}\n"
+                  "2. Получите ключ и пришлите: <code>/redeem КЛЮЧ</code>\n\n"
+                  f"За ключ — премиум на {config.WORKINK_REWARD_DAYS} дн."),
+            parse_mode="HTML", disable_web_page_preview=True,
+        )
+    else:
+        await context.bot.send_message(chat_id, "🎁 Бесплатные награды пока не настроены.")
 
 
 def _daily_claim_text(storage: Storage, uid: int) -> str:
@@ -1078,8 +1133,13 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     if text.startswith("/start"):
         parts = text.split(maxsplit=1)
-        if len(parts) == 2 and not was_known:
-            _record_pending_referral(parts[1].strip(), message.from_user.id, storage)
+        payload = parts[1].strip() if len(parts) == 2 else ""
+        # Return from the ad-link: grant the reward.
+        if payload.startswith("adkey_"):
+            await _redeem_adlink(message, context, storage, payload[len("adkey_"):])
+            return
+        if payload and not was_known:
+            _record_pending_referral(payload, message.from_user.id, storage)
         # One-time free trial for brand-new users (disabled when TRIAL_DAYS<=0).
         if config.TRIAL_DAYS > 0 and not was_known and not storage.has_trial(message.from_user.id):
             storage.mark_trial(message.from_user.id)
@@ -2974,28 +3034,12 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             text=_daily_claim_text(context.bot_data["storage"], query.from_user.id),
             parse_mode="HTML",
         )
-    elif query.data == "wink:info":
+    elif query.data == "reward:get" or query.data == "wink:info":
         await query.answer()
-        if not workink.enabled():
-            await context.bot.send_message(query.message.chat_id, "🎁 Награды за work.ink пока не настроены.")
-        else:
-            await context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text=(
-                    "🎁 <b>Бесплатный премиум за work.ink</b>\n\n"
-                    f"1. Пройдите ссылку:\n{config.WORKINK_LINK_URL}\n"
-                    "2. Отключите впн\n"
-                    "3. Нажмите go to destination\n"
-                    "4. Подождите 60 секунд\n"
-                    "5. Нажмите на кнопку watch ad\n"
-                    "6. Посмотрите рекламу\n"
-                    "7. Скопируйте ключ\n"
-                    "8. Пришлите ключ боту:\n<code>/redeem ВАШ_КЛЮЧ</code>\n\n"
-                    f"За каждый ключ — премиум на {config.WORKINK_REWARD_DAYS} дн. Ключ одноразовый."
-                ),
-                parse_mode="HTML",
-                disable_web_page_preview=True,
-            )
+        await _send_reward_link(
+            query, context, context.bot_data["storage"],
+            query.from_user.id, query.message.chat_id,
+        )
     elif query.data.startswith("bedcmd:"):
         await _handle_bedcmd_callback(query, context)
     elif query.data.startswith("bedchain:"):

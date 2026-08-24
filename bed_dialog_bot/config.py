@@ -164,6 +164,18 @@ WORKINK_REWARD_DAYS = int(os.environ.get("WORKINK_REWARD_DAYS", "1"))
 # Minimum seconds between redemptions per user (0 = no cooldown).
 WORKINK_COOLDOWN_SECONDS = int(os.environ.get("WORKINK_COOLDOWN_SECONDS", "0"))
 
+# --- Simple ad-link reward (GPLinks / exe.io / shrinkme — adlinkfly API) ---
+# Way fewer steps for the user: click -> 1 ad -> auto-returned to the bot ->
+# premium (no key to copy). Earns less than work.ink but far more convenient.
+# API base + key from your shortener dashboard. Empty base = feature disabled.
+ADLINK_API_BASE = os.environ.get("ADLINK_API_BASE", "")  # e.g. https://api.gplinks.com/api
+ADLINK_API_KEY = os.environ.get("ADLINK_API_KEY", "")
+# Bot username for the return deep-link (defaults resolved at runtime if empty).
+ADLINK_BOT_USERNAME = os.environ.get("ADLINK_BOT_USERNAME", "BedDialog_bot")
+ADLINK_REWARD_DAYS = int(os.environ.get("ADLINK_REWARD_DAYS", "1"))
+# Minimum seconds between ad-link rewards per user (default 12h).
+ADLINK_COOLDOWN_SECONDS = int(os.environ.get("ADLINK_COOLDOWN_SECONDS", "43200"))
+
 # Crypto payments via Crypto Pay (@CryptoBot). Empty token = feature disabled.
 # Get a token in @CryptoBot → Crypto Pay → Create App.
 CRYPTO_PAY_TOKEN = os.environ.get("CRYPTO_PAY_TOKEN", "")

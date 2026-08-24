@@ -14,7 +14,7 @@ from telegram import (
     InputMediaPhoto,
 )
 
-from . import admin, bedcoin, commands, config, i18n, texts, ton, workink
+from . import adlink, admin, bedcoin, commands, config, i18n, texts, ton, workink
 
 _ASSETS = os.path.join(os.path.dirname(__file__), "assets")
 
@@ -297,8 +297,8 @@ def kb_main(uid=None, storage=None) -> InlineKeyboardMarkup:
         [_btn("🗓 Ежедневная награда", "daily:claim", "success")],
         [_btn("🆘 Поддержка", "menu:support", "success"), _btn("🌐 Язык", "lang:menu", "primary")],
     ]
-    if workink.enabled():
-        rows.append([_btn("🎁 Бесплатный премиум за work.ink", "wink:info", "danger")])
+    if adlink.enabled() or workink.enabled():
+        rows.append([_btn("🎁 Бесплатный премиум", "reward:get", "danger")])
     if storage is not None and uid is not None and admin.is_admin(storage, uid):
         rows.append([_btn("🛡 Админ-панель", "menu:admin", "danger")])
     return InlineKeyboardMarkup(rows)

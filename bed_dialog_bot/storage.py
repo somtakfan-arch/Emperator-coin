@@ -266,6 +266,14 @@ CREATE TABLE IF NOT EXISTS tr_cache (
     k TEXT PRIMARY KEY,
     v TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS adlink_tokens (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    used INTEGER NOT NULL DEFAULT 0,
+    used_at INTEGER,
+    created_at INTEGER NOT NULL
+);
 """
 
 CAPTURE_RETENTION_SECONDS = 86400
@@ -1508,6 +1516,34 @@ class Storage:
             if len(out) >= limit:
                 break
         return out
+
+    def create_adlink_token(self, token: str, user_id: int) -> None:
+        import time as _t
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO adlink_tokens (token, user_id, created_at) VALUES (?, ?, ?)",
+                (token, user_id, int(_t.time())),
+            )
+
+    def use_adlink_token(self, token: str, user_id: int) -> bool:
+        """Redeem a token: must exist, be unused, and belong to this user.
+        Returns True exactly once per valid token."""
+        import time as _t
+        with self._connect() as conn:
+            cur = conn.execute(
+                "UPDATE adlink_tokens SET used = 1, used_at = ? "
+                "WHERE token = ? AND user_id = ? AND used = 0",
+                (int(_t.time()), token, user_id),
+            )
+            return cur.rowcount > 0
+
+    def last_adlink_reward(self, user_id: int) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT MAX(used_at) FROM adlink_tokens WHERE user_id = ? AND used = 1",
+                (user_id,),
+            ).fetchone()
+        return (row[0] or 0) if row else 0
 
     def get_tr(self, key: str):
         with self._connect() as conn:
