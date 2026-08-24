@@ -57,22 +57,54 @@ python -m tests.e2e_check
 
 ## Деплой на Railway
 
-1. **New Project → Deploy from GitHub repo** → этот репозиторий.
-2. **Settings → Root Directory**: `bedmusic`
-   (репозиторий монорепо, без этого Railway соберёт корень).
-3. **Variables**: `BOT_TOKEN` = токен от [@BotFather](https://t.me/BotFather).
-4. **Data → Add Volume**, mount path `/data`, и переменная
-   `DB_PATH=/data/bedmusic.db`.
-   Без вольюма файловая система Railway эфемерная — база с артистами и треками
-   будет стираться при каждом редеплое.
-5. **Settings → Deploy**: убедиться, что сервис запускается как worker —
-   `python -m bot.main` (уже прописано в `railway.json` и `Procfile`).
-   HTTP-порт боту не нужен, домен генерировать не надо.
-6. Деплой. В логах должно появиться `Run polling for bot @Bed_Musicbot`.
+Бот уже задеплоен: проект **bed-music**, сервис **bed-music-bot**.
 
-Бот работает на long polling, поэтому реплика должна быть ровно одна
-(`numReplicas: 1` в `railway.json`) — два процесса на одном токене будут
-отбирать друг у друга апдейты.
+Сборку ведёт Railpack — он сам определяет Python по `requirements.txt` и берёт
+команду запуска из `Procfile`. Отдельный конфиг сборки не нужен: Config as Code
+(`railway.json` / `railway.toml`) объявлен устаревшим и перестанет работать
+1 декабря 2026, поэтому в репозитории его нет.
+
+### Выкатить новую версию
+
+```bash
+cd bedmusic
+railway up --service bed-music-bot
+```
+
+Загружается содержимое каталога `bedmusic/`, поэтому **Root Directory сервиса
+должен быть `/`**, а не `bedmusic` — иначе Railway будет искать `bedmusic/bedmusic`
+и сборка упадёт на `railpack prepare exited with an error`.
+
+### Настройки сервиса
+
+| Что | Значение | Зачем |
+| --- | --- | --- |
+| Root Directory | `/` | загружается уже каталог `bedmusic` |
+| Volume | `/data` | иначе база стирается при каждом редеплое |
+| `BOT_TOKEN` | токен от [@BotFather](https://t.me/BotFather) | |
+| `DB_PATH` | `/data/bedmusic.db` | база на вольюме |
+| Replicas | `1` | long polling: два процесса на одном токене будут отбирать друг у друга апдейты |
+| Restart policy | `ON_FAILURE`, до 10 попыток | |
+
+HTTP-порт боту не нужен, публичный домен генерировать не надо.
+
+Признак живого деплоя в логах:
+
+```
+bedmusic: database ready at /data/bedmusic.db
+bedmusic: starting @Bed_Musicbot (Bed Music)
+aiogram.dispatcher: Run polling for bot @Bed_Musicbot
+```
+
+### Автодеплой по git push
+
+Сейчас **не настроен**: GitHub-приложение не подключено к аккаунту Railway,
+поэтому у сервиса нет repo-триггера и деплой идёт загрузкой через `railway up`.
+
+Чтобы включить: в дашборде Railway подключить GitHub, затем в сервисе выбрать
+репозиторий и ветку. При этом Root Directory нужно поменять с `/` на `bedmusic`
+— при деплое из репозитория корнем становится корень репозитория, а не каталог
+бота.
 
 ## Переменные окружения
 
