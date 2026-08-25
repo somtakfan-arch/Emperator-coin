@@ -2254,6 +2254,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         media_caps = [
             c for c in storage.get_captures(target_id)
             if c["media_file_id"] and c["media_kind"] in media.MEDIA_KINDS
+            and c["media_kind"] != "sticker"  # стикеры не пересылаем
         ]
         if not media_caps:
             await message.reply_text(f"⚪ Для {target_id} нет сохранённых медиа.")
