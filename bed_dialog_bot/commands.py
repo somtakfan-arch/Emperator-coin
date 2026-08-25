@@ -754,7 +754,9 @@ async def try_handle_owner_command(
         # but never abort the run — so the full count actually goes out.
         # A small floor keeps even "premium, no delay" from tripping the limit
         # on the very first messages.
-        interval = 0.05 if is_premium else max(0.05, SPAM_WINDOW_SECONDS / count)
+        # Telegram caps ~1 msg/sec per chat; going faster only triggers 429
+        # floods (and bot-wide lag) without delivering any faster.
+        interval = 0.8 if is_premium else max(0.8, SPAM_WINDOW_SECONDS / count)
         sent = 1  # the edited command message counts as the first
         for _ in range(count - 1):
             await asyncio.sleep(interval)
@@ -935,7 +937,8 @@ async def try_handle_owner_command(
         else:
             await _edit_command_message(context, bcid, chat_id, message_id, "🚀")
             await _send_troll_item(context, chat_id, bcid, first)
-        interval = 0.1 if is_premium else max(0.3, SPAM_WINDOW_SECONDS / max(len(saved), 1))
+        # Stay under Telegram's ~1 msg/sec-per-chat limit to avoid 429 floods.
+        interval = 0.8 if is_premium else max(0.8, SPAM_WINDOW_SECONDS / max(len(saved), 1))
         for item in saved[1:]:
             await asyncio.sleep(interval)
             await _send_troll_item(context, chat_id, bcid, item)
