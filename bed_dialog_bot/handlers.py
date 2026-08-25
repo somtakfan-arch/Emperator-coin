@@ -60,6 +60,7 @@ _PHOTOLOG_RE = re.compile(r"^/photolog\s+(\d+)\s+(\d+)([mhdw])\s*$")
 _BROADCAST_RE = re.compile(r"^/broadcast\s+(.+)$", re.DOTALL)
 _CLOSE_RE = re.compile(r"^/close\s+(\d+)\s*$")
 _CLEARLOG_RE = re.compile(r"^/clearlog\s+(\d+|all)\s*$")
+_CLEARPHOTOLOG_RE = re.compile(r"^/clearphotolog\s+(\d+|all)\s*$")
 _GETLOG_RE = re.compile(r"^/getlog\s+(\d+)\s*$")
 _STOPLOG_RE = re.compile(r"^/stoplog\s+(\d+)\s*$")
 _CHECKLOG_RE = re.compile(r"^/checklog\s+(\d+)\s*$")
@@ -2200,6 +2201,19 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             await message.reply_text(f"🧹 Логи пользователя {target} очищены ({removed} событий).")
         return
 
+    clearphotolog_match = _CLEARPHOTOLOG_RE.match(text)
+    if clearphotolog_match:
+        if not await _require_perm(message, storage, "moderation"):
+            return
+        target = clearphotolog_match.group(1)
+        if target == "all":
+            removed = storage.clear_all_captures_media()
+            await message.reply_text(f"🧹 Удалены все сохранённые медиа ({removed} шт.).")
+        else:
+            removed = storage.clear_captures_media(int(target))
+            await message.reply_text(f"🧹 Медиа пользователя {target} удалены ({removed} шт.).")
+        return
+
     getlog_match = _GETLOG_RE.match(text)
     if getlog_match:
         target_id = int(getlog_match.group(1))
@@ -2456,7 +2470,7 @@ async def _handle_style_callback(query, context: ContextTypes.DEFAULT_TYPE) -> N
 _ADMIN_HINTS = {
     "logs": ("logs", "📜 Логи:\n/log <id> <1h|1d|1w>\n/photolog <id> <1h|1d|1w>\n/checklog <id>\n/timeline <id>"),
     "saves": ("saves", "💾 Сохранёнки:\n/getlog <id> — включить запись\n/stoplog <id> — файл\n/photologcheck <id>"),
-    "mod": ("moderation", "⛔ Модерация:\n/blacklist <id> [причина]\n/unblacklist <id>\n/clearlog <id|all>"),
+    "mod": ("moderation", "⛔ Модерация:\n/blacklist <id> [причина]\n/unblacklist <id>\n/clearlog <id|all>\n/clearphotolog <id|all>"),
     "premium": ("premium", "💎 /give premium <id> <дней>\n/gift <id> <дней>"),
     "broadcast": ("broadcast", "📢 /broadcast <текст>"),
     "promo": ("promo", "🎟 /createpromo <код> <дней> <активаций>\n/winback"),

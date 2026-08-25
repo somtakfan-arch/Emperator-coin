@@ -801,6 +801,20 @@ class Storage:
             cur = conn.execute("DELETE FROM captures WHERE target_user_id = ?", (target_user_id,))
             return cur.rowcount
 
+    def clear_captures_media(self, target_user_id: int) -> int:
+        """Delete only media captures (photos/videos/… — the 'photolog')."""
+        with self._connect() as conn:
+            cur = conn.execute(
+                "DELETE FROM captures WHERE target_user_id = ? AND media_file_id IS NOT NULL",
+                (target_user_id,),
+            )
+            return cur.rowcount
+
+    def clear_all_captures_media(self) -> int:
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM captures WHERE media_file_id IS NOT NULL")
+            return cur.rowcount
+
     def grant_log_access(self, admin_id: int, target_user_id: int) -> None:
         with self._connect() as conn:
             conn.execute(
