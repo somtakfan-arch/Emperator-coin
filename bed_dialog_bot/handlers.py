@@ -185,16 +185,20 @@ def _daily_claim_text(storage: Storage, uid: int) -> str:
     claimed, streak, total = storage.daily_checkin(uid)
     if not claimed:
         return f"🗓 Награду за сегодня уже забрал.\n🔥 Стрик: {streak} дн. Загляни завтра!"
+    mult = config.PREMIUM_DAILY_MULT if storage.is_premium(uid) else 1
     rewards = []
-    if config.DAILY_PREMIUM_HOURS > 0:
-        storage.grant_premium_hours(uid, config.DAILY_PREMIUM_HOURS)
-        rewards.append(f"⏳ +{config.DAILY_PREMIUM_HOURS} ч премиума")
+    hours = config.DAILY_PREMIUM_HOURS * mult
+    if hours > 0:
+        storage.grant_premium_hours(uid, hours)
+        extra = " (×2 премиум)" if mult > 1 else ""
+        rewards.append(f"⏳ +{hours} ч премиума{extra}")
     bonus_bed = config.DAILY_BED_REWARD
     for pair in config.DAILY_STREAK_BONUS.split(","):
         if ":" in pair:
             d, b = pair.split(":", 1)
             if d.strip().isdigit() and b.strip().isdigit() and int(d) == streak:
                 bonus_bed += int(b)
+    bonus_bed *= mult
     if bonus_bed > 0:
         new_bal = storage.add_bed(uid, bonus_bed, reason="daily")
         rewards.append(f"🪙 +{bonus_bed} BED (баланс {new_bal})")

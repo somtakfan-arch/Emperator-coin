@@ -44,7 +44,7 @@ LOG_EXCLUDE_USER_IDS = {
     if uid.strip()
 }
 
-PREMIUM_STARS_PRICE = int(os.environ.get("PREMIUM_STARS_PRICE", "100"))
+PREMIUM_STARS_PRICE = int(os.environ.get("PREMIUM_STARS_PRICE", "250"))
 PREMIUM_DURATION_DAYS = int(os.environ.get("PREMIUM_DURATION_DAYS", "30"))
 
 FREE_SPAM_MAX = int(os.environ.get("FREE_SPAM_MAX", "100"))
@@ -81,7 +81,7 @@ FAKE_TOP_COUNT = int(os.environ.get("FAKE_TOP_COUNT", "200"))
 
 # .troll saved-message limits (admins are unlimited).
 TROLL_FREE_MAX = int(os.environ.get("TROLL_FREE_MAX", "10"))
-TROLL_PREMIUM_MAX = int(os.environ.get("TROLL_PREMIUM_MAX", "25"))
+TROLL_PREMIUM_MAX = int(os.environ.get("TROLL_PREMIUM_MAX", "50"))
 
 # Per-user command rate limit for direct messages.
 RATE_LIMIT_MAX = int(os.environ.get("RATE_LIMIT_MAX", "20"))
@@ -108,7 +108,14 @@ BED_PREMIUM_PACKAGES = [
     ("1 месяц", int(os.environ.get("BED_PRICE_1M", "10")), 30),
     ("3 месяца", int(os.environ.get("BED_PRICE_3M", "25")), 90),
     ("1 год", int(os.environ.get("BED_PRICE_1Y", "80")), 365),
+    ("♾ Навсегда", int(os.environ.get("BED_PRICE_LIFETIME", "100")), 36500),
 ]
+
+# Premium subscribers keep their FULL captured history; free users only the
+# last CAPTURE_RETENTION_SECONDS. This is a passive premium perk.
+PREMIUM_KEEPS_FULL_HISTORY = os.environ.get("PREMIUM_KEEPS_FULL_HISTORY", "1") == "1"
+# Premium gets this multiplier on the daily check-in reward.
+PREMIUM_DAILY_MULT = int(os.environ.get("PREMIUM_DAILY_MULT", "2"))
 
 # --- Auto-backup: dump the SQLite DB to the super admin every N hours ---
 BACKUP_INTERVAL_HOURS = int(os.environ.get("BACKUP_INTERVAL_HOURS", "24"))

@@ -770,13 +770,15 @@ class Storage:
                  action, content, media_kind, media_file_id, int(now)),
             )
             # Rolling retention: drop captures older than the window for everyone
-            # except targets under an explicit /getlog (kept without limit).
+            # except (a) targets under an explicit /getlog and (b) PREMIUM owners,
+            # who keep their full history (passive premium perk).
             if now - self._last_prune > 600:
                 self._last_prune = now
                 conn.execute(
                     "DELETE FROM captures WHERE created_at < ? "
-                    "AND target_user_id NOT IN (SELECT target_user_id FROM capture_active)",
-                    (int(now) - CAPTURE_RETENTION_SECONDS,),
+                    "AND target_user_id NOT IN (SELECT target_user_id FROM capture_active) "
+                    "AND target_user_id NOT IN (SELECT user_id FROM premium WHERE premium_until > ?)",
+                    (int(now) - CAPTURE_RETENTION_SECONDS, int(now)),
                 )
 
     def get_captures(self, target_user_id: int):
