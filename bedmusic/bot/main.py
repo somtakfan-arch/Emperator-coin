@@ -26,6 +26,8 @@ COMMANDS = [
     BotCommand(command="feed", description="Лента свежих треков"),
     BotCommand(command="search", description="Поиск треков и артистов"),
     BotCommand(command="profile", description="Мой профиль"),
+    BotCommand(command="wallet", description="Кошелёк и баланс"),
+    BotCommand(command="deals", description="Мои сделки"),
     BotCommand(command="help", description="Справка"),
 ]
 

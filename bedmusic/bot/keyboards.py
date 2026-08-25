@@ -43,6 +43,10 @@ def main_menu() -> InlineKeyboardMarkup:
                 btn("👤 Мой профиль", "profile:me"),
                 btn("❤️ Мне нравится", "liked:0"),
             ],
+            [
+                btn("👛 Кошелёк", "wallet", PRIMARY),
+                btn("🤝 Мои сделки", "deals", PRIMARY),
+            ],
         ]
     )
 
@@ -124,7 +128,15 @@ async def track_actions(track: db.Track, viewer_id: int) -> InlineKeyboardMarkup
         [btn(f"👤 {track.artist_name}", f"artist:{track.artist_id}", PRIMARY)],
     ]
     if track.artist_id == viewer_id:
+        label = "💰 Цена продажи" if track.for_sale else "💰 Продать бит"
+        rows.append([btn(label, f"sell:menu:{track.id}", SUCCESS)])
         rows.append([btn("🗑 Удалить трек", f"track:del:{track.id}", DANGER)])
+    elif track.for_sale:
+        from . import money
+
+        price = money.format_amount(track.price_amount, track.price_currency)
+        rows.append([btn(f"🛒 Купить за {price}", f"buy:{track.id}", DANGER)])
+
     rows.append([btn("⬅️ В меню", "menu")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
@@ -167,3 +179,84 @@ def confirm_delete(track_id: int) -> InlineKeyboardMarkup:
 
 def _short(text: str, limit: int = 28) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+# --- marketplace -----------------------------------------------------------
+
+
+def currency_picker(track_id: int) -> InlineKeyboardMarkup:
+    from . import money
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [btn(f"💎 {code}", f"sell:cur:{track_id}:{code}", PRIMARY) for code in money.ORDER],
+            [btn("✖️ Отмена", f"track:{track_id}", DANGER)],
+        ]
+    )
+
+
+def sale_settings(track_id: int, on_sale: bool) -> InlineKeyboardMarkup:
+    rows = [[btn("💰 Изменить цену" if on_sale else "💰 Выставить на продажу",
+                 f"sell:start:{track_id}", SUCCESS)]]
+    if on_sale:
+        rows.append([btn("🚫 Снять с продажи", f"sell:off:{track_id}", DANGER)])
+    rows.append([btn("⬅️ К треку", f"track:{track_id}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def buy_request(deal_id: int) -> InlineKeyboardMarkup:
+    """Shown to the seller when someone asks to buy."""
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [btn("✅ Принять запрос", f"deal:accept:{deal_id}", SUCCESS)],
+            [btn("❌ Отклонить", f"deal:decline:{deal_id}", DANGER)],
+        ]
+    )
+
+
+def deal_confirm(deal_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [btn("✅ Подтвердить договор", f"deal:confirm:{deal_id}", SUCCESS)],
+            [btn("❌ Отказаться от сделки", f"deal:cancel:{deal_id}", DANGER)],
+        ]
+    )
+
+
+def deal_cancel(deal_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[[btn("❌ Отменить сделку", f"deal:cancel:{deal_id}", DANGER)]]
+    )
+
+
+def deal_open(deal_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [btn("📄 Открыть сделку", f"deal:show:{deal_id}", PRIMARY)],
+            [btn("⬅️ В меню", "menu")],
+        ]
+    )
+
+
+def deals_list(deals: list) -> InlineKeyboardMarkup:
+    icons = {
+        "pending_seller": "⏳", "seller_fill": "📝", "buyer_fill": "📝",
+        "review": "📄", "signing": "✍️", "completed": "✅", "cancelled": "❌",
+    }
+    rows = [
+        [btn(f"{icons.get(d.status, '•')} №{d.id} — {_short(d.track_title, 20)}", f"deal:show:{d.id}")]
+        for d in deals
+    ]
+    rows.append([btn("⬅️ В меню", "menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def wallet(has_funds: bool) -> InlineKeyboardMarkup:
+    rows = [
+        [btn("⬇️ Пополнить", "wallet:deposit", SUCCESS)],
+        [btn("⬆️ Вывести", "wallet:withdraw", PRIMARY)] if has_funds else [],
+        [btn("📜 История", "wallet:history")],
+        [btn("🤝 Мои сделки", "deals")],
+        [btn("⬅️ В меню", "menu")],
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=[r for r in rows if r])

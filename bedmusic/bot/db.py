@@ -40,7 +40,65 @@ CREATE TABLE IF NOT EXISTS likes (
 );
 
 CREATE INDEX IF NOT EXISTS idx_likes_track ON likes(track_id);
+
+CREATE TABLE IF NOT EXISTS deals (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    track_id          INTEGER NOT NULL REFERENCES tracks(id) ON DELETE CASCADE,
+    seller_id         INTEGER NOT NULL,
+    buyer_id          INTEGER NOT NULL,
+    price_amount      INTEGER NOT NULL,
+    price_currency    TEXT NOT NULL,
+    status            TEXT NOT NULL,
+    escrow_state      TEXT NOT NULL DEFAULT 'none',
+    seller_confirmed  INTEGER NOT NULL DEFAULT 0,
+    buyer_confirmed   INTEGER NOT NULL DEFAULT 0,
+    seller_signature  TEXT,
+    buyer_signature   TEXT,
+    created_at        INTEGER NOT NULL,
+    updated_at        INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_deals_seller ON deals(seller_id, status);
+CREATE INDEX IF NOT EXISTS idx_deals_buyer  ON deals(buyer_id, status);
+CREATE INDEX IF NOT EXISTS idx_deals_track  ON deals(track_id, status);
+
+-- Answers to the contract questionnaire. Holds passport data, so rows are
+-- deleted as soon as the deal closes (see purge_deal_fields).
+CREATE TABLE IF NOT EXISTS deal_fields (
+    deal_id INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+    key     TEXT NOT NULL,
+    value   TEXT NOT NULL,
+    PRIMARY KEY (deal_id, key)
+);
+
+CREATE TABLE IF NOT EXISTS balances (
+    user_id  INTEGER NOT NULL,
+    currency TEXT NOT NULL,
+    amount   INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, currency)
+);
+
+CREATE TABLE IF NOT EXISTS ledger (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL,
+    currency   TEXT NOT NULL,
+    delta      INTEGER NOT NULL,
+    reason     TEXT NOT NULL,
+    deal_id    INTEGER,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_ledger_user ON ledger(user_id, created_at DESC);
 """
+
+# Columns added after the first release; SQLite has no "ADD COLUMN IF NOT EXISTS".
+MIGRATIONS = {
+    "tracks": {
+        "price_amount": "ALTER TABLE tracks ADD COLUMN price_amount INTEGER",
+        "price_currency": "ALTER TABLE tracks ADD COLUMN price_currency TEXT",
+        "sold_at": "ALTER TABLE tracks ADD COLUMN sold_at INTEGER",
+    },
+}
 
 
 @dataclass
@@ -64,6 +122,13 @@ class Track:
     created_at: int
     artist_name: str = ""
     likes: int = 0
+    price_amount: Optional[int] = None
+    price_currency: Optional[str] = None
+    sold_at: Optional[int] = None
+
+    @property
+    def for_sale(self) -> bool:
+        return self.price_amount is not None and self.sold_at is None
 
 
 def _ulower(value: Optional[str]) -> Optional[str]:
@@ -82,6 +147,7 @@ def _artist(row: aiosqlite.Row) -> Artist:
 
 
 def _track(row: aiosqlite.Row) -> Track:
+    keys = row.keys()
     return Track(
         id=row["id"],
         artist_id=row["artist_id"],
@@ -90,8 +156,11 @@ def _track(row: aiosqlite.Row) -> Track:
         duration=row["duration"],
         plays=row["plays"],
         created_at=row["created_at"],
-        artist_name=row["artist_name"] if "artist_name" in row.keys() else "",
-        likes=row["likes"] if "likes" in row.keys() else 0,
+        artist_name=row["artist_name"] if "artist_name" in keys else "",
+        likes=row["likes"] if "likes" in keys else 0,
+        price_amount=row["price_amount"] if "price_amount" in keys else None,
+        price_currency=row["price_currency"] if "price_currency" in keys else None,
+        sold_at=row["sold_at"] if "sold_at" in keys else None,
     )
 
 
@@ -113,7 +182,18 @@ async def connect(path: Path) -> None:
     await _conn.execute("PRAGMA foreign_keys = ON")
     await _conn.execute("PRAGMA journal_mode = WAL")
     await _conn.executescript(SCHEMA)
+    await _migrate()
     await _conn.commit()
+
+
+async def _migrate() -> None:
+    """Add columns introduced after a database was already created."""
+    for table, columns in MIGRATIONS.items():
+        async with _db().execute(f"PRAGMA table_info({table})") as cur:
+            existing = {row["name"] for row in await cur.fetchall()}
+        for column, statement in columns.items():
+            if column not in existing:
+                await _db().execute(statement)
 
 
 async def close() -> None:
@@ -314,3 +394,294 @@ async def liked_tracks(user_id: int, limit: int = 50) -> list[Track]:
     ) as cur:
         rows = await cur.fetchall()
     return [_track(r) for r in rows]
+
+
+# --- selling ---------------------------------------------------------------
+
+
+async def set_price(track_id: int, artist_id: int, amount: int, code: str) -> bool:
+    cur = await _db().execute(
+        """
+        UPDATE tracks SET price_amount = ?, price_currency = ?
+        WHERE id = ? AND artist_id = ? AND sold_at IS NULL
+        """,
+        (amount, code, track_id, artist_id),
+    )
+    await _db().commit()
+    return cur.rowcount > 0
+
+
+async def clear_price(track_id: int, artist_id: int) -> bool:
+    cur = await _db().execute(
+        "UPDATE tracks SET price_amount = NULL, price_currency = NULL WHERE id = ? AND artist_id = ?",
+        (track_id, artist_id),
+    )
+    await _db().commit()
+    return cur.rowcount > 0
+
+
+async def mark_sold(track_id: int) -> None:
+    await _db().execute(
+        "UPDATE tracks SET sold_at = ?, price_amount = NULL, price_currency = NULL WHERE id = ?",
+        (int(time.time()), track_id),
+    )
+    await _db().commit()
+
+
+# --- deals -----------------------------------------------------------------
+
+
+@dataclass
+class Deal:
+    id: int
+    track_id: int
+    seller_id: int
+    buyer_id: int
+    price_amount: int
+    price_currency: str
+    status: str
+    escrow_state: str
+    seller_confirmed: int
+    buyer_confirmed: int
+    seller_signature: Optional[str]
+    buyer_signature: Optional[str]
+    created_at: int
+    updated_at: int
+    track_title: str = ""
+    track_duration: int = 0
+
+    def party_of(self, user_id: int) -> Optional[str]:
+        if user_id == self.seller_id:
+            return "seller"
+        if user_id == self.buyer_id:
+            return "buyer"
+        return None
+
+    def other_side(self, user_id: int) -> int:
+        return self.buyer_id if user_id == self.seller_id else self.seller_id
+
+
+def _deal(row: aiosqlite.Row) -> Deal:
+    keys = row.keys()
+    return Deal(
+        id=row["id"],
+        track_id=row["track_id"],
+        seller_id=row["seller_id"],
+        buyer_id=row["buyer_id"],
+        price_amount=row["price_amount"],
+        price_currency=row["price_currency"],
+        status=row["status"],
+        escrow_state=row["escrow_state"],
+        seller_confirmed=row["seller_confirmed"],
+        buyer_confirmed=row["buyer_confirmed"],
+        seller_signature=row["seller_signature"],
+        buyer_signature=row["buyer_signature"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+        track_title=row["track_title"] if "track_title" in keys else "",
+        track_duration=row["track_duration"] if "track_duration" in keys else 0,
+    )
+
+
+DEAL_SELECT = """
+SELECT d.*, t.title AS track_title, t.duration AS track_duration
+FROM deals d JOIN tracks t ON t.id = d.track_id
+"""
+
+OPEN_STATUSES = ("pending_seller", "seller_fill", "buyer_fill", "review", "signing")
+
+
+async def create_deal(track_id: int, seller_id: int, buyer_id: int, amount: int, code: str) -> int:
+    now = int(time.time())
+    cur = await _db().execute(
+        """
+        INSERT INTO deals (track_id, seller_id, buyer_id, price_amount, price_currency,
+                           status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 'pending_seller', ?, ?)
+        """,
+        (track_id, seller_id, buyer_id, amount, code, now, now),
+    )
+    await _db().commit()
+    return int(cur.lastrowid)
+
+
+async def get_deal(deal_id: int) -> Optional[Deal]:
+    async with _db().execute(f"{DEAL_SELECT} WHERE d.id = ?", (deal_id,)) as cur:
+        row = await cur.fetchone()
+    return _deal(row) if row else None
+
+
+async def update_deal(deal_id: int, **columns: object) -> None:
+    allowed = {
+        "status", "escrow_state", "seller_confirmed", "buyer_confirmed",
+        "seller_signature", "buyer_signature",
+    }
+    unknown = set(columns) - allowed
+    if unknown:
+        raise ValueError(f"refusing to update unknown deal columns: {sorted(unknown)}")
+    assignments = ", ".join(f"{k} = ?" for k in columns)
+    await _db().execute(
+        f"UPDATE deals SET {assignments}, updated_at = ? WHERE id = ?",
+        (*columns.values(), int(time.time()), deal_id),
+    )
+    await _db().commit()
+
+
+async def open_deal_for_track(track_id: int) -> Optional[Deal]:
+    async with _db().execute(
+        f"{DEAL_SELECT} WHERE d.track_id = ? AND d.status IN {OPEN_STATUSES} LIMIT 1",
+        (track_id,),
+    ) as cur:
+        row = await cur.fetchone()
+    return _deal(row) if row else None
+
+
+async def user_deals(user_id: int, limit: int = 20) -> list[Deal]:
+    async with _db().execute(
+        f"""
+        {DEAL_SELECT}
+        WHERE d.seller_id = ? OR d.buyer_id = ?
+        ORDER BY d.updated_at DESC LIMIT ?
+        """,
+        (user_id, user_id, limit),
+    ) as cur:
+        rows = await cur.fetchall()
+    return [_deal(r) for r in rows]
+
+
+async def active_deal_for_user(user_id: int) -> Optional[Deal]:
+    """The deal a plain text answer should be routed to."""
+    async with _db().execute(
+        f"""
+        {DEAL_SELECT}
+        WHERE (d.seller_id = ? OR d.buyer_id = ?) AND d.status IN {OPEN_STATUSES}
+        ORDER BY d.updated_at DESC LIMIT 1
+        """,
+        (user_id, user_id),
+    ) as cur:
+        row = await cur.fetchone()
+    return _deal(row) if row else None
+
+
+# --- questionnaire ---------------------------------------------------------
+
+
+async def set_field(deal_id: int, key: str, value: str) -> None:
+    await _db().execute(
+        "INSERT INTO deal_fields (deal_id, key, value) VALUES (?, ?, ?) "
+        "ON CONFLICT(deal_id, key) DO UPDATE SET value = excluded.value",
+        (deal_id, key, value),
+    )
+    await _db().commit()
+
+
+async def get_fields(deal_id: int) -> dict[str, str]:
+    async with _db().execute(
+        "SELECT key, value FROM deal_fields WHERE deal_id = ?", (deal_id,)
+    ) as cur:
+        rows = await cur.fetchall()
+    return {r["key"]: r["value"] for r in rows}
+
+
+async def purge_deal_fields(deal_id: int) -> int:
+    """Drop the questionnaire once the deal is closed.
+
+    These rows hold passport numbers and home addresses. Both parties already
+    have the rendered contract, so keeping the raw answers only creates a
+    breach waiting to happen.
+    """
+    cur = await _db().execute("DELETE FROM deal_fields WHERE deal_id = ?", (deal_id,))
+    await _db().commit()
+    return cur.rowcount
+
+
+# --- balances and escrow ---------------------------------------------------
+
+
+async def get_balance(user_id: int, code: str) -> int:
+    async with _db().execute(
+        "SELECT amount FROM balances WHERE user_id = ? AND currency = ?", (user_id, code)
+    ) as cur:
+        row = await cur.fetchone()
+    return row["amount"] if row else 0
+
+
+async def all_balances(user_id: int) -> dict[str, int]:
+    async with _db().execute(
+        "SELECT currency, amount FROM balances WHERE user_id = ?", (user_id,)
+    ) as cur:
+        rows = await cur.fetchall()
+    return {r["currency"]: r["amount"] for r in rows}
+
+
+async def credit(user_id: int, code: str, amount: int, reason: str, deal_id: Optional[int] = None) -> None:
+    if amount <= 0:
+        raise ValueError("credit amount must be positive")
+    await _db().execute(
+        "INSERT INTO balances (user_id, currency, amount) VALUES (?, ?, ?) "
+        "ON CONFLICT(user_id, currency) DO UPDATE SET amount = amount + excluded.amount",
+        (user_id, code, amount),
+    )
+    await _db().execute(
+        "INSERT INTO ledger (user_id, currency, delta, reason, deal_id, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (user_id, code, amount, reason, deal_id, int(time.time())),
+    )
+    await _db().commit()
+
+
+async def debit(user_id: int, code: str, amount: int, reason: str, deal_id: Optional[int] = None) -> bool:
+    """Take funds only if they are actually there.
+
+    The guard lives in the UPDATE so a balance can never go negative, however
+    the check and the write interleave.
+    """
+    if amount <= 0:
+        raise ValueError("debit amount must be positive")
+    cur = await _db().execute(
+        "UPDATE balances SET amount = amount - ? "
+        "WHERE user_id = ? AND currency = ? AND amount >= ?",
+        (amount, user_id, code, amount),
+    )
+    if cur.rowcount == 0:
+        await _db().commit()
+        return False
+    await _db().execute(
+        "INSERT INTO ledger (user_id, currency, delta, reason, deal_id, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (user_id, code, -amount, reason, deal_id, int(time.time())),
+    )
+    await _db().commit()
+    return True
+
+
+async def recent_ledger(user_id: int, limit: int = 10) -> list[aiosqlite.Row]:
+    async with _db().execute(
+        "SELECT * FROM ledger WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ?",
+        (user_id, limit),
+    ) as cur:
+        return list(await cur.fetchall())
+
+
+async def total_held() -> dict[str, int]:
+    """Sum of escrow the service currently owes back to buyers or sellers."""
+    async with _db().execute(
+        "SELECT price_currency AS c, SUM(price_amount) AS n FROM deals "
+        "WHERE escrow_state = 'held' GROUP BY price_currency"
+    ) as cur:
+        rows = await cur.fetchall()
+    return {r["c"]: r["n"] for r in rows}
+
+
+async def count_deals_open() -> int:
+    async with _db().execute(
+        f"SELECT COUNT(*) AS n FROM deals WHERE status IN {OPEN_STATUSES}"
+    ) as cur:
+        row = await cur.fetchone()
+    return row["n"] if row else 0
+
+
+async def mark_unsold(track_id: int) -> None:
+    """Undo a sale. Only used by tests and by an admin fixing a mistake."""
+    await _db().execute("UPDATE tracks SET sold_at = NULL WHERE id = ?", (track_id,))
+    await _db().commit()
