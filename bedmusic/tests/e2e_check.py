@@ -34,6 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bot import db  # noqa: E402
 from bot.config import Config  # noqa: E402
+from bot.ton import Treasury  # noqa: E402
 from bot.handlers import build_router  # noqa: E402
 
 USER = User(id=777, is_bot=False, first_name="Тестер", username="tester")
@@ -159,6 +160,7 @@ async def main() -> None:
     )
     dp = Dispatcher(storage=MemoryStorage())
     dp["config"] = Config(token="x", db_path=tmp, page_size=5)
+    dp["treasury"] = Treasury(mnemonic="")
     dp.include_router(build_router())
 
     async def feed(update: Update) -> None:

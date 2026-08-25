@@ -1,3 +1,4 @@
 aiogram==3.30.0
 aiosqlite==0.21.0
+tonutils==0.3.4
 python-docx==1.2.0

@@ -12,6 +12,9 @@ class Config:
     page_size: int
     admin_ids: frozenset[int] = frozenset()
     treasury_mnemonic: str = ""
+    ton_api_key: str = ""
+    withdrawals_enabled: bool = False
+    deposit_poll_seconds: int = 60
 
     @property
     def treasury_configured(self) -> bool:
@@ -40,4 +43,8 @@ class Config:
             page_size=int(os.getenv("PAGE_SIZE", "5")),
             admin_ids=frozenset(admins),
             treasury_mnemonic=os.getenv("TON_TREASURY_MNEMONIC", "").strip(),
+            ton_api_key=os.getenv("TON_API_KEY", "").strip(),
+            withdrawals_enabled=os.getenv("TON_WITHDRAWALS_ENABLED", "").lower()
+            in {"1", "true", "yes", "on"},
+            deposit_poll_seconds=int(os.getenv("TON_DEPOSIT_POLL_SECONDS", "60")),
         )

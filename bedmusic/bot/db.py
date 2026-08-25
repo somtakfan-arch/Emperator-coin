@@ -103,6 +103,29 @@ CREATE TABLE IF NOT EXISTS deal_materials (
 );
 
 CREATE INDEX IF NOT EXISTS idx_materials_deal ON deal_materials(deal_id);
+
+-- One row per credited on-chain transfer. The primary key is what stops a
+-- deposit from being credited twice when polling overlaps.
+CREATE TABLE IF NOT EXISTS ton_deposits (
+    tx_hash    TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL,
+    currency   TEXT NOT NULL,
+    amount     INTEGER NOT NULL,
+    sender     TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ton_withdrawals (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL,
+    currency    TEXT NOT NULL,
+    amount      INTEGER NOT NULL,
+    destination TEXT NOT NULL,
+    status      TEXT NOT NULL,
+    tx_hash     TEXT,
+    created_at  INTEGER NOT NULL,
+    updated_at  INTEGER NOT NULL
+);
 """
 
 # Columns added after the first release; SQLite has no "ADD COLUMN IF NOT EXISTS".
@@ -749,3 +772,90 @@ async def drop_materials(deal_id: int) -> int:
     cur = await _db().execute("DELETE FROM deal_materials WHERE deal_id = ?", (deal_id,))
     await _db().commit()
     return cur.rowcount
+
+
+# --- on-chain --------------------------------------------------------------
+
+
+async def deposit_seen(tx_hash: str) -> bool:
+    async with _db().execute(
+        "SELECT 1 FROM ton_deposits WHERE tx_hash = ?", (tx_hash,)
+    ) as cur:
+        return await cur.fetchone() is not None
+
+
+async def record_deposit(
+    tx_hash: str, user_id: int, currency: str, amount: int, sender: str
+) -> bool:
+    """Claim a deposit. False means another poll already credited it."""
+    try:
+        await _db().execute(
+            """
+            INSERT INTO ton_deposits (tx_hash, user_id, currency, amount, sender, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (tx_hash, user_id, currency, amount, sender, int(time.time())),
+        )
+        await _db().commit()
+        return True
+    except aiosqlite.IntegrityError:
+        return False
+
+
+async def create_withdrawal(user_id: int, currency: str, amount: int, destination: str) -> int:
+    now = int(time.time())
+    cur = await _db().execute(
+        """
+        INSERT INTO ton_withdrawals (user_id, currency, amount, destination, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'pending', ?, ?)
+        """,
+        (user_id, currency, amount, destination, now, now),
+    )
+    await _db().commit()
+    return int(cur.lastrowid)
+
+
+async def set_withdrawal_status(wid: int, status: str, tx_hash: Optional[str] = None) -> None:
+    await _db().execute(
+        "UPDATE ton_withdrawals SET status = ?, tx_hash = ?, updated_at = ? WHERE id = ?",
+        (status, tx_hash, int(time.time()), wid),
+    )
+    await _db().commit()
+
+
+async def total_liability() -> dict[str, int]:
+    """What the service owes users: their balances plus everything in escrow."""
+    out: dict[str, int] = {}
+    async with _db().execute(
+        "SELECT currency, SUM(amount) AS n FROM balances WHERE amount > 0 GROUP BY currency"
+    ) as cur:
+        for row in await cur.fetchall():
+            out[row["currency"]] = row["n"]
+    for code, amount in (await total_held()).items():
+        out[code] = out.get(code, 0) + amount
+    return out
+
+
+# --- market ----------------------------------------------------------------
+
+
+async def count_for_sale() -> int:
+    async with _db().execute(
+        "SELECT COUNT(*) AS n FROM tracks WHERE price_amount IS NOT NULL AND sold_at IS NULL"
+    ) as cur:
+        row = await cur.fetchone()
+    return row["n"] if row else 0
+
+
+async def for_sale_page(offset: int, limit: int) -> list[Track]:
+    async with _db().execute(
+        f"""
+        {TRACK_SELECT}
+        WHERE t.price_amount IS NOT NULL AND t.sold_at IS NULL
+        ORDER BY t.created_at DESC, t.id DESC
+        LIMIT ? OFFSET ?
+        """,
+        (limit, offset),
+    ) as cur:
+        rows = await cur.fetchall()
+    return [_track(r) for r in rows]

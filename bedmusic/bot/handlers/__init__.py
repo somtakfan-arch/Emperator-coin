@@ -1,6 +1,8 @@
 from aiogram import Router
 
-from . import browse, deal, fallback, profile, registration, sell, start, upload, wallet
+from . import (
+    browse, deal, fallback, market, profile, registration, sell, start, upload, wallet,
+)
 
 
 def build_router() -> Router:
@@ -17,6 +19,7 @@ def build_router() -> Router:
     router.include_router(upload.router)
     router.include_router(sell.router)
     router.include_router(wallet.router)
+    router.include_router(market.router)
     router.include_router(browse.router)
     router.include_router(deal.router)
     router.include_router(fallback.router)

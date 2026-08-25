@@ -37,6 +37,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from bot import db, questions  # noqa: E402
 from bot.config import Config  # noqa: E402
+from bot.ton import Treasury  # noqa: E402
 from bot.handlers import build_router  # noqa: E402
 
 SELLER = User(id=111, is_bot=False, first_name="Продавец", username="seller")
@@ -240,6 +241,7 @@ async def main() -> None:
     )
     dp = Dispatcher(storage=MemoryStorage())
     dp["config"] = Config(token="x", db_path=tmp, page_size=5, admin_ids=frozenset({999}))
+    dp["treasury"] = Treasury(mnemonic="")
     dp.include_router(build_router())
 
     async def feed(update: Update) -> None:
@@ -460,6 +462,65 @@ async def main() -> None:
     check(deal2.escrow_state == "refunded", "эскроу вернул средства")
     check(await db.get_balance(BUYER.id, "TON") == before, "баланс покупателя восстановлен")
     check(await db.materials(deal2.id) == [], "файлы отменённой сделки удалены")
+
+    print("\n14. Вкладка «Биты на продажу»")
+    await db.mark_unsold(track_id)
+    await db.set_price(track_id, SELLER.id, 300_000_000, "TON")
+    session.reset()
+    await feed(press(BUYER, "market:0"))
+    check("Биты на продажу" in session.to(BUYER), "вкладка открылась")
+    labels = [b["text"] for b in session.buttons_to(BUYER)]
+    check(any("0.3 TON" in x for x in labels), f"цена видна в списке: {labels}")
+    check(
+        any(b.get("callback_data") == f"track:{track_id}" for b in session.buttons_to(BUYER)),
+        "бит кликабелен",
+    )
+
+    session.reset()
+    await feed(press(BUYER, f"track:{track_id}"))
+    buttons = session.buttons_to(BUYER)
+    play = [b for b in buttons if b.get("callback_data") == f"play:{track_id}"]
+    buy = [b for b in buttons if b.get("callback_data") == f"buy:{track_id}"]
+    check(bool(play), "есть кнопка «Слушать»")
+    check(bool(buy), "есть кнопка «Купить»")
+    check(buy[0].get("style") == "danger", "кнопка покупки красная")
+
+    await db.clear_price(track_id, SELLER.id)
+    session.reset()
+    await feed(press(BUYER, "market:0"))
+    check("Пока никто не выставил" in session.to(BUYER), "снятый с продажи бит исчез из вкладки")
+
+    print("\n15. Зачисление депозитов")
+    from bot import deposits as deposits_mod
+    from bot.ton import Deposit
+
+    class FakeTreasury:
+        configured = True
+        address = "EQTEST"
+        def __init__(self, items): self.items = items
+        async def fetch_deposits(self, limit=50): return list(self.items)
+
+    incoming = [
+        Deposit(tx_hash="tx-a", user_id=BUYER.id, currency="TON", amount=750_000_000, sender="EQX"),
+        Deposit(tx_hash="tx-b", user_id=SELLER.id, currency="BED", amount=5_000_000_000, sender="EQY"),
+    ]
+    before_buyer = await db.get_balance(BUYER.id, "TON")
+    session.reset()
+    n = await deposits_mod.poll_once(bot, FakeTreasury(incoming))
+    check(n == 2, f"зачислено депозитов: {n}")
+    check(await db.get_balance(BUYER.id, "TON") == before_buyer + 750_000_000, "TON зачислен")
+    check(await db.get_balance(SELLER.id, "BED") == 5_000_000_000, "BED зачислен")
+    check("Баланс пополнен" in session.to(BUYER), "покупатель уведомлён")
+
+    n = await deposits_mod.poll_once(bot, FakeTreasury(incoming))
+    check(n == 0, "повторный опрос ничего не зачислил")
+    check(await db.get_balance(BUYER.id, "TON") == before_buyer + 750_000_000, "баланс не удвоился")
+
+    print("\n16. Мемо не пересекается с Bed Dialog")
+    from bot.ton import match_memo, memo_for
+    check(memo_for(BUYER.id) == f"BM{BUYER.id}", "мемо формата BM<id>")
+    check(match_memo(f"BED{BUYER.id}") is None, "мемо Bed Dialog не подхватывается")
+    check(match_memo(f"bm{BUYER.id}") == BUYER.id, "регистр не важен")
 
     await bot.session.close()
     await db.close()

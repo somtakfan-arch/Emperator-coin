@@ -9,9 +9,10 @@ from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand
 
-from . import db
+from . import db, deposits
 from .config import Config
 from .handlers import build_router
+from .ton import Treasury
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,8 +43,21 @@ async def run() -> None:
         token=config.token,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
+    treasury = Treasury(
+        mnemonic=config.treasury_mnemonic,
+        api_key=config.ton_api_key,
+        withdrawals_enabled=config.withdrawals_enabled,
+    )
+    if treasury.configured:
+        log.info(
+            "treasury %s | payouts %s",
+            treasury.address,
+            "enabled" if treasury.withdrawals_enabled else "DISABLED",
+        )
+
     dispatcher = Dispatcher(storage=MemoryStorage())
     dispatcher["config"] = config
+    dispatcher["treasury"] = treasury
     dispatcher.include_router(build_router())
 
     try:
@@ -55,7 +69,15 @@ async def run() -> None:
         # from a previous deploy so restarts don't replay a backlog.
         await bot.delete_webhook(drop_pending_updates=True)
 
-        await dispatcher.start_polling(bot, allowed_updates=dispatcher.resolve_used_update_types())
+        watcher = asyncio.create_task(
+            deposits.run(bot, treasury, config.deposit_poll_seconds)
+        )
+        try:
+            await dispatcher.start_polling(
+                bot, allowed_updates=dispatcher.resolve_used_update_types()
+            )
+        finally:
+            watcher.cancel()
     finally:
         await bot.session.close()
         await db.close()

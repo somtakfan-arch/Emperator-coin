@@ -43,6 +43,7 @@ def main_menu() -> InlineKeyboardMarkup:
                 btn("👤 Мой профиль", "profile:me"),
                 btn("❤️ Мне нравится", "liked:0"),
             ],
+            [btn("🛒 Биты на продажу", "market:0", DANGER)],
             [
                 btn("👛 Кошелёк", "wallet", PRIMARY),
                 btn("🤝 Мои сделки", "deals", PRIMARY),
@@ -277,5 +278,48 @@ def retry_delivery(deal_id: int) -> InlineKeyboardMarkup:
         inline_keyboard=[
             [btn("🔁 Повторить передачу", f"deal:retry:{deal_id}", SUCCESS)],
             [btn("❌ Отменить сделку", f"deal:cancel:{deal_id}", DANGER)],
+        ]
+    )
+
+
+def market_page(
+    tracks: list[db.Track], offset: int, page_size: int, total: int
+) -> InlineKeyboardMarkup:
+    """One row per beat: its price is the whole point, so it goes in the label."""
+    from . import money
+
+    rows = []
+    for t in tracks:
+        price = money.format_amount(t.price_amount, t.price_currency)
+        rows.append([btn(f"🎧 {_short(t.title, 22)} — {price}", f"track:{t.id}", SUCCESS)])
+
+    nav: list[InlineKeyboardButton] = []
+    if offset > 0:
+        nav.append(btn("⬅️", f"market:{max(0, offset - page_size)}", PRIMARY))
+    if offset + page_size < total:
+        nav.append(btn("➡️", f"market:{offset + page_size}", PRIMARY))
+    if nav:
+        rows.append(nav)
+
+    rows.append([btn("⬅️ В меню", "menu")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def deposit(memo: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [btn("🔄 Проверить поступление", "wallet:check", SUCCESS)],
+            [btn("⬅️ Кошелёк", "wallet", PRIMARY)],
+        ]
+    )
+
+
+def withdraw_picker() -> InlineKeyboardMarkup:
+    from . import money
+
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [btn(f"💎 {code}", f"wd:cur:{code}", PRIMARY) for code in money.ORDER],
+            [btn("⬅️ Кошелёк", "wallet")],
         ]
     )

@@ -91,6 +91,7 @@ HELP = (
     "/upload — загрузить трек\n"
     "/feed — лента свежих треков\n"
     "/search &lt;запрос&gt; — поиск по трекам и артистам\n"
+    "/market — биты на продажу\n"
     "/wallet — кошелёк и баланс\n"
     "/deals — мои сделки\n"
     "/help — эта справка"
@@ -190,13 +191,12 @@ ASK_SIGNATURE = (
 )
 
 ONCHAIN_OFF = (
-    "🚧 <b>Пополнение и вывод пока не подключены</b>\n\n"
+    "🚧 <b>Пополнение и вывод не подключены</b>\n\n"
     "Внутренний баланс и эскроу работают: сделка блокирует деньги покупателя "
     "и переводит их продавцу после подписания.\n\n"
-    "Чтобы завести деньги на баланс и выводить их в сеть, нужен кошелёк-казна "
-    "сервиса. Пока его нет, баланс пополняет администратор."
+    "Чтобы завести деньги в сеть, нужен кошелёк-казна сервиса "
+    "(<code>TON_TREASURY_MNEMONIC</code>). Пока его нет, баланс пополняет администратор."
 )
-ONCHAIN_SOON = "🚧 Раздел в работе."
 
 CREDIT_USAGE = "Использование: <code>/credit &lt;user_id&gt; &lt;сумма&gt; &lt;BED|TON|USDT&gt;</code>"
 
@@ -390,13 +390,34 @@ def ledger_card(rows) -> str:
     return "\n".join(lines)
 
 
-def audit_card(held: dict) -> str:
-    if not held:
-        return "🧾 Заблокированных средств нет."
-    lines = ["🧾 <b>Заблокировано в эскроу</b>", ""]
-    for code, amount in held.items():
-        lines.append(f"{_money.format_amount(amount, code)}")
+def audit_card(owed: dict, held: dict, reserve: dict, address: str) -> str:
+    lines = ["🧾 <b>Сверка обязательств и резерва</b>", ""]
+    codes = sorted(set(owed) | set(reserve) | set(held), key=lambda c: _money.ORDER.index(c)
+                   if c in _money.ORDER else 99)
+    if not codes:
+        return "🧾 Обязательств нет."
+    for code in codes:
+        debt = owed.get(code, 0)
+        have = reserve.get(code, 0)
+        mark = "✅" if have >= debt else "🔴"
+        lines.append(f"{mark} <b>{code}</b>")
+        lines.append(f"   должны пользователям: {_money.format_amount(debt, code, False)}")
+        lines.append(f"   из них в эскроу: {_money.format_amount(held.get(code, 0), code, False)}")
+        if reserve:
+            lines.append(f"   в казне: {_money.format_amount(have, code, False)}")
+            if have < debt:
+                lines.append(
+                    f"   ⚠️ не хватает {_money.format_amount(debt - have, code, False)}"
+                )
+    if address:
+        lines += ["", f"<code>{address}</code>"]
+    else:
+        lines += ["", "<i>Казна не подключена — резерв не проверен.</i>"]
     return "\n".join(lines)
+
+
+def audit_unavailable(exc: Exception) -> str:
+    return f"⚠️ Не удалось прочитать казну: {escape(str(exc))[:200]}"
 
 
 def credit_done(user_id: int, amount: int, code: str) -> str:
@@ -469,3 +490,97 @@ def materials_line(files: list) -> str:
     if not files:
         return "мастер-файл WAV, файл MP3 320 кбит/с"
     return ", ".join(item.file_name for item in files)
+
+
+# --- on-chain wallet -------------------------------------------------------
+
+MARKET_EMPTY = (
+    "🛒 <b>Биты на продажу</b>\n\n"
+    "Пока никто не выставил бит на продажу.\n"
+    "Загрузи свой и назначь цену — он появится здесь."
+)
+
+CHECKING = "🔄 Проверяю сеть…"
+NOTHING_YET = (
+    "Новых поступлений нет. Перевод в TON обычно подтверждается за 10–30 секунд — "
+    "если только что отправил, подожди немного и нажми ещё раз."
+)
+
+WITHDRAWALS_OFF = (
+    "🚧 <b>Вывод временно отключён</b>\n\n"
+    "Пополнение и оплата сделок работают. Вывод включается отдельно — "
+    "переменной <code>TON_WITHDRAWALS_ENABLED</code>."
+)
+WITHDRAW_PICK = "💎 Что выводим?"
+BAD_ADDRESS = (
+    "⚠️ Это не похоже на адрес TON.\n\n"
+    "Нужен адрес вида <code>EQ…</code> или <code>0:…</code> — скопируй его из своего кошелька."
+)
+
+
+def market_header(offset: int, page_size: int, total: int) -> str:
+    last = min(offset + page_size, total)
+    return (
+        "🛒 <b>Биты на продажу</b>\n\n"
+        f"Показаны {offset + 1}–{last} из {total}.\n"
+        "Открой бит, послушай и нажми «Купить»."
+    )
+
+
+def deposit_card(address: str, memo: str) -> str:
+    return (
+        "⬇️ <b>Пополнение баланса</b>\n\n"
+        "Отправь BED, TON или USDT на адрес:\n"
+        f"<code>{address}</code>\n\n"
+        "И обязательно укажи в <b>комментарии</b> к переводу:\n"
+        f"<code>{memo}</code>\n\n"
+        "⚠️ <b>Без этого комментария перевод не зачислится автоматически</b> — "
+        "по нему бот понимает, чей это платёж.\n\n"
+        "<i>USDT принимается только в сети TON. Перевод из другой сети "
+        "(TRC-20, ERC-20) потеряется безвозвратно.</i>"
+    )
+
+
+def deposit_credited(amount: int, code: str) -> str:
+    return (
+        f"⬇️ <b>Баланс пополнен на {_money.format_amount(amount, code)}</b>\n\n"
+        "Можно покупать биты."
+    )
+
+
+def nothing_to_withdraw(code: str) -> str:
+    return f"На балансе нет {code}."
+
+
+def withdraw_ask_address(code: str, balance: int) -> str:
+    return (
+        f"⬆️ <b>Вывод {code}</b>\n\n"
+        f"Доступно: <b>{_money.format_amount(balance, code)}</b>\n\n"
+        "Пришли адрес кошелька TON, куда отправить."
+    )
+
+
+def withdraw_ask_amount(code: str, balance: int) -> str:
+    return (
+        f"Сколько выводим? Доступно <b>{_money.format_amount(balance, code)}</b>.\n\n"
+        "<i>Комиссию сети платит сервис.</i>"
+    )
+
+
+def withdraw_sending(amount: int, code: str) -> str:
+    return f"⏳ Отправляю {_money.format_amount(amount, code)} в сеть…"
+
+
+def withdraw_sent(amount: int, code: str, tx: str) -> str:
+    return (
+        f"✅ <b>Отправлено {_money.format_amount(amount, code)}</b>\n\n"
+        "Средства придут после подтверждения сети — обычно меньше минуты."
+    )
+
+
+def withdraw_failed(exc: Exception) -> str:
+    return (
+        "⚠️ <b>Перевод не прошёл</b>\n\n"
+        f"{escape(str(exc))[:200]}\n\n"
+        "Средства возвращены на баланс — ничего не потеряно."
+    )
