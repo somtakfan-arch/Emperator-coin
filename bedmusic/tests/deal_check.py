@@ -25,6 +25,7 @@ from aiogram.types import (
     Audio,
     CallbackQuery,
     Chat,
+    Document,
     File,
     Message,
     PhotoSize,
@@ -55,6 +56,7 @@ class FakeSession(BaseSession):
     def __init__(self) -> None:
         super().__init__()
         self.calls: list[tuple[str, dict[str, Any], int | None]] = []
+        self.fail_documents = False
 
     async def close(self) -> None:
         pass
@@ -66,6 +68,11 @@ class FakeSession(BaseSession):
         name = type(method).__name__
         payload = method.model_dump(exclude_none=True)
         self.calls.append((name, payload, payload.get("chat_id")))
+
+        if self.fail_documents and name == "SendDocument" and isinstance(
+            payload.get("document"), str
+        ):
+            raise RuntimeError("simulated Telegram failure")
 
         if name == "GetMe":
             return BOT_USER
@@ -142,6 +149,18 @@ def audio(user: User) -> Update:
         message=_make_message(
             user,
             audio=Audio(file_id="BEAT", file_unique_id="b1", duration=195, title="Ночной драйв"),
+        )
+    )
+
+
+def document(user: User, name: str, size: int = 5_000_000) -> Update:
+    return _update(
+        message=_make_message(
+            user,
+            document=Document(
+                file_id=f"FILE_{name}", file_unique_id=f"u_{name}",
+                file_name=name, file_size=size, mime_type="audio/wav",
+            ),
         )
     )
 
@@ -295,7 +314,27 @@ async def main() -> None:
     asked = await answer_all(feed, SELLER, questions.SELLER, deal.id)
     check(asked > 0, f"продавец ответил на {asked} вопросов")
     deal = await db.get_deal(deal.id)
+    check(deal.status == "seller_files", f"запрошены файлы бита ({deal.status})")
+
+    print("\n5a. Продавец передаёт файлы бита")
+    session.reset()
+    await feed(press(SELLER, f"deal:files_done:{deal.id}"))
+    check("хотя бы один файл" in session.alerts(), "нельзя завершить без файлов")
+    deal = await db.get_deal(deal.id)
+    check(deal.status == "seller_files", "статус не изменился без файлов")
+
+    session.reset()
+    await feed(document(SELLER, "night_drive_master.wav", 48_000_000))
+    await feed(document(SELLER, "night_drive_320.mp3", 7_000_000))
+    files = await db.materials(deal.id)
+    check(len(files) == 2, f"файлов принято: {len(files)}")
+    check("48.0 МБ" in session.to(SELLER) or "45.8 МБ" in session.to(SELLER), "показан размер файла")
+
+    session.reset()
+    await feed(press(SELLER, f"deal:files_done:{deal.id}"))
+    deal = await db.get_deal(deal.id)
     check(deal.status == "buyer_fill", f"ход перешёл к покупателю ({deal.status})")
+    check("Файлов бита передано сервису" in session.to(BUYER), "покупателю сообщили о файлах")
 
     print("\n6. Покупатель заполняет свою часть")
     session.reset()
@@ -351,16 +390,62 @@ async def main() -> None:
     check(await db.get_fields(deal.id) == {}, "паспортные данные удалены из базы")
 
     signed_seller = session.documents_to(SELLER)
+    buyer_docs = session.documents_to(BUYER)
     check(len(signed_seller) == 1, "продавцу отправлен подписанный договор")
-    check(len(session.documents_to(BUYER)) == 1, "покупателю отправлен подписанный договор")
     check(b"PK" == signed_seller[0]["document"].data[:2], "документ — валидный .docx")
 
-    print("\n11. Повторная покупка проданного бита невозможна")
+    delivered = [d for d in buyer_docs if isinstance(d["document"], str)]
+    check(len(delivered) == 2, f"покупателю доставлены файлы бита ({len(delivered)})")
+    check(
+        {d["document"] for d in delivered}
+        == {"FILE_night_drive_master.wav", "FILE_night_drive_320.mp3"},
+        "доставлены именно те файлы",
+    )
+    check(len(buyer_docs) == 3, "покупатель получил файлы и договор")
+
+    print("\n11. Если файлы не дошли — деньги не уходят")
+    await db.mark_unsold(track_id)
+    await db.set_price(track_id, SELLER.id, 100_000_000, "TON")
+    seller_before = await db.get_balance(SELLER.id, "TON")
+    buyer_before = await db.get_balance(BUYER.id, "TON")
+    await feed(press(BUYER, f"buy:{track_id}"))
+    d3 = await db.active_deal_for_user(BUYER.id)
+    await feed(press(SELLER, f"deal:accept:{d3.id}"))
+    await answer_all(feed, SELLER, questions.SELLER, d3.id)
+    await feed(document(SELLER, "broken.wav"))
+    await feed(press(SELLER, f"deal:files_done:{d3.id}"))
+    await answer_all(feed, BUYER, questions.BUYER, d3.id)
+    await feed(press(SELLER, f"deal:confirm:{d3.id}"))
+    await feed(press(BUYER, f"deal:confirm:{d3.id}"))
+    await feed(photo(SELLER))
+
+    session.reset()
+    session.fail_documents = True
+    await feed(photo(BUYER))
+    session.fail_documents = False
+
+    d3 = await db.get_deal(d3.id)
+    check(d3.status == "signing", f"сделка не закрыта ({d3.status})")
+    check(d3.escrow_state == "held", f"деньги остались в эскроу ({d3.escrow_state})")
+    check(await db.get_balance(SELLER.id, "TON") == seller_before, "продавцу ничего не выплачено")
+    check(await db.get_balance(BUYER.id, "TON") == buyer_before - 100_000_000, "деньги покупателя удержаны, не потрачены")
+    check((await db.get_track(track_id)).sold_at is None, "бит не помечен проданным")
+    check("не дошли" in session.to(BUYER), "покупатель предупреждён")
+
+    session.reset()
+    await feed(press(BUYER, f"deal:retry:{d3.id}"))
+    d3 = await db.get_deal(d3.id)
+    check(d3.status == "completed", f"повтор передачи закрыл сделку ({d3.status})")
+    check(d3.escrow_state == "released", "после успешной передачи деньги выплачены")
+    check(await db.get_balance(SELLER.id, "TON") == seller_before + 100_000_000, "продавец получил оплату")
+
+    print("\n12. Повторная покупка проданного бита невозможна")
+    await db.mark_sold(track_id)
     session.reset()
     await feed(press(BUYER, f"buy:{track_id}"))
     check("не продаётся" in session.to(BUYER), "проданный бит купить нельзя")
 
-    print("\n12. Отмена сделки возвращает деньги")
+    print("\n13. Отмена сделки возвращает деньги")
     await db.mark_unsold(track_id)
     await db.set_price(track_id, SELLER.id, 200_000_000, "TON")
     before = await db.get_balance(BUYER.id, "TON")
@@ -374,6 +459,7 @@ async def main() -> None:
     check(deal2.status == "cancelled", "сделка отменена")
     check(deal2.escrow_state == "refunded", "эскроу вернул средства")
     check(await db.get_balance(BUYER.id, "TON") == before, "баланс покупателя восстановлен")
+    check(await db.materials(deal2.id) == [], "файлы отменённой сделки удалены")
 
     await bot.session.close()
     await db.close()

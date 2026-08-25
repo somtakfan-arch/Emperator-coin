@@ -89,6 +89,20 @@ CREATE TABLE IF NOT EXISTS ledger (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ledger_user ON ledger(user_id, created_at DESC);
+
+-- Files the seller hands to the service, delivered to the buyer on signing.
+-- Only Telegram file_ids: the bytes stay on Telegram's servers.
+CREATE TABLE IF NOT EXISTS deal_materials (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    deal_id    INTEGER NOT NULL REFERENCES deals(id) ON DELETE CASCADE,
+    file_id    TEXT NOT NULL,
+    file_name  TEXT NOT NULL DEFAULT '',
+    file_size  INTEGER NOT NULL DEFAULT 0,
+    kind       TEXT NOT NULL DEFAULT 'document',
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_materials_deal ON deal_materials(deal_id);
 """
 
 # Columns added after the first release; SQLite has no "ADD COLUMN IF NOT EXISTS".
@@ -488,7 +502,9 @@ SELECT d.*, t.title AS track_title, t.duration AS track_duration
 FROM deals d JOIN tracks t ON t.id = d.track_id
 """
 
-OPEN_STATUSES = ("pending_seller", "seller_fill", "buyer_fill", "review", "signing")
+OPEN_STATUSES = (
+    "pending_seller", "seller_fill", "seller_files", "buyer_fill", "review", "signing",
+)
 
 
 async def create_deal(track_id: int, seller_id: int, buyer_id: int, amount: int, code: str) -> int:
@@ -685,3 +701,51 @@ async def mark_unsold(track_id: int) -> None:
     """Undo a sale. Only used by tests and by an admin fixing a mistake."""
     await _db().execute("UPDATE tracks SET sold_at = NULL WHERE id = ?", (track_id,))
     await _db().commit()
+
+
+# --- deal materials --------------------------------------------------------
+
+
+@dataclass
+class Material:
+    id: int
+    deal_id: int
+    file_id: str
+    file_name: str
+    file_size: int
+    kind: str
+
+
+async def add_material(
+    deal_id: int, file_id: str, file_name: str, file_size: int, kind: str
+) -> int:
+    cur = await _db().execute(
+        """
+        INSERT INTO deal_materials (deal_id, file_id, file_name, file_size, kind, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (deal_id, file_id, file_name, file_size, kind, int(time.time())),
+    )
+    await _db().commit()
+    return int(cur.lastrowid)
+
+
+async def materials(deal_id: int) -> list[Material]:
+    async with _db().execute(
+        "SELECT * FROM deal_materials WHERE deal_id = ? ORDER BY id", (deal_id,)
+    ) as cur:
+        rows = await cur.fetchall()
+    return [
+        Material(
+            id=r["id"], deal_id=r["deal_id"], file_id=r["file_id"],
+            file_name=r["file_name"], file_size=r["file_size"], kind=r["kind"],
+        )
+        for r in rows
+    ]
+
+
+async def drop_materials(deal_id: int) -> int:
+    """Release a cancelled deal's files; the seller keeps their originals."""
+    cur = await _db().execute("DELETE FROM deal_materials WHERE deal_id = ?", (deal_id,))
+    await _db().commit()
+    return cur.rowcount

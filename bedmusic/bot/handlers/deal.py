@@ -175,20 +175,82 @@ async def _ask_next(bot: Bot, deal_id: int, party: str) -> None:
         return
 
     if party == questions.SELLER:
-        await db.update_deal(deal_id, status="buyer_fill")
-        await bot.send_message(user_id, texts.SELLER_FORM_DONE)
-        await bot.send_message(deal.buyer_id, texts.buyer_form_starts(deal.track_title))
-        await _ask_next(bot, deal_id, questions.BUYER)
+        # Materials before the buyer invests time: the goods go into escrow
+        # too, not just the money.
+        await db.update_deal(deal_id, status="seller_files")
+        await bot.send_message(
+            user_id, texts.ASK_MATERIALS, reply_markup=keyboards.deal_cancel(deal_id)
+        )
         return
 
     await db.update_deal(deal_id, status="review")
     await _send_draft(bot, deal_id)
 
 
+# --- materials -------------------------------------------------------------
+
+
+async def pending_materials(message: Message) -> Union[bool, dict]:
+    """The seller is handing over the beat files."""
+    if message.from_user is None:
+        return False
+    if not (message.document or message.audio):
+        return False
+    deal = await db.active_deal_for_user(message.from_user.id)
+    if deal is None or deal.status != "seller_files":
+        return False
+    if message.from_user.id != deal.seller_id:
+        return False
+    return {"deal": deal}
+
+
+@router.message(pending_materials)
+async def got_material(message: Message, deal: db.Deal) -> None:
+    item = message.document or message.audio
+    name = getattr(item, "file_name", None) or f"{deal.track_title}.audio"
+    await db.add_material(
+        deal.id,
+        file_id=item.file_id,
+        file_name=name,
+        file_size=item.file_size or 0,
+        kind="audio" if message.audio else "document",
+    )
+    files = await db.materials(deal.id)
+    await message.answer(
+        texts.material_saved(files), reply_markup=keyboards.materials_done(deal.id)
+    )
+
+
+@router.callback_query(F.data.startswith("deal:files_done:"))
+async def cb_files_done(callback: CallbackQuery) -> None:
+    deal = await _deal_for(callback, "files_done")
+    if deal is None:
+        return
+    if callback.from_user.id != deal.seller_id:
+        await callback.answer(texts.NOT_YOUR_DEAL, show_alert=True)
+        return
+    if deal.status != "seller_files":
+        await callback.answer(texts.DEAL_MOVED_ON, show_alert=True)
+        return
+
+    files = await db.materials(deal.id)
+    if not files:
+        await callback.answer(texts.NO_MATERIALS, show_alert=True)
+        return
+
+    await callback.answer()
+    await db.update_deal(deal.id, status="buyer_fill")
+    await show(callback, texts.SELLER_FORM_DONE)
+    await callback.bot.send_message(
+        deal.buyer_id, texts.buyer_form_starts(deal.track_title, len(files))
+    )
+    await _ask_next(callback.bot, deal.id, questions.BUYER)
+
+
 # --- the draft contract ----------------------------------------------------
 
 
-def _render_sync(deal, fields, tmp, signatures, signed) -> bytes:
+def _render_sync(deal, fields, tmp, signatures, signed, material_names) -> bytes:
     path = contract.render(
         path=tmp / f"deal_{deal.id}.docx",
         title=deal.track_title,
@@ -199,6 +261,7 @@ def _render_sync(deal, fields, tmp, signatures, signed) -> bytes:
         seller_signature=signatures.get("seller"),
         buyer_signature=signatures.get("buyer"),
         deal_id=deal.id,
+        material_names=material_names,
     )
     return path.read_bytes()
 
@@ -223,7 +286,10 @@ async def _build(bot: Bot, deal: db.Deal, signed: bool) -> bytes:
             except Exception:  # noqa: BLE001 — a missing image must not block the deal
                 log.exception("deal %s: could not download %s signature", deal.id, party)
 
-    return await asyncio.to_thread(_render_sync, deal, fields, tmp, signatures, signed)
+    names = [item.file_name for item in await db.materials(deal.id)]
+    return await asyncio.to_thread(
+        _render_sync, deal, fields, tmp, signatures, signed, names
+    )
 
 
 async def _send_draft(bot: Bot, deal_id: int) -> None:
@@ -314,8 +380,23 @@ async def got_signature(message: Message, deal: db.Deal, party: str) -> None:
 
 
 async def _complete(bot: Bot, deal: db.Deal) -> None:
-    """Both signed: pay the seller, deliver the signed contract, close the deal."""
+    """Both signed: hand the beat to the buyer, pay the seller, close the deal."""
     data = await _build(bot, deal, signed=True)
+    files = await db.materials(deal.id)
+
+    # Deliver the goods before releasing the money: if this fails, the deal
+    # stays open and the buyer's funds stay held rather than paying for
+    # nothing.
+    delivered = await _deliver(bot, deal, files)
+    if not delivered:
+        await bot.send_message(
+            deal.seller_id, texts.DELIVERY_FAILED, reply_markup=keyboards.retry_delivery(deal.id)
+        )
+        await bot.send_message(
+            deal.buyer_id, texts.DELIVERY_FAILED_BUYER,
+            reply_markup=keyboards.retry_delivery(deal.id),
+        )
+        return
 
     paid = await escrow.release(deal)
     await db.mark_sold(deal.track_id)
@@ -330,7 +411,46 @@ async def _complete(bot: Bot, deal: db.Deal) -> None:
         )
 
     removed = await db.purge_deal_fields(deal.id)
-    log.info("deal %s completed, purged %s questionnaire rows", deal.id, removed)
+    log.info("deal %s completed, delivered %s files, purged %s rows",
+             deal.id, len(files), removed)
+
+
+async def _deliver(bot: Bot, deal: db.Deal, files: list[db.Material]) -> bool:
+    """Send the beat files to the buyer. Returns False if nothing got through."""
+    if not files:
+        log.error("deal %s: no materials to deliver", deal.id)
+        return False
+
+    sent = 0
+    for item in files:
+        try:
+            await bot.send_document(
+                deal.buyer_id,
+                item.file_id,
+                caption=texts.material_delivered(deal, item) if sent == 0 else None,
+            )
+            sent += 1
+        except Exception:  # noqa: BLE001 — try the rest before giving up
+            log.exception("deal %s: failed to deliver %s", deal.id, item.file_name)
+
+    return sent == len(files)
+
+
+@router.callback_query(F.data.startswith("deal:retry:"))
+async def cb_retry(callback: CallbackQuery) -> None:
+    """Re-run delivery after a transient failure, instead of stranding the deal."""
+    deal = await _deal_for(callback, "retry")
+    if deal is None:
+        return
+    if deal.party_of(callback.from_user.id) is None:
+        await callback.answer(texts.NOT_YOUR_DEAL, show_alert=True)
+        return
+    if deal.status != "signing" or not (deal.seller_signature and deal.buyer_signature):
+        await callback.answer(texts.DEAL_MOVED_ON, show_alert=True)
+        return
+
+    await callback.answer(texts.RETRYING)
+    await _complete(callback.bot, deal)
 
 
 # --- cancellation and overview ---------------------------------------------
@@ -357,6 +477,7 @@ async def _cancel(bot: Bot, deal: db.Deal, by: int, reason: str) -> None:
     refunded = await escrow.refund(deal)
     await db.update_deal(deal.id, status="cancelled")
     await db.purge_deal_fields(deal.id)
+    await db.drop_materials(deal.id)
     await bot.send_message(
         deal.other_side(by), texts.deal_cancelled(deal, reason, refunded, by_other=True)
     )

@@ -240,7 +240,8 @@ def deal_open(deal_id: int) -> InlineKeyboardMarkup:
 
 def deals_list(deals: list) -> InlineKeyboardMarkup:
     icons = {
-        "pending_seller": "⏳", "seller_fill": "📝", "buyer_fill": "📝",
+        "pending_seller": "⏳", "seller_fill": "📝", "seller_files": "📦",
+        "buyer_fill": "📝",
         "review": "📄", "signing": "✍️", "completed": "✅", "cancelled": "❌",
     }
     rows = [
@@ -260,3 +261,21 @@ def wallet(has_funds: bool) -> InlineKeyboardMarkup:
         [btn("⬅️ В меню", "menu")],
     ]
     return InlineKeyboardMarkup(inline_keyboard=[r for r in rows if r])
+
+
+def materials_done(deal_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [btn("✅ Все файлы отправлены", f"deal:files_done:{deal_id}", SUCCESS)],
+            [btn("❌ Отменить сделку", f"deal:cancel:{deal_id}", DANGER)],
+        ]
+    )
+
+
+def retry_delivery(deal_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [btn("🔁 Повторить передачу", f"deal:retry:{deal_id}", SUCCESS)],
+            [btn("❌ Отменить сделку", f"deal:cancel:{deal_id}", DANGER)],
+        ]
+    )

@@ -276,11 +276,15 @@ def buyer_notified_accepted(title: str) -> str:
     return f"✅ Продавец принял запрос по биту «{escape(title)}». Он заполняет свою часть договора."
 
 
-def buyer_form_starts(title: str) -> str:
-    return (
-        f"📝 Продавец заполнил свою часть договора по биту «{escape(title)}».\n\n"
-        "Теперь твои вопросы — отвечай по одному сообщению."
-    )
+def buyer_form_starts(title: str, files: int = 0) -> str:
+    lines = [f"📝 Продавец заполнил свою часть договора по биту «{escape(title)}»."]
+    if files:
+        lines.append(
+            f"📦 Файлов бита передано сервису: <b>{files}</b> — ты получишь их "
+            "сразу после подписания."
+        )
+    lines.append("Теперь твои вопросы — отвечай по одному сообщению.")
+    return "\n\n".join(lines)
 
 
 def ask_question(question, number: int, total: int) -> str:
@@ -321,10 +325,10 @@ def deal_completed(deal, paid: bool, is_seller: bool) -> str:
             if paid
             else "⚠️ Оплата не прошла — напиши администратору."
         )
-        lines.append("Не забудь передать материалы покупателю в срок из п. 1.4.")
+        lines.append("📦 Файлы бита переданы покупателю сервисом.")
     else:
         lines.append(f"✅ Исключительное право на бит перешло к тебе. Оплачено: <b>{amount}</b>.")
-        lines.append("Материалы придут на указанную тобой почту в срок из п. 1.4.")
+        lines.append("📦 Файлы бита отправлены отдельными сообщениями выше.")
     lines += ["", "<i>Анкетные данные удалены из базы бота — договор остаётся у вас на руках.</i>"]
     return "\n".join(lines)
 
@@ -343,6 +347,7 @@ def deal_card(deal, viewer_id: int) -> str:
     stages = {
         "pending_seller": "⏳ Ждём ответа продавца",
         "seller_fill": "📝 Продавец заполняет договор",
+        "seller_files": "📦 Продавец передаёт файлы бита",
         "buyer_fill": "📝 Покупатель заполняет договор",
         "review": "📄 Проверка договора и подтверждение",
         "signing": "✍️ Подписание",
@@ -404,3 +409,63 @@ def credited(amount: int, code: str) -> str:
 
 def credit_failed(exc: Exception) -> str:
     return f"⚠️ {escape(str(exc))}\n\n{CREDIT_USAGE}"
+
+
+# --- materials -------------------------------------------------------------
+
+ASK_MATERIALS = (
+    "📦 <b>Передача материалов</b>\n\n"
+    "Пришли файлы бита, которые получит покупатель:\n"
+    "• мастер-файл WAV\n"
+    "• MP3 320 кбит/с\n"
+    "• stems и проектный файл — если обещал их в договоре\n\n"
+    "Отправляй файлы по одному, <b>как документ</b> (не как аудио — так Telegram "
+    "не пережмёт качество). Когда закончишь — нажми кнопку.\n\n"
+    "<i>Файлы держит сервис и отдаст их покупателю ровно в момент подписания — "
+    "одновременно с тем, как тебе уйдут деньги.</i>"
+)
+
+NO_MATERIALS = "⚠️ Сначала пришли хотя бы один файл бита."
+RETRYING = "🔁 Пробую передать файлы ещё раз…"
+
+DELIVERY_FAILED = (
+    "⚠️ <b>Не удалось передать файлы покупателю</b>\n\n"
+    "Сделка не закрыта, деньги покупателя всё ещё удержаны. "
+    "Пришли файлы ещё раз или напиши администратору."
+)
+DELIVERY_FAILED_BUYER = (
+    "⚠️ <b>Файлы не дошли</b>\n\n"
+    "Сделка не закрыта, твои деньги остаются заблокированы и никуда не ушли. "
+    "Мы уже сообщили продавцу."
+)
+
+
+def _size(num: int) -> str:
+    if num >= 1024 * 1024:
+        return f"{num / 1024 / 1024:.1f} МБ"
+    if num >= 1024:
+        return f"{num / 1024:.0f} КБ"
+    return f"{num} Б"
+
+
+def material_saved(files: list) -> str:
+    lines = [f"✅ Принято файлов: <b>{len(files)}</b>", ""]
+    for item in files:
+        size = f" — {_size(item.file_size)}" if item.file_size else ""
+        lines.append(f"📎 {escape(item.file_name)}{size}")
+    lines += ["", "Можно прислать ещё или завершить."]
+    return "\n".join(lines)
+
+
+def material_delivered(deal, item) -> str:
+    return (
+        f"📦 <b>Материалы бита «{escape(deal.track_title)}»</b>\n\n"
+        f"Сделка № {deal.id}. Исключительное право перешло к тебе."
+    )
+
+
+def materials_line(files: list) -> str:
+    """What the contract and the act list as handed over."""
+    if not files:
+        return "мастер-файл WAV, файл MP3 320 кбит/с"
+    return ", ".join(item.file_name for item in files)
