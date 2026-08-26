@@ -50,6 +50,13 @@ PREMIUM_DURATION_DAYS = int(os.environ.get("PREMIUM_DURATION_DAYS", "30"))
 FREE_SPAM_MAX = int(os.environ.get("FREE_SPAM_MAX", "100"))
 PREMIUM_SPAM_MAX = int(os.environ.get("PREMIUM_SPAM_MAX", "500"))
 
+# Send intervals (seconds) for the burst commands. Fast by default (the
+# AIORateLimiter is the safety net against floods). Tune via env if needed.
+SPAM_INTERVAL_PREMIUM = float(os.environ.get("SPAM_INTERVAL_PREMIUM", "0.05"))
+SPAM_INTERVAL_MIN = float(os.environ.get("SPAM_INTERVAL_MIN", "0.05"))
+TROLL_INTERVAL_PREMIUM = float(os.environ.get("TROLL_INTERVAL_PREMIUM", "0.1"))
+TROLL_INTERVAL_MIN = float(os.environ.get("TROLL_INTERVAL_MIN", "0.3"))
+
 # Competitor monitoring: messages from these user ids are relayed to
 # COMPETITORS_ADMIN_ID, and only that account may run /Competitorscheck.
 COMPETITOR_IDS = {
