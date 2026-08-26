@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 600" width="1600" height="600"><defs>
+  
+  <linearGradient id="gold" x1="0" y1="0" x2="0.15" y2="1">
+    <stop offset="0%" stop-color="#F7E9C0"/><stop offset="32%" stop-color="#E3CB93"/>
+    <stop offset="58%" stop-color="#A8873F"/><stop offset="80%" stop-color="#E3CB93"/>
+    <stop offset="100%" stop-color="#F2E3B6"/>
+  </linearGradient>
+  
+  <linearGradient id="goldDark" x1="0" y1="0" x2="0.15" y2="1">
+    <stop offset="0%" stop-color="#C9A961"/><stop offset="32%" stop-color="#B08D45"/>
+    <stop offset="58%" stop-color="#7A5F28"/><stop offset="80%" stop-color="#B08D45"/>
+    <stop offset="100%" stop-color="#C9A961"/>
+  </linearGradient>
+  <radialGradient id="bg" cx="50%" cy="30%" r="82%">
+    <stop offset="0%" stop-color="#1B1B1F"/><stop offset="55%" stop-color="#101012"/>
+    <stop offset="100%" stop-color="#070709"/>
+  </radialGradient>
+  <radialGradient id="bgLight" cx="50%" cy="34%" r="80%">
+    <stop offset="0%" stop-color="#FBF9F4"/><stop offset="100%" stop-color="#EDE8DE"/>
+  </radialGradient>
+  <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur stdDeviation="9" result="b"/>
+    <feColorMatrix in="b" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 .2 0"/>
+    <feBlend in="SourceGraphic"/>
+  </filter></defs>
+    <g filter="url(#soft)">
+    <ellipse cx="547.1" cy="196.7" rx="27.3" ry="9.3"
+      transform="rotate(-28.0 547.1 196.7)" fill="url(#gold)"/><ellipse cx="562.4" cy="241.2" rx="26.1" ry="8.9"
+      transform="rotate(-15.5 562.4 241.2)" fill="url(#gold)"/><ellipse cx="569.0" cy="288.5" rx="24.8" ry="8.5"
+      transform="rotate(-3.0 569.0 288.5)" fill="url(#gold)"/><ellipse cx="566.7" cy="336.3" rx="23.6" ry="8.0"
+      transform="rotate(9.5 566.7 336.3)" fill="url(#gold)"/><ellipse cx="555.5" cy="382.5" rx="22.4" ry="7.6"
+      transform="rotate(22.0 555.5 382.5)" fill="url(#gold)"/><ellipse cx="536.0" cy="424.7" rx="21.1" ry="7.2"
+      transform="rotate(34.5 536.0 424.7)" fill="url(#gold)"/><ellipse cx="509.1" cy="461.0" rx="19.9" ry="6.8"
+      transform="rotate(47.0 509.1 461.0)" fill="url(#gold)"/><ellipse cx="476.1" cy="489.6" rx="18.7" ry="6.4"
+      transform="rotate(59.5 476.1 489.6)" fill="url(#gold)"/><ellipse cx="438.5" cy="509.3" rx="17.5" ry="6.0"
+      transform="rotate(72.0 438.5 509.3)" fill="url(#gold)"/><ellipse cx="398.1" cy="519.1" rx="16.2" ry="5.5"
+      transform="rotate(84.5 398.1 519.1)" fill="url(#gold)"/><ellipse cx="212.9" cy="196.7" rx="27.3" ry="9.3"
+      transform="rotate(28.0 212.9 196.7)" fill="url(#gold)"/><ellipse cx="197.6" cy="241.2" rx="26.1" ry="8.9"
+      transform="rotate(15.5 197.6 241.2)" fill="url(#gold)"/><ellipse cx="191.0" cy="288.5" rx="24.8" ry="8.5"
+      transform="rotate(3.0 191.0 288.5)" fill="url(#gold)"/><ellipse cx="193.3" cy="336.3" rx="23.6" ry="8.0"
+      transform="rotate(-9.5 193.3 336.3)" fill="url(#gold)"/><ellipse cx="204.5" cy="382.5" rx="22.4" ry="7.6"
+      transform="rotate(-22.0 204.5 382.5)" fill="url(#gold)"/><ellipse cx="224.0" cy="424.7" rx="21.1" ry="7.2"
+      transform="rotate(-34.5 224.0 424.7)" fill="url(#gold)"/><ellipse cx="250.9" cy="461.0" rx="19.9" ry="6.8"
+      transform="rotate(-47.0 250.9 461.0)" fill="url(#gold)"/><ellipse cx="283.9" cy="489.6" rx="18.7" ry="6.4"
+      transform="rotate(-59.5 283.9 489.6)" fill="url(#gold)"/><ellipse cx="321.5" cy="509.3" rx="17.5" ry="6.0"
+      transform="rotate(-72.0 321.5 509.3)" fill="url(#gold)"/><ellipse cx="361.9" cy="519.1" rx="16.2" ry="5.5"
+      transform="rotate(-84.5 361.9 519.1)" fill="url(#gold)"/>
+    <g transform="translate(321.1,128.88)"><g>
+    <path d="M41.230000000000004 54.188 Q53.599 30.88716 58.9 7.586320000000001
+      Q64.201 30.88716 76.57 54.188Z" fill="url(#gold)"/><path d="M5.300999999999998 54.188 Q14.7839 38.47348 18.848 22.758960000000002
+      Q22.9121 38.47348 32.394999999999996 54.188Z" fill="url(#gold)"/><path d="M85.405 54.188 Q94.8879 38.47348 98.952 22.758960000000002
+      Q103.0161 38.47348 112.499 54.188Z" fill="url(#gold)"/>
+    <circle cx="58.9" cy="4.994720000000001" r="3.2984" fill="url(#gold)"/><circle cx="18.848" cy="20.40296" r="3.2984" fill="url(#gold)"/><circle cx="98.952" cy="20.40296" r="3.2984" fill="url(#gold)"/>
+    <rect x="0" y="54.188" width="117.8" height="8.834999999999999" fill="url(#gold)"/>
+    <rect x="7.068" y="66.557" width="103.664" height="2.1203999999999996" fill="url(#gold)" opacity="0.75"/>
+  </g></g>
+    <g transform="translate(318.15500000000003,236.76)"><g><rect x="0.00" y="0.00" width="44.48" height="217.00" fill="url(#gold)"/><rect x="0.00" y="0.00" width="115.01" height="21.27" fill="url(#gold)"/><rect x="110.89" y="-2.60" width="4.12" height="26.47" fill="url(#gold)"/><rect x="0.00" y="100.04" width="88.97" height="16.93" fill="url(#gold)"/><rect x="84.85" y="97.43" width="4.12" height="22.13" fill="url(#gold)"/><rect x="0.00" y="193.56" width="123.69" height="23.44" fill="url(#gold)"/><rect x="119.57" y="190.96" width="4.12" height="28.64" fill="url(#gold)"/></g></g>
+  </g>
+    <text x="1050" y="290" text-anchor="middle" fill="#E3CB93" font-family="Charter,'Bitstream Charter','Liberation Serif','DejaVu Serif',serif" font-size="92" letter-spacing="14">E M P E R I U M</text>
+    <rect x="770" y="336" width="560" height="2" fill="#7A6636"/>
+    <text x="1050" y="402" text-anchor="middle" fill="#9A8656" font-family="Charter,'Bitstream Charter','Liberation Serif','DejaVu Serif',serif" font-size="40" letter-spacing="18">RMRP</text></svg>
