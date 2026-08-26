@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+  <linearGradient id="matte" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#FFFFFF"/>
+    <stop offset="100%" stop-color="#E4E4E6"/>
+  </linearGradient>
+  <linearGradient id="matteGold" x1="0" y1="0" x2="0" y2="1">
+    <stop offset="0%" stop-color="#E8D2A0"/>
+    <stop offset="100%" stop-color="#C4A662"/>
+  </linearGradient>
+  <linearGradient id="silver" x1="0" y1="0" x2="0.15" y2="1">
+    <stop offset="0%" stop-color="#FFFFFF"/>
+    <stop offset="30%" stop-color="#F0F0F0"/>
+    <stop offset="55%" stop-color="#B9B9B9"/>
+    <stop offset="78%" stop-color="#DEDEDE"/>
+    <stop offset="100%" stop-color="#FFFFFF"/>
+  </linearGradient>
+  <linearGradient id="gold" x1="0" y1="0" x2="0.15" y2="1">
+    <stop offset="0%" stop-color="#F7E9C0"/>
+    <stop offset="32%" stop-color="#E3CB93"/>
+    <stop offset="58%" stop-color="#A8873F"/>
+    <stop offset="80%" stop-color="#D9C08A"/>
+    <stop offset="100%" stop-color="#F2E3B6"/>
+  </linearGradient>
+  <radialGradient id="bg" cx="50%" cy="30%" r="82%">
+    <stop offset="0%" stop-color="#1B1B1F"/>
+    <stop offset="55%" stop-color="#101012"/>
+    <stop offset="100%" stop-color="#070709"/>
+  </radialGradient>
+  <filter id="soft" x="-30%" y="-30%" width="160%" height="160%">
+    <feGaussianBlur stdDeviation="10" result="b"/>
+    <feColorMatrix in="b" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 .22 0"/>
+    <feBlend in="SourceGraphic"/>
+  </filter></defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+  <g filter="url(#soft)">
+    
+  <g transform="translate(404.5,214)"><g>
+      <path d="M75.25 98.9 Q97.825 56.373000000000005 107.5 13.846000000000004
+       Q117.175 56.373000000000005 139.75 98.9Z" fill="url(#matte)"/>
+      <path d="M9.674999999999997 98.9 Q26.982499999999998 70.21900000000001 34.4 41.538000000000004
+       Q41.817499999999995 70.21900000000001 59.125 98.9Z" fill="url(#matte)"/>
+      <path d="M155.875 98.9 Q173.1825 70.21900000000001 180.6 41.538000000000004
+       Q188.01749999999998 70.21900000000001 205.325 98.9Z" fill="url(#matte)"/>
+      <circle cx="107.5" cy="9.116000000000003" r="6.0200000000000005" fill="url(#matte)"/>
+      <circle cx="34.4" cy="37.23800000000001" r="6.0200000000000005" fill="url(#matte)"/>
+      <circle cx="180.6" cy="37.23800000000001" r="6.0200000000000005" fill="url(#matte)"/>
+      <rect x="0" y="98.9" width="215" height="16.125" fill="url(#matte)"/>
+      <rect x="12.9" y="121.47500000000001" width="189.2" height="3.8699999999999997" fill="url(#matte)" opacity="0.75"/>
+    </g></g>
+  <g transform="translate(398,396)"><g>
+      <rect x="0.00" y="0.00" width="82.00" height="400.00" fill="url(#matte)"/>
+      <rect x="0.00" y="0.00" width="212.00" height="39.20" fill="url(#matte)"/><rect x="204.40" y="-4.80" width="7.60" height="48.80" fill="url(#matte)"/>
+      <rect x="0.00" y="184.40" width="164.00" height="31.20" fill="url(#matte)"/><rect x="156.40" y="179.60" width="7.60" height="40.80" fill="url(#matte)"/>
+      <rect x="0.00" y="356.80" width="228.00" height="43.20" fill="url(#matte)"/><rect x="220.40" y="352.00" width="7.60" height="52.80" fill="url(#matte)"/>
+    </g></g>
+  </g>
+  <rect x="392" y="830" width="240" height="1.5" fill="#4E4E52"/>
+  <text x="512" y="882" text-anchor="middle" fill="#C6C6C6" font-family="Charter,'Bitstream Charter','Liberation Serif','DejaVu Serif',serif"
+     font-size="30" letter-spacing="6">E M P E R I U M</text>
+</svg>
