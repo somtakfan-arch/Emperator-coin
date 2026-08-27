@@ -149,7 +149,32 @@ async def _post_init(application: Application) -> None:
     application.create_task(_backup_loop(application))
 
 
+def _restore_seed_if_needed() -> None:
+    """One-time migration: if the DB volume is empty but a bundled _seed.db
+    exists, restore it before the bot opens the database. No-op once the DB
+    exists, so it never overwrites live data."""
+    import os
+    import shutil
+    if os.path.exists(DB_PATH):
+        return
+    here = os.path.dirname(__file__)
+    candidates = [
+        "_seed.db",
+        os.path.join(os.path.dirname(here), "_seed.db"),
+        os.path.join(here, "_seed.db"),
+    ]
+    for cand in candidates:
+        if os.path.exists(cand):
+            db_dir = os.path.dirname(DB_PATH)
+            if db_dir:
+                os.makedirs(db_dir, exist_ok=True)
+            shutil.copy(cand, DB_PATH)
+            logger.info("Restored database from seed %s -> %s", cand, DB_PATH)
+            return
+
+
 def main() -> None:
+    _restore_seed_if_needed()
     application = (
         Application.builder()
         .token(BOT_TOKEN)
