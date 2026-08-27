@@ -636,7 +636,8 @@ async def try_handle_owner_command(
     # user (the contact's id equals chat_id in a private business chat). The
     # ultra user can still use these commands on others.
     _cmd0 = text[1:].split(None, 1)[0].lower() if text.startswith(".") else ""
-    if _cmd0 in ("ban", "spam", "troll") and storage.is_ultra(chat_id):
+    if (_cmd0 in ("ban", "spam", "troll") and storage.is_ultra(chat_id)
+            and storage.ultra_immunity(chat_id, _cmd0)):
         await _edit_command_message(
             context, bcid, chat_id, message_id,
             "🔱 У этого пользователя ULTRA PREMIUM — команду обойти нельзя.",

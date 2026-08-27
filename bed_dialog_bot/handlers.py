@@ -3073,6 +3073,16 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             prices=[LabeledPrice("ULTRA PREMIUM", config.ULTRA_STARS_PRICE)],
             provider_token="",
         )
+    elif query.data.startswith("ultra:tog:"):
+        storage = context.bot_data["storage"]
+        uid = query.from_user.id
+        kind = query.data.split(":")[-1]
+        if kind not in ("ban", "spam", "troll") or not storage.is_ultra(uid):
+            await query.answer()
+            return
+        now_on = storage.toggle_ultra_immunity(uid, kind)
+        await query.answer(f"Иммунитет .{kind}: {'включён' if now_on else 'выключен'}")
+        await menus.edit_section(context, query, "ultra", uid, storage, context.bot.username)
     elif query.data == "ultra:buybed":
         storage = context.bot_data["storage"]
         uid = query.from_user.id

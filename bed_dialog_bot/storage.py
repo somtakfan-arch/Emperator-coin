@@ -438,6 +438,15 @@ class Storage:
             )
         return new_until
 
+    # ULTRA immunity toggles (per command kind: ban/spam/troll). Default ON.
+    def ultra_immunity(self, user_id: int, kind: str) -> bool:
+        return self.get_setting(f"immune:{kind}:{user_id}", "1") != "0"
+
+    def toggle_ultra_immunity(self, user_id: int, kind: str) -> bool:
+        new_on = not self.ultra_immunity(user_id, kind)
+        self.set_setting(f"immune:{kind}:{user_id}", "1" if new_on else "0")
+        return new_on
+
     def grant_premium_hours(self, user_id: int, hours: int) -> int:
         now = int(time.time())
         current = self.get_premium_until(user_id)

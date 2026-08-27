@@ -408,7 +408,8 @@ def cap_ultra(uid, storage, bot_username) -> str:
             "🔱 Префикс <b>ULTRA</b> перед другими\n"
             "🎧 Моментальная поддержка (пиши как другу)"
             "</blockquote>\n"
-            "<i>Обход работает на тебя; использовать команды на других всё ещё можно.</i>"
+            "<i>Иммунитеты можно включать/выключать кнопками ниже 👇 "
+            "Команды на других использовать всё равно можно.</i>"
         )
     return (
         "<b>🔱 ULTRA PREMIUM</b>\n"
@@ -426,12 +427,19 @@ def cap_ultra(uid, storage, bot_username) -> str:
 
 def kb_ultra(uid, storage) -> InlineKeyboardMarkup:
     active = storage.is_ultra(uid)
+    rows = []
+    if active:
+        # Immunity toggles (only meaningful for active ULTRA subscribers).
+        for kind, label in (("ban", ".ban"), ("spam", ".spam"), ("troll", ".troll")):
+            on = storage.ultra_immunity(uid, kind)
+            state = "🟢 ВКЛ" if on else "🔴 ВЫКЛ"
+            rows.append([_btn(f"🛡 Иммунитет {label}: {state}", f"ultra:tog:{kind}",
+                              "success" if on else "danger")])
     verb = "Продлить" if active else "Купить"
-    return InlineKeyboardMarkup([
-        [_btn(f"⭐ {verb} · {config.ULTRA_STARS_PRICE}", "ultra:buystars", "success")],
-        [_btn(f"🔱 {verb} · {config.ULTRA_BED_PRICE} BED", "ultra:buybed", "primary")],
-        _BACK,
-    ])
+    rows.append([_btn(f"⭐ {verb} · {config.ULTRA_STARS_PRICE}", "ultra:buystars", "success")])
+    rows.append([_btn(f"🔱 {verb} · {config.ULTRA_BED_PRICE} BED", "ultra:buybed", "primary")])
+    rows.append(_BACK)
+    return InlineKeyboardMarkup(rows)
 
 
 SECTIONS = {
