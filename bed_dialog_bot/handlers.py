@@ -100,7 +100,12 @@ async def _submit_ticket(message, context, storage: Storage, ticket_message: str
         user_id=message.from_user.id, chat_id=message.chat_id,
         name=name, username=username, message=body, kind=kind, photo_file_id=photo_file_id,
     )
-    badge = "💎 ПРЕМИУМ\n" if storage.is_premium(message.from_user.id) else ""
+    if storage.is_ultra(message.from_user.id):
+        badge = "🔱 ULTRA — ПРИОРИТЕТ! Ответить моментально.\n"
+    elif storage.is_premium(message.from_user.id):
+        badge = "💎 ПРЕМИУМ\n"
+    else:
+        badge = ""
     if kind == "tg_help":
         await message.reply_text(
             f"❓ Ваш вопрос #{ticket_id} отправлен. Как только админ примет — вам ответят."
@@ -1019,6 +1024,16 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             await message.reply_text(
                 f"✅ Куплено {amount} BED! Баланс: {new_bal} BED.\n"
                 f"📈 Новый курс: {bedcoin.fmt_price(storage)}⭐ за BED."
+            )
+            return
+        # ULTRA PREMIUM purchase via Stars.
+        if parts and parts[0] == "ultra" and len(parts) >= 3 and parts[2].isdigit():
+            days = int(parts[2])
+            until_ts = storage.grant_ultra_days(message.from_user.id, days)
+            await message.reply_text(
+                f"🔱 <b>ULTRA PREMIUM активирован!</b> На {days} дн. — до {_fmt_premium(until_ts)}.\n"
+                "Открой панель: /menu → 🔱 ULTRA PREMIUM",
+                parse_mode="HTML",
             )
             return
         days = config.PREMIUM_DURATION_DAYS
@@ -2631,8 +2646,9 @@ def _build_bed_top(storage, viewer_id: int = 0) -> str:
         if len(who) > 3:
             who = who[:3] + "•••"  # light privacy mask
         me = " ← вы" if h["user_id"] == viewer_id else ""
+        ultra = "🔱 " if storage.is_ultra(h["user_id"]) else ""
         rank = bedcoin.holder_rank(h["balance"])
-        lines.append(f"{medals[i]} {who} — <b>{h['balance']} BED</b> · {rank}{me}")
+        lines.append(f"{medals[i]} {ultra}{who} — <b>{h['balance']} BED</b> · {rank}{me}")
     lines.append(f"\n<i>Всего держателей: {total}</i>")
     return "\n".join(lines)
 
@@ -3046,6 +3062,28 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             )
         else:
             await query.answer()
+    elif query.data == "ultra:buystars":
+        await query.answer()
+        await context.bot.send_invoice(
+            chat_id=query.message.chat_id,
+            title="🔱 ULTRA PREMIUM (1 месяц)",
+            description="Топ-тариф: иммунитет к .ban/.spam/.troll, моментальные команды, приоритет.",
+            payload=f"ultra:{query.from_user.id}:{config.ULTRA_DURATION_DAYS}",
+            currency="XTR",
+            prices=[LabeledPrice("ULTRA PREMIUM", config.ULTRA_STARS_PRICE)],
+            provider_token="",
+        )
+    elif query.data == "ultra:buybed":
+        storage = context.bot_data["storage"]
+        uid = query.from_user.id
+        if not storage.spend_bed(uid, config.ULTRA_BED_PRICE, reason="ultra"):
+            await query.answer(
+                f"Не хватает BED: нужно {config.ULTRA_BED_PRICE}, у вас {storage.get_bed(uid)}.",
+                show_alert=True)
+            return
+        until = storage.grant_ultra_days(uid, config.ULTRA_DURATION_DAYS)
+        await query.answer("🔱 ULTRA PREMIUM активирован!", show_alert=True)
+        await menus.edit_section(context, query, "ultra", uid, storage, context.bot.username)
     elif query.data == "daily:claim":
         await query.answer()
         await context.bot.send_message(

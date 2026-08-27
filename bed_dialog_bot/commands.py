@@ -629,7 +629,19 @@ async def try_handle_owner_command(
     message_id = message.message_id
 
     is_premium = storage.is_premium(message.from_user.id)
+    is_ultra_owner = storage.is_ultra(message.from_user.id)
     bot_username = context.bot.username
+
+    # ULTRA PREMIUM immunity: .ban/.spam/.troll cannot be used AGAINST an ultra
+    # user (the contact's id equals chat_id in a private business chat). The
+    # ultra user can still use these commands on others.
+    _cmd0 = text[1:].split(None, 1)[0].lower() if text.startswith(".") else ""
+    if _cmd0 in ("ban", "spam", "troll") and storage.is_ultra(chat_id):
+        await _edit_command_message(
+            context, bcid, chat_id, message_id,
+            "🔱 У этого пользователя ULTRA PREMIUM — команду обойти нельзя.",
+        )
+        return True
 
     custom_wm = storage.get_watermark(message.from_user.id) if is_premium else None
 
@@ -754,7 +766,8 @@ async def try_handle_owner_command(
         # but never abort the run — so the full count actually goes out.
         # A small floor keeps even "premium, no delay" from tripping the limit
         # on the very first messages.
-        interval = (config.SPAM_INTERVAL_PREMIUM if is_premium
+        interval = (0.0 if is_ultra_owner
+                    else config.SPAM_INTERVAL_PREMIUM if is_premium
                     else max(config.SPAM_INTERVAL_MIN, SPAM_WINDOW_SECONDS / count))
         sent = 1  # the edited command message counts as the first
         for _ in range(count - 1):
@@ -936,7 +949,8 @@ async def try_handle_owner_command(
         else:
             await _edit_command_message(context, bcid, chat_id, message_id, "🚀")
             await _send_troll_item(context, chat_id, bcid, first)
-        interval = (config.TROLL_INTERVAL_PREMIUM if is_premium
+        interval = (0.02 if is_ultra_owner
+                    else config.TROLL_INTERVAL_PREMIUM if is_premium
                     else max(config.TROLL_INTERVAL_MIN, SPAM_WINDOW_SECONDS / max(len(saved), 1)))
         for item in saved[1:]:
             await asyncio.sleep(interval)

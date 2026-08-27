@@ -304,6 +304,11 @@ def kb_main(uid=None, storage=None) -> InlineKeyboardMarkup:
         rows.append([_btn("🎁 Бесплатный премиум", "reward:get", "danger")])
     if storage is not None and uid is not None and admin.is_admin(storage, uid):
         rows.append([_btn("🛡 Админ-панель", "menu:admin", "danger")])
+    # ULTRA panel pinned at the very bottom (highlighted for subscribers).
+    if storage is not None and uid is not None and storage.is_ultra(uid):
+        rows.append([_btn("🔱 ULTRA PREMIUM", "menu:ultra", "danger")])
+    else:
+        rows.append([_btn("🔱 Получить ULTRA PREMIUM", "menu:ultra", "primary")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -374,8 +379,64 @@ def kb_style(uid, storage) -> InlineKeyboardMarkup:
 
 
 # section -> (banner name, caption fn, keyboard fn)
+def _ultra_left(until) -> str:
+    import time as _t
+    secs = int((until or 0) - _t.time())
+    if secs <= 0:
+        return "истёк"
+    d, rem = divmod(secs, 86400)
+    h = rem // 3600
+    if d > 0:
+        return f"{d} дн {h} ч"
+    if h > 0:
+        return f"{h} ч"
+    return f"{max(1, secs // 60)} мин"
+
+
+def cap_ultra(uid, storage, bot_username) -> str:
+    if storage.is_ultra(uid):
+        left = _ultra_left(storage.get_ultra_until(uid))
+        return (
+            "<b>🔱 ULTRA PREMIUM</b>\n"
+            f"<i>Активен · осталось <b>{left}</b></i>\n\n"
+            "<blockquote>"
+            "🛡 Иммунитет к <b>.ban</b> — тебя не забанят\n"
+            "🛡 Иммунитет к <b>.spam</b> — тебя не заспамят\n"
+            "🛡 Иммунитет к <b>.troll</b>\n"
+            "⚡️ Твой .spam — <b>моментально</b>\n"
+            "⚡️ Твой .troll — очень быстро\n"
+            "🔱 Префикс <b>ULTRA</b> перед другими\n"
+            "🎧 Моментальная поддержка (пиши как другу)"
+            "</blockquote>\n"
+            "<i>Обход работает на тебя; использовать команды на других всё ещё можно.</i>"
+        )
+    return (
+        "<b>🔱 ULTRA PREMIUM</b>\n"
+        "<i>Высший тариф — тебя нельзя тронуть.</i>\n\n"
+        "<blockquote>"
+        "🛡 Никто не заюзает на тебя <b>.ban / .spam / .troll</b>\n"
+        "⚡️ Твои .spam / .troll — моментально\n"
+        "🔱 Префикс <b>ULTRA</b> перед всеми\n"
+        "🎧 Моментальная поддержка, тесная связь\n"
+        "⏳ Всегда видно, сколько осталось"
+        "</blockquote>\n"
+        f"Цена: <b>{config.ULTRA_STARS_PRICE}⭐</b> или <b>{config.ULTRA_BED_PRICE} BED</b> / месяц."
+    )
+
+
+def kb_ultra(uid, storage) -> InlineKeyboardMarkup:
+    active = storage.is_ultra(uid)
+    verb = "Продлить" if active else "Купить"
+    return InlineKeyboardMarkup([
+        [_btn(f"⭐ {verb} · {config.ULTRA_STARS_PRICE}", "ultra:buystars", "success")],
+        [_btn(f"🔱 {verb} · {config.ULTRA_BED_PRICE} BED", "ultra:buybed", "primary")],
+        _BACK,
+    ])
+
+
 SECTIONS = {
     "main": ("main", cap_main, kb_main),
+    "ultra": ("sub", cap_ultra, kb_ultra),
     "profile": ("profile", cap_profile, kb_profile),
     "stats": ("stats", cap_stats, kb_stats),
     "support": ("support", cap_support, kb_support),
