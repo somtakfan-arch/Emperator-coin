@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import time
 from contextlib import contextmanager
@@ -282,6 +283,7 @@ CREATE TABLE IF NOT EXISTS adlink_tokens (
 """
 
 CAPTURE_RETENTION_SECONDS = 86400
+_ULTRA_GRACE_SECONDS = int(os.environ.get("ULTRA_GRACE_DAYS", "3")) * 86400
 
 
 class Storage:
@@ -422,8 +424,9 @@ class Storage:
         return row[0] if row else None
 
     def is_ultra(self, user_id: int) -> bool:
+        # ULTRA perks keep working for a grace window after expiry.
         until = self.get_ultra_until(user_id)
-        return bool(until and until > time.time())
+        return bool(until and until + _ULTRA_GRACE_SECONDS > time.time())
 
     def grant_ultra_days(self, user_id: int, days: int) -> int:
         now = int(time.time())

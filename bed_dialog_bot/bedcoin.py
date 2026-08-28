@@ -21,9 +21,13 @@ def price_stars(storage) -> float:
     return config.BED_BASE_PRICE_STARS * (1 + total_sold(storage) / config.BED_DEMAND_SCALE)
 
 
-def cost_stars(storage, bed_amount: int) -> int:
-    """Whole-Star cost to buy `bed_amount` BED right now (min 1)."""
-    return max(1, round(price_stars(storage) * bed_amount))
+def cost_stars(storage, bed_amount: int, buyer_id=None) -> int:
+    """Whole-Star cost to buy `bed_amount` BED right now (min 1).
+    ULTRA buyers get ULTRA_BED_DISCOUNT off."""
+    cost = max(1, round(price_stars(storage) * bed_amount))
+    if buyer_id is not None and storage.is_ultra(buyer_id):
+        cost = max(1, round(cost * (1 - config.ULTRA_BED_DISCOUNT)))
+    return cost
 
 
 def record_sale(storage, bed_amount: int) -> None:

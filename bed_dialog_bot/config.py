@@ -49,6 +49,10 @@ PREMIUM_STARS_PRICE = int(os.environ.get("PREMIUM_STARS_PRICE", "100"))
 ULTRA_STARS_PRICE = int(os.environ.get("ULTRA_STARS_PRICE", "250"))
 ULTRA_BED_PRICE = int(os.environ.get("ULTRA_BED_PRICE", "20"))
 ULTRA_DURATION_DAYS = int(os.environ.get("ULTRA_DURATION_DAYS", "30"))
+# Grace period (days) — ULTRA perks keep working this long after expiry.
+ULTRA_GRACE_DAYS = int(os.environ.get("ULTRA_GRACE_DAYS", "3"))
+# Discount on buying BED with Stars for ULTRA users (0.15 = -15%).
+ULTRA_BED_DISCOUNT = float(os.environ.get("ULTRA_BED_DISCOUNT", "0.15"))
 PREMIUM_DURATION_DAYS = int(os.environ.get("PREMIUM_DURATION_DAYS", "30"))
 
 FREE_SPAM_MAX = int(os.environ.get("FREE_SPAM_MAX", "100"))

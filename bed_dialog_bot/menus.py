@@ -200,7 +200,7 @@ def cap_wallet(uid, storage, bot_username) -> str:
 def kb_wallet(uid, storage) -> InlineKeyboardMarkup:
     rows = []
     for amount in config.BED_BUY_PACKAGES:
-        cost = bedcoin.cost_stars(storage, amount)
+        cost = bedcoin.cost_stars(storage, amount, uid)
         rows.append([_btn(f"🪙 Купить {amount} BED · {cost}⭐", f"bed:buy:{amount}", "success")])
     for idx, (label, bed, _days) in enumerate(config.BED_PREMIUM_PACKAGES):
         rows.append([_btn(f"💎 Премиум {label} · {bed} BED", f"bed:sub:{idx}", "primary")])
@@ -400,15 +400,17 @@ def cap_ultra(uid, storage, bot_username) -> str:
             "<b>🔱 ULTRA PREMIUM</b>\n"
             f"<i>Активен · осталось <b>{left}</b></i>\n\n"
             "<blockquote>"
-            "🛡 Иммунитет к <b>.ban</b> — тебя не забанят\n"
-            "🛡 Иммунитет к <b>.spam</b> — тебя не заспамят\n"
-            "🛡 Иммунитет к <b>.troll</b>\n"
-            "⚡️ Твой .spam — <b>моментально</b>\n"
-            "⚡️ Твой .troll — очень быстро\n"
-            "🔱 Префикс <b>ULTRA</b> перед другими\n"
-            "🎧 Моментальная поддержка (пиши как другу)"
+            "🛡 Иммунитет к <b>.ban/.spam/.troll</b> и всем power-командам\n"
+            "🚨 Сигнал, кто пытался тебя тронуть\n"
+            "⚡️ Твой .spam — <b>моментально</b>, .troll — очень быстро\n"
+            "💥 Power-команды (.hack, .trace…) — <b>бесплатно</b>\n"
+            "🎭 Тебя нельзя <b>клонировать</b> (.clone)\n"
+            f"💸 BED дешевле на <b>{int(config.ULTRA_BED_DISCOUNT*100)}%</b>\n"
+            "📜 Вечная история переписки\n"
+            "🔱 Префикс <b>ULTRA</b> перед другими · 🎧 моментальная поддержка\n"
+            f"⏳ Grace-период {config.ULTRA_GRACE_DAYS} дн после окончания"
             "</blockquote>\n"
-            "<i>Иммунитеты можно включать/выключать кнопками ниже 👇 "
+            "<i>Иммунитеты и тревогу переключай кнопками ниже 👇 "
             "Команды на других использовать всё равно можно.</i>"
         )
     return (
@@ -430,11 +432,15 @@ def kb_ultra(uid, storage) -> InlineKeyboardMarkup:
     rows = []
     if active:
         # Immunity toggles (only meaningful for active ULTRA subscribers).
-        for kind, label in (("ban", ".ban"), ("spam", ".spam"), ("troll", ".troll")):
+        for kind, label in (("ban", ".ban"), ("spam", ".spam"), ("troll", ".troll"),
+                            ("power", "power-команды")):
             on = storage.ultra_immunity(uid, kind)
             state = "🟢 ВКЛ" if on else "🔴 ВЫКЛ"
             rows.append([_btn(f"🛡 Иммунитет {label}: {state}", f"ultra:tog:{kind}",
                               "success" if on else "danger")])
+        alarm = storage.ultra_immunity(uid, "alarm")
+        rows.append([_btn(f"🚨 Сигнал тревоги: {'🟢 ВКЛ' if alarm else '🔴 ВЫКЛ'}",
+                          "ultra:tog:alarm", "success" if alarm else "danger")])
     verb = "Продлить" if active else "Купить"
     rows.append([_btn(f"⭐ {verb} · {config.ULTRA_STARS_PRICE}", "ultra:buystars", "success")])
     rows.append([_btn(f"🔱 {verb} · {config.ULTRA_BED_PRICE} BED", "ultra:buybed", "primary")])

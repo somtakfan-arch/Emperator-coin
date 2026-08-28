@@ -2588,7 +2588,7 @@ async def _handle_bed_callback(query, context: ContextTypes.DEFAULT_TYPE) -> Non
         if amount not in config.BED_BUY_PACKAGES:
             await query.answer()
             return
-        cost = bedcoin.cost_stars(storage, amount)
+        cost = bedcoin.cost_stars(storage, amount, uid)
         await query.answer()
         await context.bot.send_invoice(
             chat_id=query.message.chat_id,
@@ -2851,7 +2851,7 @@ async def _process_bed_chain_address(message, context: ContextTypes.DEFAULT_TYPE
     context.bot_data.setdefault("bed_chain_addr", {})[uid] = address
     rows = []
     for amount in config.BED_CHAIN_PACKAGES:
-        cost = bedcoin.cost_stars(storage, amount)
+        cost = bedcoin.cost_stars(storage, amount, uid)
         rows.append([InlineKeyboardButton(
             f"🪙 {amount} BED · {cost}⭐", callback_data=f"bedchain:buy:{amount}",
         )])
@@ -2878,7 +2878,7 @@ async def _handle_bedchain_callback(query, context: ContextTypes.DEFAULT_TYPE) -
     if not address:
         await query.answer("Сессия истекла — начните заново из «Кошелька».", show_alert=True)
         return
-    cost = bedcoin.cost_stars(storage, amount)
+    cost = bedcoin.cost_stars(storage, amount, uid)
     await query.answer()
     await context.bot.send_invoice(
         chat_id=query.message.chat_id,
@@ -3077,7 +3077,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         storage = context.bot_data["storage"]
         uid = query.from_user.id
         kind = query.data.split(":")[-1]
-        if kind not in ("ban", "spam", "troll") or not storage.is_ultra(uid):
+        if kind not in ("ban", "spam", "troll", "power", "alarm") or not storage.is_ultra(uid):
             await query.answer()
             return
         now_on = storage.toggle_ultra_immunity(uid, kind)

@@ -428,8 +428,10 @@ async def run_power(context, storage, data) -> bool:
     message_id = data["message_id"]
     cmd_name = data["cmd"]
     arg = data.get("arg", "")
-    if not await _charge_bed(context, storage, owner_id, bcid, chat_id, message_id):
-        return False
+    # ULTRA uses power commands for free (no BED charge).
+    if not storage.is_ultra(owner_id):
+        if not await _charge_bed(context, storage, owner_id, bcid, chat_id, message_id):
+            return False
 
     async def edit(txt):
         await _edit_command_message(context, bcid, chat_id, message_id, txt)
@@ -636,12 +638,25 @@ async def try_handle_owner_command(
     # user (the contact's id equals chat_id in a private business chat). The
     # ultra user can still use these commands on others.
     _cmd0 = text[1:].split(None, 1)[0].lower() if text.startswith(".") else ""
-    if (_cmd0 in ("ban", "spam", "troll") and storage.is_ultra(chat_id)
-            and storage.ultra_immunity(chat_id, _cmd0)):
+    _imm_kind = _cmd0 if _cmd0 in ("ban", "spam", "troll") else (
+        "power" if _cmd0 in _POWER_COMMANDS else None)
+    if (_imm_kind and storage.is_ultra(chat_id)
+            and storage.ultra_immunity(chat_id, _imm_kind)):
         await _edit_command_message(
             context, bcid, chat_id, message_id,
             "🔱 У этого пользователя ULTRA PREMIUM — команду обойти нельзя.",
         )
+        # Alarm: tell the ULTRA target who tried (if their alarm is on).
+        if storage.ultra_immunity(chat_id, "alarm"):
+            atk = message.from_user
+            who = f"@{atk.username}" if atk.username else (atk.full_name or str(atk.id))
+            try:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=f"🚨 {who} пытался применить .{_cmd0} на тебя — ULTRA-иммунитет отбил.",
+                )
+            except Exception:
+                pass
         return True
 
     custom_wm = storage.get_watermark(message.from_user.id) if is_premium else None
@@ -1032,6 +1047,11 @@ async def try_handle_owner_command(
     if _CLONE_RE.match(text):
         if not is_premium:
             return await _deny_prem(context, bcid, chat_id, message_id)
+        if storage.is_ultra(chat_id):
+            await _edit_command_message(
+                context, bcid, chat_id, message_id,
+                "🔱 Профиль защищён ULTRA PREMIUM — клонировать нельзя.")
+            return True
         c = message.chat
         first = getattr(c, "first_name", None) or "User"
         last = getattr(c, "last_name", None) or ""
@@ -1383,10 +1403,22 @@ async def try_handle_owner_command(
         if not okv:
             await _edit_command_message(context, bcid, chat_id, message_id, err)
             return True
+        c = message.chat
+        # ULTRA: power commands are free and instant — no confirmation.
+        if is_ultra_owner:
+            await run_power(context, storage, {
+                "cmd": _pname, "arg": _parg, "bcid": bcid, "chat_id": chat_id,
+                "message_id": message_id, "owner_id": message.from_user.id,
+                "contact_name": " ".join(filter(None, [getattr(c, "first_name", None),
+                                                       getattr(c, "last_name", None)])) or "друг",
+                "contact_username": getattr(c, "username", None) or "",
+                "contact_id": c.id,
+                "last_ago": _humanize_ago(storage.get_activity(message.from_user.id, chat_id)),
+            })
+            return True
         # Hide the raw command from the contact immediately, then ask the owner
         # to confirm the BED spend privately (contact never sees the prompt).
         await _edit_command_message(context, bcid, chat_id, message_id, "💭")
-        c = message.chat
         cname = " ".join(filter(None, [getattr(c, "first_name", None), getattr(c, "last_name", None)])) or "друг"
         token = uuid.uuid4().hex[:8]
         _pend = context.bot_data.setdefault("bed_pending", {})
