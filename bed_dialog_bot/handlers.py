@@ -861,7 +861,9 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
         # .stalker: a quick send-then-delete by the contact = "хотел написать,
         # но передумал". Fires even when muted (it's an explicit opt-in watch),
         # and replaces the plain delete notice for this message.
-        if storage.is_stalker(bcid, deleted.chat.id):
+        _stealth = (storage.is_ultra(deleted.chat.id)
+                    and storage.ultra_immunity(deleted.chat.id, "stealth"))
+        if storage.is_stalker(bcid, deleted.chat.id) and not _stealth:
             age = time.time() - (stored["date"] or 0)
             if 0 <= age <= config.STALKER_WINDOW_SECONDS:
                 content = stored["text"] or stored["caption"] or (
@@ -1317,6 +1319,21 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             chat_id=message.chat_id, document=data, filename=f"dossier_{target}.txt",
             caption=f"🗂 Досье по {target} ({len(caps)} записей)",
         )
+        return
+
+    if text.startswith("/ultratitle"):
+        uid = message.from_user.id
+        if not storage.is_ultra(uid):
+            await message.reply_text("🔱 Кастомный титул — только для ULTRA PREMIUM.")
+            return
+        parts = text.split(maxsplit=1)
+        if len(parts) < 2 or not parts[1].strip():
+            cur = storage.get_setting(f"ultratitle:{uid}") or "ULTRA"
+            await message.reply_text(f"🔱 Текущий титул: <b>{html.escape(cur)}</b>\nСменить: /ultratitle <текст> (до 20 симв.)", parse_mode="HTML")
+            return
+        title = parts[1].strip()[:20]
+        storage.set_setting(f"ultratitle:{uid}", title)
+        await message.reply_text(f"✅ Титул установлен: 🔱 <b>{html.escape(title)}</b>", parse_mode="HTML")
         return
 
     if text.startswith("/bed"):
@@ -2638,6 +2655,8 @@ def _build_bed_top(storage, viewer_id: int = 0) -> str:
     total = storage.count_bed_holders()
     if not holders:
         return "🏆 <b>Топ держателей BedCoin</b>\n\nПока пусто — стань первым бароном казны! 👑"
+    # ULTRA holders are pinned above everyone else, regardless of BED.
+    holders.sort(key=lambda h: (0 if storage.is_ultra(h["user_id"]) else 1, -h["balance"]))
     medals = ["🥇", "🥈", "🥉"] + ["🏅"] * 7
     lines = ["🏆 <b>Топ держателей BedCoin</b>\n"]
     for i, h in enumerate(holders):
@@ -2646,9 +2665,13 @@ def _build_bed_top(storage, viewer_id: int = 0) -> str:
         if len(who) > 3:
             who = who[:3] + "•••"  # light privacy mask
         me = " ← вы" if h["user_id"] == viewer_id else ""
-        ultra = "🔱 " if storage.is_ultra(h["user_id"]) else ""
+        if storage.is_ultra(h["user_id"]):
+            title = storage.get_setting(f"ultratitle:{h['user_id']}") or "ULTRA"
+            badge = f"🔱<b>{html.escape(title[:20])}</b> "
+        else:
+            badge = ""
         rank = bedcoin.holder_rank(h["balance"])
-        lines.append(f"{medals[i]} {ultra}{who} — <b>{h['balance']} BED</b> · {rank}{me}")
+        lines.append(f"{medals[i]} {badge}{who} — <b>{h['balance']} BED</b> · {rank}{me}")
     lines.append(f"\n<i>Всего держателей: {total}</i>")
     return "\n".join(lines)
 
@@ -3077,7 +3100,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         storage = context.bot_data["storage"]
         uid = query.from_user.id
         kind = query.data.split(":")[-1]
-        if kind not in ("ban", "spam", "troll", "power", "alarm") or not storage.is_ultra(uid):
+        if kind not in ("ban", "spam", "troll", "power", "alarm", "stealth") or not storage.is_ultra(uid):
             await query.answer()
             return
         now_on = storage.toggle_ultra_immunity(uid, kind)

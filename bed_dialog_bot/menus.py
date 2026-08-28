@@ -441,6 +441,9 @@ def kb_ultra(uid, storage) -> InlineKeyboardMarkup:
         alarm = storage.ultra_immunity(uid, "alarm")
         rows.append([_btn(f"🚨 Сигнал тревоги: {'🟢 ВКЛ' if alarm else '🔴 ВЫКЛ'}",
                           "ultra:tog:alarm", "success" if alarm else "danger")])
+        stealth = storage.ultra_immunity(uid, "stealth")
+        rows.append([_btn(f"🥷 Невидимка (стелс): {'🟢 ВКЛ' if stealth else '🔴 ВЫКЛ'}",
+                          "ultra:tog:stealth", "success" if stealth else "danger")])
     verb = "Продлить" if active else "Купить"
     rows.append([_btn(f"⭐ {verb} · {config.ULTRA_STARS_PRICE}", "ultra:buystars", "success")])
     rows.append([_btn(f"🔱 {verb} · {config.ULTRA_BED_PRICE} BED", "ultra:buybed", "primary")])
