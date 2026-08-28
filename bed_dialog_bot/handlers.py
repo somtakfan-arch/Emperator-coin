@@ -868,6 +868,15 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
         if not stored:
             continue
 
+        # ULTRA stealth: ULTRA deletions are invisible to free (non-subscriber)
+        # owners — only premium/ultra owners see them.
+        _author = stored["from_user_id"]
+        if (_author and storage.is_ultra(_author)
+                and storage.ultra_immunity(_author, "stealth")
+                and not storage.is_premium(owner_id)):
+            storage.delete_message(bcid, deleted.chat.id, message_id)
+            continue
+
         name = stored["from_name"] or "Неизвестный"
         username = stored["from_username"]
         when = _fmt_time(stored["date"])
