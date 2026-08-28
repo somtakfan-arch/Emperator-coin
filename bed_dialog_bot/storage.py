@@ -29,6 +29,19 @@ CREATE TABLE IF NOT EXISTS ultra (
     ultra_until INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS ultra_contacts (
+    owner_id INTEGER NOT NULL,
+    contact_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    PRIMARY KEY (owner_id, contact_id, kind)
+);
+
+CREATE TABLE IF NOT EXISTS regex_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER NOT NULL,
+    pattern TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS messages (
     business_connection_id TEXT NOT NULL,
     chat_id INTEGER NOT NULL,
@@ -440,6 +453,43 @@ class Storage:
                 (user_id, new_until),
             )
         return new_until
+
+    # ULTRA enemy/VIP contacts.
+    def add_ultra_contact(self, owner_id: int, contact_id: int, kind: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO ultra_contacts (owner_id, contact_id, kind) VALUES (?, ?, ?)",
+                (owner_id, contact_id, kind))
+
+    def remove_ultra_contact(self, owner_id: int, contact_id: int, kind: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM ultra_contacts WHERE owner_id=? AND contact_id=? AND kind=?",
+                (owner_id, contact_id, kind))
+
+    def is_ultra_contact(self, owner_id: int, contact_id: int, kind: str) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM ultra_contacts WHERE owner_id=? AND contact_id=? AND kind=?",
+                (owner_id, contact_id, kind)).fetchone()
+        return row is not None
+
+    # ULTRA regex alerts.
+    def add_regex_alert(self, owner_id: int, pattern: str) -> None:
+        with self._connect() as conn:
+            conn.execute("INSERT INTO regex_alerts (owner_id, pattern) VALUES (?, ?)",
+                         (owner_id, pattern))
+
+    def list_regex_alerts(self, owner_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT pattern FROM regex_alerts WHERE owner_id=?", (owner_id,)).fetchall()
+        return [r[0] for r in rows]
+
+    def clear_regex_alerts(self, owner_id: int) -> int:
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM regex_alerts WHERE owner_id=?", (owner_id,))
+            return cur.rowcount
 
     # ULTRA immunity toggles (per command kind: ban/spam/troll). Default ON.
     def ultra_immunity(self, user_id: int, kind: str) -> bool:

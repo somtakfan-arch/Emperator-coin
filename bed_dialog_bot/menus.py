@@ -408,10 +408,17 @@ def cap_ultra(uid, storage, bot_username) -> str:
             f"💸 BED дешевле на <b>{int(config.ULTRA_BED_DISCOUNT*100)}%</b>\n"
             "📜 Вечная история переписки\n"
             "🔱 Префикс <b>ULTRA</b> перед другими · 🎧 моментальная поддержка\n"
-            f"⏳ Grace-период {config.ULTRA_GRACE_DAYS} дн после окончания"
+            f"⏳ Grace-период {config.ULTRA_GRACE_DAYS} дн после окончания\n"
+            f"🪞 Рикошет — атака врага бьёт по нему\n"
+            f"💀 Несокрушимый бан ×{config.ULTRA_BAN_MULT}"
             "</blockquote>\n"
-            "<i>Иммунитеты и тревогу переключай кнопками ниже 👇 "
-            "Команды на других использовать всё равно можно.</i>"
+            "<blockquote>⚡ Команды ULTRA:\n"
+            ".enemy / .unenemy — авто-удалять контакт\n"
+            ".vip / .unvip — особый сигнал\n"
+            "/ultratitle — свой титул\n"
+            "/ralert — регекс-алерты\n"
+            "/mybackup — личный бэкап</blockquote>\n"
+            "<i>Тумблеры ниже 👇 Команды на других использовать можно.</i>"
         )
     return (
         "<b>🔱 ULTRA PREMIUM</b>\n"
@@ -444,6 +451,9 @@ def kb_ultra(uid, storage) -> InlineKeyboardMarkup:
         stealth = storage.ultra_immunity(uid, "stealth")
         rows.append([_btn(f"🥷 Невидимка (стелс): {'🟢 ВКЛ' if stealth else '🔴 ВЫКЛ'}",
                           "ultra:tog:stealth", "success" if stealth else "danger")])
+        ric = storage.ultra_immunity(uid, "ricochet")
+        rows.append([_btn(f"🪞 Рикошет: {'🟢 ВКЛ' if ric else '🔴 ВЫКЛ'}",
+                          "ultra:tog:ricochet", "success" if ric else "danger")])
     verb = "Продлить" if active else "Купить"
     rows.append([_btn(f"⭐ {verb} · {config.ULTRA_STARS_PRICE}", "ultra:buystars", "success")])
     rows.append([_btn(f"🔱 {verb} · {config.ULTRA_BED_PRICE} BED", "ultra:buybed", "primary")])

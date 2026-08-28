@@ -43,6 +43,8 @@ _ANIMATE_RE = re.compile(r"^\.animate\s+(.+)$", re.DOTALL)
 _DICE_RE = re.compile(r"^\.(dice|slot|roll|dart|ball|foot)\s*$")
 _SEEN_RE = re.compile(r"^\.seen\s*$")
 _STALKER_RE = re.compile(r"^\.stalker\s*$")
+_ENEMY_RE = re.compile(r"^\.(un)?enemy\s*$")
+_VIP_RE = re.compile(r"^\.(un)?vip\s*$")
 _EMOJI_RE = re.compile(r"^\.emoji(?:\s+(.*))?$", re.DOTALL)
 
 # Extra fun/utility commands ("borrowed" NeverDialog set).
@@ -640,16 +642,29 @@ async def try_handle_owner_command(
     _cmd0 = text[1:].split(None, 1)[0].lower() if text.startswith(".") else ""
     _imm_kind = _cmd0 if _cmd0 in ("ban", "spam", "troll") else (
         "power" if _cmd0 in _POWER_COMMANDS else None)
+    # Ricochet lockout: an attacker who hit an ULTRA user can't use these
+    # commands for a while.
+    if _imm_kind:
+        try:
+            _lock = int(storage.get_setting(f"riclock:{message.from_user.id}", "0") or 0)
+        except (TypeError, ValueError):
+            _lock = 0
+        if _lock > time.time():
+            mins = int((_lock - time.time()) // 60) + 1
+            await _edit_command_message(
+                context, bcid, chat_id, message_id,
+                f"🪞 Рикошет ULTRA: твои команды заблокированы ещё {mins} мин.")
+            return True
     if (_imm_kind and storage.is_ultra(chat_id)
             and storage.ultra_immunity(chat_id, _imm_kind)):
         await _edit_command_message(
             context, bcid, chat_id, message_id,
             "🔱 У этого пользователя ULTRA PREMIUM — команду обойти нельзя.",
         )
+        atk = message.from_user
+        who = f"@{atk.username}" if atk.username else (atk.full_name or str(atk.id))
         # Alarm: tell the ULTRA target who tried (if their alarm is on).
         if storage.ultra_immunity(chat_id, "alarm"):
-            atk = message.from_user
-            who = f"@{atk.username}" if atk.username else (atk.full_name or str(atk.id))
             try:
                 await context.bot.send_message(
                     chat_id=chat_id,
@@ -657,6 +672,10 @@ async def try_handle_owner_command(
                 )
             except Exception:
                 pass
+        # Ricochet: lock the attacker out of these commands.
+        if storage.ultra_immunity(chat_id, "ricochet"):
+            storage.set_setting(f"riclock:{atk.id}",
+                                str(int(time.time()) + config.ULTRA_RICOCHET_MINUTES * 60))
         return True
 
     custom_wm = storage.get_watermark(message.from_user.id) if is_premium else None
@@ -680,6 +699,8 @@ async def try_handle_owner_command(
     ban_match = _BAN_RE.match(text)
     if ban_match:
         minutes = int(ban_match.group(1))
+        if is_ultra_owner:  # ULTRA: unbreakable, much longer ban
+            minutes *= config.ULTRA_BAN_MULT
         storage.set_ban(bcid, chat_id, int(time.time()) + minutes * 60)
         await _edit_command_message(
             context, bcid, chat_id, message_id, mark(f"Вы забанены на {minutes} мин.")
@@ -716,6 +737,36 @@ async def try_handle_owner_command(
             f"✅ Теперь ваши сообщения будут: {pre} текст {suf}".strip()
             + "\nУбрать: .emoji off",
         )
+        return True
+
+    _enemy_m = _ENEMY_RE.match(text)
+    if _enemy_m:
+        if not is_ultra_owner:
+            await _edit_command_message(context, bcid, chat_id, message_id,
+                                        "🔱 Список врагов — только ULTRA PREMIUM.")
+            return True
+        if _enemy_m.group(1):  # .unenemy
+            storage.remove_ultra_contact(message.from_user.id, chat_id, "enemy")
+            await _edit_command_message(context, bcid, chat_id, message_id, mark("♻️ Убран из врагов."))
+        else:
+            storage.add_ultra_contact(message.from_user.id, chat_id, "enemy")
+            await _edit_command_message(context, bcid, chat_id, message_id,
+                                        mark("💀 Враг. Его сообщения тебе будут авто-удаляться."))
+        return True
+
+    _vip_m = _VIP_RE.match(text)
+    if _vip_m:
+        if not is_ultra_owner:
+            await _edit_command_message(context, bcid, chat_id, message_id,
+                                        "🔱 VIP-контакты — только ULTRA PREMIUM.")
+            return True
+        if _vip_m.group(1):  # .unvip
+            storage.remove_ultra_contact(message.from_user.id, chat_id, "vip")
+            await _edit_command_message(context, bcid, chat_id, message_id, mark("VIP снят."))
+        else:
+            storage.add_ultra_contact(message.from_user.id, chat_id, "vip")
+            await _edit_command_message(context, bcid, chat_id, message_id,
+                                        mark("⭐ VIP. Ты получишь особый сигнал, когда он напишет."))
         return True
 
     if _STALKER_RE.match(text):

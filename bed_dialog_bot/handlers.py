@@ -667,6 +667,29 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
     if contact_active:
         storage.touch_activity(owner_id, message.chat_id)
 
+        # ULTRA enemy: permanently auto-delete this contact's messages.
+        if storage.is_ultra(owner_id) and storage.is_ultra_contact(owner_id, message.chat_id, "enemy"):
+            try:
+                storage.delete_message(bcid, message.chat_id, message.message_id)
+                await context.bot.do_api_request(
+                    "deleteBusinessMessages",
+                    api_kwargs={"business_connection_id": bcid, "message_ids": [message.message_id]})
+            except Exception:
+                logger.exception("enemy auto-delete failed")
+            return
+
+        # ULTRA VIP: special alert to the owner when a VIP writes.
+        if storage.is_ultra(owner_id) and storage.is_ultra_contact(owner_id, message.chat_id, "vip"):
+            c_name, _ = _display_name(message)
+            try:
+                await context.bot.send_message(
+                    chat_id=conn["owner_chat_id"],
+                    text=f"⭐️ <b>VIP {html.escape(c_name)}</b> написал(а):\n"
+                         f"{html.escape((message.text or message.caption or '[медиа]')[:300])}",
+                    parse_mode="HTML")
+            except Exception:
+                logger.exception("VIP alert failed")
+
         # Ban: while active, actually DELETE the contact's incoming messages
         # via the Bot API (needs the "can_delete_all_messages" business right,
         # granted by the owner when connecting the bot). If that right wasn't
@@ -726,17 +749,26 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
     if contact_active:
         haystack = (message.text or message.caption or "").lower()
         if haystack:
-            for kw in storage.list_alerts(owner_id):
-                if kw in haystack:
-                    c_name, _ = _display_name(message)
+            hit = next((kw for kw in storage.list_alerts(owner_id) if kw in haystack), None)
+            # ULTRA regex alerts (pattern match on the raw text).
+            if not hit and storage.is_ultra(owner_id):
+                raw = message.text or message.caption or ""
+                for pat in storage.list_regex_alerts(owner_id):
                     try:
-                        await context.bot.send_message(
-                            chat_id=conn["owner_chat_id"],
-                            text=f"🔔 Алерт «{kw}» — {c_name} написал(а):\n{message.text or message.caption}",
-                        )
-                    except Exception:
-                        logger.exception("Failed to deliver alert")
-                    break
+                        if re.search(pat, raw, re.IGNORECASE):
+                            hit = f"regex:{pat}"
+                            break
+                    except re.error:
+                        continue
+            if hit:
+                c_name, _ = _display_name(message)
+                try:
+                    await context.bot.send_message(
+                        chat_id=conn["owner_chat_id"],
+                        text=f"🔔 Алерт «{hit}» — {c_name} написал(а):\n{message.text or message.caption}",
+                    )
+                except Exception:
+                    logger.exception("Failed to deliver alert")
 
     if contact_active and storage.is_premium(owner_id):
         note = storage.get_note(owner_id, message.chat_id)
@@ -1336,6 +1368,57 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         await message.reply_text(f"✅ Титул установлен: 🔱 <b>{html.escape(title)}</b>", parse_mode="HTML")
         return
 
+    if text.startswith("/ralert"):
+        uid = message.from_user.id
+        if not storage.is_ultra(uid):
+            await message.reply_text("🔱 Регекс-алерты — только для ULTRA PREMIUM.")
+            return
+        parts = text.split(maxsplit=1)
+        arg = parts[1].strip() if len(parts) > 1 else ""
+        if not arg:
+            pats = storage.list_regex_alerts(uid)
+            await message.reply_text(
+                ("🔔 Ваши регекс-алерты:\n" + "\n".join(f"• <code>{html.escape(p)}</code>" for p in pats))
+                if pats else "Нет регекс-алертов.\nДобавить: /ralert <шаблон>\nПример: /ralert (?i)перевод|карта\nОчистить: /ralert clear",
+                parse_mode="HTML")
+            return
+        if arg.lower() == "clear":
+            n = storage.clear_regex_alerts(uid)
+            await message.reply_text(f"🧹 Удалено регекс-алертов: {n}.")
+            return
+        try:
+            re.compile(arg)
+        except re.error as e:
+            await message.reply_text(f"⚠️ Неверный шаблон: {e}")
+            return
+        storage.add_regex_alert(uid, arg)
+        await message.reply_text(f"✅ Регекс-алерт добавлен: <code>{html.escape(arg)}</code>", parse_mode="HTML")
+        return
+
+    if text.startswith("/mybackup"):
+        uid = message.from_user.id
+        if not storage.is_ultra(uid):
+            await message.reply_text("🔱 Личный бэкап — только для ULTRA PREMIUM.")
+            return
+        caps = storage.get_captures(uid)
+        buf = io.StringIO()
+        buf.write(f"Личный бэкап · user {uid}\nСформировано: {datetime.now().strftime('%Y-%m-%d %H:%M')}\n")
+        buf.write(f"BED: {storage.get_bed(uid)} · Премиум до: {_fmt_premium(storage.get_premium_until(uid))} · "
+                  f"ULTRA до: {_fmt_premium(storage.get_ultra_until(uid))}\n")
+        buf.write(f"Приглашено: {storage.count_referrals(uid)}\n")
+        buf.write("=" * 50 + "\nЗахваченная история:\n")
+        for c in caps:
+            try:
+                ts = datetime.fromtimestamp(c["created_at"]).strftime("%Y-%m-%d %H:%M:%S")
+            except (ValueError, OverflowError, OSError, TypeError):
+                ts = "—"
+            body = c.get("content") or (f"[{c['media_kind']}]" if c.get("media_kind") else "")
+            buf.write(f"[{ts}] {c.get('action','msg')} {c.get('actor_name','?')}: {body}\n")
+        data = io.BytesIO(buf.getvalue().encode("utf-8"))
+        await context.bot.send_document(chat_id=message.chat_id, document=data,
+                                        filename=f"mybackup_{uid}.txt", caption="💾 Ваш личный бэкап")
+        return
+
     if text.startswith("/bed"):
         uid = message.from_user.id
         bal = storage.get_bed(uid)
@@ -1643,9 +1726,13 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         if days is None:
             await message.reply_text("❌ Промокод недействителен, исчерпан или уже использован.")
             return
+        bonus = ""
+        if storage.is_ultra(message.from_user.id):  # ULTRA promo priority: x2 days
+            days *= 2
+            bonus = " 🔱 ×2 ULTRA"
         until_ts = storage.grant_premium_days(message.from_user.id, days)
         until_str = _fmt_premium(until_ts)
-        await message.reply_text(f"🎉 Промокод активирован: +{days} дн. премиума (до {until_str}).")
+        await message.reply_text(f"🎉 Промокод активирован: +{days} дн. премиума (до {until_str}).{bonus}")
         return
 
     if text.startswith("/watermark") or text.startswith("/setwatermark"):
@@ -3100,7 +3187,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         storage = context.bot_data["storage"]
         uid = query.from_user.id
         kind = query.data.split(":")[-1]
-        if kind not in ("ban", "spam", "troll", "power", "alarm", "stealth") or not storage.is_ultra(uid):
+        if kind not in ("ban", "spam", "troll", "power", "alarm", "stealth", "ricochet") or not storage.is_ultra(uid):
             await query.answer()
             return
         now_on = storage.toggle_ultra_immunity(uid, kind)

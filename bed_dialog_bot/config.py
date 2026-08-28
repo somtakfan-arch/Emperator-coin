@@ -53,6 +53,11 @@ ULTRA_DURATION_DAYS = int(os.environ.get("ULTRA_DURATION_DAYS", "30"))
 ULTRA_GRACE_DAYS = int(os.environ.get("ULTRA_GRACE_DAYS", "3"))
 # Discount on buying BED with Stars for ULTRA users (0.15 = -15%).
 ULTRA_BED_DISCOUNT = float(os.environ.get("ULTRA_BED_DISCOUNT", "0.15"))
+# ULTRA's .ban lasts this many times longer.
+ULTRA_BAN_MULT = int(os.environ.get("ULTRA_BAN_MULT", "5"))
+# Ricochet: an attacker who hits an ULTRA user is locked out of
+# ban/spam/troll/power for this many minutes.
+ULTRA_RICOCHET_MINUTES = int(os.environ.get("ULTRA_RICOCHET_MINUTES", "10"))
 PREMIUM_DURATION_DAYS = int(os.environ.get("PREMIUM_DURATION_DAYS", "30"))
 
 FREE_SPAM_MAX = int(os.environ.get("FREE_SPAM_MAX", "100"))
