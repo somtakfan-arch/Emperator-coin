@@ -1362,6 +1362,76 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return
 
+    if text.startswith("/create"):
+        uid = message.from_user.id
+        parts = text.split(maxsplit=2)
+        if len(parts) < 3:
+            await message.reply_text(
+                "🧩 <b>Свои команды</b>\n\n"
+                "Создать: <code>/create имя текст</code>\n"
+                "Пример: <code>/create haha хахахахахаха</code>\n"
+                "Потом в чате пиши <code>.haha</code> — заменится на твой текст.\n\n"
+                "Список: /mycmds · Удалить: /delcmd имя · Опубликовать: /publish имя",
+                parse_mode="HTML")
+            return
+        name = parts[1].lower()
+        body = parts[2]
+        if not re.fullmatch(r"[a-zа-я0-9_]{1,20}", name):
+            await message.reply_text("⚠️ Имя — до 20 символов, буквы/цифры/_ без пробелов.")
+            return
+        limit = None
+        if not storage.is_ultra(uid):
+            limit = config.CUSTOM_CMD_PREMIUM_MAX if storage.is_premium(uid) else config.CUSTOM_CMD_FREE_MAX
+        if (limit is not None and storage.count_custom_cmds(uid) >= limit
+                and storage.get_custom_cmd(uid, name) is None):
+            await message.reply_text(
+                f"⚠️ Достигнут лимит команд ({limit}). Удалите что-нибудь (/delcmd) "
+                "или оформите премиум/ULTRA.")
+            return
+        storage.set_custom_cmd(uid, name, body[:1000])
+        await message.reply_text(f"✅ Команда <code>.{html.escape(name)}</code> создана! "
+                                 f"Пиши её в чате.", parse_mode="HTML")
+        return
+
+    if text.startswith("/mycmds"):
+        cmds = storage.list_custom_cmds(message.from_user.id)
+        if not cmds:
+            await message.reply_text("У вас нет своих команд. Создать: /create имя текст")
+            return
+        lines = ["🧩 <b>Ваши команды:</b>"]
+        for c in cmds:
+            prev = html.escape((c["text"] or "")[:40])
+            lines.append(f"• <code>.{html.escape(c['name'])}</code> → {prev}")
+        lines.append("\nУдалить: /delcmd имя · Опубликовать: /publish имя")
+        await message.reply_text("\n".join(lines), parse_mode="HTML")
+        return
+
+    if text.startswith("/delcmd"):
+        parts = text.split(maxsplit=1)
+        if len(parts) < 2:
+            await message.reply_text("Использование: /delcmd имя")
+            return
+        ok = storage.del_custom_cmd(message.from_user.id, parts[1].strip().lower())
+        await message.reply_text("🗑 Удалено." if ok else "Команда не найдена.")
+        return
+
+    if text.startswith("/publish"):
+        uid = message.from_user.id
+        parts = text.split(maxsplit=1)
+        if len(parts) < 2:
+            await message.reply_text("Использование: /publish имя — выложить свою команду в магазин.")
+            return
+        name = parts[1].strip().lower()
+        body = storage.get_custom_cmd(uid, name)
+        if body is None:
+            await message.reply_text("Такой команды у вас нет. Список: /mycmds")
+            return
+        mid = storage.publish_cmd(uid, name, body)
+        await message.reply_text(
+            f"📤 Команда <code>.{html.escape(name)}</code> опубликована в магазине (#{mid})! "
+            "Другие смогут её установить: /menu → 🛒 Магазин команд.", parse_mode="HTML")
+        return
+
     if text.startswith("/ultratitle"):
         uid = message.from_user.id
         if not storage.is_ultra(uid):
@@ -2772,6 +2842,36 @@ def _build_bed_top(storage, viewer_id: int = 0) -> str:
     return "\n".join(lines)
 
 
+_MKT_PAGE = 5
+
+
+def _build_market(storage: Storage, offset: int):
+    """(text, InlineKeyboardMarkup) for the command marketplace page."""
+    total = storage.count_market()
+    items = storage.list_market(_MKT_PAGE, offset)
+    if not items:
+        text = ("🛒 <b>Магазин команд</b>\n\nПока пусто. Создай свою (/create) "
+                "и опубликуй (/publish имя) — будешь первым!")
+        return text, InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Меню", callback_data="menu:main")]])
+    lines = [f"🛒 <b>Магазин команд</b> · {total} шт.\n"]
+    rows = []
+    for it in items:
+        prev = html.escape((it["text"] or "")[:50])
+        lines.append(f"• <code>.{html.escape(it['name'])}</code> — {prev}  ⬇️{it['installs']}")
+        rows.append([InlineKeyboardButton(
+            f"⬇️ Установить .{it['name'][:18]}", callback_data=f"mkt:install:{it['id']}")])
+    nav = []
+    if offset > 0:
+        nav.append(InlineKeyboardButton("◀️", callback_data=f"mkt:page:{max(0, offset - _MKT_PAGE)}"))
+    if offset + _MKT_PAGE < total:
+        nav.append(InlineKeyboardButton("▶️", callback_data=f"mkt:page:{offset + _MKT_PAGE}"))
+    if nav:
+        rows.append(nav)
+    rows.append([InlineKeyboardButton("📤 Опубликовать свою: /publish", callback_data="mkt:page:%d" % offset)])
+    rows.append([InlineKeyboardButton("⬅️ Меню", callback_data="menu:main")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
 async def _refresh_usernames(context: ContextTypes.DEFAULT_TYPE, storage: Storage) -> int:
     """Re-fetch each known user's current profile via get_chat and update the
     stored name/username (best-effort; skips users the bot can't resolve)."""
@@ -3213,6 +3313,48 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         until = storage.grant_ultra_days(uid, config.ULTRA_DURATION_DAYS)
         await query.answer("🔱 ULTRA PREMIUM активирован!", show_alert=True)
         await menus.edit_section(context, query, "ultra", uid, storage, context.bot.username)
+    elif query.data == "mycmds:open":
+        await query.answer()
+        storage = context.bot_data["storage"]
+        cmds = storage.list_custom_cmds(query.from_user.id)
+        if cmds:
+            lines = ["🧩 <b>Ваши команды</b> (пиши в чате):"]
+            for c in cmds:
+                lines.append(f"• <code>.{html.escape(c['name'])}</code> → {html.escape((c['text'] or '')[:40])}")
+            body = "\n".join(lines)
+        else:
+            body = "🧩 <b>Свои команды</b>\n\nУ вас пока нет. Создайте свою!"
+        body += ("\n\n➕ Создать: <code>/create имя текст</code>\n"
+                 "🗑 Удалить: /delcmd имя · 📤 В магазин: /publish имя")
+        await context.bot.send_message(query.message.chat_id, body, parse_mode="HTML")
+    elif query.data == "mkt:open" or query.data.startswith("mkt:page:"):
+        await query.answer()
+        storage = context.bot_data["storage"]
+        offset = 0
+        if query.data.startswith("mkt:page:"):
+            try:
+                offset = int(query.data.split(":")[-1])
+            except ValueError:
+                offset = 0
+        text, kb = _build_market(storage, offset)
+        try:
+            await _edit_msg(query, text, kb)
+        except Exception:
+            await context.bot.send_message(query.message.chat_id, text, parse_mode="HTML", reply_markup=kb)
+    elif query.data.startswith("mkt:install:"):
+        storage = context.bot_data["storage"]
+        try:
+            mid = int(query.data.split(":")[-1])
+        except ValueError:
+            await query.answer()
+            return
+        item = storage.get_market(mid)
+        if not item:
+            await query.answer("Команда не найдена.", show_alert=True)
+            return
+        storage.set_custom_cmd(query.from_user.id, item["name"], item["text"])
+        storage.bump_install(mid)
+        await query.answer(f"✅ Установлено: .{item['name']} — пиши в чате!", show_alert=True)
     elif query.data == "daily:claim":
         await query.answer()
         await context.bot.send_message(

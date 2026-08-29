@@ -42,6 +42,23 @@ CREATE TABLE IF NOT EXISTS regex_alerts (
     pattern TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS custom_cmds (
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    text TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS cmd_market (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    author_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    text TEXT NOT NULL,
+    installs INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS messages (
     business_connection_id TEXT NOT NULL,
     chat_id INTEGER NOT NULL,
@@ -473,6 +490,74 @@ class Storage:
                 "SELECT 1 FROM ultra_contacts WHERE owner_id=? AND contact_id=? AND kind=?",
                 (owner_id, contact_id, kind)).fetchone()
         return row is not None
+
+    # --- custom user commands (personal macros) ---
+    def set_custom_cmd(self, user_id: int, name: str, text: str) -> None:
+        import time as _t
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO custom_cmds (user_id, name, text, created_at) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(user_id, name) DO UPDATE SET text=excluded.text",
+                (user_id, name, text, int(_t.time())))
+
+    def get_custom_cmd(self, user_id: int, name: str):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT text FROM custom_cmds WHERE user_id=? AND name=?",
+                (user_id, name)).fetchone()
+        return row[0] if row else None
+
+    def list_custom_cmds(self, user_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT name, text FROM custom_cmds WHERE user_id=? ORDER BY name",
+                (user_id,)).fetchall()
+        return [{"name": r[0], "text": r[1]} for r in rows]
+
+    def count_custom_cmds(self, user_id: int) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) FROM custom_cmds WHERE user_id=?", (user_id,)).fetchone()
+        return row[0] if row else 0
+
+    def del_custom_cmd(self, user_id: int, name: str) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM custom_cmds WHERE user_id=? AND name=?", (user_id, name))
+            return cur.rowcount > 0
+
+    # --- command marketplace ---
+    def publish_cmd(self, author_id: int, name: str, text: str) -> int:
+        import time as _t
+        with self._connect() as conn:
+            cur = conn.execute(
+                "INSERT INTO cmd_market (author_id, name, text, created_at) VALUES (?, ?, ?, ?)",
+                (author_id, name, text, int(_t.time())))
+            return cur.lastrowid
+
+    def list_market(self, limit: int = 5, offset: int = 0):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, author_id, name, text, installs FROM cmd_market "
+                "ORDER BY installs DESC, id DESC LIMIT ? OFFSET ?",
+                (limit, offset)).fetchall()
+        return [{"id": r[0], "author_id": r[1], "name": r[2], "text": r[3], "installs": r[4]} for r in rows]
+
+    def count_market(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) FROM cmd_market").fetchone()
+        return row[0] if row else 0
+
+    def get_market(self, market_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id, author_id, name, text, installs FROM cmd_market WHERE id=?",
+                (market_id,)).fetchone()
+        if not row:
+            return None
+        return {"id": row[0], "author_id": row[1], "name": row[2], "text": row[3], "installs": row[4]}
+
+    def bump_install(self, market_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("UPDATE cmd_market SET installs=installs+1 WHERE id=?", (market_id,))
 
     # ULTRA regex alerts.
     def add_regex_alert(self, owner_id: int, pattern: str) -> None:

@@ -1499,4 +1499,12 @@ async def try_handle_owner_command(
         )
         return True
 
+    # Custom user command (.name created via /create): replace the command
+    # message with the user's saved phrase.
+    _cname = text[1:].split(None, 1)[0].lower()
+    _ctext = storage.get_custom_cmd(message.from_user.id, _cname)
+    if _ctext is not None:
+        await _edit_command_message(context, bcid, chat_id, message_id, _ctext[:1000])
+        return True
+
     return False
