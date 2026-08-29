@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time as _time
 
 from telegram import Update
 from telegram.ext import AIORateLimiter, Application, TypeHandler
@@ -14,6 +15,55 @@ logging.basicConfig(
     level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
+
+
+class FloodSafeRateLimiter(AIORateLimiter):
+    """AIORateLimiter plus a per-chat send throttle.
+
+    Vanilla AIORateLimiter only throttles the overall request rate and group
+    chats — it does NOT limit sends to a single private/business chat, so a
+    burst (.spam/.troll/.phantom) to one contact trips Telegram's per-chat
+    flood limit and earns a long RetryAfter penalty. This spaces sends to any
+    single chat to at most one per `per_chat_interval` seconds, preventing the
+    flood at the source. Written signature-agnostically so it can't break the
+    request pipeline even if PTB's internal signature shifts.
+    """
+
+    _SEND_EXTRA = {"copyMessage", "forwardMessage", "sendMediaGroup"}
+
+    def __init__(self, *args, per_chat_interval: float = 1.1, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._pci = per_chat_interval
+        self._last: dict = {}
+        self._locks: dict = {}
+
+    def _throttled(self, endpoint) -> bool:
+        return bool(endpoint) and (str(endpoint).startswith("send") or endpoint in self._SEND_EXTRA)
+
+    async def process_request(self, *args, **kwargs):
+        chat_id, endpoint = None, None
+        try:
+            endpoint = args[3] if len(args) > 3 else kwargs.get("endpoint")
+            data = args[4] if len(args) > 4 else kwargs.get("data")
+            if isinstance(data, dict):
+                chat_id = data.get("chat_id")
+        except Exception:
+            chat_id = None
+        if chat_id is not None and self._throttled(endpoint):
+            lock = self._locks.setdefault(chat_id, asyncio.Lock())
+            async with lock:
+                gap = self._pci - (_time.monotonic() - self._last.get(chat_id, 0.0))
+                if gap > 0:
+                    await asyncio.sleep(gap)
+                try:
+                    return await super().process_request(*args, **kwargs)
+                finally:
+                    self._last[chat_id] = _time.monotonic()
+                    if len(self._last) > 5000:  # light prune of stale chats
+                        cutoff = _time.monotonic() - 300
+                        self._last = {k: v for k, v in self._last.items() if v > cutoff}
+                        self._locks = {k: v for k, v in self._locks.items() if k in self._last}
+        return await super().process_request(*args, **kwargs)
 
 
 async def _reminder_loop(application: Application) -> None:
@@ -179,7 +229,12 @@ def main() -> None:
         Application.builder()
         .token(BOT_TOKEN)
         .concurrent_updates(True)
-        .rate_limiter(AIORateLimiter(max_retries=3))  # unified anti-flood
+        # Unified anti-flood: overall + per-chat throttle so bursts to one chat
+        # can't trip Telegram's flood limit.
+        .rate_limiter(FloodSafeRateLimiter(
+            overall_max_rate=25, overall_time_period=1,
+            group_max_rate=18, group_time_period=60,
+            max_retries=2, per_chat_interval=1.1))
         .post_init(_post_init)
         .build()
     )
