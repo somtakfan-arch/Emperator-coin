@@ -31,9 +31,11 @@ class FloodSafeRateLimiter(AIORateLimiter):
 
     _SEND_EXTRA = {"copyMessage", "forwardMessage", "sendMediaGroup"}
 
-    def __init__(self, *args, per_chat_interval: float = 1.1, **kwargs):
+    def __init__(self, *args, per_chat_interval: float = 1.1,
+                 ultra_per_chat_interval: float = 0.12, **kwargs):
         super().__init__(*args, **kwargs)
         self._pci = per_chat_interval
+        self._ultra_pci = ultra_per_chat_interval
         self._last: dict = {}
         self._locks: dict = {}
 
@@ -41,18 +43,21 @@ class FloodSafeRateLimiter(AIORateLimiter):
         return bool(endpoint) and (str(endpoint).startswith("send") or endpoint in self._SEND_EXTRA)
 
     async def process_request(self, *args, **kwargs):
-        chat_id, endpoint = None, None
+        chat_id, endpoint, rla = None, None, None
         try:
             endpoint = args[3] if len(args) > 3 else kwargs.get("endpoint")
             data = args[4] if len(args) > 4 else kwargs.get("data")
+            rla = args[5] if len(args) > 5 else kwargs.get("rate_limit_args")
             if isinstance(data, dict):
                 chat_id = data.get("chat_id")
         except Exception:
             chat_id = None
         if chat_id is not None and self._throttled(endpoint):
+            # ULTRA sends get a much shorter per-chat interval (their perk).
+            interval = self._ultra_pci if isinstance(rla, dict) and rla.get("ultra") else self._pci
             lock = self._locks.setdefault(chat_id, asyncio.Lock())
             async with lock:
-                gap = self._pci - (_time.monotonic() - self._last.get(chat_id, 0.0))
+                gap = interval - (_time.monotonic() - self._last.get(chat_id, 0.0))
                 if gap > 0:
                     await asyncio.sleep(gap)
                 try:

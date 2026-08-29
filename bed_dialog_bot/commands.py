@@ -308,12 +308,14 @@ async def _download_photo_b64(context, file_id: str, max_bytes: int = 500_000):
     return base64.b64encode(raw).decode()
 
 
-async def _spam_send_one(context, chat_id: int, bcid: str, text: str) -> bool:
+async def _spam_send_one(context, chat_id: int, bcid: str, text: str, ultra: bool = False) -> bool:
     """Send one spam message, waiting out flood limits. Returns True if sent.
     Never raises — a failed send must not abort the whole .spam run."""
+    rla = {"ultra": True} if ultra else None
     for _ in range(6):
         try:
-            await context.bot.send_message(chat_id=chat_id, business_connection_id=bcid, text=text)
+            await context.bot.send_message(chat_id=chat_id, business_connection_id=bcid,
+                                           text=text, rate_limit_args=rla)
             return True
         except RetryAfter as e:
             await asyncio.sleep(float(getattr(e, "retry_after", 1)) + 0.5)
@@ -327,22 +329,26 @@ async def _spam_send_one(context, chat_id: int, bcid: str, text: str) -> bool:
 _CAPTIONED_KINDS = {"photo", "video", "animation", "audio", "document"}
 
 
-async def _send_troll_item(context, chat_id: int, bcid: str, item) -> bool:
+async def _send_troll_item(context, chat_id: int, bcid: str, item, ultra: bool = False) -> bool:
     """Send one saved .troll item (text or media) into the chat. Never raises."""
     kind = item.get("kind", "text")
     fid = item.get("file_id")
     txt = item.get("text")
+    rla = {"ultra": True} if ultra else None
     for _ in range(4):
         try:
             if kind == "text" or not fid:
-                await context.bot.send_message(chat_id=chat_id, business_connection_id=bcid, text=txt or "")
+                await context.bot.send_message(chat_id=chat_id, business_connection_id=bcid,
+                                               text=txt or "", rate_limit_args=rla)
             else:
                 # kind doubles as the send_<kind> method name and its file kwarg.
                 send = getattr(context.bot, f"send_{kind}", None)
                 if send is None:
-                    await context.bot.send_message(chat_id=chat_id, business_connection_id=bcid, text=txt or "")
+                    await context.bot.send_message(chat_id=chat_id, business_connection_id=bcid,
+                                                   text=txt or "", rate_limit_args=rla)
                     return True
-                kwargs = {"chat_id": chat_id, "business_connection_id": bcid, kind: fid}
+                kwargs = {"chat_id": chat_id, "business_connection_id": bcid, kind: fid,
+                          "rate_limit_args": rla}
                 if kind in _CAPTIONED_KINDS and txt:
                     kwargs["caption"] = txt
                 await send(**kwargs)
@@ -839,7 +845,7 @@ async def try_handle_owner_command(
         sent = 1  # the edited command message counts as the first
         for _ in range(count - 1):
             await asyncio.sleep(interval)
-            if await _spam_send_one(context, chat_id, bcid, spam_text):
+            if await _spam_send_one(context, chat_id, bcid, spam_text, is_ultra_owner):
                 sent += 1
         if sent < count:
             try:
@@ -1015,13 +1021,13 @@ async def try_handle_owner_command(
             await _edit_command_message(context, bcid, chat_id, message_id, first["text"] or "")
         else:
             await _edit_command_message(context, bcid, chat_id, message_id, "🚀")
-            await _send_troll_item(context, chat_id, bcid, first)
+            await _send_troll_item(context, chat_id, bcid, first, is_ultra_owner)
         interval = (0.02 if is_ultra_owner
                     else config.TROLL_INTERVAL_PREMIUM if is_premium
                     else max(config.TROLL_INTERVAL_MIN, SPAM_WINDOW_SECONDS / max(len(saved), 1)))
         for item in saved[1:]:
             await asyncio.sleep(interval)
-            await _send_troll_item(context, chat_id, bcid, item)
+            await _send_troll_item(context, chat_id, bcid, item, is_ultra_owner)
         return True
 
     if _SPEK_RE.match(text):
