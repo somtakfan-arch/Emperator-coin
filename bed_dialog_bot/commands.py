@@ -16,7 +16,7 @@ import time
 import uuid
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message
-from telegram.error import RetryAfter
+from telegram.error import BadRequest, Forbidden, RetryAfter
 from telegram.ext import ContextTypes
 
 from . import config, formatting, mediautil
@@ -308,22 +308,27 @@ async def _download_photo_b64(context, file_id: str, max_bytes: int = 500_000):
     return base64.b64encode(raw).decode()
 
 
-async def _spam_send_one(context, chat_id: int, bcid: str, text: str, ultra: bool = False) -> bool:
-    """Send one spam message, waiting out flood limits. Returns True if sent.
-    Never raises — a failed send must not abort the whole .spam run."""
+async def _spam_send_one(context, chat_id: int, bcid: str, text: str, ultra: bool = False) -> str:
+    """Send one spam message. Returns 'ok', 'flood' (account restricted — stop),
+    or 'err'. RetryAfter is waited out and retried so no message is lost."""
     rla = {"ultra": True} if ultra else None
-    for _ in range(6):
+    for _ in range(4):
         try:
             await context.bot.send_message(chat_id=chat_id, business_connection_id=bcid,
                                            text=text, rate_limit_args=rla)
-            return True
+            return "ok"
         except RetryAfter as e:
             await asyncio.sleep(float(getattr(e, "retry_after", 1)) + 0.5)
+        except (BadRequest, Forbidden) as e:
+            m = str(e).lower()
+            if "flood" in m or "too many" in m or "restricted" in m:
+                return "flood"
+            logger.warning("spam send error: %s", e)
+            return "err"
         except Exception:
             logger.exception("spam send failed")
-            await asyncio.sleep(0.5)
-            return False
-    return False
+            await asyncio.sleep(0.3)
+    return "err"
 
 
 _CAPTIONED_KINDS = {"photo", "video", "animation", "audio", "document"}
@@ -843,17 +848,24 @@ async def try_handle_owner_command(
                     else config.SPAM_INTERVAL_PREMIUM if is_premium
                     else max(config.SPAM_INTERVAL_MIN, SPAM_WINDOW_SECONDS / count))
         sent = 1  # the edited command message counts as the first
+        flood = False
         for _ in range(count - 1):
             await asyncio.sleep(interval)
-            if await _spam_send_one(context, chat_id, bcid, spam_text, is_ultra_owner):
+            res = await _spam_send_one(context, chat_id, bcid, spam_text, is_ultra_owner)
+            if res == "ok":
                 sent += 1
+            elif res == "flood":
+                flood = True
+                break
         if sent < count:
+            note = (f"📣 Рассылка: отправлено {sent} из {count}.\n"
+                    "⚠️ Telegram временно ограничил аккаунт за спам (Peer-flood). "
+                    "Подождите час-другой и не спамьте так часто — ограничение снимется само. "
+                    "Статус можно проверить у @SpamBot."
+                    if flood else
+                    f"📣 Рассылка: отправлено {sent} из {count} (часть не прошла).")
             try:
-                await context.bot.send_message(
-                    chat_id=owner_chat_id,
-                    text=f"📣 Рассылка: отправлено {sent} из {count} "
-                         f"(Telegram ограничил скорость — часть не прошла).",
-                )
+                await context.bot.send_message(chat_id=owner_chat_id, text=note)
             except Exception:
                 logger.exception("Failed to send spam summary")
         return True
