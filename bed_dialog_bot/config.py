@@ -53,6 +53,11 @@ ULTRA_DURATION_DAYS = int(os.environ.get("ULTRA_DURATION_DAYS", "30"))
 ULTRA_GRACE_DAYS = int(os.environ.get("ULTRA_GRACE_DAYS", "3"))
 # Discount on buying BED with Stars for ULTRA users (0.15 = -15%).
 ULTRA_BED_DISCOUNT = float(os.environ.get("ULTRA_BED_DISCOUNT", "0.15"))
+# Wallet: premium days you get per 1 BED via /exchange.
+BED_DAYS_PER_UNIT = int(os.environ.get("BED_DAYS_PER_UNIT", "3"))
+# Dice game: win chance and payout multiplier.
+DICE_WIN_CHANCE = float(os.environ.get("DICE_WIN_CHANCE", "0.45"))
+DICE_WIN_MULT = int(os.environ.get("DICE_WIN_MULT", "2"))
 # Custom user commands (/create): how many one may have.
 CUSTOM_CMD_FREE_MAX = int(os.environ.get("CUSTOM_CMD_FREE_MAX", "5"))
 CUSTOM_CMD_PREMIUM_MAX = int(os.environ.get("CUSTOM_CMD_PREMIUM_MAX", "30"))

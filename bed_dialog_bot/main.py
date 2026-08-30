@@ -93,6 +93,35 @@ async def _reminder_loop(application: Application) -> None:
                 storage.delete_reminder(r["id"])
         except Exception:
             logger.exception("Reminder loop error")
+        # Matured stakes: return principal + interest.
+        try:
+            now = int(_time.time())
+            for st in storage.due_stakes(now):
+                payout = st["amount"] + st["amount"] * st["rate_bps"] // 10000
+                storage.close_stake(st["id"], st["user_id"], payout)
+                try:
+                    await application.bot.send_message(
+                        chat_id=st["user_id"],
+                        text=f"🏦 Стейк созрел! Вам вернулось {payout} BED (было {st['amount']}).")
+                except Exception:
+                    pass
+        except Exception:
+            logger.exception("Stake loop error")
+        # Price alerts.
+        try:
+            price = bedcoin.price_stars(storage)
+            for al in storage.all_price_alerts():
+                hit = (price >= al["target"]) if al["above"] else (price <= al["target"])
+                if hit:
+                    storage.del_price_alert(al["id"])
+                    try:
+                        await application.bot.send_message(
+                            chat_id=al["user_id"],
+                            text=f"🔔 Курс BED достиг {price:.2f}⭐ (ваш алерт: {al['target']}⭐)!")
+                    except Exception:
+                        pass
+        except Exception:
+            logger.exception("Price-alert loop error")
         await asyncio.sleep(30)
 
 

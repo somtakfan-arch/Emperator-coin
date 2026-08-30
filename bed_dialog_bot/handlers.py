@@ -1662,6 +1662,115 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             parse_mode="HTML")
         return
 
+    if text.startswith("/exchange"):
+        uid = message.from_user.id
+        parts = text.split()
+        if len(parts) != 2 or not parts[1].isdigit() or int(parts[1]) <= 0:
+            await message.reply_text(
+                f"💱 Обмен BED на премиум: <code>/exchange количество_BED</code>\n"
+                f"Курс: 1 BED = {config.BED_DAYS_PER_UNIT} дн. премиума. Баланс: {storage.get_bed(uid)} BED.",
+                parse_mode="HTML")
+            return
+        bed = int(parts[1])
+        if not storage.spend_bed(uid, bed, reason="exchange"):
+            await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)} BED.")
+            return
+        days = bed * config.BED_DAYS_PER_UNIT
+        until = storage.grant_premium_days(uid, days)
+        await message.reply_text(f"✅ Обменяно {bed} BED → +{days} дн. премиума (до {_fmt_premium(until)}).")
+        return
+
+    if text.startswith("/dice"):
+        uid = message.from_user.id
+        parts = text.split()
+        if len(parts) != 2 or not parts[1].isdigit() or int(parts[1]) <= 0:
+            await message.reply_text(
+                f"🎲 Кости на BED: <code>/dice ставка</code>\n"
+                f"Шанс выигрыша {int(config.DICE_WIN_CHANCE*100)}%, выигрыш ×{config.DICE_WIN_MULT}. "
+                f"Баланс: {storage.get_bed(uid)} BED.", parse_mode="HTML")
+            return
+        bet = int(parts[1])
+        if not storage.spend_bed(uid, bet, reason="dice_bet"):
+            await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)} BED.")
+            return
+        import random as _rnd
+        roll = _rnd.randint(1, 6)
+        win = _rnd.random() < config.DICE_WIN_CHANCE
+        if win:
+            prize = bet * config.DICE_WIN_MULT
+            new_bal = storage.add_bed(uid, prize, reason="dice_win")
+            await message.reply_text(f"🎲 {roll}! 🎉 Выигрыш +{prize} BED! Баланс: {new_bal} BED.")
+        else:
+            await message.reply_text(f"🎲 {roll}! 😔 Мимо, −{bet} BED. Баланс: {storage.get_bed(uid)} BED.")
+        return
+
+    if text.startswith("/stake"):
+        uid = message.from_user.id
+        parts = text.split()
+        if len(parts) != 3 or not parts[1].isdigit() or not parts[2].isdigit():
+            stakes = storage.list_stakes(uid)
+            cur = ""
+            if stakes:
+                cur = "\n\nАктивные:\n" + "\n".join(
+                    f"• {s['amount']} BED → {_fmt_premium(s['until_ts'])} (+{s['rate_bps']//100}%)" for s in stakes)
+            await message.reply_text(
+                "🏦 <b>Стейкинг BED</b> — заморозь и получи %:\n"
+                "<code>/stake количество дней</code>\n"
+                "Ставка: +1% за каждые 7 дней (пример: 30 дн ≈ +4%)." + cur, parse_mode="HTML")
+            return
+        amount, days = int(parts[1]), int(parts[2])
+        if amount <= 0 or days <= 0 or days > 3650:
+            await message.reply_text("Неверные параметры.")
+            return
+        rate_bps = (days // 7) * 100  # +1% per 7 days
+        if not storage.add_stake(uid, amount, int(time.time()) + days * 86400, rate_bps):
+            await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)} BED.")
+            return
+        payout = amount + amount * rate_bps // 10000
+        await message.reply_text(
+            f"🏦 Застейкано {amount} BED на {days} дн. Вернётся <b>{payout} BED</b> (+{rate_bps//100}%) "
+            f"{_fmt_premium(int(time.time()) + days*86400)}.", parse_mode="HTML")
+        return
+
+    if text.startswith("/pricealert"):
+        uid = message.from_user.id
+        parts = text.split()
+        if len(parts) != 2:
+            cur = bedcoin.price_stars(storage)
+            await message.reply_text(
+                f"🔔 Алерт по курсу BED (сейчас {cur:.2f}⭐):\n"
+                "<code>/pricealert 15</code> — пинг, когда курс достигнет 15⭐.", parse_mode="HTML")
+            return
+        try:
+            target = float(parts[1].replace(",", "."))
+        except ValueError:
+            await message.reply_text("Укажите число, например /pricealert 15")
+            return
+        above = target >= bedcoin.price_stars(storage)
+        storage.add_price_alert(uid, target, above)
+        await message.reply_text(f"🔔 Алерт поставлен: пингну, когда курс {'≥' if above else '≤'} {target}⭐.")
+        return
+
+    if text.startswith("/achievements") or text.startswith("/ach"):
+        uid = message.from_user.id
+        bal = storage.get_bed(uid)
+        refs = storage.count_referrals(uid)
+        cmds = storage.count_custom_cmds(uid)
+        got = []
+        if bal >= 1: got.append("🪙 Первая монета")
+        if bal >= 100: got.append("💰 Сотня BED")
+        if bal >= 1000: got.append("🏦 Тысячник")
+        if refs >= 1: got.append("🤝 Первый друг")
+        if refs >= 20: got.append("👑 Амбассадор (20 друзей)")
+        if cmds >= 1: got.append("🧩 Кодер (своя команда)")
+        if storage.is_ultra(uid): got.append("🔱 ULTRA")
+        elif storage.is_premium(uid): got.append("💎 Премиум")
+        if any(e["reason"] and e["reason"].startswith("send:") for e in storage.user_ledger(uid, 100)):
+            got.append("💸 Меценат (перевёл BED)")
+        text_a = "🏆 <b>Достижения</b>\n\n" + ("\n".join(got) if got else "Пока пусто — покупай BED, зови друзей, создавай команды!")
+        await message.reply_text(text_a, parse_mode="HTML")
+        return
+
     if text.startswith("/request"):
         parts = text.split()
         if len(parts) != 2 or not parts[1].isdigit() or int(parts[1]) <= 0:

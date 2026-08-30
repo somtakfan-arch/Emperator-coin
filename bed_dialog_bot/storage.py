@@ -1399,6 +1399,56 @@ class Storage:
             self._ledger(conn, user_id, -amount, reason)
         return True
 
+    # --- price alerts ---
+    def add_price_alert(self, user_id: int, target: float, above: bool) -> None:
+        with self._connect() as conn:
+            conn.execute("INSERT INTO price_alerts (user_id, target, above) VALUES (?, ?, ?)",
+                         (user_id, target, 1 if above else 0))
+
+    def all_price_alerts(self):
+        with self._connect() as conn:
+            rows = conn.execute("SELECT id, user_id, target, above FROM price_alerts").fetchall()
+        return [{"id": r[0], "user_id": r[1], "target": r[2], "above": bool(r[3])} for r in rows]
+
+    def del_price_alert(self, alert_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM price_alerts WHERE id = ?", (alert_id,))
+
+    # --- staking ---
+    def add_stake(self, user_id: int, amount: int, until_ts: int, rate_bps: int) -> bool:
+        import time as _t
+        with self._connect() as conn:
+            row = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (user_id,)).fetchone()
+            if not row or row[0] < amount:
+                return False
+            conn.execute("UPDATE bed_balances SET balance=balance-? WHERE user_id=?", (amount, user_id))
+            self._ledger(conn, user_id, -amount, "stake")
+            conn.execute("INSERT INTO bed_stakes (user_id, amount, until_ts, rate_bps, created_at) "
+                         "VALUES (?,?,?,?,?)", (user_id, amount, until_ts, rate_bps, int(_t.time())))
+        return True
+
+    def due_stakes(self, now_ts: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, user_id, amount, rate_bps FROM bed_stakes WHERE until_ts <= ?",
+                (now_ts,)).fetchall()
+        return [{"id": r[0], "user_id": r[1], "amount": r[2], "rate_bps": r[3]} for r in rows]
+
+    def list_stakes(self, user_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT amount, until_ts, rate_bps FROM bed_stakes WHERE user_id=? ORDER BY until_ts",
+                (user_id,)).fetchall()
+        return [{"amount": r[0], "until_ts": r[1], "rate_bps": r[2]} for r in rows]
+
+    def close_stake(self, stake_id: int, user_id: int, payout: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM bed_stakes WHERE id=?", (stake_id,))
+            conn.execute(
+                "INSERT INTO bed_balances (user_id, balance) VALUES (?,?) "
+                "ON CONFLICT(user_id) DO UPDATE SET balance=balance+excluded.balance", (user_id, payout))
+            self._ledger(conn, user_id, payout, "stake_return")
+
     def find_user_by_username(self, username: str):
         u = username.lstrip("@").lower()
         with self._connect() as conn:
