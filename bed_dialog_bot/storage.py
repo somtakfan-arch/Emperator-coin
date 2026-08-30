@@ -1375,6 +1375,24 @@ class Storage:
             self._ledger(conn, user_id, -amount, reason)
         return True
 
+    def transfer_bed(self, sender_id: int, recipient_id: int, amount: int) -> bool:
+        """Atomically move `amount` BED from sender to recipient. False if short."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT balance FROM bed_balances WHERE user_id = ?", (sender_id,)
+            ).fetchone()
+            if not row or row[0] < amount:
+                return False
+            conn.execute("UPDATE bed_balances SET balance = balance - ? WHERE user_id = ?",
+                         (amount, sender_id))
+            conn.execute(
+                "INSERT INTO bed_balances (user_id, balance) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET balance = balance + excluded.balance",
+                (recipient_id, amount))
+            self._ledger(conn, sender_id, -amount, f"send:{recipient_id}")
+            self._ledger(conn, recipient_id, amount, f"recv:{sender_id}")
+        return True
+
     def total_bed_liability(self) -> int:
         with self._connect() as conn:
             row = conn.execute("SELECT COALESCE(SUM(balance), 0) FROM bed_balances").fetchone()

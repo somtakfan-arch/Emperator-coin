@@ -1130,6 +1130,35 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if message.from_user and message.from_user.id in chain_await and text.startswith("/"):
         chain_await.discard(message.from_user.id)
 
+    # BED transfer: capture "ID amount".
+    send_await = context.bot_data.setdefault("bed_send_await", set())
+    if message.from_user and message.from_user.id in send_await and text:
+        uid = message.from_user.id
+        if text.startswith("/cancel"):
+            send_await.discard(uid)
+            await message.reply_text("Отменено.")
+            return
+        if not text.startswith("/"):
+            send_await.discard(uid)
+            p = text.split()
+            if len(p) != 2 or not p[0].lstrip("-").isdigit() or not p[1].isdigit():
+                await message.reply_text("Формат: <code>ID количество</code>. Попробуйте снова: /menu → Кошелёк.", parse_mode="HTML")
+                return
+            target, amount = int(p[0]), int(p[1])
+            if amount <= 0 or target == uid:
+                await message.reply_text("Неверный получатель или сумма.")
+                return
+            if not storage.transfer_bed(uid, target, amount):
+                await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)} BED.")
+                return
+            await message.reply_text(f"✅ Отправлено {amount} BED пользователю {target}. Баланс: {storage.get_bed(uid)} BED.")
+            try:
+                await context.bot.send_message(target, f"💸 Вам перевели {amount} BED! Баланс: {storage.get_bed(target)} BED.")
+            except Exception:
+                pass
+            return
+        send_await.discard(uid)
+
     # Conversational support/ask: capture the next message (text or photo) as a ticket.
     support_await = context.bot_data.setdefault("support_await", {})
     if message.from_user and message.from_user.id in support_await:
@@ -1496,6 +1525,32 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         data = io.BytesIO(buf.getvalue().encode("utf-8"))
         await context.bot.send_document(chat_id=message.chat_id, document=data,
                                         filename=f"mybackup_{uid}.txt", caption="💾 Ваш личный бэкап")
+        return
+
+    if text.startswith("/send"):
+        uid = message.from_user.id
+        parts = text.split()
+        if len(parts) != 3 or not parts[1].lstrip("-").isdigit() or not parts[2].isdigit():
+            await message.reply_text(
+                f"💸 Перевод BED другому пользователю:\n<code>/send ID количество</code>\n"
+                f"Ваш баланс: {storage.get_bed(uid)} BED. Ваш ID: <code>{uid}</code>",
+                parse_mode="HTML")
+            return
+        target, amount = int(parts[1]), int(parts[2])
+        if amount <= 0:
+            await message.reply_text("Сумма должна быть больше 0.")
+            return
+        if target == uid:
+            await message.reply_text("Себе переводить нельзя 🙂")
+            return
+        if not storage.transfer_bed(uid, target, amount):
+            await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)} BED.")
+            return
+        await message.reply_text(f"✅ Отправлено {amount} BED пользователю {target}. Баланс: {storage.get_bed(uid)} BED.")
+        try:
+            await context.bot.send_message(target, f"💸 Вам перевели {amount} BED! Баланс: {storage.get_bed(target)} BED.")
+        except Exception:
+            pass
         return
 
     if text.startswith("/bed"):
@@ -2805,6 +2860,15 @@ async def _handle_bed_callback(query, context: ContextTypes.DEFAULT_TYPE) -> Non
         await _handle_bed_withdraw_start(query, context)
     elif action == "chain":
         await _handle_bed_chain_start(query, context)
+    elif action == "send":
+        await query.answer()
+        context.bot_data.setdefault("bed_send_await", set()).add(uid)
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=(f"💸 <b>Перевод BED</b>\nБаланс: {storage.get_bed(uid)} BED.\n\n"
+                  "Пришлите одним сообщением:\n<code>ID количество</code>\n"
+                  "Например: <code>123456789 50</code>\n\nОтмена — /cancel"),
+            parse_mode="HTML")
     elif action == "top":
         await query.answer()
         await context.bot.send_message(
