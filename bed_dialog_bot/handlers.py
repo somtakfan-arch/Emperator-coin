@@ -1771,6 +1771,40 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         await message.reply_text(text_a, parse_mode="HTML")
         return
 
+    if text.startswith("/chart"):
+        series = storage.price_series(24)
+        cur = bedcoin.price_stars(storage)
+        if len(series) < 2:
+            await message.reply_text(
+                f"📈 Курс BED: <b>{cur:.2f}⭐</b>\nИстория ещё копится (точка в час) — график появится позже.",
+                parse_mode="HTML")
+            return
+        blocks = "▁▂▃▄▅▆▇█"
+        lo, hi = min(series), max(series)
+        rng = (hi - lo) or 1.0
+        spark = "".join(blocks[min(7, int((p - lo) / rng * 7))] for p in series)
+        trend = "📈" if series[-1] >= series[0] else "📉"
+        await message.reply_text(
+            f"{trend} <b>Курс BED</b> (посл. {len(series)} ч)\n<code>{spark}</code>\n"
+            f"min {lo:.2f}⭐ · сейчас {cur:.2f}⭐ · max {hi:.2f}⭐", parse_mode="HTML")
+        return
+
+    if text.startswith("/setpin"):
+        uid = message.from_user.id
+        parts = text.split()
+        if len(parts) != 2 or not parts[1].isdigit() or not (4 <= len(parts[1]) <= 6):
+            await message.reply_text("🔒 Установить PIN на вывод: <code>/setpin 1234</code> (4–6 цифр).\n"
+                                     "Убрать: /delpin", parse_mode="HTML")
+            return
+        storage.set_setting(f"pin:{uid}", parts[1])
+        await message.reply_text("🔒 PIN установлен. Теперь вывод BED требует PIN.")
+        return
+
+    if text.startswith("/delpin"):
+        storage.set_setting(f"pin:{message.from_user.id}", "")
+        await message.reply_text("🔓 PIN снят.")
+        return
+
     if text.startswith("/request"):
         parts = text.split()
         if len(parts) != 2 or not parts[1].isdigit() or int(parts[1]) <= 0:
@@ -3508,15 +3542,24 @@ async def _process_bed_withdraw(message, context: ContextTypes.DEFAULT_TYPE) -> 
         await message.reply_text("Вывод отменён.")
         return
     parts = text.split()
-    if len(parts) < 2 or not parts[-1].isdigit():
-        await message.reply_text(
-            "Неверный формат. Пришлите: <code>TON-адрес количество</code>, например "
-            "<code>UQ... 5</code>. Отмена — /cancel",
-            parse_mode="HTML",
-        )
-        return
-    address = parts[0]
-    amount = int(parts[-1])
+    pin = storage.get_setting(f"pin:{uid}")
+    if pin:
+        if len(parts) < 3 or parts[-1] != pin or not parts[1].isdigit():
+            await message.reply_text(
+                "🔒 Нужен PIN. Формат: <code>TON-адрес количество PIN</code>. Отмена — /cancel",
+                parse_mode="HTML")
+            return
+        address, amount = parts[0], int(parts[1])
+    else:
+        if len(parts) < 2 or not parts[-1].isdigit():
+            await message.reply_text(
+                "Неверный формат. Пришлите: <code>TON-адрес количество</code>, например "
+                "<code>UQ... 5</code>. Отмена — /cancel",
+                parse_mode="HTML",
+            )
+            return
+        address = parts[0]
+        amount = int(parts[-1])
     if amount < config.BED_MIN_WITHDRAW or amount > config.BED_MAX_WITHDRAW:
         await message.reply_text(
             f"Сумма вне лимита ({config.BED_MIN_WITHDRAW}–{config.BED_MAX_WITHDRAW} BED)."

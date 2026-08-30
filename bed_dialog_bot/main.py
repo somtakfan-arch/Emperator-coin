@@ -107,9 +107,10 @@ async def _reminder_loop(application: Application) -> None:
                     pass
         except Exception:
             logger.exception("Stake loop error")
-        # Price alerts.
+        # Price alerts + hourly price history for the chart.
         try:
             price = bedcoin.price_stars(storage)
+            storage.record_price((int(_time.time()) // 3600) * 3600, price)  # one point/hour
             for al in storage.all_price_alerts():
                 hit = (price >= al["target"]) if al["above"] else (price <= al["target"])
                 if hit:

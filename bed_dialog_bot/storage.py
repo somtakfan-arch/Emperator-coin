@@ -83,6 +83,11 @@ CREATE TABLE IF NOT EXISTS price_alerts (
     above INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS price_history (
+    ts INTEGER PRIMARY KEY,
+    price REAL NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS messages (
     business_connection_id TEXT NOT NULL,
     chat_id INTEGER NOT NULL,
@@ -1398,6 +1403,17 @@ class Storage:
             )
             self._ledger(conn, user_id, -amount, reason)
         return True
+
+    # --- price history (for the chart) ---
+    def record_price(self, ts: int, price: float) -> None:
+        with self._connect() as conn:
+            conn.execute("INSERT OR IGNORE INTO price_history (ts, price) VALUES (?, ?)", (ts, price))
+
+    def price_series(self, limit: int = 24):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT price FROM price_history ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
+        return [r[0] for r in reversed(rows)]
 
     # --- price alerts ---
     def add_price_alert(self, user_id: int, target: float, above: bool) -> None:
