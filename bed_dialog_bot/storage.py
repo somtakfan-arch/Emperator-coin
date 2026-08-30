@@ -59,6 +59,30 @@ CREATE TABLE IF NOT EXISTS cmd_market (
     created_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS bed_codes (
+    code TEXT PRIMARY KEY,
+    amount INTEGER NOT NULL,
+    creator_id INTEGER NOT NULL,
+    redeemed_by INTEGER,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS bed_stakes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    amount INTEGER NOT NULL,
+    until_ts INTEGER NOT NULL,
+    rate_bps INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS price_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    target REAL NOT NULL,
+    above INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS messages (
     business_connection_id TEXT NOT NULL,
     chat_id INTEGER NOT NULL,
@@ -1374,6 +1398,50 @@ class Storage:
             )
             self._ledger(conn, user_id, -amount, reason)
         return True
+
+    def find_user_by_username(self, username: str):
+        u = username.lstrip("@").lower()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT user_id FROM users WHERE LOWER(username) = ? LIMIT 1", (u,)).fetchone()
+        return row[0] if row else None
+
+    def user_ledger(self, user_id: int, limit: int = 15):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT delta, reason, created_at FROM bed_ledger WHERE user_id=? "
+                "ORDER BY id DESC LIMIT ?", (user_id, limit)).fetchall()
+        return [{"delta": r[0], "reason": r[1], "created_at": r[2]} for r in rows]
+
+    # --- BED gift codes (redeemable cheques) ---
+    def create_bed_code(self, code: str, amount: int, creator_id: int) -> bool:
+        """Escrow `amount` from creator into a one-time code. False if short."""
+        import time as _t
+        with self._connect() as conn:
+            row = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (creator_id,)).fetchone()
+            if not row or row[0] < amount:
+                return False
+            conn.execute("UPDATE bed_balances SET balance=balance-? WHERE user_id=?", (amount, creator_id))
+            self._ledger(conn, creator_id, -amount, "code")
+            conn.execute("INSERT INTO bed_codes (code, amount, creator_id, created_at) VALUES (?,?,?,?)",
+                         (code, amount, creator_id, int(_t.time())))
+        return True
+
+    def redeem_bed_code(self, code: str, user_id: int):
+        """Redeem a code to user_id. Returns amount, or None if invalid/used."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT amount, redeemed_by FROM bed_codes WHERE code=?", (code,)).fetchone()
+            if not row or row[1] is not None:
+                return None
+            amount = row[0]
+            conn.execute("UPDATE bed_codes SET redeemed_by=? WHERE code=? AND redeemed_by IS NULL",
+                         (user_id, code))
+            conn.execute(
+                "INSERT INTO bed_balances (user_id, balance) VALUES (?,?) "
+                "ON CONFLICT(user_id) DO UPDATE SET balance=balance+excluded.balance", (user_id, amount))
+            self._ledger(conn, user_id, amount, "code_in")
+        return amount
 
     def transfer_bed(self, sender_id: int, recipient_id: int, amount: int) -> bool:
         """Atomically move `amount` BED from sender to recipient. False if short."""

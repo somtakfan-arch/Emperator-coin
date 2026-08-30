@@ -1230,6 +1230,31 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         if payload.startswith("adkey_"):
             await _redeem_adlink(message, context, storage, payload[len("adkey_"):])
             return
+        # BED gift-code link.
+        if payload.startswith("code_"):
+            amount = storage.redeem_bed_code(payload[len("code_"):].upper(), message.from_user.id)
+            if amount is None:
+                await message.reply_text("❌ Чек недействителен или уже использован.")
+            else:
+                await message.reply_text(f"🎉 Чек активирован! +{amount} BED. Баланс: {storage.get_bed(message.from_user.id)} BED.")
+            return
+        # BED payment request: pay_<recipient>_<amount>.
+        if payload.startswith("pay_"):
+            m = re.match(r"pay_(\d+)_(\d+)$", payload)
+            if m:
+                to_id, amount = int(m.group(1)), int(m.group(2))
+                uid = message.from_user.id
+                if to_id == uid:
+                    await message.reply_text("Это ваш собственный запрос 🙂")
+                elif storage.transfer_bed(uid, to_id, amount):
+                    await message.reply_text(f"✅ Оплачено {amount} BED. Баланс: {storage.get_bed(uid)} BED.")
+                    try:
+                        await context.bot.send_message(to_id, f"💳 Ваш запрос на {amount} BED оплачен! Баланс: {storage.get_bed(to_id)} BED.")
+                    except Exception:
+                        pass
+                else:
+                    await message.reply_text(f"❌ Недостаточно BED для оплаты {amount}. Баланс: {storage.get_bed(uid)} BED.")
+            return
         if payload and not was_known:
             _record_pending_referral(payload, message.from_user.id, storage)
         # One-time free trial for brand-new users (disabled when TRIAL_DAYS<=0).
@@ -1529,28 +1554,125 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     if text.startswith("/send"):
         uid = message.from_user.id
-        parts = text.split()
-        if len(parts) != 3 or not parts[1].lstrip("-").isdigit() or not parts[2].isdigit():
+        parts = text.split(maxsplit=3)
+        if len(parts) < 3:
             await message.reply_text(
-                f"💸 Перевод BED другому пользователю:\n<code>/send ID количество</code>\n"
-                f"Ваш баланс: {storage.get_bed(uid)} BED. Ваш ID: <code>{uid}</code>",
+                f"💸 Перевод BED:\n<code>/send @ник_или_ID количество [сообщение]</code>\n"
+                f"Пример: <code>/send @vasya 50 с днём рождения!</code>\n"
+                f"Ваш баланс: {storage.get_bed(uid)} BED · ваш ID: <code>{uid}</code>",
                 parse_mode="HTML")
             return
-        target, amount = int(parts[1]), int(parts[2])
-        if amount <= 0:
-            await message.reply_text("Сумма должна быть больше 0.")
+        who, amt_s = parts[1], parts[2]
+        gift_msg = parts[3] if len(parts) > 3 else ""
+        if not amt_s.isdigit():
+            await message.reply_text("Количество должно быть числом.")
             return
-        if target == uid:
-            await message.reply_text("Себе переводить нельзя 🙂")
+        amount = int(amt_s)
+        target = int(who) if who.lstrip("-").isdigit() else storage.find_user_by_username(who)
+        if target is None:
+            await message.reply_text("Пользователь не найден (он должен был писать боту). Попробуйте по ID.")
+            return
+        if amount <= 0 or target == uid:
+            await message.reply_text("Неверный получатель или сумма.")
             return
         if not storage.transfer_bed(uid, target, amount):
             await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)} BED.")
             return
-        await message.reply_text(f"✅ Отправлено {amount} BED пользователю {target}. Баланс: {storage.get_bed(uid)} BED.")
+        await message.reply_text(f"✅ Отправлено {amount} BED. Баланс: {storage.get_bed(uid)} BED.")
         try:
-            await context.bot.send_message(target, f"💸 Вам перевели {amount} BED! Баланс: {storage.get_bed(target)} BED.")
+            sender_name = _display_name(message)[0]
+            note = f"💸 {html.escape(sender_name)} перевёл вам {amount} BED! Баланс: {storage.get_bed(target)} BED."
+            if gift_msg:
+                note += f"\n🎁 «{html.escape(gift_msg[:200])}»"
+            await context.bot.send_message(target, note, parse_mode="HTML")
         except Exception:
             pass
+        return
+
+    if text.startswith("/bedcode"):
+        uid = message.from_user.id
+        parts = text.split()
+        if len(parts) != 2 or not parts[1].isdigit() or int(parts[1]) <= 0:
+            await message.reply_text("🎟 Создать BED-чек: <code>/bedcode количество</code>\n"
+                                     "Спишется с баланса; кто активирует код — заберёт.", parse_mode="HTML")
+            return
+        amount = int(parts[1])
+        import secrets as _secrets
+        code = "BED-" + _secrets.token_hex(3).upper()
+        if not storage.create_bed_code(code, amount, uid):
+            await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)} BED.")
+            return
+        await message.reply_text(
+            f"🎟 Чек на <b>{amount} BED</b> создан!\nКод: <code>{code}</code>\n\n"
+            f"Активировать: <code>/redeemcode {code}</code>\n"
+            f"Или ссылкой: https://t.me/{context.bot.username}?start=code_{code}",
+            parse_mode="HTML", disable_web_page_preview=True)
+        return
+
+    if text.startswith("/redeemcode"):
+        parts = text.split()
+        if len(parts) != 2:
+            await message.reply_text("Использование: /redeemcode КОД")
+            return
+        amount = storage.redeem_bed_code(parts[1].strip().upper(), message.from_user.id)
+        if amount is None:
+            await message.reply_text("❌ Код недействителен или уже использован.")
+            return
+        await message.reply_text(f"🎉 Активировано! +{amount} BED. Баланс: {storage.get_bed(message.from_user.id)} BED.")
+        return
+
+    if text.startswith("/history"):
+        uid = message.from_user.id
+        led = storage.user_ledger(uid, 15)
+        if not led:
+            await message.reply_text("📜 История пуста.")
+            return
+        _reasons = {"buy": "покупка", "deposit": "депозит", "code": "чек создан",
+                    "code_in": "чек получен", "daily": "ежедневка", "power": "power-команда",
+                    "ultra": "ULTRA", "premium": "премиум", "add": "начисление", "spend": "трата"}
+        lines = [f"📜 <b>История BED</b> · баланс {storage.get_bed(uid)}\n"]
+        for e in led:
+            try:
+                ts = datetime.fromtimestamp(e["created_at"]).strftime("%d.%m %H:%M")
+            except (ValueError, OverflowError, OSError, TypeError):
+                ts = "—"
+            r = e["reason"] or ""
+            if r.startswith("send:"):
+                label = f"перевод → {r[5:]}"
+            elif r.startswith("recv:"):
+                label = f"перевод ← {r[5:]}"
+            else:
+                label = _reasons.get(r, r)
+            sign = "➕" if e["delta"] >= 0 else "➖"
+            lines.append(f"{sign} <b>{abs(e['delta'])}</b> · {label} · {ts}")
+        await message.reply_text("\n".join(lines), parse_mode="HTML")
+        return
+
+    if text.startswith("/calc"):
+        parts = text.split()
+        if len(parts) != 2 or not parts[1].isdigit():
+            await message.reply_text("🧮 Калькулятор: <code>/calc количество_BED</code>", parse_mode="HTML")
+            return
+        n = int(parts[1])
+        stars = bedcoin.cost_stars(storage, n, message.from_user.id)
+        price = bedcoin.fmt_price(storage)
+        await message.reply_text(
+            f"🧮 <b>{n} BED</b> ≈ <b>{stars}⭐</b> (курс {price}⭐/BED)\n"
+            f"On-chain: {n} BED = {n} джеттонов BED на TON.",
+            parse_mode="HTML")
+        return
+
+    if text.startswith("/request"):
+        parts = text.split()
+        if len(parts) != 2 or not parts[1].isdigit() or int(parts[1]) <= 0:
+            await message.reply_text("💳 Запросить оплату: <code>/request количество</code>", parse_mode="HTML")
+            return
+        amount = int(parts[1])
+        link = f"https://t.me/{context.bot.username}?start=pay_{message.from_user.id}_{amount}"
+        await message.reply_text(
+            f"💳 Ссылка-запрос на <b>{amount} BED</b>:\n{link}\n\n"
+            "Скинь её тому, кто должен оплатить — по тапу он подтвердит перевод тебе.",
+            parse_mode="HTML", disable_web_page_preview=True)
         return
 
     if text.startswith("/bed"):
@@ -2860,6 +2982,33 @@ async def _handle_bed_callback(query, context: ContextTypes.DEFAULT_TYPE) -> Non
         await _handle_bed_withdraw_start(query, context)
     elif action == "chain":
         await _handle_bed_chain_start(query, context)
+    elif action == "history":
+        await query.answer()
+        led = storage.user_ledger(uid, 15)
+        if not led:
+            await context.bot.send_message(query.message.chat_id, "📜 История пуста.")
+        else:
+            _r = {"buy": "покупка", "deposit": "депозит", "code": "чек создан", "code_in": "чек получен",
+                  "daily": "ежедневка", "power": "power", "ultra": "ULTRA", "premium": "премиум",
+                  "add": "начисление", "spend": "трата"}
+            lines = [f"📜 <b>История BED</b> · баланс {storage.get_bed(uid)}\n"]
+            for e in led:
+                try:
+                    ts = datetime.fromtimestamp(e["created_at"]).strftime("%d.%m %H:%M")
+                except (ValueError, OverflowError, OSError, TypeError):
+                    ts = "—"
+                rr = e["reason"] or ""
+                lbl = (f"перевод → {rr[5:]}" if rr.startswith("send:")
+                       else f"перевод ← {rr[5:]}" if rr.startswith("recv:") else _r.get(rr, rr))
+                lines.append(f"{'➕' if e['delta'] >= 0 else '➖'} <b>{abs(e['delta'])}</b> · {lbl} · {ts}")
+            await context.bot.send_message(query.message.chat_id, "\n".join(lines), parse_mode="HTML")
+    elif action == "code":
+        await query.answer()
+        await context.bot.send_message(
+            query.message.chat_id,
+            f"🎟 Создать BED-чек: <code>/bedcode количество</code>\n"
+            f"Ваш баланс: {storage.get_bed(uid)} BED. Активируется кодом или ссылкой.",
+            parse_mode="HTML")
     elif action == "send":
         await query.answer()
         context.bot_data.setdefault("bed_send_await", set()).add(uid)

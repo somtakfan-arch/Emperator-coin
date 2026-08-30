@@ -210,8 +210,10 @@ def kb_wallet(uid, storage) -> InlineKeyboardMarkup:
             _btn("💎 Пополнить BED", "bed:deposit:0", "success"),
             _btn("📤 Вывести BED", "bed:withdraw:0", "primary"),
         ])
-    rows.append([_btn("💸 Перевести BED другу", "bed:send:0", "success")])
-    rows.append([_btn("🏆 Топ держателей", "bed:top:0", "primary")])
+    rows.append([_btn("💸 Перевести BED другу", "bed:send:0", "success"),
+                 _btn("📜 История", "bed:history:0", "primary")])
+    rows.append([_btn("🎟 Создать BED-чек", "bed:code:0", "primary"),
+                 _btn("🏆 Топ держателей", "bed:top:0", "primary")])
     if ton.configured():
         _, _, addr = bedcoin.treasury_cache(storage)
         if addr:
