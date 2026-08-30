@@ -580,15 +580,27 @@ client.on(Events.InteractionCreate, async (interaction) => {
 });
 
 client.on(Events.GuildMemberAdd, async (member) => {
-  const guest = roleByKey(member.guild, 'guest');
-  if (guest) await member.roles.add(guest).catch(() => {});
-  const channel = mapped(member.guild, config, 'welcome');
-  if (channel) await channel.send(WELCOME(`${member}`, config.family.name)).catch(() => {});
+  try {
+    const guest = roleByKey(member.guild, 'guest');
+    if (guest) await member.roles.add(guest).catch(() => {});
+    const channel = mapped(member.guild, config, 'welcome');
+    if (channel) await channel.send(WELCOME(`${member}`, config.family.name)).catch(() => {});
+  } catch (err) {
+    console.error('Не удалось встретить новичка:', err);
+  }
 });
 
 // Правило 1.3: без крим-активности 3 дня семья считается неактивной.
 function startActivityWatcher(c) {
   const check = async () => {
+    try {
+      await checkActivity();
+    } catch (err) {
+      console.error('Проверка активности не прошла:', err);
+    }
+  };
+
+  const checkActivity = async () => {
     const last = store.data.activity.last?.at;
     if (!last || Date.now() - last < 2 * DAY) return;
     const guild = c.guilds.cache.get(process.env.DISCORD_GUILD_ID);
@@ -604,5 +616,34 @@ function startActivityWatcher(c) {
   setInterval(check, 6 * 60 * 60 * 1000);
 }
 
+// Бот живёт на хостинге без присмотра: одиночная ошибка не должна убивать
+// процесс — логируем и продолжаем работать.
+process.on('unhandledRejection', (err) => console.error('Необработанная ошибка промиса:', err));
+process.on('uncaughtException', (err) => console.error('Необработанное исключение:', err));
+
+client.on(Events.Error, (err) => console.error('Ошибка клиента Discord:', err));
+client.on(Events.ShardError, (err) => console.error('Ошибка соединения:', err));
+client.on(Events.ShardDisconnect, (event) => console.warn(`Соединение разорвано (код ${event?.code}), переподключаемся`));
+client.on(Events.ShardReconnecting, () => console.warn('Переподключение к Discord...'));
+client.on(Events.ShardResume, () => console.log('Соединение восстановлено'));
+
+for (const signal of ['SIGTERM', 'SIGINT']) {
+  process.on(signal, async () => {
+    console.log(`Получен ${signal}, выключаемся аккуратно`);
+    await store.save().catch(() => {});
+    await client.destroy();
+    process.exit(0);
+  });
+}
+
 const env = requireEnv(['DISCORD_TOKEN', 'DISCORD_GUILD_ID']);
-await client.login(env.DISCORD_TOKEN);
+
+// Неудачный вход — это не рабочая ошибка, а неправильная настройка:
+// падаем сразу, чтобы panel показала причину, а не «работает вхолостую».
+try {
+  await client.login(env.DISCORD_TOKEN);
+} catch (err) {
+  console.error('Не удалось войти в Discord:', err.message);
+  console.error('Проверь токен в переменных панели и интенты в Developer Portal (нужен SERVER MEMBERS INTENT).');
+  process.exit(1);
+}
