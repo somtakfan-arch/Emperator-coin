@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<title>Чётки</title>
+<style>
+  :root{
+    --bg:#0f1115; --fg:#f2f4f8; --dim:#8b93a7;
+    --ring:#2a2f3d; --accent:#f0b429; --accent2:#7ad0a1;
+    --hold: 300ms;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--bg); color:var(--fg);
+    font:16px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    display:flex; flex-direction:column; align-items:center;
+    justify-content:space-between; padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+    overflow:hidden; user-select:none; -webkit-user-select:none; touch-action:manipulation;
+  }
+  header{width:100%;max-width:420px;display:flex;align-items:center;justify-content:space-between;padding:14px 2px 0}
+  .title{font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim)}
+  .laps{font-size:14px;color:var(--dim);font-variant-numeric:tabular-nums}
+  .laps b{color:var(--accent2);font-weight:600}
+
+  main{flex:1;display:flex;align-items:center;justify-content:center;width:100%}
+  .bead{
+    position:relative; width:min(78vw,320px); aspect-ratio:1; border-radius:50%;
+    display:grid; place-items:center; cursor:pointer;
+    background:radial-gradient(circle at 32% 28%, #1c2130, #14171f 60%, #0d1016);
+    box-shadow:0 18px 50px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.06);
+    transition:transform .12s ease;
+  }
+  .bead.active{transform:scale(.965)}
+  .bead.flash{animation:pop .28s ease}
+  @keyframes pop{0%{transform:scale(.965)}45%{transform:scale(1.045)}100%{transform:scale(1)}}
+  svg.ring{position:absolute;inset:0;width:100%;height:100%;transform:rotate(-90deg)}
+  svg.ring circle{fill:none;stroke-linecap:round}
+  .track{stroke:var(--ring);stroke-width:6}
+  .prog{stroke:var(--accent);stroke-width:6;stroke-dasharray:var(--C);stroke-dashoffset:var(--C);
+        transition:stroke-dashoffset .06s linear}
+  .num{position:relative;text-align:center}
+  .num .n{font-size:clamp(56px,20vw,92px);font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .num .hint{margin-top:6px;font-size:13px;color:var(--dim)}
+
+  footer{width:100%;max-width:420px;display:flex;gap:10px;padding:0 2px 18px}
+  button{
+    flex:1; padding:14px 10px; border-radius:14px; border:1px solid #262b38;
+    background:#161a23; color:var(--fg); font-size:15px; font-weight:500;
+  }
+  button:active{background:#1e2330}
+  button.wide{flex:1.4}
+  .chip{font-variant-numeric:tabular-nums}
+  .toast{position:fixed;bottom:88px;left:50%;transform:translateX(-50%) translateY(10px);
+    background:#1e2330;border:1px solid #2c3242;color:var(--fg);padding:9px 16px;border-radius:999px;
+    font-size:14px;opacity:0;transition:.2s;pointer-events:none}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="title">Чётки</div>
+  <div class="laps">кругов: <b id="laps">0</b> · всего <span id="total">0</span></div>
+</header>
+
+<main>
+  <div class="bead" id="bead">
+    <svg class="ring" viewBox="0 0 100 100" aria-hidden="true">
+      <circle class="track" cx="50" cy="50" r="46"></circle>
+      <circle class="prog" id="prog" cx="50" cy="50" r="46"></circle>
+    </svg>
+    <div class="num">
+      <div class="n" id="count">0</div>
+      <div class="hint" id="hint">зажми и держи</div>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <button id="target" class="chip">Круг: 33</button>
+  <button id="speed" class="chip">Зажим: 0.3с</button>
+  <button id="reset" class="wide">Сброс (зажать)</button>
+</footer>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  var C = 2*Math.PI*46;
+  var prog = document.getElementById('prog');
+  prog.style.setProperty('--C', C);
+  prog.style.strokeDasharray = C;
+
+  var S = load();
+  var TARGETS = [33,99,100,108,1000,0];
+  var HOLDS   = [150,300,500,800];
+
+  var bead = document.getElementById('bead');
+  var elCount = document.getElementById('count');
+  var elLaps  = document.getElementById('laps');
+  var elTotal = document.getElementById('total');
+  var elHint  = document.getElementById('hint');
+  var btnT = document.getElementById('target');
+  var btnS = document.getElementById('speed');
+  var btnR = document.getElementById('reset');
+  var toastEl = document.getElementById('toast');
+
+  function load(){
+    try{ var s = JSON.parse(localStorage.getItem('tasbih')||'{}');
+      return {count:s.count|0, laps:s.laps|0, total:s.total|0,
+              target:(s.target===undefined?33:s.target|0), hold:(s.hold||300)};
+    }catch(e){ return {count:0,laps:0,total:0,target:33,hold:300}; }
+  }
+  function save(){ try{ localStorage.setItem('tasbih', JSON.stringify(S)); }catch(e){} }
+
+  function render(){
+    elCount.textContent = S.count;
+    elLaps.textContent  = S.laps;
+    elTotal.textContent = S.total;
+    btnT.textContent = 'Круг: ' + (S.target ? S.target : '∞');
+    btnS.textContent = 'Зажим: ' + (S.hold/1000).toFixed(S.hold%1000?1:0).replace('.',',') + 'с';
+  }
+  function toast(t){
+    toastEl.textContent = t; toastEl.classList.add('show');
+    clearTimeout(toast._t); toast._t = setTimeout(function(){ toastEl.classList.remove('show'); }, 1200);
+  }
+  function buzz(ms){ if(navigator.vibrate) try{ navigator.vibrate(ms); }catch(e){} }
+
+  // ---- удержание ----
+  var raf=null, start=0, held=false, dur=0;
+
+  function setProg(p){ prog.style.strokeDashoffset = C*(1-p); }
+
+  function tick(){
+    var p = Math.min(1,(performance.now()-start)/dur);
+    setProg(p);
+    if(p>=1){ fire(); return; }
+    raf = requestAnimationFrame(tick);
+  }
+
+  function begin(e){
+    if(e.cancelable) e.preventDefault();
+    if(held) return;
+    held = true; dur = S.hold; start = performance.now();
+    bead.classList.add('active'); bead.classList.remove('flash');
+    elHint.textContent = 'держи…';
+    raf = requestAnimationFrame(tick);
+  }
+
+  function end(){
+    if(!held) return;
+    held = false;
+    cancelAnimationFrame(raf);
+    setProg(0);
+    bead.classList.remove('active');
+    elHint.textContent = 'зажми и держи';
+  }
+
+  function fire(){
+    held = false; cancelAnimationFrame(raf); setProg(0);
+    bead.classList.remove('active'); bead.classList.add('flash');
+    setTimeout(function(){ bead.classList.remove('flash'); }, 300);
+
+    S.count++; S.total++;
+    if(S.target && S.count >= S.target){
+      S.count = 0; S.laps++;
+      buzz([40,60,40,60,120]); toast('Круг ' + S.laps + ' завершён');
+    } else {
+      buzz(28);
+    }
+    elHint.textContent = 'отпусти';
+    save(); render();
+  }
+
+  bead.addEventListener('pointerdown', begin);
+  bead.addEventListener('pointerup', end);
+  bead.addEventListener('pointercancel', end);
+  bead.addEventListener('pointerleave', end);
+  bead.addEventListener('contextmenu', function(e){ e.preventDefault(); });
+
+  // пробел = тоже удержание
+  document.addEventListener('keydown', function(e){ if(e.code==='Space' && !e.repeat){ e.preventDefault(); begin(e); }});
+  document.addEventListener('keyup',   function(e){ if(e.code==='Space'){ e.preventDefault(); end(); }});
+
+  // ---- кнопки ----
+  btnT.addEventListener('click', function(){
+    var i = TARGETS.indexOf(S.target); S.target = TARGETS[(i+1)%TARGETS.length];
+    if(S.target && S.count >= S.target) S.count = 0;
+    save(); render(); toast(S.target ? 'Круг: '+S.target : 'Без круга');
+  });
+  btnS.addEventListener('click', function(){
+    var i = HOLDS.indexOf(S.hold); S.hold = HOLDS[(i+1)%HOLDS.length];
+    save(); render(); toast('Держать '+(S.hold/1000)+' сек');
+  });
+
+  // сброс — тоже через удержание, чтобы не сбить случайно
+  var rt=null;
+  function resetStart(e){ if(e.cancelable) e.preventDefault();
+    clearTimeout(rt); rt = setTimeout(function(){
+      S.count=0; S.laps=0; S.total=0; save(); render(); buzz([60,50,60]); toast('Сброшено');
+    }, 900);
+  }
+  function resetEnd(){ clearTimeout(rt); }
+  btnR.addEventListener('pointerdown', resetStart);
+  ['pointerup','pointerleave','pointercancel'].forEach(function(ev){ btnR.addEventListener(ev, resetEnd); });
+
+  // не даём экрану гаснуть, если браузер умеет
+  if('wakeLock' in navigator){
+    var lock=null;
+    var req=function(){ navigator.wakeLock.request('screen').then(function(l){lock=l;}).catch(function(){}); };
+    req();
+    document.addEventListener('visibilitychange', function(){ if(document.visibilityState==='visible') req(); });
+  }
+
+  setProg(0);
+  render();
+})();
+</script>
+</body>
+</html>
