@@ -67,8 +67,16 @@ class FloodSafeRateLimiter(AIORateLimiter):
                 chat_id = data.get("chat_id")
         except Exception:
             chat_id = None
+        # The base AIORateLimiter chokes on a dict rate_limit_args (it expects a
+        # number), so our {"ultra": True} flag must be consumed here and stripped
+        # to None before delegating.
+        ultra = bool(isinstance(rla, dict) and rla.get("ultra"))
+        args = list(args)
+        if len(args) > 5:
+            args[5] = None
+        if "rate_limit_args" in kwargs:
+            kwargs["rate_limit_args"] = None
         if chat_id is not None and self._throttled(endpoint):
-            ultra = bool(isinstance(rla, dict) and rla.get("ultra"))
             try:
                 async with self._bucket(chat_id, ultra):
                     return await super().process_request(*args, **kwargs)
