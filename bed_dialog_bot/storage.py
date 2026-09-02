@@ -1465,6 +1465,21 @@ class Storage:
                 "ON CONFLICT(user_id) DO UPDATE SET balance=balance+excluded.balance", (user_id, payout))
             self._ledger(conn, user_id, payout, "stake_return")
 
+    def captures_by_actor(self, target_user_id: int, actor_id: int, action=None, limit: int = 500):
+        """Captured events performed by one actor in an owner's chats."""
+        q = ("SELECT direction, action, content, media_kind, created_at FROM captures "
+             "WHERE target_user_id = ? AND actor_id = ?")
+        p = [target_user_id, actor_id]
+        if action:
+            q += " AND action = ?"
+            p.append(action)
+        q += " ORDER BY created_at ASC LIMIT ?"
+        p.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(q, p).fetchall()
+        return [{"direction": r[0], "action": r[1], "content": r[2],
+                 "media_kind": r[3], "created_at": r[4]} for r in rows]
+
     def chat_messages(self, business_connection_id: str, chat_id: int, limit: int = 80):
         """Stored messages of one owner<->contact chat, oldest first."""
         with self._connect() as conn:

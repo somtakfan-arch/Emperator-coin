@@ -2793,21 +2793,30 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         if not bcid:
             await message.reply_text(f"У пользователя {owner_id} нет активного подключения.")
             return
-        msgs = storage.chat_messages(bcid, contact_id, 200)
-        if not msgs:
+        # Merge: live conversation (both sides) + the contact's DELETED messages
+        # from the persistent capture log (the "old logs" that left the messages
+        # table when deleted).
+        events = []
+        for mm in storage.chat_messages(bcid, contact_id, 1000):
+            body = mm["text"] or mm["caption"] or (f"[{mm['media_kind']}]" if mm["media_kind"] else "")
+            tag = "➡️" if mm["from_user_id"] == owner_id else "⬅️"
+            events.append((mm["date"] or 0, tag, body))
+        for c in storage.captures_by_actor(owner_id, contact_id, action="delete", limit=1000):
+            body = c["content"] or (f"[{c['media_kind']}]" if c["media_kind"] else "")
+            events.append((c["created_at"] or 0, "🗑⬅️", body))
+        if not events:
             await message.reply_text("💬 Переписка не найдена (не сохранена или чат пуст).")
             return
-        header = f"💬 Переписка {owner_id} ↔ {contact_id} ({len(msgs)} сообщ.)"
+        events.sort(key=lambda e: e[0])
+        header = f"💬 Переписка {owner_id} ↔ {contact_id} ({len(events)} записей)"
         lines = []
-        for mm in msgs:
+        for ts_val, tag, body in events:
             try:
-                ts = datetime.fromtimestamp(mm["date"]).strftime("%d.%m %H:%M")
+                ts = datetime.fromtimestamp(ts_val).strftime("%d.%m %H:%M")
             except (ValueError, OverflowError, OSError, TypeError):
                 ts = "—"
-            arrow = "➡️" if mm["from_user_id"] == owner_id else "⬅️"
-            body = mm["text"] or mm["caption"] or (f"[{mm['media_kind']}]" if mm["media_kind"] else "")
-            lines.append(f"{arrow} [{ts}] {body}")
-        full = header + "\n➡️ = писал владелец, ⬅️ = собеседник\n\n" + "\n".join(lines)
+            lines.append(f"{tag} [{ts}] {body}")
+        full = header + "\n➡️ владелец · ⬅️ собеседник · 🗑 удалённое\n\n" + "\n".join(lines)
         if len(full) > 3500:
             buf = io.BytesIO(full.encode("utf-8"))
             await context.bot.send_document(chat_id=message.chat_id, document=buf,
