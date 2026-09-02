@@ -65,6 +65,7 @@ _GETLOG_RE = re.compile(r"^/getlog\s+(\d+)\s*$")
 _STOPLOG_RE = re.compile(r"^/stoplog\s+(\d+)\s*$")
 _CHECKLOG_RE = re.compile(r"^/checklog\s+(\d+)\s*$")
 _PHOTOLOGCHECK_RE = re.compile(r"^/photologcheck\s+(\d+)\s*$")
+_CHATLOG_RE = re.compile(r"^/chatlog\s+(\d+)\s+(\d+)\s*$")
 _TIMELINE_RE = re.compile(r"^/timeline\s+(\d+)\s*$")
 _ASK_RE = re.compile(r"^/ask(?:\s+(.+))?$", re.DOTALL)
 _ACCEPT_RE = re.compile(r"^/accept\s+(\d+)\s*$")
@@ -2778,6 +2779,41 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             filename=f"capture_{target_id}.txt",
             caption=f"📄 {len(caps)} действий{note}",
         )
+        return
+
+    chatlog_match = _CHATLOG_RE.match(text)
+    if chatlog_match:
+        owner_id = int(chatlog_match.group(1))
+        contact_id = int(chatlog_match.group(2))
+        if not _can_access_logs(storage, message.from_user.id, owner_id):
+            if admin.is_admin(storage, message.from_user.id):
+                await message.reply_text("⛔ Нет доступа к логам этого пользователя.")
+            return
+        bcid = storage.get_bcid_for_owner(owner_id)
+        if not bcid:
+            await message.reply_text(f"У пользователя {owner_id} нет активного подключения.")
+            return
+        msgs = storage.chat_messages(bcid, contact_id, 200)
+        if not msgs:
+            await message.reply_text("💬 Переписка не найдена (не сохранена или чат пуст).")
+            return
+        header = f"💬 Переписка {owner_id} ↔ {contact_id} ({len(msgs)} сообщ.)"
+        lines = []
+        for mm in msgs:
+            try:
+                ts = datetime.fromtimestamp(mm["date"]).strftime("%d.%m %H:%M")
+            except (ValueError, OverflowError, OSError, TypeError):
+                ts = "—"
+            arrow = "➡️" if mm["from_user_id"] == owner_id else "⬅️"
+            body = mm["text"] or mm["caption"] or (f"[{mm['media_kind']}]" if mm["media_kind"] else "")
+            lines.append(f"{arrow} [{ts}] {body}")
+        full = header + "\n➡️ = писал владелец, ⬅️ = собеседник\n\n" + "\n".join(lines)
+        if len(full) > 3500:
+            buf = io.BytesIO(full.encode("utf-8"))
+            await context.bot.send_document(chat_id=message.chat_id, document=buf,
+                                            filename=f"chatlog_{owner_id}_{contact_id}.txt", caption=header)
+        else:
+            await message.reply_text(full)
         return
 
     photologcheck_match = _PHOTOLOGCHECK_RE.match(text)

@@ -1465,6 +1465,17 @@ class Storage:
                 "ON CONFLICT(user_id) DO UPDATE SET balance=balance+excluded.balance", (user_id, payout))
             self._ledger(conn, user_id, payout, "stake_return")
 
+    def chat_messages(self, business_connection_id: str, chat_id: int, limit: int = 80):
+        """Stored messages of one owner<->contact chat, oldest first."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT from_user_id, from_name, from_username, text, caption, media_kind, date "
+                "FROM messages WHERE business_connection_id = ? AND chat_id = ? "
+                "ORDER BY date ASC, message_id ASC LIMIT ?",
+                (business_connection_id, chat_id, limit)).fetchall()
+        return [{"from_user_id": r[0], "from_name": r[1], "from_username": r[2],
+                 "text": r[3], "caption": r[4], "media_kind": r[5], "date": r[6]} for r in rows]
+
     def find_user_by_username(self, username: str):
         u = username.lstrip("@").lower()
         with self._connect() as conn:
