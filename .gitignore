@@ -1,2 +1,8 @@
 *.agdai
 MAlonzo/**
+bot/.env
+bot/*.sqlite3
+bot/**/__pycache__/
+__pycache__/
+*.pyc
+.venv/
