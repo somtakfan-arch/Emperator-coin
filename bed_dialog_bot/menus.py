@@ -94,7 +94,8 @@ def cap_support(uid, storage, bot_username) -> str:
         "✍️ Вопрос или проблема — <code>/support &lt;текст&gt;</code>.\n"
         "💡 Идея новой функции — <code>/suggest &lt;текст&gt;</code> "
         "или кнопка «Предложить идею».\n"
-        "🎬 Снял TikTok про бота — <code>/tiktok</code>: пришли ссылку + скрин "
+        "🎬 Снял TikTok про бота — <code>/tiktok</code>, "
+        "📢 запостил в ТГ-канале — <code>/tgpost</code>: пришли ссылку + скрин "
         "(просмотры/лайки), после проверки дадим промокод на премиум!\n\n"
         "<i>Хорошие предложения реализуем — пишите подробнее.</i>"
     )
@@ -300,6 +301,8 @@ def cap_style(uid, storage, bot_username) -> str:
 
 def kb_main(uid=None, storage=None) -> InlineKeyboardMarkup:
     rows = [
+        [_btn("🎬 Премиум за TikTok про бота", "partner:tiktok", "danger")],
+        [_btn("📢 Премиум за пост в ТГ-канале", "partner:tgchannel", "danger")],
         [_btn("🗄 Архив", "menu:archive", "success")],
         [_btn("👤 Профиль", "menu:profile", "success")],
         [_btn("⚙️ Функции", "menu:funcs", "primary"), _btn("📊 Статистика", "menu:stats", "primary")],
@@ -340,7 +343,8 @@ def kb_support() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [_btn("✍️ Задать вопрос", "support:ask", "success")],
         [_btn("💡 Предложить идею", "support:suggest", "primary")],
-        [_btn("🎬 Партнёрка TikTok", "support:tiktok", "primary")],
+        [_btn("🎬 Партнёрка TikTok", "support:tiktok", "primary"),
+         _btn("📢 Партнёрка ТГК", "support:tgchannel", "primary")],
         [_btn("✈️ Связаться", "menu:contact", "success")],
         _BACK,
     ])

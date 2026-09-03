@@ -228,6 +228,7 @@ CREATE TABLE IF NOT EXISTS tiktok_subs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     chat_id INTEGER NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'tiktok',
     name TEXT,
     username TEXT,
     link TEXT,
@@ -401,6 +402,9 @@ class Storage:
             conn.execute("ALTER TABLE troll_texts ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'")
         if troll_cols and "file_id" not in troll_cols:
             conn.execute("ALTER TABLE troll_texts ADD COLUMN file_id TEXT")
+        tt_cols = {row[1] for row in conn.execute("PRAGMA table_info(tiktok_subs)")}
+        if tt_cols and "kind" not in tt_cols:
+            conn.execute("ALTER TABLE tiktok_subs ADD COLUMN kind TEXT NOT NULL DEFAULT 'tiktok'")
         cc_cols = {row[1] for row in conn.execute("PRAGMA table_info(custom_cmds)")}
         if cc_cols and "action" not in cc_cols:
             conn.execute("ALTER TABLE custom_cmds ADD COLUMN action TEXT NOT NULL DEFAULT 'text'")
@@ -1236,26 +1240,26 @@ class Storage:
     # --- TikTok creator partnership submissions ---
 
     def create_tiktok_sub(self, *, user_id: int, chat_id: int, name, username,
-                          link, photo_file_id) -> int:
+                          link, photo_file_id, kind: str = "tiktok") -> int:
         with self._connect() as conn:
             cur = conn.execute(
-                "INSERT INTO tiktok_subs (user_id, chat_id, name, username, link, "
-                "photo_file_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)",
-                (user_id, chat_id, name, username, link, photo_file_id, int(time.time())))
+                "INSERT INTO tiktok_subs (user_id, chat_id, kind, name, username, link, "
+                "photo_file_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)",
+                (user_id, chat_id, kind, name, username, link, photo_file_id, int(time.time())))
             return cur.lastrowid
 
     def get_tiktok_sub(self, sub_id: int):
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT id, user_id, chat_id, name, username, link, photo_file_id, "
-                "status, reward_code, reward_days, created_at FROM tiktok_subs WHERE id=?",
+                "status, reward_code, reward_days, created_at, kind FROM tiktok_subs WHERE id=?",
                 (sub_id,)).fetchone()
         if not row:
             return None
         return {"id": row[0], "user_id": row[1], "chat_id": row[2], "name": row[3],
                 "username": row[4], "link": row[5], "photo_file_id": row[6],
                 "status": row[7], "reward_code": row[8], "reward_days": row[9],
-                "created_at": row[10]}
+                "created_at": row[10], "kind": row[11] or "tiktok"}
 
     def set_tiktok_status(self, sub_id: int, status: str, reward_code=None,
                           reward_days=None) -> None:

@@ -1031,31 +1031,48 @@ async def _confirm_referral(invited_id: int, context: ContextTypes.DEFAULT_TYPE,
 
 _URL_RE = re.compile(r"https?://[^\s]+", re.IGNORECASE)
 
-TIKTOK_INTRO = (
-    "🎬 <b>Партнёрка для тиктокеров</b>\n\n"
-    "Снял TikTok про бота — получи промокод на премиум! 💎\n\n"
-    "<b>Как участвовать:</b>\n"
-    "1️⃣ Выложи TikTok про Bed Dialog\n"
-    "2️⃣ Пришли <b>одним сообщением</b>:\n"
-    "   • 📸 <b>скриншот</b> видео, где видно просмотры и лайки\n"
-    "   • 🔗 <b>ссылку</b> на TikTok — в подписи к фото\n"
-    "3️⃣ Админ проверит — и тебе придёт промокод на премиум 🎁\n\n"
-    "<i>Отправь скрин с ссылкой в подписи сейчас. Отмена — /cancel</i>"
-)
+# Creator-partnership kinds: post about the bot somewhere, get a premium promo.
+PARTNER_KINDS = {
+    "tiktok": {
+        "emoji": "🎬", "title": "TikTok", "where": "TikTok", "domain": "tiktok.com",
+        "metric": "просмотры и лайки",
+    },
+    "tgchannel": {
+        "emoji": "📢", "title": "Пост в ТГ-канале", "where": "телеграм-канале",
+        "domain": "t.me", "metric": "просмотры (охват)",
+    },
+}
 
 
-async def _submit_tiktok(message, context, storage: Storage, body: str, photo_file_id) -> None:
-    """Handle a TikTok partnership submission (screenshot + link)."""
+def _partner_intro(kind: str) -> str:
+    k = PARTNER_KINDS[kind]
+    return (
+        f"{k['emoji']} <b>Партнёрка: {k['title']}</b>\n\n"
+        f"Сделал пост про бота в {k['where']} — получи промокод на премиум! 💎\n\n"
+        "<b>Как участвовать:</b>\n"
+        f"1️⃣ Выложи пост про Bed Dialog в {k['where']}\n"
+        "2️⃣ Пришли <b>одним сообщением</b>:\n"
+        f"   • 📸 <b>скриншот</b>, где видно {k['metric']}\n"
+        f"   • 🔗 <b>ссылку</b> на пост — в подписи к фото\n"
+        "3️⃣ Админ проверит — и тебе придёт промокод на премиум 🎁\n\n"
+        "<i>Отправь скрин с ссылкой в подписи сейчас. Отмена — /cancel</i>"
+    )
+
+
+async def _submit_partner(message, context, storage: Storage, body: str,
+                          photo_file_id, kind: str) -> None:
+    """Handle a creator-partnership submission (screenshot + link)."""
+    k = PARTNER_KINDS[kind]
     uid = message.from_user.id
     link_m = _URL_RE.search(body or "")
     # Both a screenshot and a link are required.
     if not photo_file_id or not link_m:
         missing = []
         if not photo_file_id:
-            missing.append("📸 скриншот (просмотры + лайки)")
+            missing.append(f"📸 скриншот ({k['metric']})")
         if not link_m:
-            missing.append("🔗 ссылку на TikTok в подписи")
-        context.bot_data.setdefault("support_await", {})[uid] = "tiktok"
+            missing.append("🔗 ссылку в подписи")
+        context.bot_data.setdefault("support_await", {})[uid] = kind
         await message.reply_text(
             "⚠️ Нужно прислать в одном сообщении: " + " и ".join(missing) +
             ".\nПопробуй ещё раз (скрин + ссылка в подписи). Отмена — /cancel")
@@ -1064,16 +1081,16 @@ async def _submit_tiktok(message, context, storage: Storage, body: str, photo_fi
     name, username = _display_name(message)
     sub_id = storage.create_tiktok_sub(
         user_id=uid, chat_id=message.chat_id, name=name, username=username,
-        link=link, photo_file_id=photo_file_id)
+        link=link, photo_file_id=photo_file_id, kind=kind)
     await message.reply_text(
         f"✅ Заявка #{sub_id} отправлена на проверку! Как только админ одобрит — "
-        "тебе придёт промокод на премиум. Спасибо за поддержку! 🎬💜")
-    tiktok_ok = "tiktok.com" in link.lower()
-    warn = "" if tiktok_ok else "\n⚠️ Ссылка не похожа на TikTok — проверьте вручную."
-    caption = (f"🎬 <b>Заявка TikTok-партнёрки #{sub_id}</b>\n"
+        f"тебе придёт промокод на премиум. Спасибо за поддержку! {k['emoji']}💜")
+    domain_ok = k["domain"] in link.lower()
+    warn = "" if domain_ok else f"\n⚠️ Ссылка не похожа на {k['title']} — проверьте вручную."
+    caption = (f"{k['emoji']} <b>Заявка «{k['title']}» #{sub_id}</b>\n"
                f"👤 {formatting.format_sender(name, username)}\n🆔 {uid}\n"
                f"🔗 {html.escape(link)}{warn}\n\n"
-               "Проверьте просмотры/лайки на скрине и выдайте награду.")
+               f"Проверьте {k['metric']} на скрине и выдайте награду.")
     kb = InlineKeyboardMarkup([[
         InlineKeyboardButton("✅ Одобрить", callback_data=f"tt:ok:{sub_id}"),
         InlineKeyboardButton("❌ Отклонить", callback_data=f"tt:no:{sub_id}"),
@@ -1084,7 +1101,7 @@ async def _submit_tiktok(message, context, storage: Storage, body: str, photo_fi
                                          caption=caption[:1024], parse_mode="HTML",
                                          reply_markup=kb)
         except Exception:
-            logger.exception("Failed to notify admin %s about tiktok sub %s", admin_id, sub_id)
+            logger.exception("Failed to notify admin %s about partner sub %s", admin_id, sub_id)
 
 
 async def _reply_chunks(message, body: str, limit: int = 3800) -> None:
@@ -1324,8 +1341,8 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             photo_fid = message.photo[-1].file_id if message.photo else None
             if body.strip() or photo_fid:
                 kind = support_await.pop(message.from_user.id, "support")
-                if kind == "tiktok":
-                    await _submit_tiktok(message, context, storage, body, photo_fid)
+                if kind in PARTNER_KINDS:
+                    await _submit_partner(message, context, storage, body, photo_fid, kind)
                 else:
                     await _submit_ticket(message, context, storage, body, kind=kind, photo_file_id=photo_fid)
                 return
@@ -1369,6 +1386,8 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             or text.startswith("/support")
             or text.startswith("/suggest")
             or text.startswith("/tiktok")
+            or text.startswith("/tgpost")
+            or text.startswith("/tgc")
             or text.startswith("/ask")
         )
         if not is_admin and not connected and not allowed_pre:
@@ -2616,7 +2635,12 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     if text.startswith("/tiktok"):
         context.bot_data.setdefault("support_await", {})[message.from_user.id] = "tiktok"
-        await message.reply_text(TIKTOK_INTRO, parse_mode="HTML")
+        await message.reply_text(_partner_intro("tiktok"), parse_mode="HTML")
+        return
+
+    if text.startswith("/tgpost") or text.startswith("/tgc"):
+        context.bot_data.setdefault("support_await", {})[message.from_user.id] = "tgchannel"
+        await message.reply_text(_partner_intro("tgchannel"), parse_mode="HTML")
         return
 
     reply_match = _REPLY_RE.match(text)
@@ -3983,11 +4007,12 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             text=("💡 Опишите вашу идею одним сообщением — что добавить или улучшить. "
                   "Чем подробнее, тем лучше! Отмена — /cancel"),
         )
-    elif query.data == "support:tiktok":
+    elif query.data in ("support:tiktok", "support:tgchannel", "partner:tiktok", "partner:tgchannel"):
         await query.answer()
-        context.bot_data.setdefault("support_await", {})[query.from_user.id] = "tiktok"
+        kind = "tgchannel" if query.data.endswith("tgchannel") else "tiktok"
+        context.bot_data.setdefault("support_await", {})[query.from_user.id] = kind
         await context.bot.send_message(
-            chat_id=query.message.chat_id, text=TIKTOK_INTRO, parse_mode="HTML")
+            chat_id=query.message.chat_id, text=_partner_intro(kind), parse_mode="HTML")
     elif query.data.startswith("tt:"):
         storage = context.bot_data["storage"]
         if not admin.has_perm(storage, query.from_user.id, "premium"):
@@ -4002,6 +4027,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         if sub["status"] != "pending":
             await query.answer(f"Заявка уже обработана ({sub['status']}).", show_alert=True)
             return
+        pk = PARTNER_KINDS.get(sub.get("kind", "tiktok"), PARTNER_KINDS["tiktok"])
+        retry_cmd = "/tgpost" if sub.get("kind") == "tgchannel" else "/tiktok"
         if op == "no":
             storage.set_tiktok_status(sub_id, "rejected")
             await query.answer("Отклонено")
@@ -4014,8 +4041,8 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             try:
                 await context.bot.send_message(
                     sub["user_id"],
-                    "❌ Твоя заявка на TikTok-партнёрку отклонена. Возможно, мало просмотров "
-                    "или скрин/ссылка не подошли. Можешь снять ещё и отправить снова: /tiktok")
+                    f"❌ Твоя заявка на партнёрку «{pk['title']}» отклонена. Возможно, мало "
+                    f"просмотров или скрин/ссылка не подошли. Можешь сделать ещё и отправить снова: {retry_cmd}")
             except Exception:
                 pass
         elif op == "ok":
@@ -4045,7 +4072,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             try:
                 await context.bot.send_message(
                     sub["user_id"],
-                    f"🎉 Твоя TikTok-заявка одобрена! Спасибо за видео 💜\n\n"
+                    f"🎉 Твоя заявка «{pk['title']}» одобрена! Спасибо за пост 💜\n\n"
                     f"🎁 Промокод на премиум ({days} дн.):\n<code>{code}</code>\n\n"
                     f"Активируй: <code>/redeem {code}</code>",
                     parse_mode="HTML")
