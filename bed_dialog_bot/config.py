@@ -45,6 +45,11 @@ LOG_EXCLUDE_USER_IDS = {
 }
 
 PREMIUM_STARS_PRICE = int(os.environ.get("PREMIUM_STARS_PRICE", "100"))
+# TikTok creator partnership: premium-day reward tiers an admin can grant on
+# approval (each becomes a single-use promo code sent to the creator).
+TIKTOK_REWARD_TIERS = [
+    int(x) for x in os.environ.get("TIKTOK_REWARD_TIERS", "7,30,90").split(",") if x.strip()
+]
 # ULTRA PREMIUM — top tier with bypass immunities + priority.
 ULTRA_STARS_PRICE = int(os.environ.get("ULTRA_STARS_PRICE", "250"))
 ULTRA_BED_PRICE = int(os.environ.get("ULTRA_BED_PRICE", "20"))

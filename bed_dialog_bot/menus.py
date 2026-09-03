@@ -93,7 +93,9 @@ def cap_support(uid, storage, bot_username) -> str:
         "<b>🆘 Поддержка</b>\n\n"
         "✍️ Вопрос или проблема — <code>/support &lt;текст&gt;</code>.\n"
         "💡 Идея новой функции — <code>/suggest &lt;текст&gt;</code> "
-        "или кнопка «Предложить идею».\n\n"
+        "или кнопка «Предложить идею».\n"
+        "🎬 Снял TikTok про бота — <code>/tiktok</code>: пришли ссылку + скрин "
+        "(просмотры/лайки), после проверки дадим промокод на премиум!\n\n"
         "<i>Хорошие предложения реализуем — пишите подробнее.</i>"
     )
 
@@ -338,6 +340,7 @@ def kb_support() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [_btn("✍️ Задать вопрос", "support:ask", "success")],
         [_btn("💡 Предложить идею", "support:suggest", "primary")],
+        [_btn("🎬 Партнёрка TikTok", "support:tiktok", "primary")],
         [_btn("✈️ Связаться", "menu:contact", "success")],
         _BACK,
     ])

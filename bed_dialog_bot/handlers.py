@@ -1029,6 +1029,64 @@ async def _confirm_referral(invited_id: int, context: ContextTypes.DEFAULT_TYPE,
         logger.exception("Failed to notify referrer %s", referrer_id)
 
 
+_URL_RE = re.compile(r"https?://[^\s]+", re.IGNORECASE)
+
+TIKTOK_INTRO = (
+    "🎬 <b>Партнёрка для тиктокеров</b>\n\n"
+    "Снял TikTok про бота — получи промокод на премиум! 💎\n\n"
+    "<b>Как участвовать:</b>\n"
+    "1️⃣ Выложи TikTok про Bed Dialog\n"
+    "2️⃣ Пришли <b>одним сообщением</b>:\n"
+    "   • 📸 <b>скриншот</b> видео, где видно просмотры и лайки\n"
+    "   • 🔗 <b>ссылку</b> на TikTok — в подписи к фото\n"
+    "3️⃣ Админ проверит — и тебе придёт промокод на премиум 🎁\n\n"
+    "<i>Отправь скрин с ссылкой в подписи сейчас. Отмена — /cancel</i>"
+)
+
+
+async def _submit_tiktok(message, context, storage: Storage, body: str, photo_file_id) -> None:
+    """Handle a TikTok partnership submission (screenshot + link)."""
+    uid = message.from_user.id
+    link_m = _URL_RE.search(body or "")
+    # Both a screenshot and a link are required.
+    if not photo_file_id or not link_m:
+        missing = []
+        if not photo_file_id:
+            missing.append("📸 скриншот (просмотры + лайки)")
+        if not link_m:
+            missing.append("🔗 ссылку на TikTok в подписи")
+        context.bot_data.setdefault("support_await", {})[uid] = "tiktok"
+        await message.reply_text(
+            "⚠️ Нужно прислать в одном сообщении: " + " и ".join(missing) +
+            ".\nПопробуй ещё раз (скрин + ссылка в подписи). Отмена — /cancel")
+        return
+    link = link_m.group(0)
+    name, username = _display_name(message)
+    sub_id = storage.create_tiktok_sub(
+        user_id=uid, chat_id=message.chat_id, name=name, username=username,
+        link=link, photo_file_id=photo_file_id)
+    await message.reply_text(
+        f"✅ Заявка #{sub_id} отправлена на проверку! Как только админ одобрит — "
+        "тебе придёт промокод на премиум. Спасибо за поддержку! 🎬💜")
+    tiktok_ok = "tiktok.com" in link.lower()
+    warn = "" if tiktok_ok else "\n⚠️ Ссылка не похожа на TikTok — проверьте вручную."
+    caption = (f"🎬 <b>Заявка TikTok-партнёрки #{sub_id}</b>\n"
+               f"👤 {formatting.format_sender(name, username)}\n🆔 {uid}\n"
+               f"🔗 {html.escape(link)}{warn}\n\n"
+               "Проверьте просмотры/лайки на скрине и выдайте награду.")
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Одобрить", callback_data=f"tt:ok:{sub_id}"),
+        InlineKeyboardButton("❌ Отклонить", callback_data=f"tt:no:{sub_id}"),
+    ]])
+    for admin_id in admin.admin_ids_with(storage, "premium"):
+        try:
+            await context.bot.send_photo(chat_id=admin_id, photo=photo_file_id,
+                                         caption=caption[:1024], parse_mode="HTML",
+                                         reply_markup=kb)
+        except Exception:
+            logger.exception("Failed to notify admin %s about tiktok sub %s", admin_id, sub_id)
+
+
 async def _reply_chunks(message, body: str, limit: int = 3800) -> None:
     """Send a long reply split into Telegram-sized chunks (HTML)."""
     while body:
@@ -1266,7 +1324,10 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             photo_fid = message.photo[-1].file_id if message.photo else None
             if body.strip() or photo_fid:
                 kind = support_await.pop(message.from_user.id, "support")
-                await _submit_ticket(message, context, storage, body, kind=kind, photo_file_id=photo_fid)
+                if kind == "tiktok":
+                    await _submit_tiktok(message, context, storage, body, photo_fid)
+                else:
+                    await _submit_ticket(message, context, storage, body, kind=kind, photo_file_id=photo_fid)
                 return
 
     # If the user tapped "➕ Добавить" in the .troll manager, capture their next
@@ -1307,6 +1368,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             text.startswith("/start")
             or text.startswith("/support")
             or text.startswith("/suggest")
+            or text.startswith("/tiktok")
             or text.startswith("/ask")
         )
         if not is_admin and not connected and not allowed_pre:
@@ -2550,6 +2612,11 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             )
             return
         await _submit_ticket(message, context, storage, idea, kind="suggest")
+        return
+
+    if text.startswith("/tiktok"):
+        context.bot_data.setdefault("support_await", {})[message.from_user.id] = "tiktok"
+        await message.reply_text(TIKTOK_INTRO, parse_mode="HTML")
         return
 
     reply_match = _REPLY_RE.match(text)
@@ -3916,6 +3983,74 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             text=("💡 Опишите вашу идею одним сообщением — что добавить или улучшить. "
                   "Чем подробнее, тем лучше! Отмена — /cancel"),
         )
+    elif query.data == "support:tiktok":
+        await query.answer()
+        context.bot_data.setdefault("support_await", {})[query.from_user.id] = "tiktok"
+        await context.bot.send_message(
+            chat_id=query.message.chat_id, text=TIKTOK_INTRO, parse_mode="HTML")
+    elif query.data.startswith("tt:"):
+        storage = context.bot_data["storage"]
+        if not admin.has_perm(storage, query.from_user.id, "premium"):
+            await query.answer("Только для админов с правом premium.", show_alert=True)
+            return
+        parts = query.data.split(":")
+        op, sub_id = parts[1], int(parts[2])
+        sub = storage.get_tiktok_sub(sub_id)
+        if not sub:
+            await query.answer("Заявка не найдена.", show_alert=True)
+            return
+        if sub["status"] != "pending":
+            await query.answer(f"Заявка уже обработана ({sub['status']}).", show_alert=True)
+            return
+        if op == "no":
+            storage.set_tiktok_status(sub_id, "rejected")
+            await query.answer("Отклонено")
+            try:
+                await query.edit_message_caption(
+                    caption=f"❌ Заявка #{sub_id} отклонена (@{query.from_user.username or query.from_user.id}).",
+                    parse_mode="HTML")
+            except Exception:
+                pass
+            try:
+                await context.bot.send_message(
+                    sub["user_id"],
+                    "❌ Твоя заявка на TikTok-партнёрку отклонена. Возможно, мало просмотров "
+                    "или скрин/ссылка не подошли. Можешь снять ещё и отправить снова: /tiktok")
+            except Exception:
+                pass
+        elif op == "ok":
+            await query.answer()
+            rows = [[InlineKeyboardButton(f"🎁 {d} дн.", callback_data=f"tt:day:{sub_id}:{d}")]
+                    for d in config.TIKTOK_REWARD_TIERS]
+            rows.append([InlineKeyboardButton("❌ Отклонить", callback_data=f"tt:no:{sub_id}")])
+            try:
+                await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(rows))
+            except Exception:
+                pass
+        elif op == "day":
+            days = int(parts[3])
+            import secrets as _secrets
+            code = "TT-" + _secrets.token_hex(3).upper()
+            storage.create_promo(code, days, 1)
+            storage.set_tiktok_status(sub_id, "approved", reward_code=code, reward_days=days)
+            await query.answer("✅ Одобрено, промокод выдан")
+            try:
+                await query.edit_message_caption(
+                    caption=(f"✅ Заявка #{sub_id} одобрена "
+                             f"(@{query.from_user.username or query.from_user.id}).\n"
+                             f"🎁 Выдан промокод <code>{code}</code> на {days} дн. премиума."),
+                    parse_mode="HTML")
+            except Exception:
+                pass
+            try:
+                await context.bot.send_message(
+                    sub["user_id"],
+                    f"🎉 Твоя TikTok-заявка одобрена! Спасибо за видео 💜\n\n"
+                    f"🎁 Промокод на премиум ({days} дн.):\n<code>{code}</code>\n\n"
+                    f"Активируй: <code>/redeem {code}</code>",
+                    parse_mode="HTML")
+            except Exception:
+                logger.exception("Failed to DM tiktok reward to %s", sub["user_id"])
     elif query.data.startswith("cmded:"):
         storage = context.bot_data["storage"]
         uid = query.from_user.id
