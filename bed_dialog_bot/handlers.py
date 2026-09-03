@@ -19,7 +19,7 @@ from telegram import (
 )
 from telegram.ext import ContextTypes
 
-from . import admin, adlink, bedcoin, commands, config, crypto, formatting, i18n, media, menus, texts, ton, workink
+from . import admin, adlink, bedcoin, cmdengine, commands, config, crypto, formatting, i18n, media, menus, texts, ton, workink
 from .storage import Storage
 
 
@@ -668,6 +668,18 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
     if contact_active:
         storage.touch_activity(owner_id, message.chat_id)
 
+        # Deferred custom command targeting the "next" message: apply it now.
+        if cmdengine.has_next(bcid, message.chat_id):
+            pend = cmdengine.take_next(bcid, message.chat_id)
+            if pend:
+                spec = pend["spec"]
+                await commands._deliver_action(
+                    context, bcid, message.chat_id, pend.get("hint"),
+                    (spec.get("action") or "text").lower(),
+                    message.text or message.caption or "",
+                    spec.get("text") or "", spec.get("param"),
+                    "next", message.message_id)
+
         # ULTRA enemy: permanently auto-delete this contact's messages.
         if storage.is_ultra(owner_id) and storage.is_ultra_contact(owner_id, message.chat_id, "enemy"):
             try:
@@ -1004,6 +1016,65 @@ async def _confirm_referral(invited_id: int, context: ContextTypes.DEFAULT_TYPE,
         await context.bot.send_message(chat_id=referrer_id, text=text)
     except Exception:
         logger.exception("Failed to notify referrer %s", referrer_id)
+
+
+async def _reply_chunks(message, body: str, limit: int = 3800) -> None:
+    """Send a long reply split into Telegram-sized chunks (HTML)."""
+    while body:
+        chunk, body = body[:limit], body[limit:]
+        if body:
+            cut = chunk.rfind("\n")
+            if cut > limit // 2:
+                body, chunk = chunk[cut + 1:] + body, chunk[:cut]
+        await message.reply_text(chunk, parse_mode="HTML")
+
+
+def _parse_cmd_spec(rest: str):
+    """Parse the body of /create after the name.
+    Returns (action, target, param, body). action=None on unknown action.
+    Plain text (no leading '!') → ('text','self',None,rest)."""
+    rest = rest.strip()
+    if not rest.startswith("!"):
+        return "text", "self", None, rest
+    toks = rest[1:].split()
+    if not toks:
+        return "text", "self", None, ""
+    action = toks[0].lower()
+    if not cmdengine.valid_action(action):
+        return None, None, None, None
+    idx = 1
+    target = "self"
+    if idx < len(toks) and cmdengine.valid_target(toks[idx].lower()):
+        target = toks[idx].lower()
+        idx += 1
+    param = None
+    if action == "repeat" and idx < len(toks) and toks[idx].isdigit():
+        param = toks[idx]
+        idx += 1
+    body = " ".join(toks[idx:])
+    return action, target, param, body
+
+
+def _render_cmd_editor(spec: dict):
+    """(text, keyboard) for the /editcmd inline editor. Buttons cycle the
+    action and target through their lists — no typing needed."""
+    name = spec["name"]
+    action, target = spec["action"], spec["target"]
+    em_a, da = cmdengine.ACTIONS.get(action, ("💬", "текст"))
+    em_t, dt = cmdengine.TARGETS.get(target, ("✍️", "своё"))
+    body = html.escape((spec.get("text") or "")[:200]) or "<i>—</i>"
+    txt = (f"✏️ <b>Редактор</b> <code>.{html.escape(name)}</code>\n\n"
+           f"⚙️ Действие: {em_a} <b>{action}</b> — {da}\n"
+           f"🎯 Цель: {em_t} <b>{target}</b> — {dt}\n"
+           f"💬 Текст: {body}\n\n"
+           f"Кнопки переключают действие/цель. Текст меняй так:\n"
+           f"<code>/create {html.escape(name)} !{action} {target} новый текст</code>")
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"⚙️ {action} ⏭", callback_data=f"cmded:{name}:act"),
+         InlineKeyboardButton(f"🎯 {target} ⏭", callback_data=f"cmded:{name}:tgt")],
+        [InlineKeyboardButton("🗑 Удалить команду", callback_data=f"cmded:{name}:del")],
+    ])
+    return txt, kb
 
 
 async def handle_pre_checkout_query(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1417,20 +1488,46 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return
 
+    if text.startswith("/cmdhelp"):
+        lines = ["🧩 <b>Конструктор команд</b>\n",
+                 "Обычная: <code>/create имя текст</code> — <code>.имя</code> подставит текст.\n",
+                 "Продвинутая: <code>/create имя !действие цель [текст]</code>\n",
+                 "🎯 <b>Цель</b> (к чему применяется):"]
+        for t in cmdengine.TARGET_ORDER:
+            em, desc = cmdengine.TARGETS[t]
+            lines.append(f"• {em} <code>{t}</code> — {desc}")
+        lines.append("\n⚙️ <b>Действия:</b>")
+        for a in cmdengine.ACTION_ORDER:
+            em, desc = cmdengine.ACTIONS[a]
+            lines.append(f"• {em} <code>{a}</code> — {desc}")
+        lines.append(
+            "\n<b>Примеры:</b>\n"
+            "<code>/create удали !delete reply</code> — удалить сообщение, на которое ответил\n"
+            "<code>/create мок !mock prev</code> — передразнить предыдущее\n"
+            "<code>/create эхо !copy next</code> — повторить следующее сообщение собеседника\n"
+            "<code>/create крик !upper self ПРИВЕТ</code>\n"
+            "<code>/create спам !repeat self 5 ха</code> — 5× повтор\n\n"
+            "Редактор: /editcmd имя · Список: /mycmds")
+        await _reply_chunks(message, "\n".join(lines))
+        return
+
     if text.startswith("/create"):
         uid = message.from_user.id
         parts = text.split(maxsplit=2)
         if len(parts) < 3:
             await message.reply_text(
                 "🧩 <b>Свои команды</b>\n\n"
-                "Создать: <code>/create имя текст</code>\n"
-                "Пример: <code>/create haha хахахахахаха</code>\n"
-                "Потом в чате пиши <code>.haha</code> — заменится на твой текст.\n\n"
-                "Список: /mycmds · Удалить: /delcmd имя · Опубликовать: /publish имя",
+                "Простая: <code>/create имя текст</code>\n"
+                "Пример: <code>/create haha хахахахахаха</code> → в чате <code>.haha</code>\n\n"
+                "💪 Продвинутая (цель + действие):\n"
+                "<code>/create имя !действие цель [текст]</code>\n"
+                "Напр.: <code>/create удали !delete reply</code>\n\n"
+                "Все действия и цели: /cmdhelp\n"
+                "Список: /mycmds · Редактор: /editcmd имя · Удалить: /delcmd имя",
                 parse_mode="HTML")
             return
         name = parts[1].lower()
-        body = parts[2]
+        rest = parts[2]
         if not re.fullmatch(r"[a-zа-я0-9_]{1,20}", name):
             await message.reply_text("⚠️ Имя — до 20 символов, буквы/цифры/_ без пробелов.")
             return
@@ -1443,21 +1540,50 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
                 f"⚠️ Достигнут лимит команд ({limit}). Удалите что-нибудь (/delcmd) "
                 "или оформите премиум/ULTRA.")
             return
-        storage.set_custom_cmd(uid, name, body[:1000])
-        await message.reply_text(f"✅ Команда <code>.{html.escape(name)}</code> создана! "
-                                 f"Пиши её в чате.", parse_mode="HTML")
+        action, target, param, body = _parse_cmd_spec(rest)
+        if action is None:
+            await message.reply_text(
+                f"⚠️ Неизвестное действие. Смотри /cmdhelp.", parse_mode="HTML")
+            return
+        storage.set_custom_cmd(uid, name, body[:2000], action=action, target=target, param=param)
+        em_a, da = cmdengine.ACTIONS.get(action, ("", ""))
+        em_t, dt = cmdengine.TARGETS.get(target, ("", ""))
+        extra = "" if action == "text" and target == "self" else \
+            f"\n{em_a} {da} · 🎯 {em_t} {dt}"
+        await message.reply_text(
+            f"✅ Команда <code>.{html.escape(name)}</code> создана!{extra}\n"
+            f"Настроить кнопками: /editcmd {html.escape(name)}", parse_mode="HTML")
+        return
+
+    if text.startswith("/editcmd"):
+        uid = message.from_user.id
+        parts = text.split(maxsplit=1)
+        if len(parts) < 2:
+            await message.reply_text("Использование: /editcmd имя (см. /mycmds)")
+            return
+        name = parts[1].strip().lower()
+        spec = storage.get_custom_cmd_full(uid, name)
+        if spec is None:
+            await message.reply_text("Такой команды нет. Список: /mycmds")
+            return
+        body, kb = _render_cmd_editor(spec)
+        await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
         return
 
     if text.startswith("/mycmds"):
         cmds = storage.list_custom_cmds(message.from_user.id)
         if not cmds:
-            await message.reply_text("У вас нет своих команд. Создать: /create имя текст")
+            await message.reply_text("У вас нет своих команд. Создать: /create имя текст · /cmdhelp")
             return
         lines = ["🧩 <b>Ваши команды:</b>"]
         for c in cmds:
+            em_a, _ = cmdengine.ACTIONS.get(c["action"], ("💬", ""))
+            em_t, _ = cmdengine.TARGETS.get(c["target"], ("✍️", ""))
             prev = html.escape((c["text"] or "")[:40])
-            lines.append(f"• <code>.{html.escape(c['name'])}</code> → {prev}")
-        lines.append("\nУдалить: /delcmd имя · Опубликовать: /publish имя")
+            tail = f" → {prev}" if prev else ""
+            badge = "" if c["action"] == "text" and c["target"] == "self" else f" [{em_a}{em_t}]"
+            lines.append(f"• <code>.{html.escape(c['name'])}</code>{badge}{tail}")
+        lines.append("\n✏️ Редактор: /editcmd имя · 🗑 /delcmd имя · 📤 /publish имя · ❔ /cmdhelp")
         await message.reply_text("\n".join(lines), parse_mode="HTML")
         return
 
@@ -3667,6 +3793,41 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             chat_id=query.message.chat_id,
             text="✍️ Напишите ваше обращение одним сообщением (можно приложить фото). Отмена — /cancel",
         )
+    elif query.data.startswith("cmded:"):
+        storage = context.bot_data["storage"]
+        uid = query.from_user.id
+        _, name, op = query.data.split(":", 2)
+        spec = storage.get_custom_cmd_full(uid, name)
+        if spec is None:
+            await query.answer("Команда не найдена", show_alert=True)
+            return
+        if op == "del":
+            storage.del_custom_cmd(uid, name)
+            await query.answer("🗑 Удалено")
+            try:
+                await query.edit_message_text(f"🗑 Команда <code>.{html.escape(name)}</code> удалена.",
+                                              parse_mode="HTML")
+            except Exception:
+                pass
+            return
+        if op == "act":
+            order = cmdengine.ACTION_ORDER
+            cur = spec["action"] if spec["action"] in order else "text"
+            nxt = order[(order.index(cur) + 1) % len(order)]
+            storage.update_custom_cmd_field(uid, name, "action", nxt)
+            spec["action"] = nxt
+        elif op == "tgt":
+            order = cmdengine.TARGET_ORDER
+            cur = spec["target"] if spec["target"] in order else "self"
+            nxt = order[(order.index(cur) + 1) % len(order)]
+            storage.update_custom_cmd_field(uid, name, "target", nxt)
+            spec["target"] = nxt
+        await query.answer("✅")
+        body, kb = _render_cmd_editor(spec)
+        try:
+            await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
     elif query.data == "lang:menu":
         await query.answer()
         rows = [[InlineKeyboardButton(label, callback_data=f"lang:set:{code}")]

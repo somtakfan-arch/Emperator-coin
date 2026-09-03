@@ -46,6 +46,9 @@ CREATE TABLE IF NOT EXISTS custom_cmds (
     user_id INTEGER NOT NULL,
     name TEXT NOT NULL,
     text TEXT NOT NULL,
+    action TEXT NOT NULL DEFAULT 'text',
+    target TEXT NOT NULL DEFAULT 'self',
+    param TEXT,
     created_at INTEGER NOT NULL,
     PRIMARY KEY (user_id, name)
 );
@@ -383,6 +386,13 @@ class Storage:
             conn.execute("ALTER TABLE troll_texts ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'")
         if troll_cols and "file_id" not in troll_cols:
             conn.execute("ALTER TABLE troll_texts ADD COLUMN file_id TEXT")
+        cc_cols = {row[1] for row in conn.execute("PRAGMA table_info(custom_cmds)")}
+        if cc_cols and "action" not in cc_cols:
+            conn.execute("ALTER TABLE custom_cmds ADD COLUMN action TEXT NOT NULL DEFAULT 'text'")
+        if cc_cols and "target" not in cc_cols:
+            conn.execute("ALTER TABLE custom_cmds ADD COLUMN target TEXT NOT NULL DEFAULT 'self'")
+        if cc_cols and "param" not in cc_cols:
+            conn.execute("ALTER TABLE custom_cmds ADD COLUMN param TEXT")
 
     @contextmanager
     def _connect(self):
@@ -521,13 +531,16 @@ class Storage:
         return row is not None
 
     # --- custom user commands (personal macros) ---
-    def set_custom_cmd(self, user_id: int, name: str, text: str) -> None:
+    def set_custom_cmd(self, user_id: int, name: str, text: str,
+                       action: str = "text", target: str = "self", param=None) -> None:
         import time as _t
         with self._connect() as conn:
             conn.execute(
-                "INSERT INTO custom_cmds (user_id, name, text, created_at) VALUES (?, ?, ?, ?) "
-                "ON CONFLICT(user_id, name) DO UPDATE SET text=excluded.text",
-                (user_id, name, text, int(_t.time())))
+                "INSERT INTO custom_cmds (user_id, name, text, action, target, param, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(user_id, name) DO UPDATE SET "
+                "text=excluded.text, action=excluded.action, target=excluded.target, param=excluded.param",
+                (user_id, name, text, action, target, param, int(_t.time())))
 
     def get_custom_cmd(self, user_id: int, name: str):
         with self._connect() as conn:
@@ -536,12 +549,32 @@ class Storage:
                 (user_id, name)).fetchone()
         return row[0] if row else None
 
+    def get_custom_cmd_full(self, user_id: int, name: str):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT text, action, target, param FROM custom_cmds WHERE user_id=? AND name=?",
+                (user_id, name)).fetchone()
+        if not row:
+            return None
+        return {"name": name, "text": row[0], "action": row[1] or "text",
+                "target": row[2] or "self", "param": row[3]}
+
+    def update_custom_cmd_field(self, user_id: int, name: str, field: str, value) -> bool:
+        if field not in ("action", "target", "param", "text"):
+            return False
+        with self._connect() as conn:
+            cur = conn.execute(
+                f"UPDATE custom_cmds SET {field}=? WHERE user_id=? AND name=?",
+                (value, user_id, name))
+        return cur.rowcount > 0
+
     def list_custom_cmds(self, user_id: int):
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT name, text FROM custom_cmds WHERE user_id=? ORDER BY name",
+                "SELECT name, text, action, target, param FROM custom_cmds WHERE user_id=? ORDER BY name",
                 (user_id,)).fetchall()
-        return [{"name": r[0], "text": r[1]} for r in rows]
+        return [{"name": r[0], "text": r[1], "action": r[2] or "text",
+                 "target": r[3] or "self", "param": r[4]} for r in rows]
 
     def count_custom_cmds(self, user_id: int) -> int:
         with self._connect() as conn:
@@ -1490,6 +1523,24 @@ class Storage:
                 (business_connection_id, chat_id, limit)).fetchall()
         return [{"from_user_id": r[0], "from_name": r[1], "from_username": r[2],
                  "text": r[3], "caption": r[4], "media_kind": r[5], "date": r[6]} for r in rows]
+
+    def last_message(self, business_connection_id: str, chat_id: int, exclude_message_id=None):
+        """The most recent stored message in a chat (for the 'prev' target),
+        optionally skipping the command message itself. Returns message_id too
+        so callers can delete it."""
+        q = ("SELECT message_id, from_user_id, text, caption, media_kind, date "
+             "FROM messages WHERE business_connection_id = ? AND chat_id = ?")
+        p = [business_connection_id, chat_id]
+        if exclude_message_id is not None:
+            q += " AND message_id != ?"
+            p.append(exclude_message_id)
+        q += " ORDER BY date DESC, message_id DESC LIMIT 1"
+        with self._connect() as conn:
+            row = conn.execute(q, p).fetchone()
+        if not row:
+            return None
+        return {"message_id": row[0], "from_user_id": row[1], "text": row[2],
+                "caption": row[3], "media_kind": row[4], "date": row[5]}
 
     def find_user_by_username(self, username: str):
         u = username.lstrip("@").lower()

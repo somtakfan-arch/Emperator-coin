@@ -19,7 +19,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from telegram.error import BadRequest, Forbidden, RetryAfter
 from telegram.ext import ContextTypes
 
-from . import config, formatting, mediautil
+from . import cmdengine, config, formatting, mediautil
 from .storage import Storage
 
 logger = logging.getLogger(__name__)
@@ -1517,12 +1517,118 @@ async def try_handle_owner_command(
         )
         return True
 
-    # Custom user command (.name created via /create): replace the command
-    # message with the user's saved phrase.
+    # Custom user command (.name created via /create). May be a simple text
+    # command or a programmable action (target + action) — see cmdengine.
     _cname = text[1:].split(None, 1)[0].lower()
-    _ctext = storage.get_custom_cmd(message.from_user.id, _cname)
-    if _ctext is not None:
-        await _edit_command_message(context, bcid, chat_id, message_id, _ctext[:1000])
+    _spec = storage.get_custom_cmd_full(message.from_user.id, _cname)
+    if _spec is not None:
+        await run_custom_spec(context, storage, message, bcid, chat_id, message_id, _spec)
         return True
 
     return False
+
+
+async def _delete_business_message(context, bcid, chat_id, msg_id) -> bool:
+    try:
+        await context.bot.do_api_request(
+            "deleteBusinessMessages",
+            api_kwargs={"business_connection_id": bcid, "message_ids": [msg_id]})
+        return True
+    except Exception:
+        logger.exception("delete business message %s failed", msg_id)
+        return False
+
+
+async def run_custom_spec(context, storage, message, bcid, chat_id, command_message_id, spec) -> None:
+    """Execute a programmable custom command. Resolves the target message,
+    runs the action, and delivers the result (edits the .command message so the
+    raw command is never left visible)."""
+    action = (spec.get("action") or "text").lower()
+    target = (spec.get("target") or "self").lower()
+    payload = spec.get("text") or ""
+    param = spec.get("param")
+
+    # --- resolve the target message + its text -------------------------------
+    src_text, target_msg_id = "", None
+    if target == "self":
+        pass  # transforms act on the payload
+    elif target == "reply":
+        r = message.reply_to_message
+        if r is None:
+            await _edit_command_message(context, bcid, chat_id, command_message_id,
+                                        "↩️ Команда требует ответа на сообщение.")
+            return
+        src_text = r.text or r.caption or ""
+        target_msg_id = r.message_id
+    elif target == "prev":
+        last = storage.last_message(bcid, chat_id, exclude_message_id=command_message_id)
+        if last is None:
+            await _edit_command_message(context, bcid, chat_id, command_message_id,
+                                        "⬆️ Нет предыдущего сообщения.")
+            return
+        src_text = last["text"] or last["caption"] or ""
+        target_msg_id = last["message_id"]
+    elif target == "next":
+        # Defer: apply to the contact's next message. Store the spec and show a
+        # small hint in place of the raw command.
+        cmdengine.arm_next(bcid, chat_id, spec, command_message_id)
+        emoji, _ = cmdengine.ACTIONS.get(action, ("⏭", ""))
+        await _edit_command_message(context, bcid, chat_id, command_message_id,
+                                    f"⏭ {emoji} Применю к следующему сообщению собеседника…")
+        return
+
+    await _deliver_action(context, bcid, chat_id, command_message_id,
+                          action, src_text, payload, param, target, target_msg_id)
+
+
+async def _deliver_action(context, bcid, chat_id, command_message_id,
+                          action, src_text, payload, param, target, target_msg_id) -> None:
+    """Common delivery for immediate (self/reply/prev) and deferred (next)."""
+    if cmdengine.is_delete(action):
+        # Delete the target message. For self/prev/reply the command message is
+        # its own separate line; delete it too so nothing is left behind.
+        if target == "self":
+            await _delete_business_message(context, bcid, chat_id, command_message_id)
+            return
+        if target_msg_id is not None:
+            await _delete_business_message(context, bcid, chat_id, target_msg_id)
+        # For 'next' there is no visible command line to remove (the hint is the
+        # command message); wipe it. For others also remove the command line.
+        if command_message_id is not None:
+            if target == "next":
+                await _edit_command_message(context, bcid, chat_id, command_message_id, "🗑")
+            else:
+                await _delete_business_message(context, bcid, chat_id, command_message_id)
+        return
+
+    out, parse_mode = cmdengine.compute_output(action, src_text, payload, param)
+    if not out:
+        await _edit_command_message(context, bcid, chat_id, command_message_id, "∅")
+        return
+    out = out[:4000]
+
+    if target in ("self", "prev", "reply") and command_message_id is not None:
+        # Replace the raw .command with the result (keeps the chat clean).
+        try:
+            await context.bot.edit_message_text(
+                chat_id=chat_id, message_id=command_message_id,
+                business_connection_id=bcid, text=out, parse_mode=parse_mode)
+        except Exception:
+            await _edit_command_message(context, bcid, chat_id, command_message_id, out)
+        return
+
+    # target == 'next': the command line is the hint; send the result as a
+    # fresh reply to the contact's new message.
+    try:
+        await context.bot.send_message(
+            chat_id=chat_id, business_connection_id=bcid, text=out,
+            parse_mode=parse_mode,
+            reply_to_message_id=target_msg_id if target_msg_id else None)
+    except Exception:
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id, business_connection_id=bcid, text=out)
+        except Exception:
+            logger.exception("deliver next action failed")
+    if command_message_id is not None:
+        await _edit_command_message(context, bcid, chat_id, command_message_id, "✅")
