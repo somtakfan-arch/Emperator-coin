@@ -2097,8 +2097,9 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         await message.reply_text("\n".join(lines), parse_mode="HTML")
         return
 
-    if text.startswith("/adminmenu") or text.startswith("/apanel"):
+    if (text.split(maxsplit=1) or [""])[0].lower() in ("/adm", "/adminmenu", "/apanel"):
         if not admin.is_admin(storage, message.from_user.id):
+            await message.reply_text("🚫 Недоступно.")
             return
         await menus.send_section(
             context, message.chat_id, "admin",
@@ -3298,8 +3299,10 @@ async def _handle_menu_callback(query, context: ContextTypes.DEFAULT_TYPE) -> No
     if section == "style" and not storage.is_premium(uid):
         await query.answer("💎 Форматирование доступно только с премиумом. /premium", show_alert=True)
         return
-    if section == "admin" and not admin.is_admin(storage, uid):
-        await query.answer("⛔ Раздел только для администраторов.", show_alert=True)
+    if section == "admin":
+        # Decoy: admin panel is not reachable from the interface. The real,
+        # working panel opens only via the /adm command.
+        await query.answer("🚫 Недоступно.", show_alert=True)
         return
     if section in menus.SECTIONS:
         await query.answer()
@@ -3384,6 +3387,12 @@ async def _handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     what = query.data.split(":", 1)[1]
     perms = admin.perms_of(storage, uid)
+
+    if what == "home":
+        # Re-open the working admin panel (internal back button).
+        await query.answer()
+        await menus.edit_section(context, query, "admin", uid, storage, context.bot.username)
+        return
 
     if what in _ADMIN_HINTS:
         need, msg = _ADMIN_HINTS[what]

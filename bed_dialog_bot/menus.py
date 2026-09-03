@@ -275,7 +275,7 @@ def kb_admin(uid, storage) -> InlineKeyboardMarkup:
 
 
 def kb_admin_back() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([[_btn("⬅️ В админку", "menu:admin", "primary")]])
+    return InlineKeyboardMarkup([[_btn("⬅️ В админку", "adm:home", "primary")]])
 
 
 _STYLE_ORDER = ["bold", "italic", "strike", "underline", "mono", "spoiler"]
@@ -314,8 +314,8 @@ def kb_main(uid=None, storage=None) -> InlineKeyboardMarkup:
     ]
     if adlink.enabled() or workink.enabled():
         rows.append([_btn("🎁 Бесплатный премиум", "reward:get", "danger")])
-    if storage is not None and uid is not None and admin.is_admin(storage, uid):
-        rows.append([_btn("🛡 Админ-панель", "menu:admin", "danger")])
+    # Admin panel is intentionally NOT shown in the interface — it opens only
+    # via the /adm command. A stale menu:admin button just says «Недоступно».
     # ULTRA panel pinned at the very bottom (highlighted for subscribers).
     if storage is not None and uid is not None and storage.is_ultra(uid):
         rows.append([_btn("🔱 ULTRA PREMIUM", "menu:ultra", "danger")])
