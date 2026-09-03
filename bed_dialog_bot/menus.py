@@ -91,10 +91,10 @@ def cap_stats(uid, storage, bot_username) -> str:
 def cap_support(uid, storage, bot_username) -> str:
     return (
         "<b>🆘 Поддержка</b>\n\n"
-        "Опишите вопрос или проблему одним сообщением — команда "
-        "<code>/support &lt;текст&gt;</code>.\n\n"
-        "<i>Можно предложить и новую функцию — опишите идею подробнее, "
-        "рассмотрим.</i>"
+        "✍️ Вопрос или проблема — <code>/support &lt;текст&gt;</code>.\n"
+        "💡 Идея новой функции — <code>/suggest &lt;текст&gt;</code> "
+        "или кнопка «Предложить идею».\n\n"
+        "<i>Хорошие предложения реализуем — пишите подробнее.</i>"
     )
 
 
@@ -334,6 +334,7 @@ def kb_stats() -> InlineKeyboardMarkup:
 def kb_support() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [_btn("✍️ Задать вопрос", "support:ask", "success")],
+        [_btn("💡 Предложить идею", "support:suggest", "primary")],
         [_btn("✈️ Связаться", "menu:contact", "success")],
         _BACK,
     ])
@@ -434,7 +435,9 @@ def cap_ultra(uid, storage, bot_username) -> str:
         "🎧 Моментальная поддержка, тесная связь\n"
         "⏳ Всегда видно, сколько осталось"
         "</blockquote>\n"
-        f"Цена: <b>{config.ULTRA_STARS_PRICE}⭐</b> или <b>{config.ULTRA_BED_PRICE} BED</b> / месяц."
+        f"Цена: <b>{config.ULTRA_STARS_PRICE}⭐</b> или <b>{config.ULTRA_BED_PRICE} BED</b> / месяц.\n"
+        f"♾ Навсегда: <b>{config.ULTRA_FOREVER_STARS_PRICE}⭐</b> или "
+        f"<b>{config.ULTRA_FOREVER_BED_PRICE} BED</b> (разово)."
     )
 
 
@@ -458,9 +461,16 @@ def kb_ultra(uid, storage) -> InlineKeyboardMarkup:
         ric = storage.ultra_immunity(uid, "ricochet")
         rows.append([_btn(f"🪞 Рикошет: {'🟢 ВКЛ' if ric else '🔴 ВЫКЛ'}",
                           "ultra:tog:ricochet", "success" if ric else "danger")])
+    if storage.is_ultra_forever(uid):
+        # Lifetime ULTRA — nothing left to buy.
+        rows.append([_btn("♾ ULTRA НАВСЕГДА — активно", "noop", "success")])
+        rows.append(_BACK)
+        return InlineKeyboardMarkup(rows)
     verb = "Продлить" if active else "Купить"
     rows.append([_btn(f"⭐ {verb} · {config.ULTRA_STARS_PRICE}", "ultra:buystars", "success")])
     rows.append([_btn(f"🔱 {verb} · {config.ULTRA_BED_PRICE} BED", "ultra:buybed", "primary")])
+    rows.append([_btn(f"♾ Навсегда · {config.ULTRA_FOREVER_STARS_PRICE}⭐", "ultra:buystars_forever", "success"),
+                 _btn(f"♾ · {config.ULTRA_FOREVER_BED_PRICE} BED", "ultra:buybed_forever", "primary")])
     rows.append(_BACK)
     return InlineKeyboardMarkup(rows)
 

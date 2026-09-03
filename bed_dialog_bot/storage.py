@@ -346,6 +346,7 @@ CREATE TABLE IF NOT EXISTS adlink_tokens (
 
 CAPTURE_RETENTION_SECONDS = 86400
 _ULTRA_GRACE_SECONDS = int(os.environ.get("ULTRA_GRACE_DAYS", "3")) * 86400
+_ULTRA_FOREVER_TS = 9999999999  # lifetime sentinel (~year 2286)
 
 
 class Storage:
@@ -509,6 +510,20 @@ class Storage:
                 (user_id, new_until),
             )
         return new_until
+
+    def grant_ultra_forever(self, user_id: int) -> int:
+        """Lifetime ULTRA: a far-future expiry (~year 2286)."""
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO ultra (user_id, ultra_until) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET ultra_until=excluded.ultra_until",
+                (user_id, _ULTRA_FOREVER_TS),
+            )
+        return _ULTRA_FOREVER_TS
+
+    def is_ultra_forever(self, user_id: int) -> bool:
+        until = self.get_ultra_until(user_id)
+        return bool(until and until >= _ULTRA_FOREVER_TS)
 
     # ULTRA enemy/VIP contacts.
     def add_ultra_contact(self, owner_id: int, contact_id: int, kind: str) -> None:

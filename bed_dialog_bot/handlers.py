@@ -52,6 +52,7 @@ async def _send_banner(context, chat_id, path, caption=None, reply_markup=None, 
 
 _GIVE_PREMIUM_RE = re.compile(r"^/give\s+premium\s+(\d+)\s+(\d+)\s*$")
 _SUPPORT_RE = re.compile(r"^/support(?:\s+(.+))?$", re.DOTALL)
+_SUGGEST_RE = re.compile(r"^/suggest(?:\s+(.+))?$", re.DOTALL)
 _REPLY_RE = re.compile(r"^/reply\s+(\d+)\s+(.+)$", re.DOTALL)
 _BLACKLIST_RE = re.compile(r"^/blacklist\s+(\d+)(?:\s+(.+))?$", re.DOTALL)
 _UNBLACKLIST_RE = re.compile(r"^/unblacklist\s+(\d+)\s*$")
@@ -87,6 +88,8 @@ logger = logging.getLogger(__name__)
 def _fmt_premium(ts) -> str:
     """Format a premium-until timestamp, guarding huge/overflowing values."""
     try:
+        if ts and ts >= 9000000000:  # lifetime sentinel
+            return "навсегда ♾"
         return datetime.fromtimestamp(ts).strftime("%d.%m.%Y")
     except (ValueError, OverflowError, OSError, TypeError):
         return "надолго"
@@ -114,6 +117,14 @@ async def _submit_ticket(message, context, storage: Storage, ticket_message: str
         notify = (f"{badge}❓ Вопрос по Telegram #{ticket_id}\n"
                   f"👤 {formatting.format_sender(name, username)}\n🆔 {message.from_user.id}\n\n"
                   f"{body}\n\nПринять: /accept {ticket_id}\nОтветить: /reply {ticket_id} <текст>")
+    elif kind == "suggest":
+        await message.reply_text(
+            f"💡 Спасибо! Ваше предложение #{ticket_id} отправлено команде. "
+            "Если возьмём в работу — сообщим."
+        )
+        notify = (f"{badge}💡 ПРЕДЛОЖЕНИЕ #{ticket_id}\n"
+                  f"👤 {formatting.format_sender(name, username)}\n🆔 {message.from_user.id}\n\n"
+                  f"{body}\n\nОтветить: /reply {ticket_id} <текст>")
     else:
         await message.reply_text(texts.build_ticket_created_text(ticket_id))
         notify = badge + texts.build_ticket_notification(
@@ -1141,6 +1152,16 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
                 f"📈 Новый курс: {bedcoin.fmt_price(storage)}⭐ за BED."
             )
             return
+        # ULTRA PREMIUM «навсегда» via Stars.
+        if parts and parts[0] == "ultra" and len(parts) >= 3 and parts[2] == "forever":
+            storage.grant_ultra_forever(message.from_user.id)
+            await message.reply_text(
+                "🔱♾ <b>ULTRA PREMIUM НАВСЕГДА активирован!</b>\n"
+                "Топ-тариф теперь твой без ограничений по времени. 🎉\n"
+                "Открой панель: /menu → 🔱 ULTRA PREMIUM",
+                parse_mode="HTML",
+            )
+            return
         # ULTRA PREMIUM purchase via Stars.
         if parts and parts[0] == "ultra" and len(parts) >= 3 and parts[2].isdigit():
             days = int(parts[2])
@@ -1285,6 +1306,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         allowed_pre = (
             text.startswith("/start")
             or text.startswith("/support")
+            or text.startswith("/suggest")
             or text.startswith("/ask")
         )
         if not is_admin and not connected and not allowed_pre:
@@ -2474,6 +2496,19 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             )
             return
         await _submit_ticket(message, context, storage, ticket_message, kind="support")
+        return
+
+    suggest_match = _SUGGEST_RE.match(text)
+    if suggest_match:
+        idea = (suggest_match.group(1) or "").strip()
+        if not idea:
+            context.bot_data.setdefault("support_await", {})[message.from_user.id] = "suggest"
+            await message.reply_text(
+                "💡 Опишите вашу идею одним сообщением — что добавить или улучшить. "
+                "Чем подробнее, тем лучше! Отмена — /cancel"
+            )
+            return
+        await _submit_ticket(message, context, storage, idea, kind="suggest")
         return
 
     reply_match = _REPLY_RE.match(text)
@@ -3793,6 +3828,14 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             chat_id=query.message.chat_id,
             text="✍️ Напишите ваше обращение одним сообщением (можно приложить фото). Отмена — /cancel",
         )
+    elif query.data == "support:suggest":
+        await query.answer()
+        context.bot_data.setdefault("support_await", {})[query.from_user.id] = "suggest"
+        await context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text=("💡 Опишите вашу идею одним сообщением — что добавить или улучшить. "
+                  "Чем подробнее, тем лучше! Отмена — /cancel"),
+        )
     elif query.data.startswith("cmded:"):
         storage = context.bot_data["storage"]
         uid = query.from_user.id
@@ -3883,6 +3926,28 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             return
         until = storage.grant_ultra_days(uid, config.ULTRA_DURATION_DAYS)
         await query.answer("🔱 ULTRA PREMIUM активирован!", show_alert=True)
+        await menus.edit_section(context, query, "ultra", uid, storage, context.bot.username)
+    elif query.data == "ultra:buystars_forever":
+        await query.answer()
+        await context.bot.send_invoice(
+            chat_id=query.message.chat_id,
+            title="🔱♾ ULTRA PREMIUM НАВСЕГДА",
+            description="Пожизненный топ-тариф: все ULTRA-функции без ограничения по времени.",
+            payload=f"ultra:{query.from_user.id}:forever",
+            currency="XTR",
+            prices=[LabeledPrice("ULTRA навсегда", config.ULTRA_FOREVER_STARS_PRICE)],
+            provider_token="",
+        )
+    elif query.data == "ultra:buybed_forever":
+        storage = context.bot_data["storage"]
+        uid = query.from_user.id
+        if not storage.spend_bed(uid, config.ULTRA_FOREVER_BED_PRICE, reason="ultra_forever"):
+            await query.answer(
+                f"Не хватает BED: нужно {config.ULTRA_FOREVER_BED_PRICE}, у вас {storage.get_bed(uid)}.",
+                show_alert=True)
+            return
+        storage.grant_ultra_forever(uid)
+        await query.answer("🔱♾ ULTRA PREMIUM НАВСЕГДА активирован!", show_alert=True)
         await menus.edit_section(context, query, "ultra", uid, storage, context.bot.username)
     elif query.data == "mycmds:open":
         await query.answer()
