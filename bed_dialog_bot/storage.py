@@ -1244,11 +1244,14 @@ class Storage:
             return None
         return {"code": code, "price": price, "until": until}
 
-    def opt_in_bed_sale(self, user_id: int, code: str) -> None:
+    def opt_in_bed_sale(self, user_id: int, code: str) -> bool:
+        """Opt a user into the sale. Returns True if this was a NEW activation,
+        False if they had already activated this code (max 1 per user)."""
         with self._connect() as conn:
-            conn.execute(
+            cur = conn.execute(
                 "INSERT OR IGNORE INTO promo_redemptions (code, user_id) VALUES (?, ?)",
                 (code.upper(), user_id))
+            return cur.rowcount > 0
 
     def bed_sale_price_for(self, user_id):
         """Effective per-BED sale price if a sale is active AND this user opted

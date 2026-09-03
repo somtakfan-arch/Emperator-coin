@@ -1405,7 +1405,10 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         if arg:
             sale = storage.get_bed_sale()
             if sale and arg.upper() == sale["code"]:
-                storage.opt_in_bed_sale(uid, sale["code"])
+                if not storage.opt_in_bed_sale(uid, sale["code"]):
+                    await message.reply_text(
+                        "♻️ Этот промокод можно активировать только 1 раз — он у вас уже активирован.")
+                    return
                 left_h = max(1, (sale["until"] - int(time.time())) // 3600)
                 await message.reply_text(
                     f"🏷 <b>Промо активировано!</b>\n"
