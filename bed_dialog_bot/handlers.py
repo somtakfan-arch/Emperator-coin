@@ -1397,12 +1397,38 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             )
         return
 
-    if text.startswith("/redeem"):
+    if text.startswith("/redeem") and not text.startswith("/redeemcode"):
+        uid = message.from_user.id
+        parts = text.split(maxsplit=1)
+        arg = parts[1].strip().split()[0] if len(parts) > 1 and parts[1].strip() else ""
+        # BED sale promo code takes priority over work.ink keys / premium promos.
+        if arg:
+            sale = storage.get_bed_sale()
+            if sale and arg.upper() == sale["code"]:
+                storage.opt_in_bed_sale(uid, sale["code"])
+                left_h = max(1, (sale["until"] - int(time.time())) // 3600)
+                await message.reply_text(
+                    f"🏷 <b>Промо активировано!</b>\n"
+                    f"Покупай BED по <b>{sale['price']*100:.0f}⭐ за 100 BED</b> "
+                    f"({sale['price']:g}⭐/BED) — сколько угодно, ещё ~{left_h} ч.\n\n"
+                    f"Купить: /menu → 🪙 Кошелёк, или /buy &lt;кол-во&gt;.",
+                    parse_mode="HTML")
+                return
+            # Premium promo code (grants days).
+            days = storage.redeem_promo(arg, uid)
+            if days is not None:
+                bonus = ""
+                if storage.is_ultra(uid):
+                    days *= 2
+                    bonus = " 🔱 ×2 ULTRA"
+                until_ts = storage.grant_premium_days(uid, days)
+                await message.reply_text(
+                    f"🎉 Промокод активирован: +{days} дн. премиума "
+                    f"(до {_fmt_premium(until_ts)}).{bonus}")
+                return
         if not workink.enabled():
             await message.reply_text("🎁 Награды за work.ink пока не настроены.")
             return
-        uid = message.from_user.id
-        parts = text.split(maxsplit=1)
         if len(parts) < 2 or not parts[1].strip():
             await message.reply_text(
                 "🎁 Пришлите ключ так: <code>/redeem ВАШ_КЛЮЧ</code>\n\n"
