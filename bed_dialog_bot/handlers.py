@@ -1967,7 +1967,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             parse_mode="HTML", disable_web_page_preview=True)
         return
 
-    if text.startswith("/bed"):
+    if text.startswith("/bed") and not text.startswith("/bedsale"):
         uid = message.from_user.id
         bal = storage.get_bed(uid)
         rank = bedcoin.holder_rank(bal)
