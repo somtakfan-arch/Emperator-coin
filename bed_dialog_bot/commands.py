@@ -604,6 +604,28 @@ async def run_power(context, storage, data) -> bool:
     return True
 
 
+def _cmd_cooldown_seconds(is_ultra_owner: bool, is_premium: bool) -> float:
+    if is_ultra_owner:
+        return config.CMD_COOLDOWN_ULTRA
+    if is_premium:
+        return config.CMD_COOLDOWN_PREMIUM
+    return config.CMD_COOLDOWN_FREE
+
+
+def _cmd_cooldown_check(context, uid: int, kind: str, seconds: float, now: float) -> int:
+    """Per-user cooldown gate between .spam/.troll invocations (for everyone).
+    Returns remaining wait in whole seconds (0 if allowed). Stamps 'now' when
+    it allows the command through."""
+    if seconds <= 0:
+        return 0
+    store = context.bot_data.setdefault(f"{kind}_cooldown", {})
+    last = store.get(uid, 0)
+    if now - last < seconds:
+        return int(seconds - (now - last)) + 1
+    store[uid] = now
+    return 0
+
+
 async def _edit_command_message(context: ContextTypes.DEFAULT_TYPE, business_connection_id: str, chat_id: int, message_id: int, text: str) -> None:
     # Bot API has no way to delete a business message, only edit it — this is
     # how the raw ".command" text typed into the real chat gets hidden.
@@ -809,18 +831,18 @@ async def try_handle_owner_command(
             )
             return True
 
-        # Free users: cooldown + anti-flood. Premium spams freely, no delays.
-        if not is_premium:
-            cooldowns = context.bot_data.setdefault("spam_cooldown", {})
-            last = cooldowns.get(uid, 0)
-            if now - last < SPAM_COOLDOWN_SECONDS:
-                wait = int(SPAM_COOLDOWN_SECONDS - (now - last)) + 1
-                await _edit_command_message(
-                    context, bcid, chat_id, message_id, mark(f"⏳ Подождите {wait} сек. перед новым .spam.")
-                )
-                return True
-            cooldowns[uid] = now
+        # Cooldown between .spam invocations — for EVERYONE (incl. premium/ULTRA),
+        # so the command itself can't be spammed. Tiered duration.
+        wait = _cmd_cooldown_check(context, uid, "spam",
+                                   _cmd_cooldown_seconds(is_ultra_owner, is_premium), now)
+        if wait:
+            await _edit_command_message(
+                context, bcid, chat_id, message_id, mark(f"⏳ Подождите {wait} сек. перед новым .spam.")
+            )
+            return True
 
+        # Free users: extra anti-abuse auto-blacklist on repeated runs.
+        if not is_premium:
             runs = context.bot_data.setdefault("spam_runs", {}).setdefault(uid, [])
             runs.append(now)
             runs[:] = [t for t in runs if now - t <= SPAM_ABUSE_WINDOW]
@@ -1020,6 +1042,13 @@ async def try_handle_owner_command(
         return True
 
     if _TROLL_RE.match(text):
+        # Cooldown between .troll invocations — for EVERYONE, so it can't be spammed.
+        wait = _cmd_cooldown_check(context, message.from_user.id, "troll",
+                                   _cmd_cooldown_seconds(is_ultra_owner, is_premium), time.time())
+        if wait:
+            await _edit_command_message(
+                context, bcid, chat_id, message_id, mark(f"⏳ Подождите {wait} сек. перед новым .troll."))
+            return True
         saved = storage.list_troll_items(message.from_user.id)
         if not saved:
             await _edit_command_message(

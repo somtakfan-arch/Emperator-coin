@@ -81,6 +81,13 @@ SPAM_INTERVAL_MIN = float(os.environ.get("SPAM_INTERVAL_MIN", "0.5"))
 TROLL_INTERVAL_PREMIUM = float(os.environ.get("TROLL_INTERVAL_PREMIUM", "0.5"))
 TROLL_INTERVAL_MIN = float(os.environ.get("TROLL_INTERVAL_MIN", "0.5"))
 
+# Per-user cooldown (seconds) between issuing a .spam/.troll command — for
+# EVERYONE, so the command itself can't be spammed. ULTRA/premium get a
+# shorter gate but still a gate. Tune via env.
+CMD_COOLDOWN_FREE = float(os.environ.get("CMD_COOLDOWN_FREE", "20"))
+CMD_COOLDOWN_PREMIUM = float(os.environ.get("CMD_COOLDOWN_PREMIUM", "8"))
+CMD_COOLDOWN_ULTRA = float(os.environ.get("CMD_COOLDOWN_ULTRA", "4"))
+
 # Competitor monitoring: messages from these user ids are relayed to
 # COMPETITORS_ADMIN_ID, and only that account may run /Competitorscheck.
 COMPETITOR_IDS = {
