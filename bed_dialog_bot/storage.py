@@ -1219,6 +1219,49 @@ class Storage:
             conn.execute("UPDATE promos SET uses_left = uses_left - 1 WHERE code = ?", (code,))
             return row[0]
 
+    # --- BED sale (special fixed-price promo window) ---
+
+    def start_bed_sale(self, code: str, price_per_bed: float, until: int) -> None:
+        self.set_setting("bedsale_code", code.upper())
+        self.set_setting("bedsale_price", str(price_per_bed))
+        self.set_setting("bedsale_until", str(int(until)))
+
+    def stop_bed_sale(self) -> None:
+        self.set_setting("bedsale_code", "")
+        self.set_setting("bedsale_until", "0")
+
+    def get_bed_sale(self):
+        """Active BED sale, or None if none/expired. {code, price, until}."""
+        code = self.get_setting("bedsale_code")
+        if not code:
+            return None
+        try:
+            until = int(self.get_setting("bedsale_until", "0") or 0)
+            price = float(self.get_setting("bedsale_price", "0") or 0)
+        except (TypeError, ValueError):
+            return None
+        if until <= int(time.time()) or price <= 0:
+            return None
+        return {"code": code, "price": price, "until": until}
+
+    def opt_in_bed_sale(self, user_id: int, code: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO promo_redemptions (code, user_id) VALUES (?, ?)",
+                (code.upper(), user_id))
+
+    def bed_sale_price_for(self, user_id):
+        """Effective per-BED sale price if a sale is active AND this user opted
+        in with the code; otherwise None."""
+        sale = self.get_bed_sale()
+        if not sale:
+            return None
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM promo_redemptions WHERE code = ? AND user_id = ?",
+                (sale["code"], user_id)).fetchone()
+        return sale["price"] if row else None
+
     # --- referral leaderboard ---
 
     def top_referrers(self, limit: int = 50):

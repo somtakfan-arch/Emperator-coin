@@ -1804,7 +1804,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             return
         n = int(parts[1])
         stars = bedcoin.cost_stars(storage, n, message.from_user.id)
-        price = bedcoin.fmt_price(storage)
+        price = bedcoin.fmt_price_for(storage, message.from_user.id)
         await message.reply_text(
             f"🧮 <b>{n} BED</b> ≈ <b>{stars}⭐</b> (курс {price}⭐/BED)\n"
             f"On-chain: {n} BED = {n} джеттонов BED на TON.",
@@ -2270,6 +2270,18 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     redeem_match = _REDEEM_RE.match(text)
     if redeem_match:
         code = redeem_match.group(1)
+        # BED sale promo: unlocks a fixed-price BED window for this user.
+        sale = storage.get_bed_sale()
+        if sale and code.upper() == sale["code"]:
+            storage.opt_in_bed_sale(message.from_user.id, sale["code"])
+            left_h = max(1, (sale["until"] - int(time.time())) // 3600)
+            await message.reply_text(
+                f"🏷 <b>Промо активировано!</b>\n"
+                f"Покупай BED по <b>{sale['price']*100:.0f}⭐ за 100 BED</b> "
+                f"({sale['price']:g}⭐/BED) — сколько угодно, ещё ~{left_h} ч.\n\n"
+                f"Купить: /menu → 💼 Кошелёк → купить BED, или /buy <кол-во>.",
+                parse_mode="HTML")
+            return
         days = storage.redeem_promo(code, message.from_user.id)
         if days is None:
             await message.reply_text("❌ Промокод недействителен, исчерпан или уже использован.")
@@ -2606,6 +2618,45 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             f"✅ Промокод {code} создан: +{days} дн., активаций {uses}.\n"
             f"Пользователи вводят: /redeem {code}"
         )
+        return
+
+    if text.startswith("/bedsale"):
+        if not admin.is_super(message.from_user.id):
+            return
+        parts = text.split()
+        if len(parts) == 2 and parts[1].lower() == "off":
+            storage.stop_bed_sale()
+            await message.reply_text("🛑 Распродажа BED остановлена.")
+            return
+        if len(parts) != 4 or not parts[2].isdigit() or not parts[3].isdigit():
+            sale = storage.get_bed_sale()
+            cur = ""
+            if sale:
+                left_h = max(0, (sale["until"] - int(time.time())) // 3600)
+                cur = (f"\n\nСейчас активна: код {sale['code']}, "
+                       f"{sale['price']*100:.0f}⭐/100 BED, осталось ~{left_h} ч.")
+            await message.reply_text(
+                "🏷 <b>Распродажа BED</b>\n"
+                "Создать: <code>/bedsale &lt;код&gt; &lt;звёзд за 100 BED&gt; &lt;часов&gt;</code>\n"
+                "Напр.: <code>/bedsale SF3SJ7DT 800 24</code>\n"
+                "Остановить: <code>/bedsale off</code>\n\n"
+                "Пользователи вводят код (/redeem &lt;код&gt;) и покупают BED по этой "
+                "фиксированной цене, сколько угодно, до конца окна." + cur,
+                parse_mode="HTML")
+            return
+        code = parts[1].upper()
+        stars_per_100 = int(parts[2])
+        hours = int(parts[3])
+        price_per_bed = stars_per_100 / 100.0
+        until = int(time.time()) + hours * 3600
+        storage.start_bed_sale(code, price_per_bed, until)
+        await message.reply_text(
+            f"🏷 Распродажа BED создана!\n"
+            f"Код: <code>{html.escape(code)}</code>\n"
+            f"Цена: {stars_per_100}⭐ за 100 BED ({price_per_bed:g}⭐/BED)\n"
+            f"Действует: {hours} ч.\n\n"
+            f"Пользователи активируют кодом (/redeem {html.escape(code)}) и покупают "
+            f"сколько угодно BED по этой цене.", parse_mode="HTML")
         return
 
     if text == "/admin" or text.startswith("/admin "):
@@ -3302,7 +3353,7 @@ async def _handle_bed_callback(query, context: ContextTypes.DEFAULT_TYPE) -> Non
         await context.bot.send_invoice(
             chat_id=query.message.chat_id,
             title=f"{amount} BedCoin",
-            description=f"Покупка {amount} BED по курсу {bedcoin.fmt_price(storage)}⭐ за BED.",
+            description=f"Покупка {amount} BED по курсу {bedcoin.fmt_price_for(storage, uid)}⭐ за BED.",
             payload=f"bed:{uid}:{amount}",
             currency="XTR",
             prices=[LabeledPrice(f"{amount} BED", cost)],
@@ -3638,7 +3689,7 @@ async def _process_bed_chain_address(message, context: ContextTypes.DEFAULT_TYPE
         )])
     await message.reply_text(
         f"✅ Адрес принят:\n<code>{html.escape(address)}</code>\n\n"
-        f"Сколько BED купить и отправить сюда? Курс: {bedcoin.fmt_price(storage)}⭐ за BED.",
+        f"Сколько BED купить и отправить сюда? Курс: {bedcoin.fmt_price_for(storage, uid)}⭐ за BED.",
         parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(rows),
     )

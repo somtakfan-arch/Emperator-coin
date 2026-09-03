@@ -167,7 +167,8 @@ def cap_cmds(uid, storage, bot_username) -> str:
 
 def cap_wallet(uid, storage, bot_username) -> str:
     bal = storage.get_bed(uid)
-    price = bedcoin.fmt_price(storage)
+    sale_price = storage.bed_sale_price_for(uid) if hasattr(storage, "bed_sale_price_for") else None
+    price = bedcoin.fmt_price_for(storage, uid)
     sold = int(bedcoin.total_sold(storage))
     rank = bedcoin.holder_rank(bal)
     nxt = bedcoin.next_rank(bal)
@@ -179,10 +180,12 @@ def cap_wallet(uid, storage, bot_username) -> str:
         "<blockquote>"
         f"💰 Баланс: <b>{bal} BED</b>\n"
         f"{rank}{nxt_line}{dust_line}\n"
-        f"📈 Курс: <b>{price} ⭐ за 1 BED</b>\n"
+        f"📈 Курс: <b>{price} ⭐ за 1 BED</b>{' 🏷 ПРОМО' if sale_price else ''}\n"
         f"🔥 Продано всего: {sold} BED"
         "</blockquote>\n"
-        "<i>Цена растёт со спросом — чем больше куплено, тем дороже.</i>\n"
+        + ("<i>🏷 У тебя активна распродажа — покупай BED по промо-цене, сколько угодно!</i>\n"
+           if sale_price else
+           "<i>Цена растёт со спросом — чем больше куплено, тем дороже.</i>\n")
     )
     if ton.configured():
         t_bed, t_ton, _addr = bedcoin.treasury_cache(storage)

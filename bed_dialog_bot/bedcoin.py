@@ -23,7 +23,12 @@ def price_stars(storage) -> float:
 
 def cost_stars(storage, bed_amount: int, buyer_id=None) -> int:
     """Whole-Star cost to buy `bed_amount` BED right now (min 1).
-    ULTRA buyers get ULTRA_BED_DISCOUNT off."""
+    An active BED sale (promo the buyer opted into) fixes the price and skips
+    other discounts; otherwise ULTRA buyers get ULTRA_BED_DISCOUNT off."""
+    if buyer_id is not None:
+        sale_price = storage.bed_sale_price_for(buyer_id)
+        if sale_price:
+            return max(1, round(sale_price * bed_amount))
     cost = max(1, round(price_stars(storage) * bed_amount))
     if buyer_id is not None and storage.is_ultra(buyer_id):
         cost = max(1, round(cost * (1 - config.ULTRA_BED_DISCOUNT)))
@@ -37,6 +42,14 @@ def record_sale(storage, bed_amount: int) -> None:
 
 def fmt_price(storage) -> str:
     p = price_stars(storage)
+    return f"{p:.2f}".rstrip("0").rstrip(".")
+
+
+def fmt_price_for(storage, buyer_id) -> str:
+    """Price shown to a specific buyer — the promo sale price if they opted in,
+    else the normal demand price."""
+    sp = storage.bed_sale_price_for(buyer_id) if buyer_id is not None else None
+    p = sp if sp else price_stars(storage)
     return f"{p:.2f}".rstrip("0").rstrip(".")
 
 
