@@ -1029,6 +1029,181 @@ async def _confirm_referral(invited_id: int, context: ContextTypes.DEFAULT_TYPE,
         logger.exception("Failed to notify referrer %s", referrer_id)
 
 
+# --- 🎡 Wheel of Fortune ---------------------------------------------------
+
+def _parse_wheel_prizes():
+    prizes = []
+    for pair in config.WHEEL_PRIZES.split(","):
+        if ":" in pair:
+            bed, w = pair.split(":", 1)
+            if bed.strip().isdigit() and w.strip().isdigit() and int(w) > 0:
+                prizes.append((int(bed), int(w)))
+    return prizes or [(1, 1)]
+
+
+async def _spin_wheel(message, context, storage: Storage, uid: int) -> None:
+    if not storage.try_wheel_spin(uid):
+        secs = 86400 - (int(time.time()) % 86400)
+        h, m = secs // 3600, (secs % 3600) // 60
+        await message.reply_text(
+            f"🎡 Колесо ты уже крутил сегодня!\n⏳ Следующий бесплатный спин через "
+            f"{h} ч {m} мин.\n💰 Баланс: {storage.get_bed(uid)} BED.")
+        return
+    import random as _rnd
+    prizes = _parse_wheel_prizes()
+    beds = [p[0] for p in prizes]
+    weights = [p[1] for p in prizes]
+    base = _rnd.choices(beds, weights=weights, k=1)[0]
+    mult = 1.0
+    if storage.is_ultra(uid):
+        mult = config.WHEEL_ULTRA_MULT
+    elif storage.is_premium(uid):
+        mult = config.WHEEL_PREMIUM_MULT
+    prize = max(1, int(round(base * mult)))
+    new_bal = storage.add_bed(uid, prize, reason="wheel")
+    top = "🎉🎉 <b>ДЖЕКПОТ!</b> " if base == max(beds) else ""
+    bonus = f" (×{mult:g} за премиум)" if mult != 1.0 else ""
+    await message.reply_text(
+        f"🎡 Крутим колесо фортуны…\n\n{top}Выпало: <b>+{prize} BED</b>{bonus}!\n"
+        f"💰 Баланс: <b>{new_bal} BED</b>\n\n🕛 Возвращайся завтра за новым спином!",
+        parse_mode="HTML")
+
+
+# --- ⚔️ PvP duels ----------------------------------------------------------
+
+async def _start_duel(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    parts = (message.text or "").split()
+    if len(parts) != 3 or not parts[2].isdigit() or int(parts[2]) <= 0:
+        await message.reply_text(
+            "⚔️ <b>Дуэль на BED</b>\n<code>/duel @ник ставка</code>\n\n"
+            "Оба ставят BED, победитель (50/50) забирает банк!\n"
+            f"Мин. ставка: {config.DUEL_MIN_BET} BED · Баланс: {storage.get_bed(uid)} BED.",
+            parse_mode="HTML")
+        return
+    nick, amount = parts[1], int(parts[2])
+    if amount < config.DUEL_MIN_BET:
+        await message.reply_text(f"Мин. ставка — {config.DUEL_MIN_BET} BED.")
+        return
+    opp_id = storage.find_user_by_username(nick)
+    if not opp_id:
+        await message.reply_text(
+            "Не нашёл такого пользователя. Он должен был писать боту, укажи его @username.")
+        return
+    if opp_id == uid:
+        await message.reply_text("Нельзя вызвать самого себя 🙂")
+        return
+    if storage.get_bed(uid) < amount:
+        await message.reply_text(f"❌ У тебя недостаточно BED. Баланс: {storage.get_bed(uid)}.")
+        return
+    if storage.get_bed(opp_id) < amount:
+        await message.reply_text("У соперника недостаточно BED для такой ставки.")
+        return
+    import secrets as _s
+    duel_id = _s.token_hex(4)
+    ch_name, ch_user = _display_name(message)
+    duels = context.bot_data.setdefault("duels", {})
+    duels[duel_id] = {"challenger": uid, "opponent": opp_id, "amount": amount,
+                      "created": int(time.time()), "ch_name": ch_name, "ch_user": ch_user}
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("⚔️ Принять", callback_data=f"duel:acc:{duel_id}"),
+        InlineKeyboardButton("🏳 Отклонить", callback_data=f"duel:dec:{duel_id}"),
+    ]])
+    try:
+        await context.bot.send_message(
+            opp_id,
+            f"⚔️ <b>Вызов на дуэль!</b>\n{formatting.format_sender(ch_name, ch_user)} "
+            f"ставит <b>{amount} BED</b>.\nПобедитель забирает банк <b>{amount * 2} BED</b> (50/50).\n"
+            f"💰 Твой баланс: {storage.get_bed(opp_id)} BED.",
+            parse_mode="HTML", reply_markup=kb)
+    except Exception:
+        duels.pop(duel_id, None)
+        await message.reply_text("Не смог отправить вызов сопернику — возможно, он не запускал бота.")
+        return
+    await message.reply_text(f"⚔️ Вызов отправлен {nick} на {amount} BED. Ждём ответа… (⏳ {config.DUEL_TIMEOUT_SECONDS // 60} мин)")
+
+
+async def _resolve_duel(query, context, storage: Storage) -> None:
+    op = query.data.split(":")[1]
+    duel_id = query.data.split(":")[2]
+    duels = context.bot_data.setdefault("duels", {})
+    duel = duels.get(duel_id)
+    if not duel:
+        await query.answer("Вызов уже неактуален.", show_alert=True)
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        return
+    if query.from_user.id != duel["opponent"]:
+        await query.answer("Это не твой вызов.", show_alert=True)
+        return
+    if int(time.time()) - duel["created"] > config.DUEL_TIMEOUT_SECONDS:
+        duels.pop(duel_id, None)
+        await query.answer("⏳ Время вызова истекло.", show_alert=True)
+        try:
+            await query.edit_message_text("⏳ Вызов истёк.")
+        except Exception:
+            pass
+        return
+    ch, opp, amount = duel["challenger"], duel["opponent"], duel["amount"]
+    if op == "dec":
+        duels.pop(duel_id, None)
+        await query.answer("Вызов отклонён.")
+        try:
+            await query.edit_message_text("🏳 Ты отклонил дуэль.")
+        except Exception:
+            pass
+        try:
+            await context.bot.send_message(ch, "🏳 Соперник отклонил твою дуэль.")
+        except Exception:
+            pass
+        return
+    # Accept: re-check balances, then charge both.
+    if storage.get_bed(opp) < amount:
+        duels.pop(duel_id, None)
+        await query.answer("У тебя не хватает BED.", show_alert=True)
+        return
+    if storage.get_bed(ch) < amount:
+        duels.pop(duel_id, None)
+        await query.answer("У соперника уже не хватает BED — дуэль отменена.", show_alert=True)
+        try:
+            await context.bot.send_message(ch, "⚔️ Дуэль отменена: у тебя не хватило BED к моменту принятия.")
+        except Exception:
+            pass
+        return
+    if not storage.spend_bed(opp, amount, reason="duel_bet"):
+        duels.pop(duel_id, None)
+        await query.answer("Не удалось списать ставку.", show_alert=True)
+        return
+    if not storage.spend_bed(ch, amount, reason="duel_bet"):
+        storage.add_bed(opp, amount, reason="duel_refund")  # refund opponent
+        duels.pop(duel_id, None)
+        await query.answer("У соперника не хватило BED — дуэль отменена.", show_alert=True)
+        return
+    duels.pop(duel_id, None)
+    import random as _rnd
+    winner, loser = (ch, opp) if _rnd.random() < 0.5 else (opp, ch)
+    pot = amount * 2
+    rake = pot * config.DUEL_RAKE_PERCENT // 100
+    payout = pot - rake
+    win_bal = storage.add_bed(winner, payout, reason="duel_win")
+    await query.answer("⚔️ Бой!")
+    rake_note = f" (комиссия {rake} BED)" if rake else ""
+    win_txt = (f"🏆 <b>Победа!</b> Забираешь банк <b>+{payout} BED</b>{rake_note}!\n"
+               f"💰 Баланс: {win_bal} BED.")
+    lose_txt = (f"💀 <b>Поражение.</b> Ставка {amount} BED ушла сопернику.\n"
+                f"💰 Баланс: {storage.get_bed(loser)} BED.")
+    try:
+        await query.edit_message_text(win_txt if winner == opp else lose_txt, parse_mode="HTML")
+    except Exception:
+        pass
+    try:
+        await context.bot.send_message(ch, win_txt if winner == ch else lose_txt, parse_mode="HTML")
+    except Exception:
+        pass
+
+
 _URL_RE = re.compile(r"https?://[^\s]+", re.IGNORECASE)
 
 # Creator-partnership kinds: post about the bot somewhere, get a premium promo.
@@ -1961,6 +2136,14 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             await message.reply_text(f"🎲 {roll}! 🎉 Выигрыш +{prize} BED! Баланс: {new_bal} BED.")
         else:
             await message.reply_text(f"🎲 {roll}! 😔 Мимо, −{bet} BED. Баланс: {storage.get_bed(uid)} BED.")
+        return
+
+    if text.startswith("/wheel") or text.startswith("/spin") or text.startswith("/колесо"):
+        await _spin_wheel(message, context, storage, message.from_user.id)
+        return
+
+    if text.startswith("/duel") or text.startswith("/дуэль"):
+        await _start_duel(message, context, storage)
         return
 
     if text.startswith("/stake"):
@@ -4087,6 +4270,13 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
                     parse_mode="HTML")
             except Exception:
                 logger.exception("Failed to DM tiktok reward to %s", sub["user_id"])
+    elif query.data == "game:wheel":
+        await query.answer()
+        storage = context.bot_data["storage"]
+        await _spin_wheel(query.message, context, storage, query.from_user.id)
+    elif query.data.startswith("duel:"):
+        storage = context.bot_data["storage"]
+        await _resolve_duel(query, context, storage)
     elif query.data.startswith("cmded:"):
         storage = context.bot_data["storage"]
         uid = query.from_user.id

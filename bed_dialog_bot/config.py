@@ -66,6 +66,16 @@ BED_DAYS_PER_UNIT = int(os.environ.get("BED_DAYS_PER_UNIT", "3"))
 # Dice game: win chance and payout multiplier.
 DICE_WIN_CHANCE = float(os.environ.get("DICE_WIN_CHANCE", "0.45"))
 DICE_WIN_MULT = int(os.environ.get("DICE_WIN_MULT", "2"))
+# 🎡 Wheel of Fortune — one free spin per day. Weighted BED prizes as
+# "bed:weight" pairs; premium/ULTRA prizes are multiplied (see below).
+WHEEL_PRIZES = os.environ.get(
+    "WHEEL_PRIZES", "1:30,2:25,3:20,5:13,10:8,25:3,100:1")
+WHEEL_PREMIUM_MULT = float(os.environ.get("WHEEL_PREMIUM_MULT", "1.5"))
+WHEEL_ULTRA_MULT = float(os.environ.get("WHEEL_ULTRA_MULT", "2"))
+# ⚔️ PvP duels on a BED stake. Rake (%) taken from the pot; 0 = winner takes all.
+DUEL_MIN_BET = int(os.environ.get("DUEL_MIN_BET", "1"))
+DUEL_RAKE_PERCENT = int(os.environ.get("DUEL_RAKE_PERCENT", "0"))
+DUEL_TIMEOUT_SECONDS = int(os.environ.get("DUEL_TIMEOUT_SECONDS", "300"))
 # Custom user commands (/create): how many one may have.
 CUSTOM_CMD_FREE_MAX = int(os.environ.get("CUSTOM_CMD_FREE_MAX", "5"))
 CUSTOM_CMD_PREMIUM_MAX = int(os.environ.get("CUSTOM_CMD_PREMIUM_MAX", "30"))

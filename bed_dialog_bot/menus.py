@@ -308,7 +308,8 @@ def kb_main(uid=None, storage=None) -> InlineKeyboardMarkup:
         [_btn("⚙️ Функции", "menu:funcs", "primary"), _btn("📊 Статистика", "menu:stats", "primary")],
         [_btn("👥 Рефералы", "menu:ref", "primary"), _btn("📟 Команды", "menu:cmds", "primary")],
         [_btn("💎 Подписка", "menu:sub", "primary"), _btn("🪙 Кошелёк", "menu:wallet", "success")],
-        [_btn("🗓 Ежедневная награда", "daily:claim", "success")],
+        [_btn("🗓 Ежедневная награда", "daily:claim", "success"),
+         _btn("🎡 Колесо фортуны", "game:wheel", "danger")],
         [_btn("🧩 Мои команды", "mycmds:open", "primary"), _btn("🛒 Магазин команд", "mkt:open", "success")],
         [_btn("🆘 Поддержка", "menu:support", "success"), _btn("🌐 Язык", "lang:menu", "primary")],
     ]

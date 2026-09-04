@@ -1280,6 +1280,19 @@ class Storage:
         with self._connect() as conn:
             return conn.execute(q, p).fetchone()[0]
 
+    # --- 🎡 Wheel of Fortune (one free spin per day) ---
+
+    def try_wheel_spin(self, user_id: int) -> bool:
+        """Reserve today's spin. True if allowed (and stamped), False if the
+        user already spun today."""
+        today = int(time.time()) // 86400
+        key = f"wheel:{user_id}"
+        last = self.get_setting(key)
+        if last and last.isdigit() and int(last) == today:
+            return False
+        self.set_setting(key, str(today))
+        return True
+
     # --- BED sale (special fixed-price promo window) ---
 
     def start_bed_sale(self, code: str, price_per_bed: float, until: int) -> None:
