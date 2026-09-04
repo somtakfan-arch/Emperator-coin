@@ -1042,12 +1042,12 @@ def _parse_wheel_prizes():
 
 
 async def _spin_wheel(message, context, storage: Storage, uid: int) -> None:
-    if not storage.try_wheel_spin(uid):
-        secs = 86400 - (int(time.time()) % 86400)
-        h, m = secs // 3600, (secs % 3600) // 60
+    cost = config.WHEEL_SPIN_COST
+    if not storage.spend_bed(uid, cost, reason="wheel_spin"):
         await message.reply_text(
-            f"🎡 Колесо ты уже крутил сегодня!\n⏳ Следующий бесплатный спин через "
-            f"{h} ч {m} мин.\n💰 Баланс: {storage.get_bed(uid)} BED.")
+            f"🎡 Прокрут колеса стоит <b>{cost} BED</b>, а у тебя "
+            f"{storage.get_bed(uid)} BED.\nПополни: /menu → 🪙 Кошелёк.",
+            parse_mode="HTML")
         return
     import random as _rnd
     prizes = _parse_wheel_prizes()
@@ -1061,11 +1061,15 @@ async def _spin_wheel(message, context, storage: Storage, uid: int) -> None:
         mult = config.WHEEL_PREMIUM_MULT
     prize = max(1, int(round(base * mult)))
     new_bal = storage.add_bed(uid, prize, reason="wheel")
+    net = prize - cost
     top = "🎉🎉 <b>ДЖЕКПОТ!</b> " if base == max(beds) else ""
     bonus = f" (×{mult:g} за премиум)" if mult != 1.0 else ""
+    outcome = (f"📈 В плюс: +{net} BED!" if net > 0
+               else (f"➖ В ноль." if net == 0 else f"📉 В минус: {net} BED."))
     await message.reply_text(
-        f"🎡 Крутим колесо фортуны…\n\n{top}Выпало: <b>+{prize} BED</b>{bonus}!\n"
-        f"💰 Баланс: <b>{new_bal} BED</b>\n\n🕛 Возвращайся завтра за новым спином!",
+        f"🎡 Крутим колесо фортуны… (−{cost} BED)\n\n"
+        f"{top}Выпало: <b>+{prize} BED</b>{bonus}! {outcome}\n"
+        f"💰 Баланс: <b>{new_bal} BED</b>\n\n🔁 Ещё раз: /wheel",
         parse_mode="HTML")
 
 
