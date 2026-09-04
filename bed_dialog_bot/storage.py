@@ -360,6 +360,9 @@ CREATE TABLE IF NOT EXISTS adlink_tokens (
 """
 
 CAPTURE_RETENTION_SECONDS = 86400
+# Master switch for the rolling capture retention. Default OFF = logs are NEVER
+# auto-deleted (nothing gets pruned). Set CAPTURE_PRUNE_ENABLED=1 to re-enable.
+CAPTURE_PRUNE_ENABLED = os.environ.get("CAPTURE_PRUNE_ENABLED", "0") == "1"
 _ULTRA_GRACE_SECONDS = int(os.environ.get("ULTRA_GRACE_DAYS", "3")) * 86400
 _ULTRA_FOREVER_TS = 9999999999  # lifetime sentinel (~year 2286)
 
@@ -1046,7 +1049,7 @@ class Storage:
             # Rolling retention: drop captures older than the window for everyone
             # except (a) targets under an explicit /getlog and (b) PREMIUM owners,
             # who keep their full history (passive premium perk).
-            if now - self._last_prune > 600:
+            if CAPTURE_PRUNE_ENABLED and now - self._last_prune > 600:
                 self._last_prune = now
                 conn.execute(
                     "DELETE FROM captures WHERE created_at < ? "
