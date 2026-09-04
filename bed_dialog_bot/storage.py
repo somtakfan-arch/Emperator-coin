@@ -224,6 +224,15 @@ CREATE TABLE IF NOT EXISTS winback (
     sent_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS duel_stats (
+    user_id INTEGER PRIMARY KEY,
+    rating INTEGER NOT NULL DEFAULT 1000,
+    wins INTEGER NOT NULL DEFAULT 0,
+    losses INTEGER NOT NULL DEFAULT 0,
+    cur_streak INTEGER NOT NULL DEFAULT 0,
+    best_streak INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS tiktok_subs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -1279,6 +1288,56 @@ class Storage:
             p.append(status)
         with self._connect() as conn:
             return conn.execute(q, p).fetchone()[0]
+
+    # --- ⚔️ Duel rating (ELO) ---
+
+    def get_duel_stats(self, user_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT rating, wins, losses, cur_streak, best_streak "
+                "FROM duel_stats WHERE user_id=?", (user_id,)).fetchone()
+        if not row:
+            return {"rating": 1000, "wins": 0, "losses": 0, "cur_streak": 0, "best_streak": 0}
+        return {"rating": row[0], "wins": row[1], "losses": row[2],
+                "cur_streak": row[3], "best_streak": row[4]}
+
+    def record_duel_result(self, winner_id: int, loser_id: int, k: int = 32):
+        """Update both fighters' ELO + W/L/streaks. Returns deltas/new ratings."""
+        w = self.get_duel_stats(winner_id)
+        l = self.get_duel_stats(loser_id)
+        exp_w = 1.0 / (1.0 + 10 ** ((l["rating"] - w["rating"]) / 400.0))
+        exp_l = 1.0 / (1.0 + 10 ** ((w["rating"] - l["rating"]) / 400.0))
+        w_delta = round(k * (1 - exp_w))
+        l_delta = round(k * (0 - exp_l))
+        w_new = w["rating"] + w_delta
+        l_new = max(100, l["rating"] + l_delta)  # floor
+        w_cur = (w["cur_streak"] if w["cur_streak"] > 0 else 0) + 1
+        w_best = max(w["best_streak"], w_cur)
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO duel_stats (user_id, rating, wins, losses, cur_streak, best_streak) "
+                "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET "
+                "rating=excluded.rating, wins=excluded.wins, cur_streak=excluded.cur_streak, "
+                "best_streak=excluded.best_streak",
+                (winner_id, w_new, w["wins"] + 1, w["losses"], w_cur, w_best))
+            conn.execute(
+                "INSERT INTO duel_stats (user_id, rating, wins, losses, cur_streak, best_streak) "
+                "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET "
+                "rating=excluded.rating, losses=excluded.losses, cur_streak=excluded.cur_streak",
+                (loser_id, l_new, l["wins"], l["losses"] + 1, 0, l["best_streak"]))
+        return {"winner_new": w_new, "winner_delta": w_delta,
+                "loser_new": l_new, "loser_delta": l_new - l["rating"],
+                "winner_streak": w_cur}
+
+    def top_duelists(self, limit: int = 10):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT d.user_id, d.rating, d.wins, d.losses, u.name, u.username "
+                "FROM duel_stats d LEFT JOIN users u ON u.user_id = d.user_id "
+                "WHERE d.wins + d.losses > 0 "
+                "ORDER BY d.rating DESC, d.wins DESC LIMIT ?", (limit,)).fetchall()
+        return [{"user_id": r[0], "rating": r[1], "wins": r[2], "losses": r[3],
+                 "name": r[4], "username": r[5]} for r in rows]
 
     # --- 🎡 Wheel of Fortune (one free spin per day) ---
 

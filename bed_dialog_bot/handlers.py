@@ -1071,6 +1071,39 @@ async def _spin_wheel(message, context, storage: Storage, uid: int) -> None:
 
 # --- ⚔️ PvP duels ----------------------------------------------------------
 
+_DUEL_RANKS = [
+    (1800, "👑 Легенда"),
+    (1500, "💎 Мастер"),
+    (1300, "🥇 Ветеран"),
+    (1100, "🥈 Воин"),
+    (900, "🥉 Боец"),
+    (0, "🥚 Новичок"),
+]
+
+
+def _duel_rank(rating: int) -> str:
+    for threshold, title in _DUEL_RANKS:
+        if rating >= threshold:
+            return title
+    return "🥚 Новичок"
+
+
+def _duel_leaderboard(storage: Storage) -> str:
+    top = storage.top_duelists(10)
+    if not top:
+        return ("⚔️ <b>Рейтинг дуэлянтов</b>\n\nПока никто не сражался. "
+                "Брось вызов: <code>/duel @ник ставка</code>!")
+    medals = ["🥇", "🥈", "🥉"]
+    lines = ["⚔️ <b>Топ дуэлянтов</b>\n"]
+    for i, d in enumerate(top):
+        who = formatting.format_sender(d["name"] or "Боец", d["username"])
+        pos = medals[i] if i < 3 else f"{i + 1}."
+        lines.append(f"{pos} {who} — <b>{d['rating']}</b> {_duel_rank(d['rating'])} "
+                     f"({d['wins']}✅/{d['losses']}❌)")
+    lines.append("\nСвоя статистика: /duelstats · Бой: /duel @ник ставка")
+    return "\n".join(lines)
+
+
 async def _start_duel(message, context, storage: Storage) -> None:
     uid = message.from_user.id
     parts = (message.text or "").split()
@@ -1188,12 +1221,18 @@ async def _resolve_duel(query, context, storage: Storage) -> None:
     rake = pot * config.DUEL_RAKE_PERCENT // 100
     payout = pot - rake
     win_bal = storage.add_bed(winner, payout, reason="duel_win")
+    res = storage.record_duel_result(winner, loser)
     await query.answer("⚔️ Бой!")
     rake_note = f" (комиссия {rake} BED)" if rake else ""
+    w_rank = _duel_rank(res["winner_new"])
+    l_rank = _duel_rank(res["loser_new"])
+    streak_note = f"\n🔥 Серия побед: {res['winner_streak']}" if res["winner_streak"] >= 2 else ""
     win_txt = (f"🏆 <b>Победа!</b> Забираешь банк <b>+{payout} BED</b>{rake_note}!\n"
-               f"💰 Баланс: {win_bal} BED.")
+               f"💰 Баланс: {win_bal} BED\n"
+               f"📈 Рейтинг: <b>{res['winner_new']}</b> (+{res['winner_delta']}) · {w_rank}{streak_note}")
     lose_txt = (f"💀 <b>Поражение.</b> Ставка {amount} BED ушла сопернику.\n"
-                f"💰 Баланс: {storage.get_bed(loser)} BED.")
+                f"💰 Баланс: {storage.get_bed(loser)} BED\n"
+                f"📉 Рейтинг: <b>{res['loser_new']}</b> ({res['loser_delta']}) · {l_rank}")
     try:
         await query.edit_message_text(win_txt if winner == opp else lose_txt, parse_mode="HTML")
     except Exception:
@@ -2140,6 +2179,25 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     if text.startswith("/wheel") or text.startswith("/spin") or text.startswith("/колесо"):
         await _spin_wheel(message, context, storage, message.from_user.id)
+        return
+
+    if text.startswith("/dtop") or text.startswith("/dueltop"):
+        await message.reply_text(_duel_leaderboard(storage), parse_mode="HTML")
+        return
+
+    if text.startswith("/duelstats") or text.startswith("/mystats"):
+        uid = message.from_user.id
+        st = storage.get_duel_stats(uid)
+        games = st["wins"] + st["losses"]
+        wr = f"{st['wins'] * 100 // games}%" if games else "—"
+        await message.reply_text(
+            f"⚔️ <b>Твоя дуэльная статистика</b>\n\n"
+            f"🎖 Звание: <b>{_duel_rank(st['rating'])}</b>\n"
+            f"📊 Рейтинг: <b>{st['rating']}</b>\n"
+            f"✅ Побед: {st['wins']} · ❌ Поражений: {st['losses']} · 🎯 Винрейт: {wr}\n"
+            f"🔥 Текущая серия: {st['cur_streak']} · Лучшая: {st['best_streak']}\n\n"
+            f"Вызвать на бой: <code>/duel @ник ставка</code> · Топ: /dtop",
+            parse_mode="HTML")
         return
 
     if text.startswith("/duel") or text.startswith("/дуэль"):
