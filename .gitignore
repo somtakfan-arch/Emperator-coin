@@ -1,2 +1,12 @@
 *.agdai
 MAlonzo/**
+
+# bed_dialog_bot
+bed_dialog_bot/.venv/
+bed_dialog_bot/.env
+bed_dialog_bot/*.db
+bed_dialog_bot/__pycache__/
+**/__pycache__/
+
+# migration seed (never commit user data)
+_seed.db
