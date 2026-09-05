@@ -1041,6 +1041,34 @@ def _parse_wheel_prizes():
     return prizes or [(1, 1)]
 
 
+def _wheel_preview(storage: Storage, uid: int):
+    """(text, keyboard): what you can win + a confirm button."""
+    cost = config.WHEEL_SPIN_COST
+    prizes = _parse_wheel_prizes()
+    total = sum(w for _, w in prizes) or 1
+    top_bed = max(b for b, _ in prizes)
+    mult = 1.0
+    if storage.is_ultra(uid):
+        mult = config.WHEEL_ULTRA_MULT
+    elif storage.is_premium(uid):
+        mult = config.WHEEL_PREMIUM_MULT
+    lines = ["🎡 <b>Колесо фортуны</b>", f"🎟 Прокрут: <b>{cost} BED</b>\n", "🎁 <b>Что можно выиграть:</b>"]
+    for bed, w in sorted(prizes, key=lambda x: x[0]):
+        pct = w / total * 100
+        pstr = f"{pct:.0f}%" if pct >= 1 else f"{pct:.1f}%"
+        win = max(1, int(round(bed * mult)))
+        jack = " 🎉 ДЖЕКПОТ" if bed == top_bed else ""
+        lines.append(f"• <b>{win} BED</b> — {pstr}{jack}")
+    if mult != 1.0:
+        lines.append(f"\n✨ Твой множитель за премиум: ×{mult:g}")
+    lines.append(f"\n💰 Баланс: {storage.get_bed(uid)} BED")
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton(f"🎡 Крутить за {cost} BED", callback_data="game:spin"),
+        InlineKeyboardButton("❌ Отмена", callback_data="game:cancel"),
+    ]])
+    return "\n".join(lines), kb
+
+
 async def _spin_wheel(message, context, storage: Storage, uid: int) -> None:
     cost = config.WHEEL_SPIN_COST
     if not storage.spend_bed(uid, cost, reason="wheel_spin"):
@@ -2182,7 +2210,8 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     if text.startswith("/wheel") or text.startswith("/spin") or text.startswith("/колесо"):
-        await _spin_wheel(message, context, storage, message.from_user.id)
+        body, kb = _wheel_preview(storage, message.from_user.id)
+        await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
         return
 
     if text.startswith("/dtop") or text.startswith("/dueltop"):
@@ -4335,7 +4364,23 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     elif query.data == "game:wheel":
         await query.answer()
         storage = context.bot_data["storage"]
+        body, kb = _wheel_preview(storage, query.from_user.id)
+        await context.bot.send_message(
+            chat_id=query.message.chat_id, text=body, parse_mode="HTML", reply_markup=kb)
+    elif query.data == "game:spin":
+        await query.answer("🎡")
+        storage = context.bot_data["storage"]
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
         await _spin_wheel(query.message, context, storage, query.from_user.id)
+    elif query.data == "game:cancel":
+        await query.answer("Отменено")
+        try:
+            await query.edit_message_text("🎡 Отменено.")
+        except Exception:
+            pass
     elif query.data.startswith("duel:"):
         storage = context.bot_data["storage"]
         await _resolve_duel(query, context, storage)
