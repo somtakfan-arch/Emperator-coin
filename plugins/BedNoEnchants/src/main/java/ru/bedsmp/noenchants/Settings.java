@@ -6,6 +6,7 @@ import org.bukkit.configuration.file.FileConfiguration;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
+import java.util.logging.Logger;
 
 /** Снимок config.yml. Пересоздаётся при /noenchants reload. */
 public final class Settings {
@@ -32,9 +33,12 @@ public final class Settings {
     private final boolean sweepPlayers;
     private final boolean sweepOnChunkLoad;
 
+    private final boolean vanillaGearEnabled;
+    private final VanillaComponents vanillaComponents;
+
     private final FileConfiguration raw;
 
-    private Settings(FileConfiguration cfg) {
+    private Settings(FileConfiguration cfg, Logger logger) {
         this.raw = cfg;
         this.enabled = cfg.getBoolean("enabled", true);
         this.convertEnchantedBooks = cfg.getBoolean("convert-enchanted-books", true);
@@ -60,10 +64,15 @@ public final class Settings {
         this.chunksPerTick = Math.max(1, cfg.getInt("sweep.chunks-per-tick", 10));
         this.sweepPlayers = cfg.getBoolean("sweep.players", true);
         this.sweepOnChunkLoad = cfg.getBoolean("sweep.on-chunk-load", true);
+
+        this.vanillaGearEnabled = cfg.getBoolean("vanilla-gear.enabled", true);
+        this.vanillaComponents = this.vanillaGearEnabled
+                ? VanillaComponents.resolve(cfg.getStringList("vanilla-gear.components"), logger)
+                : VanillaComponents.resolve(java.util.List.of(), logger);
     }
 
-    public static Settings load(FileConfiguration cfg) {
-        return new Settings(cfg);
+    public static Settings load(FileConfiguration cfg, Logger logger) {
+        return new Settings(cfg, logger);
     }
 
     public boolean enabled() { return enabled; }
@@ -84,6 +93,9 @@ public final class Settings {
     public int chunksPerTick() { return chunksPerTick; }
     public boolean sweepPlayers() { return sweepPlayers; }
     public boolean sweepOnChunkLoad() { return sweepOnChunkLoad; }
+
+    public boolean vanillaGearEnabled() { return vanillaGearEnabled && !vanillaComponents.isEmpty(); }
+    public VanillaComponents vanillaComponents() { return vanillaComponents; }
 
     /** Работает ли плагин в этом мире. */
     public boolean worldEnabled(World world) {

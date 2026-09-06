@@ -21,7 +21,7 @@ public final class BedNoEnchants extends JavaPlugin {
     @Override
     public void onEnable() {
         saveDefaultConfig();
-        this.settings = Settings.load(getConfig());
+        this.settings = Settings.load(getConfig(), getLogger());
         this.stripper = new EnchantStripper(this);
         this.sweepTask = new SweepTask(this);
 
@@ -46,7 +46,10 @@ public final class BedNoEnchants extends JavaPlugin {
             }
         });
 
-        getLogger().info("BedNoEnchants включён — зачарований на сервере больше нет.");
+        getLogger().info("BedNoEnchants включён — зачарований на сервере больше нет."
+                + (settings.vanillaGearEnabled()
+                ? " Ванильные характеристики: следим за " + settings.vanillaComponents().size() + " компонентами."
+                : ""));
     }
 
     @Override
@@ -58,7 +61,7 @@ public final class BedNoEnchants extends JavaPlugin {
     /** Перечитывает config.yml и перезапускает фоновую зачистку. */
     public void reloadSettings() {
         reloadConfig();
-        this.settings = Settings.load(getConfig());
+        this.settings = Settings.load(getConfig(), getLogger());
         sweepTask.start();
     }
 

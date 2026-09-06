@@ -126,7 +126,13 @@ public final class EnchantStripper {
             }
         }
 
-        // 3. Пустая зачарованная книга -> обычная книга.
+        // 3. Кастомные характеристики (урон, скорость атаки, броня, прочность,
+        //    неломаемость, кастомная еда и т.п.) — обратно к ванильным значениям.
+        if (settings().vanillaGearEnabled() && settings().vanillaComponents().restore(result)) {
+            changed = true;
+        }
+
+        // 4. Пустая зачарованная книга -> обычная книга.
         if (settings().convertEnchantedBooks() && result.getType() == Material.ENCHANTED_BOOK) {
             result = result.withType(Material.BOOK);
             changed = true;
