@@ -1,0 +1,22 @@
+name: BedNoEnchants
+version: '${project.version}'
+main: ru.bedsmp.noenchants.BedNoEnchants
+api-version: '1.21'
+authors: [Emperatorrr]
+description: Полностью убирает зачарования со ВСЕХ предметов на сервере BedSMP.
+website: https://discord.gg/D5JEqtup
+
+commands:
+  noenchants:
+    description: Управление плагином BedNoEnchants
+    usage: /noenchants <scan|stats|reload|toggle>
+    aliases: [bne, noench]
+    permission: bednoenchants.admin
+
+permissions:
+  bednoenchants.admin:
+    description: Доступ к команде /noenchants
+    default: op
+  bednoenchants.bypass:
+    description: Исключение из очистки (работает только если включено в config.yml)
+    default: false
