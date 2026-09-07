@@ -77,6 +77,9 @@ WHEEL_PRIZES = os.environ.get(
 WHEEL_PREMIUM_MULT = float(os.environ.get("WHEEL_PREMIUM_MULT", "1.1"))
 WHEEL_ULTRA_MULT = float(os.environ.get("WHEEL_ULTRA_MULT", "1.15"))
 # ⚔️ PvP duels on a BED stake. Rake (%) taken from the pot; 0 = winner takes all.
+# 🎰 Casino games: bet limits (BED).
+CASINO_MIN_BET = int(os.environ.get("CASINO_MIN_BET", "1"))
+CASINO_MAX_BET = int(os.environ.get("CASINO_MAX_BET", "500"))
 DUEL_MIN_BET = int(os.environ.get("DUEL_MIN_BET", "1"))
 DUEL_RAKE_PERCENT = int(os.environ.get("DUEL_RAKE_PERCENT", "0"))
 DUEL_TIMEOUT_SECONDS = int(os.environ.get("DUEL_TIMEOUT_SECONDS", "300"))

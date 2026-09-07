@@ -19,7 +19,7 @@ from telegram import (
 )
 from telegram.ext import ContextTypes
 
-from . import admin, adlink, bedcoin, cmdengine, commands, config, crypto, formatting, i18n, media, menus, texts, ton, workink
+from . import admin, adlink, bedcoin, casino, cmdengine, commands, config, crypto, formatting, i18n, media, menus, texts, ton, workink
 from .storage import Storage
 
 
@@ -1280,6 +1280,148 @@ async def _resolve_duel(query, context, storage: Storage) -> None:
         pass
 
 
+# --- 🎰 Casino: instant games ----------------------------------------------
+
+def _parse_bet(message, storage: Storage):
+    """Parse '<cmd> <bet> [extra...]'. Returns (bet, extra_tokens) or
+    (None, error_text)."""
+    parts = (message.text or "").split()
+    if len(parts) < 2 or not parts[1].isdigit() or int(parts[1]) <= 0:
+        return None, None
+    bet = int(parts[1])
+    if bet < config.CASINO_MIN_BET or bet > config.CASINO_MAX_BET:
+        return None, (f"Ставка от {config.CASINO_MIN_BET} до {config.CASINO_MAX_BET} BED.")
+    return bet, parts[2:]
+
+
+async def _play_slots(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    bet, extra = _parse_bet(message, storage)
+    if bet is None:
+        await message.reply_text(
+            f"🎰 <b>Слоты</b>: <code>/slots ставка</code>\n"
+            f"Три в ряд — ×{casino.SLOT_TRIPLE_MULT}, три 7️⃣ — ×{casino.SLOT_JACKPOT_MULT}!\n"
+            f"💰 Баланс: {storage.get_bed(uid)} BED." + (f"\n⚠️ {extra}" if isinstance(extra, str) else ""),
+            parse_mode="HTML")
+        return
+    if not storage.spend_bed(uid, bet, reason="slots"):
+        await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)}.")
+        return
+    dice = await context.bot.send_dice(chat_id=message.chat_id, emoji="🎰")
+    value = dice.dice.value
+    mult = casino.slots_multiplier(value)
+    await asyncio.sleep(2)  # let the animation land
+    if mult:
+        prize = bet * mult
+        new_bal = storage.add_bed(uid, prize, reason="slots_win")
+        tag = "🎉 ДЖЕКПОТ!!!" if mult == casino.SLOT_JACKPOT_MULT else "🎉 Выигрыш!"
+        await message.reply_text(
+            f"🎰 {casino.slots_symbols(value)}\n{tag} ×{mult} = <b>+{prize} BED</b>\n"
+            f"💰 Баланс: {new_bal} BED", parse_mode="HTML")
+    else:
+        await message.reply_text(
+            f"🎰 {casino.slots_symbols(value)}\n😔 Мимо, −{bet} BED.\n"
+            f"💰 Баланс: {storage.get_bed(uid)} BED", parse_mode="HTML")
+
+
+async def _play_darts(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    bet, extra = _parse_bet(message, storage)
+    if bet is None:
+        await message.reply_text(
+            f"🎯 <b>Дартс</b>: <code>/darts ставка</code>\n"
+            f"Точно в яблочко — ×{casino.DARTS_BULLSEYE_MULT}!\n"
+            f"💰 Баланс: {storage.get_bed(uid)} BED." + (f"\n⚠️ {extra}" if isinstance(extra, str) else ""),
+            parse_mode="HTML")
+        return
+    if not storage.spend_bed(uid, bet, reason="darts"):
+        await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)}.")
+        return
+    dice = await context.bot.send_dice(chat_id=message.chat_id, emoji="🎯")
+    await asyncio.sleep(2)
+    if dice.dice.value == 6:
+        prize = bet * casino.DARTS_BULLSEYE_MULT
+        new_bal = storage.add_bed(uid, prize, reason="darts_win")
+        await message.reply_text(
+            f"🎯 В яблочко! ×{casino.DARTS_BULLSEYE_MULT} = <b>+{prize} BED</b>\n"
+            f"💰 Баланс: {new_bal} BED", parse_mode="HTML")
+    else:
+        await message.reply_text(
+            f"🎯 Мимо центра, −{bet} BED.\n💰 Баланс: {storage.get_bed(uid)} BED", parse_mode="HTML")
+
+
+async def _play_roulette(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    bet, extra = _parse_bet(message, storage)
+    if bet is None or not extra:
+        await message.reply_text(
+            "🔴⚫️ <b>Рулетка</b>: <code>/roulette ставка тип</code>\n"
+            "Тип: <code>red</code>/<code>black</code> (×2), <code>even</code>/<code>odd</code> (×2), "
+            "число <code>0-36</code> (×36).\n"
+            f"Пример: <code>/roulette 10 red</code>\n💰 Баланс: {storage.get_bed(uid)} BED."
+            + (f"\n⚠️ {extra}" if isinstance(extra, str) else ""),
+            parse_mode="HTML")
+        return
+    bet_type = extra[0].lower()
+    valid = bet_type in ("red", "black", "even", "odd") or (bet_type.isdigit() and 0 <= int(bet_type) <= 36)
+    if not valid:
+        await message.reply_text("Тип ставки: red/black/even/odd или число 0-36.")
+        return
+    if not storage.spend_bed(uid, bet, reason="roulette"):
+        await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)}.")
+        return
+    n = casino.roulette_spin()
+    color = casino.roulette_color(n)
+    emoji = {"red": "🔴", "black": "⚫️", "green": "🟢"}[color]
+    ret = casino.roulette_payout(bet_type, n)
+    if ret:
+        prize = bet * ret
+        new_bal = storage.add_bed(uid, prize, reason="roulette_win")
+        await message.reply_text(
+            f"🎡 Выпало: {emoji} <b>{n}</b>\n🎉 Выигрыш ×{ret} = <b>+{prize} BED</b>\n"
+            f"💰 Баланс: {new_bal} BED", parse_mode="HTML")
+    else:
+        await message.reply_text(
+            f"🎡 Выпало: {emoji} <b>{n}</b>\n😔 Мимо, −{bet} BED.\n"
+            f"💰 Баланс: {storage.get_bed(uid)} BED", parse_mode="HTML")
+
+
+async def _play_crash(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    bet, extra = _parse_bet(message, storage)
+    target = None
+    if extra and not isinstance(extra, str):
+        try:
+            target = float(extra[0].replace(",", "."))
+        except (ValueError, IndexError):
+            target = None
+    if bet is None or target is None or target < 1.01:
+        await message.reply_text(
+            "📈 <b>Crash</b>: <code>/crash ставка множитель</code>\n"
+            "Задай авто-забор (≥1.01). Ракета взлетает — если краш ≥ твоего "
+            "множителя, забираешь ставку × множитель.\n"
+            f"Пример: <code>/crash 10 2</code> (×2)\n💰 Баланс: {storage.get_bed(uid)} BED."
+            + (f"\n⚠️ {extra}" if isinstance(extra, str) else ""),
+            parse_mode="HTML")
+        return
+    target = round(min(target, 100.0), 2)
+    if not storage.spend_bed(uid, bet, reason="crash"):
+        await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)}.")
+        return
+    crash = casino.roll_crash()
+    if crash >= target:
+        prize = int(bet * target)
+        new_bal = storage.add_bed(uid, prize, reason="crash_win")
+        await message.reply_text(
+            f"🚀 Ракета взлетела до <b>×{crash:.2f}</b>!\n"
+            f"✅ Забрал на ×{target:g} = <b>+{prize} BED</b>\n💰 Баланс: {new_bal} BED",
+            parse_mode="HTML")
+    else:
+        await message.reply_text(
+            f"💥 Краш на <b>×{crash:.2f}</b> (не дожил до ×{target:g}).\n"
+            f"😔 −{bet} BED. Баланс: {storage.get_bed(uid)} BED", parse_mode="HTML")
+
+
 _URL_RE = re.compile(r"https?://[^\s]+", re.IGNORECASE)
 
 # Creator-partnership kinds: post about the bot somewhere, get a premium promo.
@@ -2240,6 +2382,22 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     if text.startswith("/duel") or text.startswith("/дуэль"):
         await _start_duel(message, context, storage)
+        return
+
+    if text.startswith("/slots") or text.startswith("/слоты"):
+        await _play_slots(message, context, storage)
+        return
+
+    if text.startswith("/darts") or text.startswith("/дартс"):
+        await _play_darts(message, context, storage)
+        return
+
+    if text.startswith("/roulette") or text.startswith("/рулетка"):
+        await _play_roulette(message, context, storage)
+        return
+
+    if text.startswith("/crash") or text.startswith("/краш"):
+        await _play_crash(message, context, storage)
         return
 
     if text.startswith("/stake"):
