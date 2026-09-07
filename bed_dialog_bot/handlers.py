@@ -1006,6 +1006,26 @@ async def _confirm_referral(invited_id: int, context: ContextTypes.DEFAULT_TYPE,
     if referrer_id is None:
         return
     count = storage.count_referrals(referrer_id)
+
+    # 🔱 Promo: while active, EVERY confirmed referral grants ULTRA days.
+    if time.time() < config.REFERRAL_ULTRA_PROMO_UNTIL:
+        ultra_days = config.REFERRAL_ULTRA_PROMO_DAYS
+        ultra_until = storage.grant_ultra_days(referrer_id, ultra_days)
+        # Mark milestone rewards as settled so they aren't back-paid after the
+        # promo ends (the ULTRA reward replaces them during the campaign).
+        storage.set_ref_rewarded(referrer_id, count // config.REFERRALS_PER_REWARD)
+        try:
+            await context.bot.send_message(
+                chat_id=referrer_id,
+                text=(f"🎉 Твой друг подключил бота! Всего приглашено: {count}.\n"
+                      f"🔱 <b>Акция: +{ultra_days} дн. ULTRA PREMIUM!</b> "
+                      f"Активен до {_fmt_premium(ultra_until)}.\n"
+                      f"Зови ещё — /ref (акция до 15 сентября)!"),
+                parse_mode="HTML")
+        except Exception:
+            logger.exception("Failed to notify referrer %s", referrer_id)
+        return
+
     earned = count // config.REFERRALS_PER_REWARD
     rewarded = storage.get_ref_rewarded(referrer_id)
     if earned > rewarded:
@@ -2856,8 +2876,13 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         need = config.REFERRALS_PER_REWARD
         to_next = need - (count % need)
         link = f"https://t.me/{context.bot.username}?start=ref_{uid}"
+        promo = ""
+        if time.time() < config.REFERRAL_ULTRA_PROMO_UNTIL:
+            promo = (f"🔥 АКЦИЯ до 15 сентября: за КАЖДОГО приглашённого — "
+                     f"+{config.REFERRAL_ULTRA_PROMO_DAYS} дн. ULTRA PREMIUM! 🔱\n\n")
         await message.reply_text(
             "👥 Реферальная программа\n\n"
+            + promo +
             f"Приглашайте друзей по вашей ссылке — за каждые {need} новых "
             f"пользователей вы получаете {config.REFERRAL_REWARD_DAYS} дней премиума.\n\n"
             f"Ваша ссылка:\n{link}\n\n"

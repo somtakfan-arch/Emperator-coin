@@ -127,6 +127,12 @@ COMPETITORS_ADMIN_ID = int(os.environ.get("COMPETITORS_ADMIN_ID", "7563505180"))
 
 REFERRALS_PER_REWARD = int(os.environ.get("REFERRALS_PER_REWARD", "20"))
 REFERRAL_REWARD_DAYS = int(os.environ.get("REFERRAL_REWARD_DAYS", "30"))
+# 🔱 Referral promo: while active, EACH confirmed referral grants ULTRA days.
+import calendar as _calendar  # noqa: E402
+REFERRAL_ULTRA_PROMO_DAYS = int(os.environ.get("REFERRAL_ULTRA_PROMO_DAYS", "2"))
+# Active up to and including 15 Sep (ends at 2026-09-16 00:00 UTC). Override via env.
+REFERRAL_ULTRA_PROMO_UNTIL = int(os.environ.get(
+    "REFERRAL_ULTRA_PROMO_UNTIL", str(_calendar.timegm((2026, 9, 16, 0, 0, 0, 0, 0, 0)))))
 
 # Free trial premium granted once to each brand-new user.
 TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "0"))

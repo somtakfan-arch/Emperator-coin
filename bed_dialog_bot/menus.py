@@ -121,10 +121,17 @@ def cap_sub(uid, storage, bot_username) -> str:
 
 
 def cap_ref(uid, storage, bot_username) -> str:
+    import time as _t
     link = f"https://t.me/{bot_username}?start=ref_{uid}"
+    promo = ""
+    if _t.time() < config.REFERRAL_ULTRA_PROMO_UNTIL:
+        promo = (f"🔥 <b>АКЦИЯ до 15 сентября!</b>\n"
+                 f"🔱 За КАЖДОГО приглашённого — <b>+{config.REFERRAL_ULTRA_PROMO_DAYS} дн. "
+                 f"ULTRA PREMIUM</b>! Зови друзей 🏃\n\n")
     return (
         "<b>👥 Реферальная программа</b>\n\n"
-        "Приглашайте друзей и получайте награды за их покупки.\n\n"
+        + promo +
+        "Приглашайте друзей и получайте награды.\n\n"
         "🔗 <b>Ваша ссылка</b>\n"
         f"<code>{link}</code>\n\n"
         "<blockquote>"
