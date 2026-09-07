@@ -115,6 +115,42 @@ async def _reminder_loop(application: Application) -> None:
                     pass
         except Exception:
             logger.exception("Stake loop error")
+        # 🎟 Lottery daily draw (after the configured UTC hour, once per day).
+        try:
+            today = int(_time.time()) // 86400
+            last = storage.get_setting("lottery_last_draw_day")
+            last = int(last) if last and last.isdigit() else 0
+            if _time.gmtime().tm_hour >= config.LOTTERY_DRAW_HOUR_UTC and today > last:
+                entries = storage.lottery_entries()
+                storage.set_setting("lottery_last_draw_day", str(today))
+                if entries:
+                    import random as _rnd
+                    total = sum(e["tickets"] for e in entries)
+                    pool = total * config.LOTTERY_TICKET_PRICE
+                    prize = pool - pool * config.LOTTERY_RAKE_PERCENT // 100
+                    pick = _rnd.randint(1, total)
+                    acc, winner = 0, entries[-1]["user_id"]
+                    for e in entries:
+                        acc += e["tickets"]
+                        if pick <= acc:
+                            winner = e["user_id"]
+                            break
+                    rnd = storage.lottery_round()
+                    storage.lottery_advance_round()
+                    storage.add_bed(winner, prize, reason="lottery_win")
+                    for e in entries:
+                        won = e["user_id"] == winner
+                        msg = (f"🎟 Лотерея #{rnd}: ты ПОБЕДИЛ! 🎉\n🏆 Банк {prize} BED зачислен! "
+                               f"(билетов в розыгрыше: {total})"
+                               if won else
+                               f"🎟 Лотерея #{rnd} разыграна. Банк {prize} BED забрал другой участник. "
+                               f"Новый раунд уже идёт — участвуй: /lottery")
+                        try:
+                            await application.bot.send_message(chat_id=e["user_id"], text=msg)
+                        except Exception:
+                            pass
+        except Exception:
+            logger.exception("Lottery draw error")
         # Price alerts + hourly price history for the chart.
         try:
             price = bedcoin.price_stars(storage)

@@ -224,6 +224,13 @@ CREATE TABLE IF NOT EXISTS winback (
     sent_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS lottery_tickets (
+    round INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    tickets INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (round, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS duel_stats (
     user_id INTEGER PRIMARY KEY,
     rating INTEGER NOT NULL DEFAULT 1000,
@@ -1288,6 +1295,48 @@ class Storage:
             p.append(status)
         with self._connect() as conn:
             return conn.execute(q, p).fetchone()[0]
+
+    # --- 🎟 Lottery ---
+
+    def lottery_round(self) -> int:
+        v = self.get_setting("lottery_round")
+        return int(v) if v and v.isdigit() else 1
+
+    def lottery_buy(self, user_id: int, tickets: int) -> None:
+        rnd = self.lottery_round()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO lottery_tickets (round, user_id, tickets) VALUES (?, ?, ?) "
+                "ON CONFLICT(round, user_id) DO UPDATE SET tickets = tickets + excluded.tickets",
+                (rnd, user_id, tickets))
+
+    def lottery_entries(self, rnd=None):
+        rnd = self.lottery_round() if rnd is None else rnd
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT user_id, tickets FROM lottery_tickets WHERE round=? AND tickets > 0",
+                (rnd,)).fetchall()
+        return [{"user_id": r[0], "tickets": r[1]} for r in rows]
+
+    def lottery_pool_tickets(self, rnd=None) -> int:
+        rnd = self.lottery_round() if rnd is None else rnd
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(tickets),0) FROM lottery_tickets WHERE round=?", (rnd,)).fetchone()
+        return int(row[0] or 0)
+
+    def lottery_my_tickets(self, user_id: int, rnd=None) -> int:
+        rnd = self.lottery_round() if rnd is None else rnd
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT tickets FROM lottery_tickets WHERE round=? AND user_id=?",
+                (rnd, user_id)).fetchone()
+        return int(row[0]) if row else 0
+
+    def lottery_advance_round(self) -> int:
+        nxt = self.lottery_round() + 1
+        self.set_setting("lottery_round", str(nxt))
+        return nxt
 
     # --- ⚔️ Duel rating (ELO) ---
 

@@ -1422,6 +1422,290 @@ async def _play_crash(message, context, storage: Storage) -> None:
             f"😔 −{bet} BED. Баланс: {storage.get_bed(uid)} BED", parse_mode="HTML")
 
 
+# --- 💣 Mines --------------------------------------------------------------
+
+def _mines_view(state, reveal_all=False, dead=False):
+    picks = len(state["revealed"])
+    mult = casino.mines_multiplier(picks, state["bombs"])
+    cash = int(state["bet"] * mult)
+    rows = []
+    for r in range(5):
+        row = []
+        for cc in range(5):
+            idx = r * 5 + cc
+            if idx in state["revealed"]:
+                row.append(InlineKeyboardButton("💎", callback_data="mine:x"))
+            elif (reveal_all or dead) and idx in state["positions"]:
+                row.append(InlineKeyboardButton("💣", callback_data="mine:x"))
+            elif reveal_all:
+                row.append(InlineKeyboardButton("💎", callback_data="mine:x"))
+            else:
+                row.append(InlineKeyboardButton("▪️", callback_data=f"mine:{idx}"))
+        rows.append(row)
+    if not reveal_all and not dead and picks > 0:
+        rows.append([InlineKeyboardButton(f"💰 Забрать ×{mult:.2f} = {cash} BED", callback_data="mine:cash")])
+    text = (f"💣 <b>Минёр</b> · ставка {state['bet']} BED · бомб {state['bombs']}\n"
+            f"Открыто: {picks} · множитель ×{mult:.2f}"
+            + (f" · заберёшь {cash} BED" if picks > 0 else "\nОткрывай клетки, обходи бомбы!"))
+    return text, InlineKeyboardMarkup(rows)
+
+
+async def _start_mines(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    parts = (message.text or "").split()
+    if len(parts) < 2 or not parts[1].isdigit() or int(parts[1]) <= 0:
+        await message.reply_text(
+            f"💣 <b>Минёр</b>: <code>/mines ставка [бомб]</code>\n"
+            f"Открывай клетки — множитель растёт. Забери до бомбы! (бомб 1–24, по умолч. 3)\n"
+            f"💰 Баланс: {storage.get_bed(uid)} BED.", parse_mode="HTML")
+        return
+    bet = int(parts[1])
+    if bet < config.CASINO_MIN_BET or bet > config.CASINO_MAX_BET:
+        await message.reply_text(f"Ставка от {config.CASINO_MIN_BET} до {config.CASINO_MAX_BET} BED.")
+        return
+    bombs = 3
+    if len(parts) >= 3 and parts[2].isdigit():
+        bombs = max(1, min(24, int(parts[2])))
+    casino_state = context.bot_data.setdefault("casino", {})
+    if uid in casino_state:
+        await message.reply_text("Сначала заверши текущую игру (или /cancel).")
+        return
+    if not storage.spend_bed(uid, bet, reason="mines"):
+        await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)}.")
+        return
+    state = {"game": "mines", "bet": bet, "bombs": bombs,
+             "positions": casino.mines_new(bombs), "revealed": set()}
+    casino_state[uid] = state
+    text, kb = _mines_view(state)
+    await message.reply_text(text, parse_mode="HTML", reply_markup=kb)
+
+
+async def _mines_callback(query, context, storage: Storage) -> None:
+    uid = query.from_user.id
+    op = query.data.split(":", 1)[1]
+    if op == "x":
+        await query.answer()
+        return
+    state = context.bot_data.setdefault("casino", {}).get(uid)
+    if not state or state.get("game") != "mines":
+        await query.answer("Игра не найдена.", show_alert=True)
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        return
+    if op == "cash":
+        picks = len(state["revealed"])
+        if picks == 0:
+            await query.answer("Открой хотя бы одну клетку.")
+            return
+        mult = casino.mines_multiplier(picks, state["bombs"])
+        prize = int(state["bet"] * mult)
+        new_bal = storage.add_bed(uid, prize, reason="mines_win")
+        context.bot_data["casino"].pop(uid, None)
+        await query.answer("💰 Забрал!")
+        _, kb = _mines_view(state, reveal_all=True)
+        try:
+            await query.edit_message_text(
+                f"💣 Минёр — забрал ×{mult:.2f} = <b>+{prize} BED</b>!\n💰 Баланс: {new_bal} BED",
+                parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+        return
+    idx = int(op)
+    if idx in state["revealed"]:
+        await query.answer()
+        return
+    if idx in state["positions"]:
+        context.bot_data["casino"].pop(uid, None)
+        await query.answer("💥 БУМ!", show_alert=True)
+        _, kb = _mines_view(state, dead=True)
+        try:
+            await query.edit_message_text(
+                f"💥 Бомба! Ставка {state['bet']} BED сгорела.\n💰 Баланс: {storage.get_bed(uid)} BED",
+                parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+        return
+    state["revealed"].add(idx)
+    await query.answer("💎")
+    if len(state["revealed"]) >= 25 - state["bombs"]:
+        mult = casino.mines_multiplier(len(state["revealed"]), state["bombs"])
+        prize = int(state["bet"] * mult)
+        new_bal = storage.add_bed(uid, prize, reason="mines_win")
+        context.bot_data["casino"].pop(uid, None)
+        _, kb = _mines_view(state, reveal_all=True)
+        try:
+            await query.edit_message_text(
+                f"🏆 Все клетки чисты! ×{mult:.2f} = <b>+{prize} BED</b>!\n💰 Баланс: {new_bal} BED",
+                parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+        return
+    text, kb = _mines_view(state)
+    try:
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=kb)
+    except Exception:
+        pass
+
+
+# --- 🃏 Blackjack ----------------------------------------------------------
+
+def _bj_cards(cards):
+    return " ".join(str(c) for c in cards)
+
+
+def _bj_view(state, reveal_dealer=False):
+    p = state["player"]
+    d = state["dealer"]
+    pt = casino.bj_total(p)
+    if reveal_dealer:
+        dealer_line = f"🃏 Дилер: {_bj_cards(d)} = {casino.bj_total(d)}"
+    else:
+        dealer_line = f"🃏 Дилер: {d[0]} + ❓"
+    text = (f"🃏 <b>Блэкджек</b> · ставка {state['bet']} BED\n\n"
+            f"{dealer_line}\n👤 Ты: {_bj_cards(p)} = <b>{pt}</b>")
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("🃏 Ещё", callback_data="bj:hit"),
+        InlineKeyboardButton("✋ Хватит", callback_data="bj:stand"),
+    ]])
+    return text, kb
+
+
+async def _start_blackjack(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    parts = (message.text or "").split()
+    if len(parts) < 2 or not parts[1].isdigit() or int(parts[1]) <= 0:
+        await message.reply_text(
+            f"🃏 <b>Блэкджек (21)</b>: <code>/bj ставка</code>\n"
+            f"Набери больше дилера, но не больше 21. Блэкджек платит ×2.5!\n"
+            f"💰 Баланс: {storage.get_bed(uid)} BED.", parse_mode="HTML")
+        return
+    bet = int(parts[1])
+    if bet < config.CASINO_MIN_BET or bet > config.CASINO_MAX_BET:
+        await message.reply_text(f"Ставка от {config.CASINO_MIN_BET} до {config.CASINO_MAX_BET} BED.")
+        return
+    casino_state = context.bot_data.setdefault("casino", {})
+    if uid in casino_state:
+        await message.reply_text("Сначала заверши текущую игру (или /cancel).")
+        return
+    if not storage.spend_bed(uid, bet, reason="blackjack"):
+        await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)}.")
+        return
+    state = {"game": "bj", "bet": bet,
+             "player": [casino.bj_draw(), casino.bj_draw()],
+             "dealer": [casino.bj_draw(), casino.bj_draw()]}
+    casino_state[uid] = state
+    # Natural blackjack check.
+    if casino.bj_total(state["player"]) == 21:
+        await _bj_finish(None, context, storage, uid, message=message)
+        return
+    text, kb = _bj_view(state)
+    await message.reply_text(text, parse_mode="HTML", reply_markup=kb)
+
+
+async def _bj_finish(query, context, storage: Storage, uid: int, message=None) -> None:
+    state = context.bot_data.setdefault("casino", {}).get(uid)
+    if not state:
+        return
+    casino.bj_dealer_play(state["dealer"])
+    pt = casino.bj_total(state["player"])
+    dt = casino.bj_total(state["dealer"])
+    bet = state["bet"]
+    natural = pt == 21 and len(state["player"]) == 2
+    if pt > 21:
+        result, prize = "💥 Перебор! Проигрыш.", 0
+    elif natural and dt != 21:
+        result, prize = "🃏 БЛЭКДЖЕК! ×2.5", int(bet * 2.5)
+    elif dt > 21 or pt > dt:
+        result, prize = "🎉 Победа! ×2", bet * 2
+    elif pt == dt:
+        result, prize = "🤝 Ничья — ставка возвращена.", bet
+    else:
+        result, prize = "😔 Дилер выиграл.", 0
+    if prize:
+        storage.add_bed(uid, prize, reason="blackjack_win")
+    context.bot_data["casino"].pop(uid, None)
+    _, _ = _bj_view(state, reveal_dealer=True)
+    body = (f"🃏 <b>Блэкджек</b>\n\n"
+            f"🃏 Дилер: {_bj_cards(state['dealer'])} = {dt}\n"
+            f"👤 Ты: {_bj_cards(state['player'])} = {pt}\n\n"
+            f"{result}\n💰 Баланс: {storage.get_bed(uid)} BED")
+    if query is not None:
+        try:
+            await query.edit_message_text(body, parse_mode="HTML")
+        except Exception:
+            pass
+    elif message is not None:
+        await message.reply_text(body, parse_mode="HTML")
+
+
+async def _bj_callback(query, context, storage: Storage) -> None:
+    uid = query.from_user.id
+    state = context.bot_data.setdefault("casino", {}).get(uid)
+    if not state or state.get("game") != "bj":
+        await query.answer("Игра не найдена.", show_alert=True)
+        try:
+            await query.edit_message_reply_markup(reply_markup=None)
+        except Exception:
+            pass
+        return
+    op = query.data.split(":", 1)[1]
+    if op == "hit":
+        state["player"].append(casino.bj_draw())
+        await query.answer()
+        if casino.bj_total(state["player"]) >= 21:
+            await _bj_finish(query, context, storage, uid)
+            return
+        text, kb = _bj_view(state)
+        try:
+            await query.edit_message_text(text, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+    else:  # stand
+        await query.answer()
+        await _bj_finish(query, context, storage, uid)
+
+
+# --- 🎟 Lottery ------------------------------------------------------------
+
+async def _lottery_cmd(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    parts = (message.text or "").split()
+    price = config.LOTTERY_TICKET_PRICE
+    if len(parts) >= 3 and parts[1].lower() in ("buy", "купить") and parts[2].isdigit():
+        n = int(parts[2])
+        if n <= 0:
+            await message.reply_text("Сколько билетов купить? Напр.: /lottery buy 3")
+            return
+        cost = n * price
+        if not storage.spend_bed(uid, cost, reason="lottery"):
+            await message.reply_text(f"❌ Нужно {cost} BED, у тебя {storage.get_bed(uid)}.")
+            return
+        storage.lottery_buy(uid, n)
+        await message.reply_text(
+            f"🎟 Куплено билетов: {n} за {cost} BED.\n"
+            f"Всего твоих билетов в раунде: {storage.lottery_my_tickets(uid)}.\n"
+            f"💰 Баланс: {storage.get_bed(uid)} BED. Удачи в розыгрыше!")
+        return
+    total = storage.lottery_pool_tickets()
+    pool = total * price
+    prize = pool - pool * config.LOTTERY_RAKE_PERCENT // 100
+    mine = storage.lottery_my_tickets(uid)
+    chance = f"{mine / total * 100:.1f}%" if total else "—"
+    now = time.gmtime()
+    secs = ((config.LOTTERY_DRAW_HOUR_UTC - now.tm_hour) % 24) * 3600 - now.tm_min * 60
+    if secs <= 0:
+        secs += 24 * 3600
+    await message.reply_text(
+        f"🎟 <b>Лотерея</b> (раунд #{storage.lottery_round()})\n\n"
+        f"🏆 Банк: <b>{prize} BED</b> ({total} билетов)\n"
+        f"🎫 Твоих билетов: {mine} · шанс победы: {chance}\n"
+        f"💵 Цена билета: {price} BED\n"
+        f"⏳ Розыгрыш примерно через {secs // 3600} ч {secs % 3600 // 60} мин\n\n"
+        f"Купить: <code>/lottery buy N</code>", parse_mode="HTML")
+
+
 _URL_RE = re.compile(r"https?://[^\s]+", re.IGNORECASE)
 
 # Creator-partnership kinds: post about the bot somewhere, get a premium promo.
@@ -2384,6 +2668,11 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         await _start_duel(message, context, storage)
         return
 
+    if text.startswith("/cancel") and message.from_user.id in context.bot_data.get("casino", {}):
+        context.bot_data["casino"].pop(message.from_user.id, None)
+        await message.reply_text("🎰 Активная игра отменена (ставка не возвращается).")
+        return
+
     if text.startswith("/slots") or text.startswith("/слоты"):
         await _play_slots(message, context, storage)
         return
@@ -2398,6 +2687,18 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     if text.startswith("/crash") or text.startswith("/краш"):
         await _play_crash(message, context, storage)
+        return
+
+    if text.startswith("/mines") or text.startswith("/минёр") or text.startswith("/miner"):
+        await _start_mines(message, context, storage)
+        return
+
+    if text.startswith("/bj") or text.startswith("/blackjack") or text.startswith("/21"):
+        await _start_blackjack(message, context, storage)
+        return
+
+    if text.startswith("/lottery") or text.startswith("/лотерея"):
+        await _lottery_cmd(message, context, storage)
         return
 
     if text.startswith("/stake"):
@@ -4547,6 +4848,12 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     elif query.data.startswith("duel:"):
         storage = context.bot_data["storage"]
         await _resolve_duel(query, context, storage)
+    elif query.data.startswith("mine:"):
+        storage = context.bot_data["storage"]
+        await _mines_callback(query, context, storage)
+    elif query.data.startswith("bj:"):
+        storage = context.bot_data["storage"]
+        await _bj_callback(query, context, storage)
     elif query.data.startswith("cmded:"):
         storage = context.bot_data["storage"]
         uid = query.from_user.id

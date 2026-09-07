@@ -80,6 +80,10 @@ WHEEL_ULTRA_MULT = float(os.environ.get("WHEEL_ULTRA_MULT", "1.15"))
 # 🎰 Casino games: bet limits (BED).
 CASINO_MIN_BET = int(os.environ.get("CASINO_MIN_BET", "1"))
 CASINO_MAX_BET = int(os.environ.get("CASINO_MAX_BET", "500"))
+# 🎟 Lottery: ticket price (BED), house rake (%) and daily draw hour (UTC).
+LOTTERY_TICKET_PRICE = int(os.environ.get("LOTTERY_TICKET_PRICE", "5"))
+LOTTERY_RAKE_PERCENT = int(os.environ.get("LOTTERY_RAKE_PERCENT", "10"))
+LOTTERY_DRAW_HOUR_UTC = int(os.environ.get("LOTTERY_DRAW_HOUR_UTC", "18"))
 DUEL_MIN_BET = int(os.environ.get("DUEL_MIN_BET", "1"))
 DUEL_RAKE_PERCENT = int(os.environ.get("DUEL_RAKE_PERCENT", "0"))
 DUEL_TIMEOUT_SECONDS = int(os.environ.get("DUEL_TIMEOUT_SECONDS", "300"))
