@@ -1055,7 +1055,12 @@ def _wheel_preview(storage: Storage, uid: int):
     lines = ["🎡 <b>Колесо фортуны</b>", f"🎟 Прокрут: <b>{cost} BED</b>\n", "🎁 <b>Что можно выиграть:</b>"]
     for bed, w in sorted(prizes, key=lambda x: x[0]):
         pct = w / total * 100
-        pstr = f"{pct:.0f}%" if pct >= 1 else f"{pct:.1f}%"
+        if pct >= 1:
+            pstr = f"{pct:.0f}%"
+        elif pct >= 0.1:
+            pstr = f"{pct:.1f}%"
+        else:
+            pstr = f"1 к {round(total / w):,}".replace(",", " ")  # ultra-rare
         win = max(1, int(round(bed * mult)))
         jack = " 🎉 ДЖЕКПОТ" if bed == top_bed else ""
         lines.append(f"• <b>{win} BED</b> — {pstr}{jack}")

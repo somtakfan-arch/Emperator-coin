@@ -70,8 +70,10 @@ DICE_WIN_MULT = int(os.environ.get("DICE_WIN_MULT", "2"))
 # prizes as "bed:weight" pairs; premium/ULTRA prizes are multiplied. The average
 # payout is below WHEEL_SPIN_COST so the house keeps an edge (a BED sink).
 WHEEL_SPIN_COST = int(os.environ.get("WHEEL_SPIN_COST", "10"))
+# Weights are scaled up so the 259 jackpot can have a truly tiny chance
+# (~1 in 19 800) while the everyday prizes keep the same feel.
 WHEEL_PRIZES = os.environ.get(
-    "WHEEL_PRIZES", "3:34,6:24,10:22,13:11,18:6,25:2,70:1")
+    "WHEEL_PRIZES", "3:6800,6:4800,10:4400,13:2200,18:1200,25:400,259:1")
 WHEEL_PREMIUM_MULT = float(os.environ.get("WHEEL_PREMIUM_MULT", "1.1"))
 WHEEL_ULTRA_MULT = float(os.environ.get("WHEEL_ULTRA_MULT", "1.15"))
 # ⚔️ PvP duels on a BED stake. Rake (%) taken from the pot; 0 = winner takes all.
