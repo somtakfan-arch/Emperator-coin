@@ -71,9 +71,9 @@ DICE_WIN_MULT = int(os.environ.get("DICE_WIN_MULT", "2"))
 # payout is below WHEEL_SPIN_COST so the house keeps an edge (a BED sink).
 WHEEL_SPIN_COST = int(os.environ.get("WHEEL_SPIN_COST", "10"))
 WHEEL_PRIZES = os.environ.get(
-    "WHEEL_PRIZES", "1:30,2:25,3:20,5:13,10:8,25:3,100:1")
-WHEEL_PREMIUM_MULT = float(os.environ.get("WHEEL_PREMIUM_MULT", "1.5"))
-WHEEL_ULTRA_MULT = float(os.environ.get("WHEEL_ULTRA_MULT", "2"))
+    "WHEEL_PRIZES", "3:34,6:24,10:22,13:11,18:6,25:2,70:1")
+WHEEL_PREMIUM_MULT = float(os.environ.get("WHEEL_PREMIUM_MULT", "1.1"))
+WHEEL_ULTRA_MULT = float(os.environ.get("WHEEL_ULTRA_MULT", "1.15"))
 # ⚔️ PvP duels on a BED stake. Rake (%) taken from the pot; 0 = winner takes all.
 DUEL_MIN_BET = int(os.environ.get("DUEL_MIN_BET", "1"))
 DUEL_RAKE_PERCENT = int(os.environ.get("DUEL_RAKE_PERCENT", "0"))
