@@ -309,7 +309,7 @@ def kb_main(uid=None, storage=None) -> InlineKeyboardMarkup:
         [_btn("👥 Рефералы", "menu:ref", "primary"), _btn("📟 Команды", "menu:cmds", "primary")],
         [_btn("💎 Подписка", "menu:sub", "primary"), _btn("🪙 Кошелёк", "menu:wallet", "success")],
         [_btn("🗓 Ежедневная награда", "daily:claim", "success"),
-         _btn(f"🎡 Колесо ({config.WHEEL_SPIN_COST} BED)", "game:wheel", "danger")],
+         _btn("🎰 Казино", "menu:casino", "danger")],
         [_btn("🧩 Мои команды", "mycmds:open", "primary"), _btn("🛒 Магазин команд", "mkt:open", "success")],
         [_btn("🆘 Поддержка", "menu:support", "success"), _btn("🌐 Язык", "lang:menu", "primary")],
     ]
@@ -336,6 +336,31 @@ def kb_profile() -> InlineKeyboardMarkup:
 def kb_stats() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [_btn("👥 Рефералы", "menu:ref", "primary"), _btn("💎 Подписка", "menu:sub", "primary")],
+        _BACK,
+    ])
+
+
+def cap_casino(uid, storage, bot_username) -> str:
+    bal = storage.get_bed(uid)
+    return (
+        "🎰 <b>BED-Казино</b>\n\n"
+        "<blockquote>"
+        f"🎡 Колесо · 🎰 Слоты · 🎯 Дартс\n"
+        f"🔴⚫️ Рулетка · 📈 Crash\n"
+        f"💣 Минёр · 🃏 Блэкджек · 🎟 Лотерея"
+        "</blockquote>\n"
+        f"💰 Баланс: <b>{bal} BED</b>\n"
+        "<i>Выбери игру — покажу как играть. Ставки в BED.</i>"
+    )
+
+
+def kb_casino(uid=None, storage=None) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [_btn("🎡 Колесо фортуны", "game:wheel", "danger")],
+        [_btn("🎰 Слоты", "cas:slots", "success"), _btn("🎯 Дартс", "cas:darts", "success")],
+        [_btn("🔴⚫️ Рулетка", "cas:roulette", "primary"), _btn("📈 Crash", "cas:crash", "primary")],
+        [_btn("💣 Минёр", "cas:mines", "danger"), _btn("🃏 Блэкджек", "cas:bj", "danger")],
+        [_btn("🎟 Лотерея", "cas:lottery", "success")],
         _BACK,
     ])
 
@@ -492,6 +517,7 @@ SECTIONS = {
     "profile": ("profile", cap_profile, kb_profile),
     "stats": ("stats", cap_stats, kb_stats),
     "support": ("support", cap_support, kb_support),
+    "casino": ("wallet", cap_casino, kb_casino),
     "sub": ("sub", cap_sub, kb_sub),
     "ref": ("ref", cap_ref, kb_ref),
     "funcs": ("funcs", cap_funcs, kb_funcs),

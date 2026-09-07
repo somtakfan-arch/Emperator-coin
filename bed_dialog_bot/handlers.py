@@ -1688,6 +1688,11 @@ async def _lottery_cmd(message, context, storage: Storage) -> None:
             f"Всего твоих билетов в раунде: {storage.lottery_my_tickets(uid)}.\n"
             f"💰 Баланс: {storage.get_bed(uid)} BED. Удачи в розыгрыше!")
         return
+    await message.reply_text(_lottery_status_text(storage, uid), parse_mode="HTML")
+
+
+def _lottery_status_text(storage: Storage, uid: int) -> str:
+    price = config.LOTTERY_TICKET_PRICE
     total = storage.lottery_pool_tickets()
     pool = total * price
     prize = pool - pool * config.LOTTERY_RAKE_PERCENT // 100
@@ -1697,13 +1702,13 @@ async def _lottery_cmd(message, context, storage: Storage) -> None:
     secs = ((config.LOTTERY_DRAW_HOUR_UTC - now.tm_hour) % 24) * 3600 - now.tm_min * 60
     if secs <= 0:
         secs += 24 * 3600
-    await message.reply_text(
+    return (
         f"🎟 <b>Лотерея</b> (раунд #{storage.lottery_round()})\n\n"
         f"🏆 Банк: <b>{prize} BED</b> ({total} билетов)\n"
         f"🎫 Твоих билетов: {mine} · шанс победы: {chance}\n"
         f"💵 Цена билета: {price} BED\n"
         f"⏳ Розыгрыш примерно через {secs // 3600} ч {secs % 3600 // 60} мин\n\n"
-        f"Купить: <code>/lottery buy N</code>", parse_mode="HTML")
+        f"Купить: <code>/lottery buy N</code>")
 
 
 _URL_RE = re.compile(r"https?://[^\s]+", re.IGNORECASE)
@@ -4831,6 +4836,34 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         body, kb = _wheel_preview(storage, query.from_user.id)
         await context.bot.send_message(
             chat_id=query.message.chat_id, text=body, parse_mode="HTML", reply_markup=kb)
+    elif query.data.startswith("cas:"):
+        await query.answer()
+        storage = context.bot_data["storage"]
+        bal = storage.get_bed(query.from_user.id)
+        game = query.data.split(":", 1)[1]
+        usage = {
+            "slots": "🎰 <b>Слоты</b>\nКоманда: <code>/slots ставка</code>\n"
+                     f"Три в ряд ×{casino.SLOT_TRIPLE_MULT}, три 7️⃣ ×{casino.SLOT_JACKPOT_MULT}.",
+            "darts": "🎯 <b>Дартс</b>\nКоманда: <code>/darts ставка</code>\n"
+                     f"В яблочко ×{casino.DARTS_BULLSEYE_MULT}.",
+            "roulette": "🔴⚫️ <b>Рулетка</b>\nКоманда: <code>/roulette ставка тип</code>\n"
+                        "Тип: red/black/even/odd (×2) или число 0-36 (×36).\n"
+                        "Пример: <code>/roulette 10 red</code>",
+            "crash": "📈 <b>Crash</b>\nКоманда: <code>/crash ставка множитель</code>\n"
+                     "Забираешь, если ракета долетит до множителя. Пример: <code>/crash 10 2</code>",
+            "mines": "💣 <b>Минёр</b>\nКоманда: <code>/mines ставка [бомб]</code>\n"
+                     "Открывай клетки, забирай до бомбы. Пример: <code>/mines 10 3</code>",
+            "bj": "🃏 <b>Блэкджек</b>\nКоманда: <code>/bj ставка</code>\n"
+                  "Набери больше дилера, но ≤21. Блэкджек ×2.5.",
+        }
+        if game == "lottery":
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=_lottery_status_text(storage, query.from_user.id), parse_mode="HTML")
+        elif game in usage:
+            await context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text=f"{usage[game]}\n\n💰 Баланс: {bal} BED", parse_mode="HTML")
     elif query.data == "game:spin":
         await query.answer("🎡")
         storage = context.bot_data["storage"]
