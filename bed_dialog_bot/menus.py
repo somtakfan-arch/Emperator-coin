@@ -135,11 +135,12 @@ def cap_ref(uid, storage, bot_username) -> str:
         "🔗 <b>Ваша ссылка</b>\n"
         f"<code>{link}</code>\n\n"
         "<blockquote>"
-        f"🤝 Партнёрка: {config.AFFILIATE_PERCENT}% с покупок приглашённых\n"
-        f"🎁 {config.REFERRALS_PER_REWARD} друзей = "
-        f"{config.REFERRAL_REWARD_DAYS} дней премиума\n"
+        "🎁 Друг тоже получит премиум за вход\n"
+        "🪜 Лестница наград: премиум → ULTRA → ULTRA навсегда → блатной ID\n"
+        "🏆 Батл недели: топ-3 забирают ULTRA + титул «Амбассадор»\n"
         f"👥 Приглашено вами: {storage.count_referrals(uid)}"
-        "</blockquote>"
+        "</blockquote>\n"
+        "Подробно и прогресс: /ref · Батл: /reftop"
     )
 
 

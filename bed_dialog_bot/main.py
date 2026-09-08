@@ -180,6 +180,34 @@ async def _reminder_loop(application: Application) -> None:
                         pass
         except Exception:
             logger.exception("Auction settle error")
+        # 🔥 Weekly referral battle: award top inviters of the week that ended.
+        try:
+            cur_week = storage.current_week()
+            last = storage.get_setting("refbattle_last_week")
+            last = int(last) if last and last.lstrip("-").isdigit() else None
+            if last is None:
+                storage.set_setting("refbattle_last_week", str(cur_week))
+            elif cur_week > last:
+                winners = storage.ref_season_top(week=last, limit=len(config.REFERRAL_BATTLE_PRIZES))
+                storage.set_setting("refbattle_last_week", str(cur_week))
+                medals = ["🥇", "🥈", "🥉"]
+                for i, w in enumerate(winners):
+                    days = config.REFERRAL_BATTLE_PRIZES[i]
+                    storage.grant_ultra_days(w["user_id"], days)
+                    if i == 0:
+                        storage.set_setting(f"ultratitle:{w['user_id']}", "Амбассадор")
+                    try:
+                        await application.bot.send_message(
+                            chat_id=w["user_id"],
+                            text=(f"🏆 Итоги батла пригласителей!\n{medals[i]} Ты в топе "
+                                  f"({w['invites']} приглашений) — приз <b>{days} дн. ULTRA</b>"
+                                  + (" + титул «Амбассадор» 🎖" if i == 0 else "") +
+                                  "! Новая неделя пошла 🔥"),
+                            parse_mode="HTML")
+                    except Exception:
+                        pass
+        except Exception:
+            logger.exception("Referral battle award error")
         # 🏆 Weekly duel tournament: award top-3 of the week that just ended.
         try:
             cur_week = storage.current_week()

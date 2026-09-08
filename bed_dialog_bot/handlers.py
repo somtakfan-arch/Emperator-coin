@@ -1029,47 +1029,100 @@ async def _confirm_referral(invited_id: int, context: ContextTypes.DEFAULT_TYPE,
         return
     count = storage.count_referrals(referrer_id)
     _quest_bump(storage, referrer_id, "invite")
+    storage.ref_season_bump(referrer_id)  # weekly inviter battle
 
-    # 🔱 Promo: while active, EVERY confirmed referral grants ULTRA days.
-    if time.time() < config.REFERRAL_ULTRA_PROMO_UNTIL:
-        ultra_days = config.REFERRAL_ULTRA_PROMO_DAYS
-        ultra_until = storage.grant_ultra_days(referrer_id, ultra_days)
-        # Mark milestone rewards as settled so they aren't back-paid after the
-        # promo ends (the ULTRA reward replaces them during the campaign).
-        storage.set_ref_rewarded(referrer_id, count // config.REFERRALS_PER_REWARD)
+    # 🎁 Two-sided: the invitee gets a starter premium just for joining via a link.
+    if config.REFERRAL_JOIN_BONUS_DAYS > 0:
+        iu = storage.grant_premium_days(invited_id, config.REFERRAL_JOIN_BONUS_DAYS)
         try:
             await context.bot.send_message(
-                chat_id=referrer_id,
-                text=(f"🎉 Твой друг подключил бота! Всего приглашено: {count}.\n"
-                      f"🔱 <b>Акция: +{ultra_days} дн. ULTRA PREMIUM!</b> "
-                      f"Активен до {_fmt_premium(ultra_until)}.\n"
-                      f"Зови ещё — /ref (акция до 15 сентября)!"),
-                parse_mode="HTML")
+                invited_id,
+                f"🎁 Ты пришёл по приглашению — держи <b>{config.REFERRAL_JOIN_BONUS_DAYS} дн. премиума</b> "
+                f"в подарок (до {_fmt_premium(iu)})! Осмотрись: /menu", parse_mode="HTML")
         except Exception:
-            logger.exception("Failed to notify referrer %s", referrer_id)
-        return
+            pass
 
-    earned = count // config.REFERRALS_PER_REWARD
-    rewarded = storage.get_ref_rewarded(referrer_id)
-    if earned > rewarded:
-        days = (earned - rewarded) * config.REFERRAL_REWARD_DAYS
-        until_ts = storage.grant_premium_days(referrer_id, days)
-        storage.set_ref_rewarded(referrer_id, earned)
-        until_str = _fmt_premium(until_ts)
-        text = (
-            f"🎉 Ваш приглашённый подключил бота! Всего: {count}. "
-            f"Награда: +{days} дн. премиума (до {until_str})."
-        )
-    else:
-        remaining = config.REFERRALS_PER_REWARD - (count % config.REFERRALS_PER_REWARD)
-        text = (
-            f"👥 Ваш приглашённый подключил бота (всего {count}). "
-            f"До награды осталось {remaining}."
-        )
+    lines = [f"🎉 Твой друг подключил бота! Приглашено всего: <b>{count}</b>."]
+
+    # 🔱 Temporary promo: +N ULTRA days per referral (until Sep 15).
+    if time.time() < config.REFERRAL_ULTRA_PROMO_UNTIL:
+        u = storage.grant_ultra_days(referrer_id, config.REFERRAL_ULTRA_PROMO_DAYS)
+        lines.append(f"🔱 Акция: +{config.REFERRAL_ULTRA_PROMO_DAYS} дн. ULTRA (до {_fmt_premium(u)})!")
+
+    # 🪜 Ladder milestones crossed (premium/ULTRA/vanity ID — never BED).
+    stage = storage.ref_ladder_stage(referrer_id)
+    ladder = config.REFERRAL_LADDER
+    while stage < len(ladder) and count >= ladder[stage][0]:
+        _, kind, amount, label = ladder[stage]
+        await _grant_ref_ladder(storage, referrer_id, kind, amount)
+        lines.append(f"🏅 <b>Веха {ladder[stage][0]} друзей: {label}!</b>")
+        stage += 1
+    storage.set_ref_ladder_stage(referrer_id, stage)
+
+    nxt = next((m for m in ladder if m[0] > count), None)
+    if nxt:
+        lines.append(f"➡️ До «{nxt[3]}» — ещё {nxt[0] - count} друзей.")
+    lines.append("Зови ещё: /ref")
     try:
-        await context.bot.send_message(chat_id=referrer_id, text=text)
+        await context.bot.send_message(chat_id=referrer_id, text="\n".join(lines), parse_mode="HTML")
     except Exception:
         logger.exception("Failed to notify referrer %s", referrer_id)
+
+
+async def _grant_ref_ladder(storage: Storage, uid: int, kind: str, amount: int) -> None:
+    if kind == "premium":
+        storage.grant_premium_days(uid, amount)
+    elif kind == "ultra":
+        storage.grant_ultra_days(uid, amount)
+    elif kind == "ultraforever":
+        storage.grant_ultra_forever(uid)
+    elif kind == "vanityid":
+        storage.grant_id(uid, config.ID_MAX_VALUE, cool_chance=1.0)  # a prized ID
+
+
+def _ref_text(storage: Storage, uid: int, bot_username: str) -> str:
+    count = storage.count_referrals(uid)
+    link = f"https://t.me/{bot_username}?start=ref_{uid}"
+    lines = ["👥 <b>Приглашай друзей — получай награды!</b>\n"]
+    if time.time() < config.REFERRAL_ULTRA_PROMO_UNTIL:
+        lines.append(f"🔥 <b>АКЦИЯ до 15 сентября:</b> за КАЖДОГО друга +"
+                     f"{config.REFERRAL_ULTRA_PROMO_DAYS} дн. ULTRA! 🔱\n")
+    lines.append(f"🎁 Друг тоже получит {config.REFERRAL_JOIN_BONUS_DAYS} дн. премиума за вход по ссылке.")
+    lines.append(f"\n🔗 Твоя ссылка:\n<code>{link}</code>\n")
+    lines.append(f"👥 Приглашено: <b>{count}</b>")
+    # Ladder progress
+    lines.append("\n🪜 <b>Лестница наград:</b>")
+    for cnt, kind, amount, label in config.REFERRAL_LADDER:
+        mark = "✅" if count >= cnt else "▫️"
+        lines.append(f"{mark} {cnt} друзей — {label}")
+    nxt = next((m for m in config.REFERRAL_LADDER if m[0] > count), None)
+    if nxt:
+        lines.append(f"\n➡️ До «{nxt[3]}» — ещё <b>{nxt[0] - count}</b> друзей!")
+    # Weekly battle
+    my_wk = storage.ref_season_my(uid)
+    prizes = config.REFERRAL_BATTLE_PRIZES
+    lines.append(f"\n🏆 <b>Батл недели</b>: топ-3 забирают {prizes[0]}/{prizes[1]}/{prizes[2]} дн. ULTRA "
+                 f"+ титул «Амбассадор». Твои приглашения на неделе: <b>{my_wk}</b> (/reftop)")
+    return "\n".join(lines)
+
+
+def _ref_battle_text(storage: Storage, uid: int) -> str:
+    top = storage.ref_season_top(limit=10)
+    prizes = config.REFERRAL_BATTLE_PRIZES
+    medals = ["🥇", "🥈", "🥉"]
+    secs = 7 * 86400 - (int(time.time()) % (7 * 86400))
+    lines = ["🏆 <b>Батл пригласителей недели</b>",
+             f"⏳ До конца: {secs // 86400}д {secs % 86400 // 3600}ч",
+             "🎁 Призы: " + " · ".join(f"{medals[i]} {p} дн. ULTRA" for i, p in enumerate(prizes)) + "\n"]
+    if not top:
+        lines.append("Пока никто не приглашал на этой неделе. Будь первым: /ref")
+    else:
+        for i, r in enumerate(top):
+            who = formatting.format_sender(r["name"] or "Игрок", r["username"])
+            pos = medals[i] if i < 3 else f"{i + 1}."
+            lines.append(f"{pos} {who} — <b>{r['invites']}</b>")
+    lines.append(f"\nТвои приглашения на неделе: <b>{storage.ref_season_my(uid)}</b> · ссылка: /ref")
+    return "\n".join(lines)
 
 
 # --- 🎡 Wheel of Fortune ---------------------------------------------------
@@ -3669,24 +3722,12 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return
 
+    if text.startswith("/reftop") or text.startswith("/refbattle"):
+        await message.reply_text(_ref_battle_text(storage, message.from_user.id), parse_mode="HTML")
+        return
     if text.startswith("/ref") or text.startswith("/invite"):
-        uid = message.from_user.id
-        count = storage.count_referrals(uid)
-        need = config.REFERRALS_PER_REWARD
-        to_next = need - (count % need)
-        link = f"https://t.me/{context.bot.username}?start=ref_{uid}"
-        promo = ""
-        if time.time() < config.REFERRAL_ULTRA_PROMO_UNTIL:
-            promo = (f"🔥 АКЦИЯ до 15 сентября: за КАЖДОГО приглашённого — "
-                     f"+{config.REFERRAL_ULTRA_PROMO_DAYS} дн. ULTRA PREMIUM! 🔱\n\n")
-        await message.reply_text(
-            "👥 Реферальная программа\n\n"
-            + promo +
-            f"Приглашайте друзей по вашей ссылке — за каждые {need} новых "
-            f"пользователей вы получаете {config.REFERRAL_REWARD_DAYS} дней премиума.\n\n"
-            f"Ваша ссылка:\n{link}\n\n"
-            f"Приглашено: {count}\nДо следующей награды: {to_next}"
-        )
+        await message.reply_text(_ref_text(storage, message.from_user.id, context.bot.username),
+                                 parse_mode="HTML")
         return
 
     if text.startswith("/top"):

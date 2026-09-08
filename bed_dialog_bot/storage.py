@@ -284,6 +284,13 @@ CREATE TABLE IF NOT EXISTS lottery_tickets (
     PRIMARY KEY (round, user_id)
 );
 
+CREATE TABLE IF NOT EXISTS ref_season (
+    week INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    invites INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (week, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS duel_season (
     week INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
@@ -1922,6 +1929,37 @@ class Storage:
     @staticmethod
     def current_week() -> int:
         return int(time.time()) // (7 * 86400)
+
+    # 🔥 Referral ladder + weekly battle.
+    def ref_ladder_stage(self, user_id: int) -> int:
+        v = self.get_setting(f"refladder:{user_id}")
+        return int(v) if v and v.isdigit() else 0
+
+    def set_ref_ladder_stage(self, user_id: int, stage: int) -> None:
+        self.set_setting(f"refladder:{user_id}", str(stage))
+
+    def ref_season_bump(self, user_id: int) -> None:
+        wk = self.current_week()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO ref_season (week, user_id, invites) VALUES (?, ?, 1) "
+                "ON CONFLICT(week, user_id) DO UPDATE SET invites = invites + 1", (wk, user_id))
+
+    def ref_season_top(self, week=None, limit: int = 10):
+        wk = self.current_week() if week is None else week
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT r.user_id, r.invites, u.name, u.username FROM ref_season r "
+                "LEFT JOIN users u ON u.user_id = r.user_id "
+                "WHERE r.week=? AND r.invites > 0 ORDER BY r.invites DESC LIMIT ?", (wk, limit)).fetchall()
+        return [{"user_id": r[0], "invites": r[1], "name": r[2], "username": r[3]} for r in rows]
+
+    def ref_season_my(self, user_id: int, week=None) -> int:
+        wk = self.current_week() if week is None else week
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT invites FROM ref_season WHERE week=? AND user_id=?", (wk, user_id)).fetchone()
+        return row[0] if row else 0
 
     def season_bump_win(self, user_id: int) -> None:
         wk = self.current_week()

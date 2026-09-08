@@ -167,6 +167,22 @@ SHOP_ITEMS = [
     ("ultra30", "🔱 ULTRA · 30 дней", 200, "ultra", 30),
 ]
 
+# 🔥 Viral referrals — rewards are premium/ULTRA days, titles & vanity IDs
+# (free to mint), NOT BED (BED is backed by real Stars, so we don't hand it out).
+REFERRAL_JOIN_BONUS_DAYS = int(os.environ.get("REFERRAL_JOIN_BONUS_DAYS", "1"))  # invitee starter premium
+# Milestone ladder by total confirmed referrals: (count, kind, amount, label).
+# kind: premium|ultra (amount=days), ultraforever, vanityid.
+REFERRAL_LADDER = [
+    (1, "premium", 2, "2 дня премиума"),
+    (3, "premium", 5, "5 дней премиума"),
+    (5, "ultra", 7, "неделя ULTRA"),
+    (10, "ultra", 30, "месяц ULTRA"),
+    (25, "ultraforever", 0, "ULTRA НАВСЕГДА ♾"),
+    (50, "vanityid", 0, "крутой именной ID"),
+]
+# Weekly inviter battle: ULTRA-days prizes for the top inviters of the week.
+REFERRAL_BATTLE_PRIZES = [int(x) for x in os.environ.get("REFERRAL_BATTLE_PRIZES", "30,14,7").split(",")]
+
 REFERRALS_PER_REWARD = int(os.environ.get("REFERRALS_PER_REWARD", "20"))
 REFERRAL_REWARD_DAYS = int(os.environ.get("REFERRAL_REWARD_DAYS", "30"))
 # 🔱 Referral promo: while active, EACH confirmed referral grants ULTRA days.
