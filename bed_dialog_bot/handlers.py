@@ -2285,6 +2285,10 @@ async def _id_callback(query, context, storage: Storage) -> None:
         except Exception:
             pass
         return
+    # Unknown/stale op (e.g. a button from an older version) — always answer so
+    # the client never shows an endless spinner, then refresh the ID home.
+    await query.answer("Кнопка устарела, обновил 🔄", show_alert=False)
+    await render_home()
 
 
 _URL_RE = re.compile(r"https?://[^\s]+", re.IGNORECASE)
@@ -3309,6 +3313,24 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
     if text.startswith("/sellid"):
         await _id_sell(message, context, storage)
+        return
+    if text.startswith("/delid"):
+        uid = message.from_user.id
+        parts = (message.text or "").split()
+        pid = _norm_pid(parts[1]) if len(parts) >= 2 else None
+        if pid is None:
+            ids = ", ".join(map(str, storage.ids_of(uid))) or "—"
+            await message.reply_text(
+                f"♻️ Обнулить ID и получить новый случайный: <code>/delid ID</code>\nТвои ID: {ids}",
+                parse_mode="HTML")
+            return
+        if storage.id_owner(pid) != uid:
+            await message.reply_text("Это не твой ID.")
+            return
+        storage.release_id(pid, uid)  # drop it (refunds any auction bidder)
+        new = storage.assign_random_id(uid, config.ID_MAX_VALUE, _id_cool_chance(storage, uid))
+        await message.reply_text(
+            f"♻️ ID <b>{pid}</b> обнулён. Твой новый ID: <b>{new}</b>", parse_mode="HTML")
         return
     if text.startswith("/listid"):
         await _id_list_cmd(message, context, storage)
