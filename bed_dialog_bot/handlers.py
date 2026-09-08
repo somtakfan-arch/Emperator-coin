@@ -1966,6 +1966,8 @@ def _do_id_buy(storage: Storage, uid: int):
 def _do_id_sell(storage: Storage, uid: int, pid: int):
     if storage.id_owner(pid) != uid:
         return False, "own"
+    if storage.count_ids(uid) <= 1:
+        return False, "last"  # keep at least one ID (anti-dupe)
     if not storage.release_id(pid, uid):
         return False, "own"
     storage.add_bed(uid, config.ID_SELL_PRICE, reason="id_sell")
@@ -2000,6 +2002,8 @@ async def _id_sell(message, context, storage: Storage) -> None:
     if ok:
         await message.reply_text(
             f"💰 Продал ID {pid} боту за {config.ID_SELL_PRICE} BED. Баланс: {storage.get_bed(uid)} BED.")
+    elif reason == "last":
+        await message.reply_text("🚫 Нельзя продать последний ID — хотя бы один должен остаться.")
     else:
         await message.reply_text("Это не твой ID.")
 
@@ -2007,6 +2011,8 @@ async def _id_sell(message, context, storage: Storage) -> None:
 def _do_list_auction(storage: Storage, uid: int, pid: int, start_price: int):
     if storage.id_owner(pid) != uid:
         return False, "Это не твой ID."
+    if storage.count_ids(uid) <= 1:
+        return False, "🚫 Нельзя выставить последний ID — хотя бы один должен остаться."
     ends = int(time.time()) + config.AUCTION_DURATION_HOURS * 3600
     sp = max(config.AUCTION_MIN_START, start_price)
     if not storage.list_id_auction(pid, uid, sp, ends):
@@ -2210,8 +2216,13 @@ async def _id_callback(query, context, storage: Storage) -> None:
             pass
         return
     if op == "sellone":
-        ok, _ = _do_id_sell(storage, uid, data[2])
-        await query.answer(f"Продано ID {data[2]}." if ok else "Не твой ID.")
+        ok, reason = _do_id_sell(storage, uid, data[2])
+        if ok:
+            await query.answer(f"Продано ID {data[2]}.")
+        elif reason == "last":
+            await query.answer("🚫 Нельзя продать последний ID.", show_alert=True)
+        else:
+            await query.answer("Не твой ID.")
         await render_home()
         return
     if op == "listmenu":
