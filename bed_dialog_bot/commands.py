@@ -716,6 +716,27 @@ async def try_handle_owner_command(
     def mark(value: str) -> str:
         return formatting.with_watermark(value, bot_username, is_premium, custom_wm)
 
+    # 📝 Private note about the current contact (never shown in the chat — the
+    # command line is removed and the note is sent to the owner's DM).
+    if text.startswith(".note"):
+        arg = text[5:].strip()
+        await _delete_business_message(context, bcid, chat_id, message_id)
+        if not arg:
+            note = storage.get_note(message.from_user.id, chat_id)
+            body = (f"📝 Заметка о контакте <code>{chat_id}</code>:\n{note}" if note
+                    else f"📝 О контакте <code>{chat_id}</code> заметок нет.\nДобавь в чате с ним: <code>.note текст</code>")
+        elif arg.lower() in ("del", "-", "clear", "удалить"):
+            storage.del_note(message.from_user.id, chat_id)
+            body = f"📝 Заметка о контакте <code>{chat_id}</code> удалена."
+        else:
+            storage.set_note(message.from_user.id, chat_id, arg[:600])
+            body = f"📝 Заметка о контакте <code>{chat_id}</code> сохранена."
+        try:
+            await context.bot.send_message(chat_id=owner_chat_id, text=body, parse_mode="HTML")
+        except Exception:
+            logger.exception("note DM failed")
+        return True
+
     prefix_match = _PREFIX_RE.match(text)
     if prefix_match:
         if not is_premium:

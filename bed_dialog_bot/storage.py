@@ -224,6 +224,21 @@ CREATE TABLE IF NOT EXISTS winback (
     sent_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS contact_notes (
+    owner_id INTEGER NOT NULL,
+    contact_id INTEGER NOT NULL,
+    note TEXT,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, contact_id)
+);
+
+CREATE TABLE IF NOT EXISTS autoreplies (
+    owner_id INTEGER NOT NULL,
+    keyword TEXT NOT NULL,
+    reply TEXT NOT NULL,
+    PRIMARY KEY (owner_id, keyword)
+);
+
 CREATE TABLE IF NOT EXISTS friends (
     user_id INTEGER NOT NULL,
     friend_id INTEGER NOT NULL,
@@ -1331,6 +1346,61 @@ class Storage:
             p.append(status)
         with self._connect() as conn:
             return conn.execute(q, p).fetchone()[0]
+
+    # --- 📝 Contact notes ---
+
+    def set_note(self, owner_id: int, contact_id: int, note: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO contact_notes (owner_id, contact_id, note, updated_at) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(owner_id, contact_id) DO UPDATE SET note=excluded.note, updated_at=excluded.updated_at",
+                (owner_id, contact_id, note, int(time.time())))
+
+    def get_note(self, owner_id: int, contact_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT note FROM contact_notes WHERE owner_id=? AND contact_id=?",
+                (owner_id, contact_id)).fetchone()
+        return row[0] if row else None
+
+    def del_note(self, owner_id: int, contact_id: int) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute(
+                "DELETE FROM contact_notes WHERE owner_id=? AND contact_id=?", (owner_id, contact_id))
+        return cur.rowcount > 0
+
+    # --- 🤖 Keyword autoreplies ---
+
+    def set_autoreply(self, owner_id: int, keyword: str, reply: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO autoreplies (owner_id, keyword, reply) VALUES (?, ?, ?) "
+                "ON CONFLICT(owner_id, keyword) DO UPDATE SET reply=excluded.reply",
+                (owner_id, keyword.lower(), reply))
+
+    def del_autoreply(self, owner_id: int, keyword: str) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute(
+                "DELETE FROM autoreplies WHERE owner_id=? AND keyword=?", (owner_id, keyword.lower()))
+        return cur.rowcount > 0
+
+    def list_autoreplies(self, owner_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT keyword, reply FROM autoreplies WHERE owner_id=? ORDER BY keyword",
+                (owner_id,)).fetchall()
+        return [{"keyword": r[0], "reply": r[1]} for r in rows]
+
+    def match_autoreply(self, owner_id: int, text: str):
+        """First autoreply whose keyword is contained in the incoming text."""
+        low = (text or "").lower()
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT keyword, reply FROM autoreplies WHERE owner_id=?", (owner_id,)).fetchall()
+        for kw, reply in rows:
+            if kw and kw in low:
+                return reply
+        return None
 
     # --- 👥 Friends ---
 

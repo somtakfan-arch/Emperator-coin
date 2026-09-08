@@ -714,6 +714,22 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
             except Exception:
                 logger.exception("VIP alert failed")
 
+        # 🤖 Keyword autoreply (owner-configured): if the incoming text matches
+        # a rule, reply on the owner's behalf (throttled per chat, skip if banned).
+        arep = storage.match_autoreply(owner_id, message.text or message.caption or "")
+        if arep:
+            ban_ts = storage.get_ban(bcid, message.chat_id)
+            if not (ban_ts and ban_ts > time.time()):
+                cds = context.bot_data.setdefault("autoreply_cd", {})
+                key = (bcid, message.chat_id)
+                if time.time() - cds.get(key, 0) >= 30:
+                    cds[key] = time.time()
+                    try:
+                        await context.bot.send_message(
+                            chat_id=message.chat_id, business_connection_id=bcid, text=arep[:1000])
+                    except Exception:
+                        logger.exception("autoreply send failed")
+
         # Ban: while active, actually DELETE the contact's incoming messages
         # via the Bot API (needs the "can_delete_all_messages" business right,
         # granted by the owner when connecting the bot). If that right wasn't
@@ -3217,6 +3233,42 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if text.startswith("/friends") or text.startswith("/друзья"):
         body, kb = _friends_view(storage, message.from_user.id)
         await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
+        return
+    if text.startswith("/delautoreply"):
+        parts = (message.text or "").split(maxsplit=1)
+        if len(parts) < 2:
+            await message.reply_text("Удалить правило: /delautoreply ключевое_слово")
+            return
+        ok = storage.del_autoreply(message.from_user.id, parts[1].strip())
+        await message.reply_text("✅ Удалено." if ok else "Такого правила нет.")
+        return
+    if text.startswith("/autoreplies"):
+        rules = storage.list_autoreplies(message.from_user.id)
+        if not rules:
+            await message.reply_text(
+                "🤖 <b>Автоответчик</b>\nПравил нет. Добавь: <code>/autoreply слово текст ответа</code>\n"
+                "Когда собеседник напишет сообщение со «словом», бот ответит за тебя.",
+                parse_mode="HTML")
+            return
+        lines = ["🤖 <b>Правила автоответа:</b>"]
+        for r in rules:
+            lines.append(f"• <code>{html.escape(r['keyword'])}</code> → {html.escape(r['reply'][:60])}")
+        lines.append("\nУдалить: /delautoreply слово")
+        await message.reply_text("\n".join(lines), parse_mode="HTML")
+        return
+    if text.startswith("/autoreply"):
+        parts = (message.text or "").split(maxsplit=2)
+        if len(parts) < 3:
+            await message.reply_text(
+                "🤖 <b>Автоответчик по ключевым словам</b>\n"
+                "<code>/autoreply слово текст ответа</code>\n"
+                "Пример: <code>/autoreply цена Прайс здесь: ...</code>\n"
+                "Список: /autoreplies · Удалить: /delautoreply слово", parse_mode="HTML")
+            return
+        storage.set_autoreply(message.from_user.id, parts[1], parts[2][:1000])
+        await message.reply_text(
+            f"✅ Готово. Когда собеседник напишет «{html.escape(parts[1])}», бот ответит автоматически.",
+            parse_mode="HTML")
         return
 
     if text.startswith("/stake"):
