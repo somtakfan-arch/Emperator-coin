@@ -97,6 +97,8 @@ LOTTERY_TICKET_PRICE = int(os.environ.get("LOTTERY_TICKET_PRICE", "5"))
 LOTTERY_RAKE_PERCENT = int(os.environ.get("LOTTERY_RAKE_PERCENT", "10"))
 LOTTERY_DRAW_HOUR_UTC = int(os.environ.get("LOTTERY_DRAW_HOUR_UTC", "18"))
 DUEL_MIN_BET = int(os.environ.get("DUEL_MIN_BET", "1"))
+# 🏆 Weekly duel tournament: BED prizes for the top fighters by wins this week.
+TOURNAMENT_PRIZES = [int(x) for x in os.environ.get("TOURNAMENT_PRIZES", "150,75,30").split(",")]
 DUEL_RAKE_PERCENT = int(os.environ.get("DUEL_RAKE_PERCENT", "0"))
 DUEL_TIMEOUT_SECONDS = int(os.environ.get("DUEL_TIMEOUT_SECONDS", "300"))
 # Custom user commands (/create): how many one may have.

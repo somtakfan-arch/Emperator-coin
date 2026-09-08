@@ -1164,6 +1164,25 @@ def _duel_leaderboard(storage: Storage) -> str:
     return "\n".join(lines)
 
 
+def _tournament_text(storage: Storage, uid: int) -> str:
+    top = storage.season_top(limit=10)
+    prizes = config.TOURNAMENT_PRIZES
+    medals = ["🥇", "🥈", "🥉"]
+    secs = 7 * 86400 - (int(time.time()) % (7 * 86400))
+    lines = ["🏆 <b>Недельный турнир дуэлянтов</b>",
+             f"⏳ До конца недели: {secs // 86400}д {secs % 86400 // 3600}ч\n",
+             "🎁 Призы: " + " · ".join(f"{medals[i]} {p} BED" for i, p in enumerate(prizes)) + "\n"]
+    if not top:
+        lines.append("Пока никто не побеждал. Врывайся: <code>/duel @ник ставка</code>!")
+    else:
+        for i, d in enumerate(top):
+            who = formatting.format_sender(d["name"] or "Боец", d["username"])
+            pos = medals[i] if i < 3 else f"{i + 1}."
+            lines.append(f"{pos} {who} — <b>{d['wins']}</b> побед")
+    lines.append(f"\n⚔️ Твои победы на неделе: <b>{storage.season_my_wins(uid)}</b>")
+    return "\n".join(lines)
+
+
 async def _start_duel(message, context, storage: Storage) -> None:
     uid = message.from_user.id
     parts = (message.text or "").split()
@@ -1282,6 +1301,7 @@ async def _resolve_duel(query, context, storage: Storage) -> None:
     payout = pot - rake
     win_bal = storage.add_bed(winner, payout, reason="duel_win")
     _quest_bump(storage, winner, "duelwin")
+    storage.season_bump_win(winner)
     res = storage.record_duel_result(winner, loser)
     await query.answer("⚔️ Бой!")
     rake_note = f" (комиссия {rake} BED)" if rake else ""
@@ -3064,6 +3084,10 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     if text.startswith("/dtop") or text.startswith("/dueltop"):
         await message.reply_text(_duel_leaderboard(storage), parse_mode="HTML")
+        return
+
+    if text.startswith("/tournament") or text.startswith("/турнир"):
+        await message.reply_text(_tournament_text(storage, message.from_user.id), parse_mode="HTML")
         return
 
     if text.startswith("/duelstats") or text.startswith("/mystats"):

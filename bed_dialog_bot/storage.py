@@ -260,6 +260,13 @@ CREATE TABLE IF NOT EXISTS lottery_tickets (
     PRIMARY KEY (round, user_id)
 );
 
+CREATE TABLE IF NOT EXISTS duel_season (
+    week INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    wins INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (week, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS duel_stats (
     user_id INTEGER PRIMARY KEY,
     rating INTEGER NOT NULL DEFAULT 1000,
@@ -1595,6 +1602,33 @@ class Storage:
         return {"winner_new": w_new, "winner_delta": w_delta,
                 "loser_new": l_new, "loser_delta": l_new - l["rating"],
                 "winner_streak": w_cur}
+
+    @staticmethod
+    def current_week() -> int:
+        return int(time.time()) // (7 * 86400)
+
+    def season_bump_win(self, user_id: int) -> None:
+        wk = self.current_week()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO duel_season (week, user_id, wins) VALUES (?, ?, 1) "
+                "ON CONFLICT(week, user_id) DO UPDATE SET wins = wins + 1", (wk, user_id))
+
+    def season_top(self, week=None, limit: int = 10):
+        wk = self.current_week() if week is None else week
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT d.user_id, d.wins, u.name, u.username FROM duel_season d "
+                "LEFT JOIN users u ON u.user_id = d.user_id "
+                "WHERE d.week=? AND d.wins > 0 ORDER BY d.wins DESC LIMIT ?", (wk, limit)).fetchall()
+        return [{"user_id": r[0], "wins": r[1], "name": r[2], "username": r[3]} for r in rows]
+
+    def season_my_wins(self, user_id: int, week=None) -> int:
+        wk = self.current_week() if week is None else week
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT wins FROM duel_season WHERE week=? AND user_id=?", (wk, user_id)).fetchone()
+        return row[0] if row else 0
 
     def top_duelists(self, limit: int = 10):
         with self._connect() as conn:

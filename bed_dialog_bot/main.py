@@ -151,6 +151,31 @@ async def _reminder_loop(application: Application) -> None:
                             pass
         except Exception:
             logger.exception("Lottery draw error")
+        # 🏆 Weekly duel tournament: award top-3 of the week that just ended.
+        try:
+            cur_week = storage.current_week()
+            last = storage.get_setting("tournament_last_week")
+            last = int(last) if last and last.lstrip("-").isdigit() else None
+            if last is None:
+                storage.set_setting("tournament_last_week", str(cur_week))
+            elif cur_week > last:
+                winners = storage.season_top(week=last, limit=len(config.TOURNAMENT_PRIZES))
+                storage.set_setting("tournament_last_week", str(cur_week))
+                medals = ["🥇", "🥈", "🥉"]
+                for i, w in enumerate(winners):
+                    prize = config.TOURNAMENT_PRIZES[i]
+                    storage.add_bed(w["user_id"], prize, reason="tournament")
+                    try:
+                        await application.bot.send_message(
+                            chat_id=w["user_id"],
+                            text=(f"🏆 Итоги недельного турнира дуэлянтов!\n"
+                                  f"{medals[i]} Ты в топе с {w['wins']} победами — приз "
+                                  f"<b>{prize} BED</b> зачислен! Новый сезон уже идёт ⚔️"),
+                            parse_mode="HTML")
+                    except Exception:
+                        pass
+        except Exception:
+            logger.exception("Tournament award error")
         # Price alerts + hourly price history for the chart.
         try:
             price = bedcoin.price_stars(storage)
