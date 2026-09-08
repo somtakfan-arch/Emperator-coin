@@ -1965,6 +1965,47 @@ async def _id_sendbed(message, context, storage: Storage) -> None:
         pass
 
 
+# --- 🛍 BED shop ------------------------------------------------------------
+
+def _shop_view(storage: Storage, uid: int):
+    lines = [f"🛍 <b>BED-магазин</b>\n💰 Баланс: <b>{storage.get_bed(uid)} BED</b>\n\n"
+             "Трать BED на подписки:"]
+    rows = [[InlineKeyboardButton(f"{title} — {cost} BED", callback_data=f"shop:buy:{key}")]
+            for key, title, cost, kind, days in config.SHOP_ITEMS]
+    rows.append([InlineKeyboardButton("🔄 Обновить", callback_data="shop:home")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _do_shop_buy(storage: Storage, uid: int, key: str):
+    item = next((i for i in config.SHOP_ITEMS if i[0] == key), None)
+    if not item:
+        return False, "Нет такого товара."
+    _, title, cost, kind, days = item
+    if not storage.spend_bed(uid, cost, reason="shop"):
+        return False, f"❌ Не хватает BED (нужно {cost}, у тебя {storage.get_bed(uid)})."
+    until = storage.grant_ultra_days(uid, days) if kind == "ultra" else storage.grant_premium_days(uid, days)
+    return True, (f"✅ Куплено: {title}!\nАктивно до {_fmt_premium(until)}. "
+                  f"💰 Баланс: {storage.get_bed(uid)} BED.")
+
+
+# --- 👥 Friends -------------------------------------------------------------
+
+def _friends_view(storage: Storage, uid: int):
+    fr = storage.list_friends(uid)
+    lines = ["👥 <b>Друзья</b>\n"]
+    if not fr:
+        lines.append("Пока никого. Добавь друга по его ID: <code>/addfriend ID</code>")
+    else:
+        for f in fr[:25]:
+            lines.append("• " + formatting.format_sender(f["name"] or "Друг", f["username"]))
+    lines.append("\n➕ Добавить: <code>/addfriend ID</code> · 💸 перевод: <code>/sendid ID сумма</code>")
+    rows = [[InlineKeyboardButton(
+        f"❌ {(('@' + f['username']) if f['username'] else (f['name'] or f['friend_id']))}",
+        callback_data=f"fr:del:{f['friend_id']}")] for f in fr[:10]]
+    rows.append([InlineKeyboardButton("🔄 Обновить", callback_data="fr:home")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
 async def _id_callback(query, context, storage: Storage) -> None:
     uid = query.from_user.id
     data = query.data.split(":")
@@ -3110,6 +3151,47 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
     if text.startswith("/quests") or text.startswith("/tasks") or text.startswith("/задания"):
         body, kb = _quests_view(storage, message.from_user.id)
+        await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
+        return
+    if text.startswith("/shop") or text.startswith("/магазин"):
+        body, kb = _shop_view(storage, message.from_user.id)
+        await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
+        return
+    if text.startswith("/addfriend"):
+        uid = message.from_user.id
+        parts = (message.text or "").split()
+        if len(parts) < 2 or not parts[1].isdigit():
+            await message.reply_text("Добавить друга по его ID: <code>/addfriend ID</code>", parse_mode="HTML")
+            return
+        owner = storage.id_owner(int(parts[1]))
+        if not owner:
+            await message.reply_text("🆔 Такой ID никем не занят.")
+            return
+        if owner == uid:
+            await message.reply_text("Нельзя добавить самого себя 🙂")
+            return
+        if storage.add_friend(uid, owner):
+            n, u = storage.user_display(owner)
+            await message.reply_text(f"✅ {formatting.format_sender(n or 'Друг', u)} добавлен в друзья!")
+            try:
+                sn, su = _display_name(message)
+                await context.bot.send_message(
+                    owner, f"👋 {formatting.format_sender(sn, su)} добавил тебя в друзья в боте!")
+            except Exception:
+                pass
+        else:
+            await message.reply_text("Уже в друзьях.")
+        return
+    if text.startswith("/delfriend"):
+        parts = (message.text or "").split()
+        if len(parts) < 2 or not parts[1].isdigit():
+            await message.reply_text("Удалить друга: /delfriend <его_uid> (см. /friends)")
+            return
+        ok = storage.del_friend(message.from_user.id, int(parts[1]))
+        await message.reply_text("✅ Удалён." if ok else "Такого друга нет.")
+        return
+    if text.startswith("/friends") or text.startswith("/друзья"):
+        body, kb = _friends_view(storage, message.from_user.id)
         await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
         return
 
@@ -5251,6 +5333,42 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     elif query.data.startswith("id:"):
         storage = context.bot_data["storage"]
         await _id_callback(query, context, storage)
+    elif query.data.startswith("shop:"):
+        storage = context.bot_data["storage"]
+        uid = query.from_user.id
+        if query.data == "shop:open":
+            await query.answer()
+            body, kb = _shop_view(storage, uid)
+            await context.bot.send_message(query.message.chat_id, body, parse_mode="HTML", reply_markup=kb)
+        else:
+            if query.data.startswith("shop:buy:"):
+                ok, msg = _do_shop_buy(storage, uid, query.data.split(":", 2)[2])
+                await query.answer(msg if ok else msg, show_alert=True)
+            else:
+                await query.answer()
+            body, kb = _shop_view(storage, uid)
+            try:
+                await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
+            except Exception:
+                pass
+    elif query.data.startswith("fr:"):
+        storage = context.bot_data["storage"]
+        uid = query.from_user.id
+        if query.data == "fr:open":
+            await query.answer()
+            body, kb = _friends_view(storage, uid)
+            await context.bot.send_message(query.message.chat_id, body, parse_mode="HTML", reply_markup=kb)
+        else:
+            if query.data.startswith("fr:del:"):
+                storage.del_friend(uid, int(query.data.split(":", 2)[2]))
+                await query.answer("Удалён")
+            else:
+                await query.answer()
+            body, kb = _friends_view(storage, uid)
+            try:
+                await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
+            except Exception:
+                pass
     elif query.data.startswith("quest:"):
         storage = context.bot_data["storage"]
         uid = query.from_user.id

@@ -147,6 +147,14 @@ ID_HOLD_PREMIUM = int(os.environ.get("ID_HOLD_PREMIUM", "5"))
 ID_HOLD_ULTRA = int(os.environ.get("ID_HOLD_ULTRA", "10"))
 ID_LIST_PRICES = [5, 10, 25, 50, 100]  # preset auction prices (BED)
 
+# 🛍 BED shop: spend BED on premium/ULTRA. (key, title, bed_cost, kind, days)
+SHOP_ITEMS = [
+    ("prem7", "💎 Премиум · 7 дней", 30, "premium", 7),
+    ("prem30", "💎 Премиум · 30 дней", 100, "premium", 30),
+    ("ultra7", "🔱 ULTRA · 7 дней", 60, "ultra", 7),
+    ("ultra30", "🔱 ULTRA · 30 дней", 200, "ultra", 30),
+]
+
 REFERRALS_PER_REWARD = int(os.environ.get("REFERRALS_PER_REWARD", "20"))
 REFERRAL_REWARD_DAYS = int(os.environ.get("REFERRAL_REWARD_DAYS", "30"))
 # 🔱 Referral promo: while active, EACH confirmed referral grants ULTRA days.

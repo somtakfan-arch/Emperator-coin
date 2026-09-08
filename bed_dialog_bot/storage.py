@@ -224,6 +224,13 @@ CREATE TABLE IF NOT EXISTS winback (
     sent_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS friends (
+    user_id INTEGER NOT NULL,
+    friend_id INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, friend_id)
+);
+
 CREATE TABLE IF NOT EXISTS quests (
     user_id INTEGER NOT NULL,
     day INTEGER NOT NULL,
@@ -1317,6 +1324,31 @@ class Storage:
             p.append(status)
         with self._connect() as conn:
             return conn.execute(q, p).fetchone()[0]
+
+    # --- 👥 Friends ---
+
+    def add_friend(self, user_id: int, friend_id: int) -> bool:
+        if user_id == friend_id:
+            return False
+        with self._connect() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO friends (user_id, friend_id, created_at) VALUES (?, ?, ?)",
+                (user_id, friend_id, int(time.time())))
+        return cur.rowcount > 0
+
+    def del_friend(self, user_id: int, friend_id: int) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute(
+                "DELETE FROM friends WHERE user_id=? AND friend_id=?", (user_id, friend_id))
+        return cur.rowcount > 0
+
+    def list_friends(self, user_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT f.friend_id, u.name, u.username FROM friends f "
+                "LEFT JOIN users u ON u.user_id = f.friend_id "
+                "WHERE f.user_id=? ORDER BY f.created_at DESC", (user_id,)).fetchall()
+        return [{"friend_id": r[0], "name": r[1], "username": r[2]} for r in rows]
 
     # --- 🎰 Jackpot pool ---
 
