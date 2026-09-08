@@ -1849,6 +1849,18 @@ def _id_limit(storage: Storage, uid: int) -> int:
     return base + storage.id_slot_bonus(uid)
 
 
+_PID_RE = re.compile(r"[a-z0-9]{1,12}")
+
+
+def _norm_pid(tok: str):
+    """Normalize a player-ID token: lowercased letters/digits, 1-12 chars.
+    Returns the string, or None if invalid."""
+    if not tok:
+        return None
+    t = tok.strip().lower()
+    return t if _PID_RE.fullmatch(t) else None
+
+
 def _id_cool_chance(storage: Storage, uid: int) -> float:
     if storage.is_ultra(uid):
         return config.ID_COOL_CHANCE_ULTRA
@@ -1977,16 +1989,17 @@ async def _id_buy(message, context, storage: Storage) -> None:
 async def _id_sell(message, context, storage: Storage) -> None:
     uid = message.from_user.id
     parts = (message.text or "").split()
-    if len(parts) < 2 or not parts[1].isdigit():
+    pid = _norm_pid(parts[1]) if len(parts) >= 2 else None
+    if pid is None:
         ids = ", ".join(map(str, storage.ids_of(uid))) or "—"
         await message.reply_text(
             f"💰 Продать боту за {config.ID_SELL_PRICE} BED: <code>/sellid ID</code>\nТвои ID: {ids}",
             parse_mode="HTML")
         return
-    ok, reason = _do_id_sell(storage, uid, int(parts[1]))
+    ok, reason = _do_id_sell(storage, uid, pid)
     if ok:
         await message.reply_text(
-            f"💰 Продал ID {parts[1]} боту за {config.ID_SELL_PRICE} BED. Баланс: {storage.get_bed(uid)} BED.")
+            f"💰 Продал ID {pid} боту за {config.ID_SELL_PRICE} BED. Баланс: {storage.get_bed(uid)} BED.")
     else:
         await message.reply_text("Это не твой ID.")
 
@@ -2005,22 +2018,24 @@ def _do_list_auction(storage: Storage, uid: int, pid: int, start_price: int):
 async def _id_list_cmd(message, context, storage: Storage) -> None:
     uid = message.from_user.id
     parts = (message.text or "").split()
-    if len(parts) < 3 or not parts[1].isdigit() or not parts[2].isdigit():
+    pid = _norm_pid(parts[1]) if len(parts) >= 2 else None
+    if pid is None or len(parts) < 3 or not parts[2].isdigit():
         await message.reply_text(
             "📤 На аукцион: <code>/listid ID стартовая_ставка</code>\n"
             "Дальше люди перебивают ставками, победитель — по концу торгов.", parse_mode="HTML")
         return
-    ok, msg = _do_list_auction(storage, uid, int(parts[1]), int(parts[2]))
+    ok, msg = _do_list_auction(storage, uid, pid, int(parts[2]))
     await message.reply_text(msg)
 
 
 async def _id_unlist_cmd(message, context, storage: Storage) -> None:
     uid = message.from_user.id
     parts = (message.text or "").split()
-    if len(parts) < 2 or not parts[1].isdigit():
+    pid = _norm_pid(parts[1]) if len(parts) >= 2 else None
+    if pid is None:
         await message.reply_text("Снять с аукциона (пока нет ставок): /unlistid ID")
         return
-    ok = storage.cancel_auction(int(parts[1]), uid)
+    ok = storage.cancel_auction(pid, uid)
     await message.reply_text("✅ Снято с аукциона." if ok else "Нельзя снять: лота нет или на нём уже есть ставка.")
 
 
@@ -2048,22 +2063,23 @@ async def _place_bid(context, storage: Storage, uid: int, pid: int, amount: int)
 async def _id_bid_cmd(message, context, storage: Storage) -> None:
     uid = message.from_user.id
     parts = (message.text or "").split()
-    if len(parts) < 3 or not parts[1].isdigit() or not parts[2].isdigit():
+    pid = _norm_pid(parts[1]) if len(parts) >= 2 else None
+    if pid is None or len(parts) < 3 or not parts[2].isdigit():
         await message.reply_text("💸 Ставка: <code>/bid ID сумма</code> (лоты: /idmarket)", parse_mode="HTML")
         return
     if storage.count_ids(uid) >= _id_limit(storage, uid):
         await message.reply_text("📦 Нет свободных слотов ID — освободи или докупи, потом делай ставку.")
         return
-    ok, info = await _place_bid(context, storage, uid, int(parts[1]), int(parts[2]))
+    ok, info = await _place_bid(context, storage, uid, pid, int(parts[2]))
     await message.reply_text(info, parse_mode="HTML")
 
 
 async def _id_whois(message, context, storage: Storage) -> None:
     parts = (message.text or "").split()
-    if len(parts) < 2 or not parts[1].isdigit():
+    pid = _norm_pid(parts[1]) if len(parts) >= 2 else None
+    if pid is None:
         await message.reply_text("Чей ID? <code>/whois ID</code>", parse_mode="HTML")
         return
-    pid = int(parts[1])
     owner = storage.id_owner(pid)
     if not owner:
         await message.reply_text(f"🆔 {pid} — свободен (никем не занят).")
@@ -2079,10 +2095,11 @@ async def _id_whois(message, context, storage: Storage) -> None:
 async def _id_sendbed(message, context, storage: Storage) -> None:
     uid = message.from_user.id
     parts = (message.text or "").split()
-    if len(parts) < 3 or not parts[1].isdigit() or not parts[2].isdigit():
+    pid = _norm_pid(parts[1]) if len(parts) >= 2 else None
+    if pid is None or len(parts) < 3 or not parts[2].isdigit():
         await message.reply_text("💸 Перевод по ID: <code>/sendid ID сумма</code>", parse_mode="HTML")
         return
-    pid, amount = int(parts[1]), int(parts[2])
+    amount = int(parts[2])
     owner = storage.id_owner(pid)
     if not owner:
         await message.reply_text("🆔 Такой ID никем не занят.")
@@ -2193,7 +2210,7 @@ async def _id_callback(query, context, storage: Storage) -> None:
             pass
         return
     if op == "sellone":
-        ok, _ = _do_id_sell(storage, uid, int(data[2]))
+        ok, _ = _do_id_sell(storage, uid, data[2])
         await query.answer(f"Продано ID {data[2]}." if ok else "Не твой ID.")
         await render_home()
         return
@@ -2210,7 +2227,7 @@ async def _id_callback(query, context, storage: Storage) -> None:
             pass
         return
     if op == "listpick":
-        pid = int(data[2])
+        pid = data[2]
         rows = [[InlineKeyboardButton(f"старт {pr} BED", callback_data=f"id:listat:{pid}:{pr}")]
                 for pr in config.ID_LIST_PRICES]
         rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="id:home")])
@@ -2223,7 +2240,7 @@ async def _id_callback(query, context, storage: Storage) -> None:
             pass
         return
     if op == "listat":
-        pid, price = int(data[2]), int(data[3])
+        pid, price = data[2], int(data[3])
         ok, msg = _do_list_auction(storage, uid, pid, price)
         await query.answer(msg[:190], show_alert=True)
         await render_home()
@@ -2238,14 +2255,14 @@ async def _id_callback(query, context, storage: Storage) -> None:
         return
     if op == "lot":
         await query.answer()
-        body, kb = _id_lot_view(storage, uid, int(data[2]))
+        body, kb = _id_lot_view(storage, uid, data[2])
         try:
             await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
         except Exception:
             pass
         return
     if op == "bid":
-        pid, amount = int(data[2]), int(data[3])
+        pid, amount = data[2], int(data[3])
         if storage.count_ids(uid) >= _id_limit(storage, uid):
             await query.answer("Нет свободных слотов ID — освободи или докупи.", show_alert=True)
             return
@@ -3301,12 +3318,18 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         parts = (message.text or "").split()
         if len(parts) < 2 or not parts[1].lstrip("-").isdigit():
             await message.reply_text(
-                "🆔 Выдать ID: <code>/giveid user_id [конкретный_ID]</code>\n"
-                "Без второго аргумента — случайный (с блатным шансом). Лимит/цена игнорируются.",
+                "🆔 Выдать ID: <code>/giveid user_id [ID]</code>\n"
+                "ID может быть числом ИЛИ буквами (напр. <code>/giveid 123 cozpe</code>).\n"
+                "Без второго аргумента — случайный. Лимит/цена игнорируются.",
                 parse_mode="HTML")
             return
         target = int(parts[1])
-        want = int(parts[2]) if len(parts) >= 3 and parts[2].isdigit() else None
+        want = None
+        if len(parts) >= 3:
+            want = _norm_pid(parts[2])
+            if want is None:
+                await message.reply_text("⚠️ ID — только латинские буквы/цифры, до 12 символов.")
+                return
         pid = storage.grant_id(target, config.ID_MAX_VALUE, pid=want,
                                cool_chance=_id_cool_chance(storage, target))
         if pid is None:
@@ -3360,10 +3383,11 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if text.startswith("/addfriend"):
         uid = message.from_user.id
         parts = (message.text or "").split()
-        if len(parts) < 2 or not parts[1].isdigit():
+        fpid = _norm_pid(parts[1]) if len(parts) >= 2 else None
+        if fpid is None:
             await message.reply_text("Добавить друга по его ID: <code>/addfriend ID</code>", parse_mode="HTML")
             return
-        owner = storage.id_owner(int(parts[1]))
+        owner = storage.id_owner(fpid)
         if not owner:
             await message.reply_text("🆔 Такой ID никем не занят.")
             return

@@ -256,13 +256,13 @@ CREATE TABLE IF NOT EXISTS quests (
 );
 
 CREATE TABLE IF NOT EXISTS player_ids (
-    pid INTEGER PRIMARY KEY,
+    pid TEXT PRIMARY KEY,
     owner_id INTEGER NOT NULL,
     acquired_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS id_auction (
-    pid INTEGER PRIMARY KEY,
+    pid TEXT PRIMARY KEY,
     seller_id INTEGER NOT NULL,
     start_price INTEGER NOT NULL DEFAULT 1,
     bid INTEGER NOT NULL DEFAULT 0,
@@ -530,6 +530,28 @@ class Storage:
                 conn.execute("ALTER TABLE id_auction ADD COLUMN bidder INTEGER")
             if "ends_at" not in auc_cols:
                 conn.execute("ALTER TABLE id_auction ADD COLUMN ends_at INTEGER NOT NULL DEFAULT 0")
+        # Player IDs & auctions: pid was INTEGER; rebuild to TEXT so letter/vanity
+        # IDs are allowed (existing numeric IDs are preserved as their text form).
+        pi_cols = list(conn.execute("PRAGMA table_info(player_ids)").fetchall())
+        pi_type = next((r[2].upper() for r in pi_cols if r[1] == "pid"), "TEXT")
+        if pi_type != "TEXT":
+            conn.execute("ALTER TABLE player_ids RENAME TO player_ids_old")
+            conn.execute("CREATE TABLE player_ids (pid TEXT PRIMARY KEY, "
+                         "owner_id INTEGER NOT NULL, acquired_at INTEGER NOT NULL)")
+            conn.execute("INSERT INTO player_ids (pid, owner_id, acquired_at) "
+                         "SELECT CAST(pid AS TEXT), owner_id, acquired_at FROM player_ids_old")
+            conn.execute("DROP TABLE player_ids_old")
+        ac_cols = list(conn.execute("PRAGMA table_info(id_auction)").fetchall())
+        ac_type = next((r[2].upper() for r in ac_cols if r[1] == "pid"), "TEXT")
+        if ac_type != "TEXT":
+            conn.execute("ALTER TABLE id_auction RENAME TO id_auction_old")
+            conn.execute("CREATE TABLE id_auction (pid TEXT PRIMARY KEY, seller_id INTEGER NOT NULL, "
+                         "start_price INTEGER NOT NULL DEFAULT 1, bid INTEGER NOT NULL DEFAULT 0, "
+                         "bidder INTEGER, ends_at INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)")
+            conn.execute("INSERT INTO id_auction (pid, seller_id, start_price, bid, bidder, ends_at, created_at) "
+                         "SELECT CAST(pid AS TEXT), seller_id, start_price, bid, bidder, ends_at, created_at "
+                         "FROM id_auction_old")
+            conn.execute("DROP TABLE id_auction_old")
         tt_cols = {row[1] for row in conn.execute("PRAGMA table_info(tiktok_subs)")}
         if tt_cols and "kind" not in tt_cols:
             conn.execute("ALTER TABLE tiktok_subs ADD COLUMN kind TEXT NOT NULL DEFAULT 'tiktok'")
@@ -1599,14 +1621,14 @@ class Storage:
             if cool_chance > 0 and _r.random() < cool_chance:
                 pool = _cool_id_pool(max_value)
                 for _ in range(80):
-                    pid = _r.choice(pool)
+                    pid = str(_r.choice(pool))
                     if not self._id_taken(conn, pid):
                         conn.execute(
                             "INSERT INTO player_ids (pid, owner_id, acquired_at) VALUES (?, ?, ?)",
                             (pid, user_id, int(time.time())))
                         return pid
             for _ in range(200):
-                pid = _r.randint(0, max_value)
+                pid = str(_r.randint(0, max_value))
                 if not self._id_taken(conn, pid):
                     conn.execute(
                         "INSERT INTO player_ids (pid, owner_id, acquired_at) VALUES (?, ?, ?)",
@@ -1776,9 +1798,11 @@ class Storage:
         return new
 
     def grant_id(self, user_id: int, max_value: int, pid=None, cool_chance: float = 0.0):
-        """Admin grant: give a specific free ID (or a random one) to a user,
-        bypassing limits/cost. Returns the pid, or None if unavailable."""
+        """Admin grant: give a specific free ID (numeric OR letters, e.g. 'cozpe')
+        or a random one to a user, bypassing limits/cost. Returns the pid, or
+        None if unavailable."""
         if pid is not None:
+            pid = str(pid)
             with self._connect() as conn:
                 if self._id_taken(conn, pid):
                     return None
