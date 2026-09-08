@@ -3315,22 +3315,25 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         await _id_sell(message, context, storage)
         return
     if text.startswith("/delid"):
-        uid = message.from_user.id
+        # Admin-only: delete ANYONE's ID (frees it back to the pool).
+        if not (admin.is_super(message.from_user.id) or admin.has_perm(storage, message.from_user.id, "users")):
+            return
         parts = (message.text or "").split()
         pid = _norm_pid(parts[1]) if len(parts) >= 2 else None
         if pid is None:
-            ids = ", ".join(map(str, storage.ids_of(uid))) or "—"
-            await message.reply_text(
-                f"♻️ Обнулить ID и получить новый случайный: <code>/delid ID</code>\nТвои ID: {ids}",
-                parse_mode="HTML")
+            await message.reply_text("🗑 Удалить чужой ID: <code>/delid ID</code>", parse_mode="HTML")
             return
-        if storage.id_owner(pid) != uid:
-            await message.reply_text("Это не твой ID.")
+        owner = storage.id_owner(pid)
+        if not owner:
+            await message.reply_text(f"🆔 ID {pid} и так свободен.")
             return
-        storage.release_id(pid, uid)  # drop it (refunds any auction bidder)
-        new = storage.assign_random_id(uid, config.ID_MAX_VALUE, _id_cool_chance(storage, uid))
-        await message.reply_text(
-            f"♻️ ID <b>{pid}</b> обнулён. Твой новый ID: <b>{new}</b>", parse_mode="HTML")
+        storage.release_id(pid, owner)  # remove from its owner (refunds any bidder)
+        await message.reply_text(f"🗑 ID <b>{pid}</b> удалён у пользователя {owner} (теперь свободен).",
+                                 parse_mode="HTML")
+        try:
+            await context.bot.send_message(owner, f"🗑 Администратор удалил у тебя ID {pid}.")
+        except Exception:
+            pass
         return
     if text.startswith("/listid"):
         await _id_list_cmd(message, context, storage)
