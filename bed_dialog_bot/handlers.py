@@ -1847,6 +1847,14 @@ def _id_limit(storage: Storage, uid: int) -> int:
     return config.ID_HOLD_FREE
 
 
+def _id_cool_chance(storage: Storage, uid: int) -> float:
+    if storage.is_ultra(uid):
+        return config.ID_COOL_CHANCE_ULTRA
+    if storage.is_premium(uid):
+        return config.ID_COOL_CHANCE_PREMIUM
+    return config.ID_COOL_CHANCE_FREE
+
+
 def _id_home_view(storage: Storage, uid: int):
     ids = storage.ids_of(uid)
     limit = _id_limit(storage, uid)
@@ -1885,7 +1893,7 @@ def _do_id_buy(storage: Storage, uid: int):
         return False, "limit"
     if not storage.spend_bed(uid, config.ID_BUY_COST, reason="id_buy"):
         return False, "funds"
-    pid = storage.assign_random_id(uid, config.ID_MAX_VALUE)
+    pid = storage.assign_random_id(uid, config.ID_MAX_VALUE, _id_cool_chance(storage, uid))
     if pid is None:
         storage.add_bed(uid, config.ID_BUY_COST, reason="id_refund")
         return False, "full"
@@ -2052,7 +2060,7 @@ async def _id_callback(query, context, storage: Storage) -> None:
     uid = query.from_user.id
     data = query.data.split(":")
     op = data[1]
-    storage.ensure_player_id(uid, config.ID_MAX_VALUE)
+    storage.ensure_player_id(uid, config.ID_MAX_VALUE, _id_cool_chance(storage, uid))
 
     async def render_home():
         body, kb = _id_home_view(storage, uid)
@@ -2534,7 +2542,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     if text.startswith("/start"):
         # Give every user their first ID on first contact.
-        storage.ensure_player_id(message.from_user.id, config.ID_MAX_VALUE)
+        storage.ensure_player_id(message.from_user.id, config.ID_MAX_VALUE, _id_cool_chance(storage, message.from_user.id))
         parts = text.split(maxsplit=1)
         payload = parts[1].strip() if len(parts) == 2 else ""
         # Return from the ad-link: grant the reward.
@@ -3196,7 +3204,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         await _id_sendbed(message, context, storage)
         return
     if text.startswith("/id") or text.startswith("/myid") or text.startswith("/айди"):
-        storage.ensure_player_id(message.from_user.id, config.ID_MAX_VALUE)
+        storage.ensure_player_id(message.from_user.id, config.ID_MAX_VALUE, _id_cool_chance(storage, message.from_user.id))
         body, kb = _id_home_view(storage, message.from_user.id)
         await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
         return

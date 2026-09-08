@@ -433,6 +433,45 @@ CAPTURE_PRUNE_ENABLED = os.environ.get("CAPTURE_PRUNE_ENABLED", "0") == "1"
 _ULTRA_GRACE_SECONDS = int(os.environ.get("ULTRA_GRACE_DAYS", "3")) * 86400
 _ULTRA_FOREVER_TS = 9999999999  # lifetime sentinel (~year 2286)
 
+_COOL_POOL_CACHE: dict = {}
+
+
+def _cool_id_pool(max_value: int):
+    """'Cool/prized' IDs: 0-100, repdigits (777, 88888…), one-digit-off
+    repdigits, and round thousands. Cached per max_value."""
+    cached = _COOL_POOL_CACHE.get(max_value)
+    if cached is not None:
+        return cached
+    pool = set(range(0, 101))
+    digits = len(str(max_value))
+    for length in range(1, digits + 1):
+        for d in range(0, 10):
+            if length > 1 and d == 0:
+                continue
+            v = int(str(d) * length)
+            if v <= max_value:
+                pool.add(v)
+    # numbers where all but one digit are the same (lots of repeats)
+    for length in range(3, digits + 1):
+        for d in range(0, 10):
+            base = str(d) * length
+            for i in range(length):
+                for e in range(0, 10):
+                    if e == d:
+                        continue
+                    s = list(base)
+                    s[i] = str(e)
+                    if s[0] == "0":
+                        continue
+                    v = int("".join(s))
+                    if v <= max_value:
+                        pool.add(v)
+    for v in range(1000, max_value + 1, 1000):  # round thousands
+        pool.add(v)
+    result = sorted(pool)
+    _COOL_POOL_CACHE[max_value] = result
+    return result
+
 
 class Storage:
     def __init__(self, db_path: str):
@@ -1531,11 +1570,22 @@ class Storage:
     def _id_taken(self, conn, pid: int) -> bool:
         return conn.execute("SELECT 1 FROM player_ids WHERE pid=?", (pid,)).fetchone() is not None
 
-    def assign_random_id(self, user_id: int, max_value: int):
-        """Give the user a fresh random unused ID. Returns the pid, or None if
-        the space is somehow exhausted."""
+    def assign_random_id(self, user_id: int, max_value: int, cool_chance: float = 0.0):
+        """Give the user a fresh random unused ID. With probability cool_chance
+        the roll is drawn from the 'cool' pool (short / repeated-digit IDs) —
+        used to give premium/ULTRA better odds at prized handles. Returns the
+        pid, or None if the space is exhausted."""
         import random as _r
         with self._connect() as conn:
+            if cool_chance > 0 and _r.random() < cool_chance:
+                pool = _cool_id_pool(max_value)
+                for _ in range(80):
+                    pid = _r.choice(pool)
+                    if not self._id_taken(conn, pid):
+                        conn.execute(
+                            "INSERT INTO player_ids (pid, owner_id, acquired_at) VALUES (?, ?, ?)",
+                            (pid, user_id, int(time.time())))
+                        return pid
             for _ in range(200):
                 pid = _r.randint(0, max_value)
                 if not self._id_taken(conn, pid):
@@ -1545,10 +1595,10 @@ class Storage:
                     return pid
         return None
 
-    def ensure_player_id(self, user_id: int, max_value: int):
+    def ensure_player_id(self, user_id: int, max_value: int, cool_chance: float = 0.0):
         """Give a brand-new user their first ID if they have none."""
         if self.count_ids(user_id) == 0:
-            return self.assign_random_id(user_id, max_value)
+            return self.assign_random_id(user_id, max_value, cool_chance)
         return None
 
     def release_id(self, pid: int, owner_id: int) -> bool:

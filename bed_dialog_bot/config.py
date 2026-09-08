@@ -148,6 +148,11 @@ ID_HOLD_FREE = int(os.environ.get("ID_HOLD_FREE", "3"))
 ID_HOLD_PREMIUM = int(os.environ.get("ID_HOLD_PREMIUM", "5"))
 ID_HOLD_ULTRA = int(os.environ.get("ID_HOLD_ULTRA", "10"))
 ID_LIST_PRICES = [5, 10, 25, 50, 100]  # preset auction prices (BED)
+# Chance a bought/initial ID is drawn from the "cool" pool (short/repeated
+# digits). Premium and especially ULTRA get much better odds at prized IDs.
+ID_COOL_CHANCE_FREE = float(os.environ.get("ID_COOL_CHANCE_FREE", "0.05"))
+ID_COOL_CHANCE_PREMIUM = float(os.environ.get("ID_COOL_CHANCE_PREMIUM", "0.4"))
+ID_COOL_CHANCE_ULTRA = float(os.environ.get("ID_COOL_CHANCE_ULTRA", "0.85"))
 
 # 🛍 BED shop: spend BED on premium/ULTRA. (key, title, bed_cost, kind, days)
 SHOP_ITEMS = [
