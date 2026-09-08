@@ -85,6 +85,12 @@ _DURATION_UNITS = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
 logger = logging.getLogger(__name__)
 
 
+def _apply_discount(storage, uid, stars: int) -> int:
+    """Apply the active discount promo (if the user opted in) to a Stars price."""
+    pct = storage.discount_pct_for(uid)
+    return max(1, round(stars * (100 - pct) / 100)) if pct else stars
+
+
 def _fmt_premium(ts) -> str:
     """Format a premium-until timestamp, guarding huge/overflowing values."""
     try:
@@ -2614,6 +2620,15 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         arg = parts[1].strip().split()[0] if len(parts) > 1 and parts[1].strip() else ""
         # BED sale promo code takes priority over work.ink keys / premium promos.
         if arg:
+            disc = storage.get_discount()
+            if disc and arg.upper() == disc["code"]:
+                storage.opt_in_bed_sale(uid, disc["code"])  # reuse redemptions table
+                left_h = max(1, (disc["until"] - int(time.time())) // 3600)
+                await message.reply_text(
+                    f"💸 <b>Скидка активирована!</b>\n"
+                    f"−{disc['pct']}% на покупку премиума/ULTRA/BED за ⭐ ещё ~{left_h} ч.\n\n"
+                    f"Покупай: /menu → 💎 Подписка или 🪙 Кошелёк.", parse_mode="HTML")
+                return
             sale = storage.get_bed_sale()
             if sale and arg.upper() == sale["code"]:
                 if not storage.opt_in_bed_sale(uid, sale["code"]):
@@ -4054,6 +4069,35 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return
 
+    if text.startswith("/discount"):
+        if not admin.is_super(message.from_user.id):
+            return
+        parts = text.split()
+        if len(parts) == 2 and parts[1].lower() == "off":
+            storage.stop_discount()
+            await message.reply_text("🛑 Скидка отключена.")
+            return
+        if len(parts) != 4 or not parts[2].isdigit() or not parts[3].isdigit():
+            d = storage.get_discount()
+            cur = ""
+            if d:
+                left_h = max(0, (d["until"] - int(time.time())) // 3600)
+                cur = f"\n\nСейчас активна: код {d['code']}, −{d['pct']}%, осталось ~{left_h} ч."
+            await message.reply_text(
+                "💸 <b>Скидка на покупку</b> (⭐ премиум/ULTRA/BED)\n"
+                "Создать: <code>/discount &lt;код&gt; &lt;процент&gt; &lt;часов&gt;</code>\n"
+                "Напр.: <code>/discount SALE30 30 24</code>\n"
+                "Остановить: <code>/discount off</code>\n\n"
+                "Пользователи вводят код (/redeem &lt;код&gt;) и покупают со скидкой." + cur,
+                parse_mode="HTML")
+            return
+        code, pct, hours = parts[1].upper(), int(parts[2]), int(parts[3])
+        storage.start_discount(code, pct, int(time.time()) + hours * 3600)
+        await message.reply_text(
+            f"💸 Скидка создана!\nКод: <code>{html.escape(code)}</code> · −{min(pct, 90)}% · {hours} ч.\n"
+            f"Юзеры активируют: /redeem {html.escape(code)}", parse_mode="HTML")
+        return
+
     if text.startswith("/bedsale"):
         if not admin.is_super(message.from_user.id):
             return
@@ -4790,7 +4834,7 @@ async def _handle_bed_callback(query, context: ContextTypes.DEFAULT_TYPE) -> Non
         if amount not in config.BED_BUY_PACKAGES:
             await query.answer()
             return
-        cost = bedcoin.cost_stars(storage, amount, uid)
+        cost = _apply_discount(storage, uid, bedcoin.cost_stars(storage, amount, uid))
         await query.answer()
         await context.bot.send_invoice(
             chat_id=query.message.chat_id,
@@ -5152,7 +5196,7 @@ async def _handle_bedchain_callback(query, context: ContextTypes.DEFAULT_TYPE) -
     if not address:
         await query.answer("Сессия истекла — начните заново из «Кошелька».", show_alert=True)
         return
-    cost = bedcoin.cost_stars(storage, amount, uid)
+    cost = _apply_discount(storage, uid, bedcoin.cost_stars(storage, amount, uid))
     await query.answer()
     await context.bot.send_invoice(
         chat_id=query.message.chat_id,
@@ -5581,13 +5625,14 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await query.answer()
     elif query.data == "ultra:buystars":
         await query.answer()
+        _price = _apply_discount(context.bot_data["storage"], query.from_user.id, config.ULTRA_STARS_PRICE)
         await context.bot.send_invoice(
             chat_id=query.message.chat_id,
             title="🔱 ULTRA PREMIUM (1 месяц)",
             description="Топ-тариф: иммунитет к .ban/.spam/.troll, моментальные команды, приоритет.",
             payload=f"ultra:{query.from_user.id}:{config.ULTRA_DURATION_DAYS}",
             currency="XTR",
-            prices=[LabeledPrice("ULTRA PREMIUM", config.ULTRA_STARS_PRICE)],
+            prices=[LabeledPrice("ULTRA PREMIUM", _price)],
             provider_token="",
         )
     elif query.data.startswith("ultra:tog:"):
@@ -5613,13 +5658,14 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await menus.edit_section(context, query, "ultra", uid, storage, context.bot.username)
     elif query.data == "ultra:buystars_forever":
         await query.answer()
+        _price = _apply_discount(context.bot_data["storage"], query.from_user.id, config.ULTRA_FOREVER_STARS_PRICE)
         await context.bot.send_invoice(
             chat_id=query.message.chat_id,
             title="🔱♾ ULTRA PREMIUM НАВСЕГДА",
             description="Пожизненный топ-тариф: все ULTRA-функции без ограничения по времени.",
             payload=f"ultra:{query.from_user.id}:forever",
             currency="XTR",
-            prices=[LabeledPrice("ULTRA навсегда", config.ULTRA_FOREVER_STARS_PRICE)],
+            prices=[LabeledPrice("ULTRA навсегда", _price)],
             provider_token="",
         )
     elif query.data == "ultra:buybed_forever":
@@ -5714,6 +5760,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             label, stars, days = config.PREMIUM_PACKAGES[idx]
         except (ValueError, IndexError):
             return
+        stars = _apply_discount(context.bot_data["storage"], query.from_user.id, stars)
         await context.bot.send_invoice(
             chat_id=query.message.chat_id,
             title=f"Bed Dialog Premium ({label})",

@@ -1427,6 +1427,40 @@ class Storage:
                 "WHERE f.user_id=? ORDER BY f.created_at DESC", (user_id,)).fetchall()
         return [{"friend_id": r[0], "name": r[1], "username": r[2]} for r in rows]
 
+    # --- 💸 Discount promo (percent off Stars purchases) ---
+
+    def start_discount(self, code: str, pct: int, until: int) -> None:
+        self.set_setting("discount_code", code.upper())
+        self.set_setting("discount_pct", str(pct))
+        self.set_setting("discount_until", str(int(until)))
+
+    def stop_discount(self) -> None:
+        self.set_setting("discount_code", "")
+        self.set_setting("discount_until", "0")
+
+    def get_discount(self):
+        code = self.get_setting("discount_code")
+        if not code:
+            return None
+        try:
+            until = int(self.get_setting("discount_until", "0") or 0)
+            pct = int(self.get_setting("discount_pct", "0") or 0)
+        except (TypeError, ValueError):
+            return None
+        if until <= int(time.time()) or pct <= 0:
+            return None
+        return {"code": code, "pct": min(pct, 90), "until": until}
+
+    def discount_pct_for(self, user_id) -> int:
+        d = self.get_discount()
+        if not d or user_id is None:
+            return 0
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM promo_redemptions WHERE code=? AND user_id=?",
+                (d["code"], user_id)).fetchone()
+        return d["pct"] if row else 0
+
     # --- 🎰 Jackpot pool ---
 
     def jackpot_get(self) -> int:
