@@ -224,6 +224,19 @@ CREATE TABLE IF NOT EXISTS winback (
     sent_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS player_ids (
+    pid INTEGER PRIMARY KEY,
+    owner_id INTEGER NOT NULL,
+    acquired_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS id_auction (
+    pid INTEGER PRIMARY KEY,
+    seller_id INTEGER NOT NULL,
+    price INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS lottery_tickets (
     round INTEGER NOT NULL,
     user_id INTEGER NOT NULL,
@@ -1295,6 +1308,127 @@ class Storage:
             p.append(status)
         with self._connect() as conn:
             return conn.execute(q, p).fetchone()[0]
+
+    # --- 🆔 Player IDs ---
+
+    def ids_of(self, user_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT pid FROM player_ids WHERE owner_id=? ORDER BY pid", (user_id,)).fetchall()
+        return [r[0] for r in rows]
+
+    def count_ids(self, user_id: int) -> int:
+        with self._connect() as conn:
+            return conn.execute(
+                "SELECT COUNT(*) FROM player_ids WHERE owner_id=?", (user_id,)).fetchone()[0]
+
+    def id_owner(self, pid: int):
+        with self._connect() as conn:
+            row = conn.execute("SELECT owner_id FROM player_ids WHERE pid=?", (pid,)).fetchone()
+        return row[0] if row else None
+
+    def user_display(self, user_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT name, username FROM users WHERE user_id=?", (user_id,)).fetchone()
+        return (row[0], row[1]) if row else (None, None)
+
+    def _id_taken(self, conn, pid: int) -> bool:
+        return conn.execute("SELECT 1 FROM player_ids WHERE pid=?", (pid,)).fetchone() is not None
+
+    def assign_random_id(self, user_id: int, max_value: int):
+        """Give the user a fresh random unused ID. Returns the pid, or None if
+        the space is somehow exhausted."""
+        import random as _r
+        with self._connect() as conn:
+            for _ in range(200):
+                pid = _r.randint(0, max_value)
+                if not self._id_taken(conn, pid):
+                    conn.execute(
+                        "INSERT INTO player_ids (pid, owner_id, acquired_at) VALUES (?, ?, ?)",
+                        (pid, user_id, int(time.time())))
+                    return pid
+        return None
+
+    def ensure_player_id(self, user_id: int, max_value: int):
+        """Give a brand-new user their first ID if they have none."""
+        if self.count_ids(user_id) == 0:
+            return self.assign_random_id(user_id, max_value)
+        return None
+
+    def release_id(self, pid: int, owner_id: int) -> bool:
+        """Sell/drop an ID back (must belong to owner_id). Also delists it."""
+        with self._connect() as conn:
+            cur = conn.execute(
+                "DELETE FROM player_ids WHERE pid=? AND owner_id=?", (pid, owner_id))
+            conn.execute("DELETE FROM id_auction WHERE pid=?", (pid,))
+        return cur.rowcount > 0
+
+    # Auction (user-to-user fixed-price listings).
+    def list_id(self, pid: int, seller_id: int, price: int) -> bool:
+        with self._connect() as conn:
+            owner = conn.execute("SELECT owner_id FROM player_ids WHERE pid=?", (pid,)).fetchone()
+            if not owner or owner[0] != seller_id:
+                return False
+            conn.execute(
+                "INSERT INTO id_auction (pid, seller_id, price, created_at) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(pid) DO UPDATE SET seller_id=excluded.seller_id, price=excluded.price",
+                (pid, seller_id, price, int(time.time())))
+        return True
+
+    def unlist_id(self, pid: int, seller_id: int) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute(
+                "DELETE FROM id_auction WHERE pid=? AND seller_id=?", (pid, seller_id))
+        return cur.rowcount > 0
+
+    def get_listing(self, pid: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT pid, seller_id, price FROM id_auction WHERE pid=?", (pid,)).fetchone()
+        return {"pid": row[0], "seller_id": row[1], "price": row[2]} if row else None
+
+    def all_listings(self, limit: int = 20, exclude_seller=None):
+        q = "SELECT pid, seller_id, price FROM id_auction"
+        p = []
+        if exclude_seller is not None:
+            q += " WHERE seller_id != ?"
+            p.append(exclude_seller)
+        q += " ORDER BY price ASC, created_at ASC LIMIT ?"
+        p.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(q, p).fetchall()
+        return [{"pid": r[0], "seller_id": r[1], "price": r[2]} for r in rows]
+
+    def buy_listing(self, pid: int, buyer_id: int):
+        """Atomically transfer a listed ID to the buyer and pay the seller.
+        Returns (ok, reason/price). Balance/limit checks done here."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT seller_id, price FROM id_auction WHERE pid=?", (pid,)).fetchone()
+            if not row:
+                return False, "gone"
+            seller_id, price = row[0], row[1]
+            if seller_id == buyer_id:
+                return False, "own"
+            bal = conn.execute(
+                "SELECT balance FROM bed_balances WHERE user_id=?", (buyer_id,)).fetchone()
+            if not bal or bal[0] < price:
+                return False, "funds"
+            # still owned by seller?
+            own = conn.execute("SELECT owner_id FROM player_ids WHERE pid=?", (pid,)).fetchone()
+            if not own or own[0] != seller_id:
+                conn.execute("DELETE FROM id_auction WHERE pid=?", (pid,))
+                return False, "gone"
+            conn.execute("UPDATE bed_balances SET balance = balance - ? WHERE user_id=?", (price, buyer_id))
+            conn.execute(
+                "INSERT INTO bed_balances (user_id, balance) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET balance = balance + ?",
+                (seller_id, price, price))
+            conn.execute("UPDATE player_ids SET owner_id=?, acquired_at=? WHERE pid=?",
+                         (buyer_id, int(time.time()), pid))
+            conn.execute("DELETE FROM id_auction WHERE pid=?", (pid,))
+        return True, {"seller_id": seller_id, "price": price}
 
     # --- 🎟 Lottery ---
 

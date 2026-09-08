@@ -125,6 +125,16 @@ COMPETITOR_IDS = {
 }
 COMPETITORS_ADMIN_ID = int(os.environ.get("COMPETITORS_ADMIN_ID", "7563505180"))
 
+# 🆔 Player IDs: short numeric handles (0..ID_MAX) users own, trade and use to
+# interact (BED transfers by ID). Hold limits by tier; buy/sell to the bot.
+ID_MAX_VALUE = int(os.environ.get("ID_MAX_VALUE", "100000"))
+ID_BUY_COST = int(os.environ.get("ID_BUY_COST", "10"))      # buy a new random ID
+ID_SELL_PRICE = int(os.environ.get("ID_SELL_PRICE", "3"))   # sell an ID to the bot
+ID_HOLD_FREE = int(os.environ.get("ID_HOLD_FREE", "3"))
+ID_HOLD_PREMIUM = int(os.environ.get("ID_HOLD_PREMIUM", "5"))
+ID_HOLD_ULTRA = int(os.environ.get("ID_HOLD_ULTRA", "10"))
+ID_LIST_PRICES = [5, 10, 25, 50, 100]  # preset auction prices (BED)
+
 REFERRALS_PER_REWARD = int(os.environ.get("REFERRALS_PER_REWARD", "20"))
 REFERRAL_REWARD_DAYS = int(os.environ.get("REFERRAL_REWARD_DAYS", "30"))
 # 🔱 Referral promo: while active, EACH confirmed referral grants ULTRA days.

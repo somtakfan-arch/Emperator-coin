@@ -1731,6 +1731,291 @@ def _lottery_status_text(storage: Storage, uid: int) -> str:
         f"Купить: <code>/lottery buy N</code>")
 
 
+# --- 🆔 Player IDs ----------------------------------------------------------
+
+def _id_limit(storage: Storage, uid: int) -> int:
+    if storage.is_ultra(uid):
+        return config.ID_HOLD_ULTRA
+    if storage.is_premium(uid):
+        return config.ID_HOLD_PREMIUM
+    return config.ID_HOLD_FREE
+
+
+def _id_home_view(storage: Storage, uid: int):
+    ids = storage.ids_of(uid)
+    limit = _id_limit(storage, uid)
+    ids_str = ", ".join(f"<code>{p}</code>" for p in ids) or "—"
+    text = (
+        "🆔 <b>Мои ID</b>\n\n"
+        f"Твои ID: {ids_str}\n"
+        f"📦 Слотов занято: <b>{len(ids)}/{limit}</b>\n"
+        f"<i>free {config.ID_HOLD_FREE} · premium {config.ID_HOLD_PREMIUM} · ULTRA {config.ID_HOLD_ULTRA}</i>\n"
+        f"💰 Баланс: {storage.get_bed(uid)} BED\n\n"
+        f"🆕 Новый ID — {config.ID_BUY_COST} BED · 💰 продать боту — {config.ID_SELL_PRICE} BED\n"
+        f"💸 Перевод по ID: <code>/sendid ID сумма</code>")
+    rows = [
+        [InlineKeyboardButton(f"🆕 Купить ID ({config.ID_BUY_COST} BED)", callback_data="id:buy")],
+        [InlineKeyboardButton(f"💰 Продать боту ({config.ID_SELL_PRICE})", callback_data="id:sellmenu"),
+         InlineKeyboardButton("📤 На аукцион", callback_data="id:listmenu")],
+        [InlineKeyboardButton("🏷 Аукцион (купить у людей)", callback_data="id:auction")],
+        [InlineKeyboardButton("🔄 Обновить", callback_data="id:home")],
+    ]
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _id_auction_view(storage: Storage, uid: int):
+    listings = storage.all_listings(20, exclude_seller=uid)
+    rows = [[InlineKeyboardButton(f"🏷 ID {l['pid']} — {l['price']} BED",
+                                  callback_data=f"id:buyone:{l['pid']}")] for l in listings]
+    rows.append([InlineKeyboardButton("⬅️ К моим ID", callback_data="id:home")])
+    body = ("🏷 <b>Аукцион ID</b>\n\n"
+            + ("Выбери ID для покупки:" if listings else "Пока пусто. Выставь свой: /listid ID цена")
+            + f"\n💰 Баланс: {storage.get_bed(uid)} BED")
+    return body, InlineKeyboardMarkup(rows)
+
+
+def _do_id_buy(storage: Storage, uid: int):
+    if storage.count_ids(uid) >= _id_limit(storage, uid):
+        return False, "limit"
+    if not storage.spend_bed(uid, config.ID_BUY_COST, reason="id_buy"):
+        return False, "funds"
+    pid = storage.assign_random_id(uid, config.ID_MAX_VALUE)
+    if pid is None:
+        storage.add_bed(uid, config.ID_BUY_COST, reason="id_refund")
+        return False, "full"
+    return True, pid
+
+
+def _do_id_sell(storage: Storage, uid: int, pid: int):
+    if storage.id_owner(pid) != uid:
+        return False, "own"
+    if not storage.release_id(pid, uid):
+        return False, "own"
+    storage.add_bed(uid, config.ID_SELL_PRICE, reason="id_sell")
+    return True, None
+
+
+async def _id_buy(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    ok, res = _do_id_buy(storage, uid)
+    if ok:
+        await message.reply_text(
+            f"🆕 Ты получил новый ID: <b>{res}</b>! (−{config.ID_BUY_COST} BED)\n"
+            f"💰 Баланс: {storage.get_bed(uid)} BED", parse_mode="HTML")
+    elif res == "limit":
+        await message.reply_text(
+            f"📦 Достигнут лимит ID ({_id_limit(storage, uid)}). Продай лишний или оформи премиум/ULTRA.")
+    else:
+        await message.reply_text(f"❌ Нужно {config.ID_BUY_COST} BED. Баланс: {storage.get_bed(uid)}.")
+
+
+async def _id_sell(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    parts = (message.text or "").split()
+    if len(parts) < 2 or not parts[1].isdigit():
+        ids = ", ".join(map(str, storage.ids_of(uid))) or "—"
+        await message.reply_text(
+            f"💰 Продать боту за {config.ID_SELL_PRICE} BED: <code>/sellid ID</code>\nТвои ID: {ids}",
+            parse_mode="HTML")
+        return
+    ok, reason = _do_id_sell(storage, uid, int(parts[1]))
+    if ok:
+        await message.reply_text(
+            f"💰 Продал ID {parts[1]} боту за {config.ID_SELL_PRICE} BED. Баланс: {storage.get_bed(uid)} BED.")
+    else:
+        await message.reply_text("Это не твой ID.")
+
+
+async def _id_list_cmd(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    parts = (message.text or "").split()
+    if len(parts) < 3 or not parts[1].isdigit() or not parts[2].isdigit():
+        await message.reply_text("📤 На аукцион: <code>/listid ID цена</code> (цена в BED).", parse_mode="HTML")
+        return
+    pid, price = int(parts[1]), int(parts[2])
+    if price <= 0:
+        await message.reply_text("Цена должна быть больше 0.")
+        return
+    if storage.id_owner(pid) != uid:
+        await message.reply_text("Это не твой ID.")
+        return
+    storage.list_id(pid, uid, price)
+    await message.reply_text(f"🏷 ID {pid} выставлен на аукцион за {price} BED. Снять: /unlistid {pid}")
+
+
+async def _id_unlist_cmd(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    parts = (message.text or "").split()
+    if len(parts) < 2 or not parts[1].isdigit():
+        await message.reply_text("Снять с аукциона: /unlistid ID")
+        return
+    ok = storage.unlist_id(int(parts[1]), uid)
+    await message.reply_text("✅ Снято с аукциона." if ok else "Такого лота у тебя нет.")
+
+
+async def _id_whois(message, context, storage: Storage) -> None:
+    parts = (message.text or "").split()
+    if len(parts) < 2 or not parts[1].isdigit():
+        await message.reply_text("Чей ID? <code>/whois ID</code>", parse_mode="HTML")
+        return
+    pid = int(parts[1])
+    owner = storage.id_owner(pid)
+    if not owner:
+        await message.reply_text(f"🆔 {pid} — свободен (никем не занят).")
+        return
+    name, username = storage.user_display(owner)
+    who = formatting.format_sender(name or "Пользователь", username)
+    mine = " (это ты)" if owner == message.from_user.id else ""
+    await message.reply_text(
+        f"🆔 <b>{pid}</b> принадлежит: {who}{mine}\n💸 Перевести BED: <code>/sendid {pid} сумма</code>",
+        parse_mode="HTML")
+
+
+async def _id_sendbed(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    parts = (message.text or "").split()
+    if len(parts) < 3 or not parts[1].isdigit() or not parts[2].isdigit():
+        await message.reply_text("💸 Перевод по ID: <code>/sendid ID сумма</code>", parse_mode="HTML")
+        return
+    pid, amount = int(parts[1]), int(parts[2])
+    owner = storage.id_owner(pid)
+    if not owner:
+        await message.reply_text("🆔 Такой ID никем не занят.")
+        return
+    if owner == uid:
+        await message.reply_text("Нельзя переводить самому себе 🙂")
+        return
+    if amount <= 0:
+        await message.reply_text("Сумма должна быть больше 0.")
+        return
+    if not storage.transfer_bed(uid, owner, amount):
+        await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)}.")
+        return
+    await message.reply_text(f"✅ Отправлено {amount} BED владельцу ID {pid}. Баланс: {storage.get_bed(uid)} BED.")
+    try:
+        s_name, s_user = _display_name(message)
+        await context.bot.send_message(
+            owner, f"💸 Тебе перевели {amount} BED (от {formatting.format_sender(s_name, s_user)} по ID {pid})! "
+                   f"Баланс: {storage.get_bed(owner)} BED.")
+    except Exception:
+        pass
+
+
+async def _id_callback(query, context, storage: Storage) -> None:
+    uid = query.from_user.id
+    data = query.data.split(":")
+    op = data[1]
+    storage.ensure_player_id(uid, config.ID_MAX_VALUE)
+
+    async def render_home():
+        body, kb = _id_home_view(storage, uid)
+        try:
+            await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+
+    if op == "open":
+        await query.answer()
+        body, kb = _id_home_view(storage, uid)
+        await context.bot.send_message(query.message.chat_id, body, parse_mode="HTML", reply_markup=kb)
+        return
+    if op == "home":
+        await query.answer()
+        await render_home()
+        return
+    if op == "buy":
+        ok, res = _do_id_buy(storage, uid)
+        if ok:
+            await query.answer(f"🆕 Новый ID: {res}!", show_alert=True)
+        elif res == "limit":
+            await query.answer(f"Лимит ID ({_id_limit(storage, uid)}) достигнут.", show_alert=True)
+        else:
+            await query.answer("Не хватает BED.", show_alert=True)
+        await render_home()
+        return
+    if op == "sellmenu":
+        ids = storage.ids_of(uid)
+        rows = [[InlineKeyboardButton(f"💰 {p} (+{config.ID_SELL_PRICE} BED)",
+                                      callback_data=f"id:sellone:{p}")] for p in ids]
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="id:home")])
+        await query.answer()
+        try:
+            await query.edit_message_text(
+                "💰 <b>Продать боту</b>\nВыбери ID:" if ids else "У тебя нет ID.",
+                parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+        except Exception:
+            pass
+        return
+    if op == "sellone":
+        ok, _ = _do_id_sell(storage, uid, int(data[2]))
+        await query.answer(f"Продано ID {data[2]}." if ok else "Не твой ID.")
+        await render_home()
+        return
+    if op == "listmenu":
+        ids = storage.ids_of(uid)
+        rows = [[InlineKeyboardButton(f"📤 ID {p}", callback_data=f"id:listpick:{p}")] for p in ids]
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="id:home")])
+        await query.answer()
+        try:
+            await query.edit_message_text(
+                "📤 <b>Выставить на аукцион</b>\nВыбери ID:" if ids else "У тебя нет ID.",
+                parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+        except Exception:
+            pass
+        return
+    if op == "listpick":
+        pid = int(data[2])
+        rows = [[InlineKeyboardButton(f"{pr} BED", callback_data=f"id:listat:{pid}:{pr}")]
+                for pr in config.ID_LIST_PRICES]
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="id:home")])
+        await query.answer()
+        try:
+            await query.edit_message_text(f"📤 Цена для ID {pid}:", reply_markup=InlineKeyboardMarkup(rows))
+        except Exception:
+            pass
+        return
+    if op == "listat":
+        pid, price = int(data[2]), int(data[3])
+        if storage.id_owner(pid) != uid:
+            await query.answer("Не твой ID.", show_alert=True)
+        else:
+            storage.list_id(pid, uid, price)
+            await query.answer(f"🏷 ID {pid} на аукционе за {price} BED!", show_alert=True)
+        await render_home()
+        return
+    if op == "auction":
+        await query.answer()
+        body, kb = _id_auction_view(storage, uid)
+        try:
+            await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+        return
+    if op == "buyone":
+        pid = int(data[2])
+        if storage.count_ids(uid) >= _id_limit(storage, uid):
+            await query.answer("Лимит ID достигнут — продай лишний.", show_alert=True)
+            return
+        ok, res = storage.buy_listing(pid, uid)
+        if ok:
+            await query.answer(f"✅ Куплен ID {pid} за {res['price']} BED!", show_alert=True)
+            try:
+                await context.bot.send_message(
+                    res["seller_id"], f"💰 Твой ID {pid} купили на аукционе за {res['price']} BED!")
+            except Exception:
+                pass
+        else:
+            msg = {"funds": "Не хватает BED.", "own": "Это твой лот.",
+                   "gone": "Лот уже продан."}.get(res, "Ошибка.")
+            await query.answer(msg, show_alert=True)
+        body, kb = _id_auction_view(storage, uid)
+        try:
+            await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+        return
+
+
 _URL_RE = re.compile(r"https?://[^\s]+", re.IGNORECASE)
 
 # Creator-partnership kinds: post about the bot somewhere, get a premium promo.
@@ -2101,6 +2386,8 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             return
 
     if text.startswith("/start"):
+        # Give every user their first ID on first contact.
+        storage.ensure_player_id(message.from_user.id, config.ID_MAX_VALUE)
         parts = text.split(maxsplit=1)
         payload = parts[1].strip() if len(parts) == 2 else ""
         # Return from the ad-link: grant the reward.
@@ -2513,7 +2800,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
                                         filename=f"mybackup_{uid}.txt", caption="💾 Ваш личный бэкап")
         return
 
-    if text.startswith("/send"):
+    if text.startswith("/send") and not text.startswith("/sendid"):
         uid = message.from_user.id
         parts = text.split(maxsplit=3)
         if len(parts) < 3:
@@ -2724,6 +3011,34 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     if text.startswith("/lottery") or text.startswith("/лотерея"):
         await _lottery_cmd(message, context, storage)
+        return
+
+    if text.startswith("/buyid"):
+        await _id_buy(message, context, storage)
+        return
+    if text.startswith("/sellid"):
+        await _id_sell(message, context, storage)
+        return
+    if text.startswith("/listid"):
+        await _id_list_cmd(message, context, storage)
+        return
+    if text.startswith("/unlistid"):
+        await _id_unlist_cmd(message, context, storage)
+        return
+    if text.startswith("/idmarket") or text.startswith("/idauction"):
+        body, kb = _id_auction_view(storage, message.from_user.id)
+        await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
+        return
+    if text.startswith("/whois"):
+        await _id_whois(message, context, storage)
+        return
+    if text.startswith("/sendid"):
+        await _id_sendbed(message, context, storage)
+        return
+    if text.startswith("/id") or text.startswith("/myid") or text.startswith("/айди"):
+        storage.ensure_player_id(message.from_user.id, config.ID_MAX_VALUE)
+        body, kb = _id_home_view(storage, message.from_user.id)
+        await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
         return
 
     if text.startswith("/stake"):
@@ -4861,6 +5176,9 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         body, kb = _wheel_preview(storage, query.from_user.id)
         await context.bot.send_message(
             chat_id=query.message.chat_id, text=body, parse_mode="HTML", reply_markup=kb)
+    elif query.data.startswith("id:"):
+        storage = context.bot_data["storage"]
+        await _id_callback(query, context, storage)
     elif query.data.startswith("cas:"):
         await query.answer()
         storage = context.bot_data["storage"]
