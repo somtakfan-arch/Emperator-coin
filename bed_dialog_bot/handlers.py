@@ -1006,6 +1006,7 @@ async def _confirm_referral(invited_id: int, context: ContextTypes.DEFAULT_TYPE,
     if referrer_id is None:
         return
     count = storage.count_referrals(referrer_id)
+    _quest_bump(storage, referrer_id, "invite")
 
     # 🔱 Promo: while active, EVERY confirmed referral grants ULTRA days.
     if time.time() < config.REFERRAL_ULTRA_PROMO_UNTIL:
@@ -1102,6 +1103,8 @@ async def _spin_wheel(message, context, storage: Storage, uid: int) -> None:
             f"{storage.get_bed(uid)} BED.\nПополни: /menu → 🪙 Кошелёк.",
             parse_mode="HTML")
         return
+    _quest_bump(storage, uid, "wheel")
+    await _jackpot_roll(context, message.chat_id, storage, uid, cost)
     import random as _rnd
     prizes = _parse_wheel_prizes()
     beds = [p[0] for p in prizes]
@@ -1278,6 +1281,7 @@ async def _resolve_duel(query, context, storage: Storage) -> None:
     rake = pot * config.DUEL_RAKE_PERCENT // 100
     payout = pot - rake
     win_bal = storage.add_bed(winner, payout, reason="duel_win")
+    _quest_bump(storage, winner, "duelwin")
     res = storage.record_duel_result(winner, loser)
     await query.answer("⚔️ Бой!")
     rake_note = f" (комиссия {rake} BED)" if rake else ""
@@ -1314,6 +1318,54 @@ def _parse_bet(message, storage: Storage):
     return bet, parts[2:]
 
 
+async def _jackpot_roll(context, chat_id, storage: Storage, uid: int, bet: int) -> None:
+    """Feed the progressive pool from a bet and maybe pay it out."""
+    contrib = max(1, bet * config.JACKPOT_CONTRIB_PERCENT // 100)
+    storage.jackpot_add(contrib)
+    import random as _r
+    if _r.random() < config.JACKPOT_HIT_CHANCE:
+        pool = storage.jackpot_get()
+        storage.jackpot_reset(config.JACKPOT_SEED)
+        new_bal = storage.add_bed(uid, pool, reason="jackpot")
+        try:
+            await context.bot.send_message(
+                chat_id,
+                f"🎉🎰 <b>ДЖЕКПОТ-ПУЛ!!!</b>\nТы сорвал общий банк <b>{pool} BED</b>! 🤑\n"
+                f"💰 Баланс: {new_bal} BED", parse_mode="HTML")
+        except Exception:
+            pass
+
+
+def _quest_bump(storage: Storage, uid: int, key: str, inc: int = 1) -> None:
+    storage.quest_bump(uid, key, int(time.time()) // 86400, inc)
+
+
+def _jackpot_text(storage: Storage) -> str:
+    return (f"🎰 <b>Джекпот-пул</b>\n\nОбщий банк: <b>{storage.jackpot_get()} BED</b> 🤑\n\n"
+            f"С каждой ставки в казино <b>{config.JACKPOT_CONTRIB_PERCENT}%</b> капает в пул, "
+            f"и любая игра может сорвать его целиком!\nИграй: /menu → 🎰 Казино")
+
+
+def _quests_view(storage: Storage, uid: int):
+    day = int(time.time()) // 86400
+    lines = ["🎯 <b>Ежедневные задания</b>\n"]
+    rows = []
+    for key, title, target, reward in config.DAILY_QUESTS:
+        r = storage.quest_row(uid, key, day)
+        if r["claimed"]:
+            status = "✅ получено"
+        elif r["progress"] >= target:
+            status = f"🎁 <b>готово — забери +{reward} BED!</b>"
+            rows.append([InlineKeyboardButton(f"🎁 Забрать +{reward} — {title}",
+                                              callback_data=f"quest:claim:{key}")])
+        else:
+            status = f"{min(r['progress'], target)}/{target} · награда +{reward} BED"
+        lines.append(f"{title}\n   {status}")
+    lines.append("\n🕛 Задания обновляются каждый день.")
+    rows.append([InlineKeyboardButton("🔄 Обновить", callback_data="quest:refresh")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
 async def _play_slots(message, context, storage: Storage) -> None:
     uid = message.from_user.id
     bet, extra = _parse_bet(message, storage)
@@ -1327,6 +1379,8 @@ async def _play_slots(message, context, storage: Storage) -> None:
     if not storage.spend_bed(uid, bet, reason="slots"):
         await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)}.")
         return
+    _quest_bump(storage, uid, "play")
+    await _jackpot_roll(context, message.chat_id, storage, uid, bet)
     dice = await context.bot.send_dice(chat_id=message.chat_id, emoji="🎰")
     value = dice.dice.value
     mult = casino.slots_multiplier(value)
@@ -1357,6 +1411,8 @@ async def _play_darts(message, context, storage: Storage) -> None:
     if not storage.spend_bed(uid, bet, reason="darts"):
         await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)}.")
         return
+    _quest_bump(storage, uid, "play")
+    await _jackpot_roll(context, message.chat_id, storage, uid, bet)
     dice = await context.bot.send_dice(chat_id=message.chat_id, emoji="🎯")
     await asyncio.sleep(2)
     if dice.dice.value == 6:
@@ -1390,6 +1446,8 @@ async def _play_roulette(message, context, storage: Storage) -> None:
     if not storage.spend_bed(uid, bet, reason="roulette"):
         await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)}.")
         return
+    _quest_bump(storage, uid, "play")
+    await _jackpot_roll(context, message.chat_id, storage, uid, bet)
     n = casino.roulette_spin()
     color = casino.roulette_color(n)
     emoji = {"red": "🔴", "black": "⚫️", "green": "🟢"}[color]
@@ -1428,6 +1486,8 @@ async def _play_crash(message, context, storage: Storage) -> None:
     if not storage.spend_bed(uid, bet, reason="crash"):
         await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)}.")
         return
+    _quest_bump(storage, uid, "play")
+    await _jackpot_roll(context, message.chat_id, storage, uid, bet)
     crash = casino.roll_crash()
     if crash >= target:
         prize = int(bet * target)
@@ -1493,6 +1553,8 @@ async def _start_mines(message, context, storage: Storage) -> None:
     if not storage.spend_bed(uid, bet, reason="mines"):
         await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)}.")
         return
+    _quest_bump(storage, uid, "play")
+    await _jackpot_roll(context, message.chat_id, storage, uid, bet)
     state = {"game": "mines", "bet": bet, "bombs": bombs,
              "positions": casino.mines_new(bombs), "revealed": set()}
     casino_state[uid] = state
@@ -1612,6 +1674,8 @@ async def _start_blackjack(message, context, storage: Storage) -> None:
     if not storage.spend_bed(uid, bet, reason="blackjack"):
         await message.reply_text(f"❌ Недостаточно BED. Баланс: {storage.get_bed(uid)}.")
         return
+    _quest_bump(storage, uid, "play")
+    await _jackpot_roll(context, message.chat_id, storage, uid, bet)
     state = {"game": "bj", "bet": bet,
              "player": [casino.bj_draw(), casino.bj_draw()],
              "dealer": [casino.bj_draw(), casino.bj_draw()]}
@@ -3038,6 +3102,14 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if text.startswith("/id") or text.startswith("/myid") or text.startswith("/айди"):
         storage.ensure_player_id(message.from_user.id, config.ID_MAX_VALUE)
         body, kb = _id_home_view(storage, message.from_user.id)
+        await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
+        return
+
+    if text.startswith("/jackpot") or text.startswith("/джекпот"):
+        await message.reply_text(_jackpot_text(storage), parse_mode="HTML")
+        return
+    if text.startswith("/quests") or text.startswith("/tasks") or text.startswith("/задания"):
+        body, kb = _quests_view(storage, message.from_user.id)
         await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
         return
 
@@ -5179,6 +5251,30 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     elif query.data.startswith("id:"):
         storage = context.bot_data["storage"]
         await _id_callback(query, context, storage)
+    elif query.data.startswith("quest:"):
+        storage = context.bot_data["storage"]
+        uid = query.from_user.id
+        if query.data == "quest:open":
+            await query.answer()
+            body, kb = _quests_view(storage, uid)
+            await context.bot.send_message(query.message.chat_id, body, parse_mode="HTML", reply_markup=kb)
+        else:
+            if query.data.startswith("quest:claim:"):
+                key = query.data.split(":", 2)[2]
+                day = int(time.time()) // 86400
+                q = next((x for x in config.DAILY_QUESTS if x[0] == key), None)
+                if q and storage.quest_claim(uid, key, day, q[2]):
+                    storage.add_bed(uid, q[3], reason="quest")
+                    await query.answer(f"🎁 +{q[3]} BED!", show_alert=True)
+                else:
+                    await query.answer("Уже получено или ещё не выполнено.", show_alert=True)
+            else:
+                await query.answer()
+            body, kb = _quests_view(storage, uid)
+            try:
+                await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
+            except Exception:
+                pass
     elif query.data.startswith("cas:"):
         await query.answer()
         storage = context.bot_data["storage"]

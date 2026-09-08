@@ -80,6 +80,18 @@ WHEEL_ULTRA_MULT = float(os.environ.get("WHEEL_ULTRA_MULT", "1.15"))
 # 🎰 Casino games: bet limits (BED).
 CASINO_MIN_BET = int(os.environ.get("CASINO_MIN_BET", "1"))
 CASINO_MAX_BET = int(os.environ.get("CASINO_MAX_BET", "500"))
+# 🎰 Progressive jackpot pool: a % of every casino bet feeds a shared pool; each
+# play has a tiny chance to win the whole pool.
+JACKPOT_CONTRIB_PERCENT = int(os.environ.get("JACKPOT_CONTRIB_PERCENT", "3"))
+JACKPOT_HIT_CHANCE = float(os.environ.get("JACKPOT_HIT_CHANCE", "0.0015"))  # ~1/667
+JACKPOT_SEED = int(os.environ.get("JACKPOT_SEED", "100"))
+# 🎯 Daily quests: (key, title, target, reward BED).
+DAILY_QUESTS = [
+    ("play", "🎰 Сыграй в казино 3 раза", 3, 5),
+    ("wheel", "🎡 Крутани колесо фортуны", 1, 3),
+    ("duelwin", "⚔️ Выиграй 1 дуэль", 1, 10),
+    ("invite", "👥 Пригласи 1 друга", 1, 15),
+]
 # 🎟 Lottery: ticket price (BED), house rake (%) and daily draw hour (UTC).
 LOTTERY_TICKET_PRICE = int(os.environ.get("LOTTERY_TICKET_PRICE", "5"))
 LOTTERY_RAKE_PERCENT = int(os.environ.get("LOTTERY_RAKE_PERCENT", "10"))

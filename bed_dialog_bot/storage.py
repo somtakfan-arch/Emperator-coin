@@ -224,6 +224,15 @@ CREATE TABLE IF NOT EXISTS winback (
     sent_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS quests (
+    user_id INTEGER NOT NULL,
+    day INTEGER NOT NULL,
+    key TEXT NOT NULL,
+    progress INTEGER NOT NULL DEFAULT 0,
+    claimed INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, day, key)
+);
+
 CREATE TABLE IF NOT EXISTS player_ids (
     pid INTEGER PRIMARY KEY,
     owner_id INTEGER NOT NULL,
@@ -1308,6 +1317,49 @@ class Storage:
             p.append(status)
         with self._connect() as conn:
             return conn.execute(q, p).fetchone()[0]
+
+    # --- 🎰 Jackpot pool ---
+
+    def jackpot_get(self) -> int:
+        v = self.get_setting("jackpot_pool")
+        return int(v) if v and v.lstrip("-").isdigit() else 0
+
+    def jackpot_add(self, amount: int) -> int:
+        new = self.jackpot_get() + amount
+        self.set_setting("jackpot_pool", str(new))
+        return new
+
+    def jackpot_reset(self, seed: int) -> None:
+        self.set_setting("jackpot_pool", str(seed))
+
+    # --- 🎯 Daily quests ---
+
+    def quest_bump(self, user_id: int, key: str, day: int, inc: int = 1) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO quests (user_id, day, key, progress) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(user_id, day, key) DO UPDATE SET progress = progress + ?",
+                (user_id, day, key, inc, inc))
+
+    def quest_row(self, user_id: int, key: str, day: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT progress, claimed FROM quests WHERE user_id=? AND day=? AND key=?",
+                (user_id, day, key)).fetchone()
+        return {"progress": row[0], "claimed": row[1]} if row else {"progress": 0, "claimed": 0}
+
+    def quest_claim(self, user_id: int, key: str, day: int, target: int) -> bool:
+        """Mark a quest claimed if the target is met and not already claimed."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT progress, claimed FROM quests WHERE user_id=? AND day=? AND key=?",
+                (user_id, day, key)).fetchone()
+            if not row or row[0] < target or row[1]:
+                return False
+            conn.execute(
+                "UPDATE quests SET claimed=1 WHERE user_id=? AND day=? AND key=?",
+                (user_id, day, key))
+        return True
 
     # --- 🆔 Player IDs ---
 

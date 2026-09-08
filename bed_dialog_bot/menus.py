@@ -317,7 +317,8 @@ def kb_main(uid=None, storage=None) -> InlineKeyboardMarkup:
         [_btn("💎 Подписка", "menu:sub", "primary"), _btn("🪙 Кошелёк", "menu:wallet", "success")],
         [_btn("🗓 Ежедневная награда", "daily:claim", "success"),
          _btn("🎰 Казино", "menu:casino", "danger")],
-        [_btn("🆔 Мои ID", "id:open", "primary")],
+        [_btn("🆔 Мои ID", "id:open", "primary"),
+         _btn("🎯 Задания", "quest:open", "success")],
         [_btn("🧩 Мои команды", "mycmds:open", "primary"), _btn("🛒 Магазин команд", "mkt:open", "success")],
         [_btn("🆘 Поддержка", "menu:support", "success"), _btn("🌐 Язык", "lang:menu", "primary")],
     ]
@@ -358,6 +359,7 @@ def cap_casino(uid, storage, bot_username) -> str:
         f"💣 Минёр · 🃏 Блэкджек · 🎟 Лотерея"
         "</blockquote>\n"
         f"💰 Баланс: <b>{bal} BED</b>\n"
+        f"🎰 Джекпот-пул: <b>{storage.jackpot_get()} BED</b> — сорви любой игрой!\n"
         "<i>Выбери игру — покажу как играть. Ставки в BED.</i>"
     )
 
