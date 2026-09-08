@@ -264,8 +264,17 @@ CREATE TABLE IF NOT EXISTS player_ids (
 CREATE TABLE IF NOT EXISTS id_auction (
     pid INTEGER PRIMARY KEY,
     seller_id INTEGER NOT NULL,
-    price INTEGER NOT NULL,
+    start_price INTEGER NOT NULL DEFAULT 1,
+    bid INTEGER NOT NULL DEFAULT 0,
+    bidder INTEGER,
+    ends_at INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS slot_promos (
+    code TEXT PRIMARY KEY,
+    slots INTEGER NOT NULL,
+    uses_left INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS lottery_tickets (
@@ -511,6 +520,16 @@ class Storage:
             conn.execute("ALTER TABLE troll_texts ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'")
         if troll_cols and "file_id" not in troll_cols:
             conn.execute("ALTER TABLE troll_texts ADD COLUMN file_id TEXT")
+        auc_cols = {row[1] for row in conn.execute("PRAGMA table_info(id_auction)")}
+        if auc_cols:
+            if "start_price" not in auc_cols:
+                conn.execute("ALTER TABLE id_auction ADD COLUMN start_price INTEGER NOT NULL DEFAULT 1")
+            if "bid" not in auc_cols:
+                conn.execute("ALTER TABLE id_auction ADD COLUMN bid INTEGER NOT NULL DEFAULT 0")
+            if "bidder" not in auc_cols:
+                conn.execute("ALTER TABLE id_auction ADD COLUMN bidder INTEGER")
+            if "ends_at" not in auc_cols:
+                conn.execute("ALTER TABLE id_auction ADD COLUMN ends_at INTEGER NOT NULL DEFAULT 0")
         tt_cols = {row[1] for row in conn.execute("PRAGMA table_info(tiktok_subs)")}
         if tt_cols and "kind" not in tt_cols:
             conn.execute("ALTER TABLE tiktok_subs ADD COLUMN kind TEXT NOT NULL DEFAULT 'tiktok'")
@@ -1601,79 +1620,198 @@ class Storage:
             return self.assign_random_id(user_id, max_value, cool_chance)
         return None
 
+    def _auction_bidder(self, conn, pid: int):
+        row = conn.execute("SELECT bidder FROM id_auction WHERE pid=?", (pid,)).fetchone()
+        return row[0] if row else None
+
+    def _credit(self, conn, user_id: int, amount: int) -> None:
+        conn.execute(
+            "INSERT INTO bed_balances (user_id, balance) VALUES (?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET balance = balance + ?",
+            (user_id, amount, amount))
+
     def release_id(self, pid: int, owner_id: int) -> bool:
-        """Sell/drop an ID back (must belong to owner_id). Also delists it."""
+        """Sell/drop an ID back to the bot (must belong to owner_id). Refunds an
+        active bidder and delists any auction first."""
         with self._connect() as conn:
+            bidder = self._auction_bidder(conn, pid)
+            if bidder is not None:
+                brow = conn.execute("SELECT bid FROM id_auction WHERE pid=?", (pid,)).fetchone()
+                if brow:
+                    self._credit(conn, bidder, brow[0])
+            conn.execute("DELETE FROM id_auction WHERE pid=?", (pid,))
             cur = conn.execute(
                 "DELETE FROM player_ids WHERE pid=? AND owner_id=?", (pid, owner_id))
-            conn.execute("DELETE FROM id_auction WHERE pid=?", (pid,))
         return cur.rowcount > 0
 
-    # Auction (user-to-user fixed-price listings).
-    def list_id(self, pid: int, seller_id: int, price: int) -> bool:
+    def on_auction(self, pid: int) -> bool:
+        with self._connect() as conn:
+            return conn.execute("SELECT 1 FROM id_auction WHERE pid=?", (pid,)).fetchone() is not None
+
+    # --- 🏷 ID auction (real bidding) ---
+
+    def list_id_auction(self, pid: int, seller_id: int, start_price: int, ends_at: int) -> bool:
+        """List an owned ID for auction. Fails if it isn't the seller's or an
+        active auction with a bid already exists."""
         with self._connect() as conn:
             owner = conn.execute("SELECT owner_id FROM player_ids WHERE pid=?", (pid,)).fetchone()
             if not owner or owner[0] != seller_id:
                 return False
+            existing = conn.execute("SELECT bidder FROM id_auction WHERE pid=?", (pid,)).fetchone()
+            if existing and existing[0] is not None:
+                return False  # active bid — can't relist
             conn.execute(
-                "INSERT INTO id_auction (pid, seller_id, price, created_at) VALUES (?, ?, ?, ?) "
-                "ON CONFLICT(pid) DO UPDATE SET seller_id=excluded.seller_id, price=excluded.price",
-                (pid, seller_id, price, int(time.time())))
+                "INSERT INTO id_auction (pid, seller_id, start_price, bid, bidder, ends_at, created_at) "
+                "VALUES (?, ?, ?, 0, NULL, ?, ?) "
+                "ON CONFLICT(pid) DO UPDATE SET seller_id=excluded.seller_id, "
+                "start_price=excluded.start_price, bid=0, bidder=NULL, ends_at=excluded.ends_at",
+                (pid, seller_id, max(1, start_price), ends_at, int(time.time())))
         return True
 
-    def unlist_id(self, pid: int, seller_id: int) -> bool:
-        with self._connect() as conn:
-            cur = conn.execute(
-                "DELETE FROM id_auction WHERE pid=? AND seller_id=?", (pid, seller_id))
-        return cur.rowcount > 0
-
-    def get_listing(self, pid: int):
+    def cancel_auction(self, pid: int, seller_id: int) -> bool:
+        """Cancel only if there are no bids yet."""
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT pid, seller_id, price FROM id_auction WHERE pid=?", (pid,)).fetchone()
-        return {"pid": row[0], "seller_id": row[1], "price": row[2]} if row else None
+                "SELECT bidder FROM id_auction WHERE pid=? AND seller_id=?", (pid, seller_id)).fetchone()
+            if not row or row[0] is not None:
+                return False
+            conn.execute("DELETE FROM id_auction WHERE pid=?", (pid,))
+        return True
 
-    def all_listings(self, limit: int = 20, exclude_seller=None):
-        q = "SELECT pid, seller_id, price FROM id_auction"
-        p = []
+    def get_auction(self, pid: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT pid, seller_id, start_price, bid, bidder, ends_at FROM id_auction WHERE pid=?",
+                (pid,)).fetchone()
+        if not row:
+            return None
+        return {"pid": row[0], "seller_id": row[1], "start_price": row[2],
+                "bid": row[3], "bidder": row[4], "ends_at": row[5],
+                "min_next": (row[3] + 1) if row[4] is not None else row[2]}
+
+    def all_auctions(self, limit: int = 20, exclude_seller=None):
+        now = int(time.time())
+        q = "SELECT pid, seller_id, start_price, bid, bidder, ends_at FROM id_auction WHERE ends_at > ?"
+        p = [now]
         if exclude_seller is not None:
-            q += " WHERE seller_id != ?"
+            q += " AND seller_id != ?"
             p.append(exclude_seller)
-        q += " ORDER BY price ASC, created_at ASC LIMIT ?"
+        q += " ORDER BY ends_at ASC LIMIT ?"
         p.append(limit)
         with self._connect() as conn:
             rows = conn.execute(q, p).fetchall()
-        return [{"pid": r[0], "seller_id": r[1], "price": r[2]} for r in rows]
+        return [{"pid": r[0], "seller_id": r[1], "start_price": r[2], "bid": r[3],
+                 "bidder": r[4], "ends_at": r[5], "min_next": (r[3] + 1) if r[4] is not None else r[2]}
+                for r in rows]
 
-    def buy_listing(self, pid: int, buyer_id: int):
-        """Atomically transfer a listed ID to the buyer and pay the seller.
-        Returns (ok, reason/price). Balance/limit checks done here."""
+    def place_bid(self, pid: int, bidder_id: int, amount: int):
+        """Place/raise a bid. Escrows the bid (deducts bidder, refunds the
+        previous top bidder). Returns (ok, info/reason)."""
+        now = int(time.time())
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT seller_id, price FROM id_auction WHERE pid=?", (pid,)).fetchone()
+                "SELECT seller_id, start_price, bid, bidder, ends_at FROM id_auction WHERE pid=?",
+                (pid,)).fetchone()
             if not row:
                 return False, "gone"
-            seller_id, price = row[0], row[1]
-            if seller_id == buyer_id:
+            seller_id, start_price, bid, bidder, ends_at = row
+            if ends_at <= now:
+                return False, "ended"
+            if seller_id == bidder_id:
                 return False, "own"
-            bal = conn.execute(
-                "SELECT balance FROM bed_balances WHERE user_id=?", (buyer_id,)).fetchone()
-            if not bal or bal[0] < price:
-                return False, "funds"
-            # still owned by seller?
+            min_next = (bid + 1) if bidder is not None else start_price
+            if amount < min_next:
+                return False, ("low", min_next)
             own = conn.execute("SELECT owner_id FROM player_ids WHERE pid=?", (pid,)).fetchone()
             if not own or own[0] != seller_id:
                 conn.execute("DELETE FROM id_auction WHERE pid=?", (pid,))
                 return False, "gone"
-            conn.execute("UPDATE bed_balances SET balance = balance - ? WHERE user_id=?", (price, buyer_id))
-            conn.execute(
-                "INSERT INTO bed_balances (user_id, balance) VALUES (?, ?) "
-                "ON CONFLICT(user_id) DO UPDATE SET balance = balance + ?",
-                (seller_id, price, price))
-            conn.execute("UPDATE player_ids SET owner_id=?, acquired_at=? WHERE pid=?",
-                         (buyer_id, int(time.time()), pid))
+            bal = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (bidder_id,)).fetchone()
+            if not bal or bal[0] < amount:
+                return False, "funds"
+            conn.execute("UPDATE bed_balances SET balance = balance - ? WHERE user_id=?", (amount, bidder_id))
+            if bidder is not None:
+                self._credit(conn, bidder, bid)  # refund previous top bid (incl. same bidder raising)
+            conn.execute("UPDATE id_auction SET bid=?, bidder=? WHERE pid=?", (amount, bidder_id, pid))
+        return True, {"seller_id": seller_id, "prev_bidder": (bidder if bidder != bidder_id else None)}
+
+    def due_auctions(self, now: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT pid FROM id_auction WHERE ends_at <= ?", (now,)).fetchall()
+        return [r[0] for r in rows]
+
+    def settle_auction(self, pid: int):
+        """Finalize an ended auction: transfer the ID to the winner and pay the
+        seller (bid already escrowed). Returns a summary dict or None."""
+        now = int(time.time())
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT seller_id, bid, bidder FROM id_auction WHERE pid=?", (pid,)).fetchone()
+            if not row:
+                return None
+            seller_id, bid, bidder = row
             conn.execute("DELETE FROM id_auction WHERE pid=?", (pid,))
-        return True, {"seller_id": seller_id, "price": price}
+            if bidder is None:
+                return {"pid": pid, "winner": None, "seller": seller_id}
+            own = conn.execute("SELECT owner_id FROM player_ids WHERE pid=?", (pid,)).fetchone()
+            if not own or own[0] != seller_id:
+                self._credit(conn, bidder, bid)  # seller no longer owns — refund
+                return {"pid": pid, "winner": None, "seller": seller_id, "refunded": bidder}
+            conn.execute("UPDATE player_ids SET owner_id=?, acquired_at=? WHERE pid=?", (bidder, now, pid))
+            from . import config as _cfg
+            payout = bid - bid * _cfg.AUCTION_RAKE_PERCENT // 100
+            self._credit(conn, seller_id, payout)
+            return {"pid": pid, "winner": bidder, "seller": seller_id, "amount": bid, "payout": payout}
+
+    # --- 🆔 ID slot bonus + admin grants + slot promos ---
+
+    def id_slot_bonus(self, user_id: int) -> int:
+        v = self.get_setting(f"idbonus:{user_id}")
+        return int(v) if v and v.lstrip("-").isdigit() else 0
+
+    def add_id_slot_bonus(self, user_id: int, n: int) -> int:
+        new = self.id_slot_bonus(user_id) + n
+        self.set_setting(f"idbonus:{user_id}", str(new))
+        return new
+
+    def grant_id(self, user_id: int, max_value: int, pid=None, cool_chance: float = 0.0):
+        """Admin grant: give a specific free ID (or a random one) to a user,
+        bypassing limits/cost. Returns the pid, or None if unavailable."""
+        if pid is not None:
+            with self._connect() as conn:
+                if self._id_taken(conn, pid):
+                    return None
+                conn.execute(
+                    "INSERT INTO player_ids (pid, owner_id, acquired_at) VALUES (?, ?, ?)",
+                    (pid, user_id, int(time.time())))
+            return pid
+        return self.assign_random_id(user_id, max_value, cool_chance)
+
+    def create_slot_promo(self, code: str, slots: int, uses: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO slot_promos (code, slots, uses_left) VALUES (?, ?, ?) "
+                "ON CONFLICT(code) DO UPDATE SET slots=excluded.slots, uses_left=excluded.uses_left",
+                (code.upper(), slots, uses))
+
+    def redeem_slot_promo(self, code: str, user_id: int):
+        """Returns slots granted, or None if invalid/exhausted/already used."""
+        code = code.upper()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT slots, uses_left FROM slot_promos WHERE code=?", (code,)).fetchone()
+            if not row or row[1] <= 0:
+                return None
+            key = f"slotcode:{code}"
+            already = conn.execute(
+                "SELECT 1 FROM promo_redemptions WHERE code=? AND user_id=?", (key, user_id)).fetchone()
+            if already:
+                return None
+            conn.execute("INSERT INTO promo_redemptions (code, user_id) VALUES (?, ?)", (key, user_id))
+            conn.execute("UPDATE slot_promos SET uses_left = uses_left - 1 WHERE code=?", (code,))
+        self.add_id_slot_bonus(user_id, row[0])
+        return row[0]
 
     # --- 🎟 Lottery ---
 

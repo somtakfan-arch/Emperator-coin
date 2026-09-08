@@ -1841,10 +1841,12 @@ def _lottery_status_text(storage: Storage, uid: int) -> str:
 
 def _id_limit(storage: Storage, uid: int) -> int:
     if storage.is_ultra(uid):
-        return config.ID_HOLD_ULTRA
-    if storage.is_premium(uid):
-        return config.ID_HOLD_PREMIUM
-    return config.ID_HOLD_FREE
+        base = config.ID_HOLD_ULTRA
+    elif storage.is_premium(uid):
+        base = config.ID_HOLD_PREMIUM
+    else:
+        base = config.ID_HOLD_FREE
+    return base + storage.id_slot_bonus(uid)
 
 
 def _id_cool_chance(storage: Storage, uid: int) -> float:
@@ -1859,10 +1861,12 @@ def _id_home_view(storage: Storage, uid: int):
     ids = storage.ids_of(uid)
     limit = _id_limit(storage, uid)
     ids_str = ", ".join(f"<code>{p}</code>" for p in ids) or "—"
+    bonus = storage.id_slot_bonus(uid)
+    bonus_str = f" (+{bonus} докуплено)" if bonus else ""
     text = (
         "🆔 <b>Мои ID</b>\n\n"
         f"Твои ID: {ids_str}\n"
-        f"📦 Слотов занято: <b>{len(ids)}/{limit}</b>\n"
+        f"📦 Слотов занято: <b>{len(ids)}/{limit}</b>{bonus_str}\n"
         f"<i>free {config.ID_HOLD_FREE} · premium {config.ID_HOLD_PREMIUM} · ULTRA {config.ID_HOLD_ULTRA}</i>\n"
         f"💰 Баланс: {storage.get_bed(uid)} BED\n\n"
         f"🆕 Новый ID — {config.ID_BUY_COST} BED · 💰 продать боту — {config.ID_SELL_PRICE} BED\n"
@@ -1877,14 +1881,61 @@ def _id_home_view(storage: Storage, uid: int):
     return text, InlineKeyboardMarkup(rows)
 
 
+def _fmt_left(secs: int) -> str:
+    secs = max(0, secs)
+    if secs >= 3600:
+        return f"{secs // 3600}ч {secs % 3600 // 60}м"
+    return f"{secs // 60}м"
+
+
 def _id_auction_view(storage: Storage, uid: int):
-    listings = storage.all_listings(20, exclude_seller=uid)
-    rows = [[InlineKeyboardButton(f"🏷 ID {l['pid']} — {l['price']} BED",
-                                  callback_data=f"id:buyone:{l['pid']}")] for l in listings]
+    auctions = storage.all_auctions(20, exclude_seller=uid)
+    rows = []
+    for a in auctions:
+        cur = f"{a['bid']} BED" if a["bidder"] is not None else f"старт {a['start_price']} BED"
+        left = _fmt_left(a["ends_at"] - int(time.time()))
+        rows.append([InlineKeyboardButton(f"🏷 ID {a['pid']} · {cur} · ⏳{left}",
+                                          callback_data=f"id:lot:{a['pid']}")])
     rows.append([InlineKeyboardButton("⬅️ К моим ID", callback_data="id:home")])
-    body = ("🏷 <b>Аукцион ID</b>\n\n"
-            + ("Выбери ID для покупки:" if listings else "Пока пусто. Выставь свой: /listid ID цена")
+    body = ("🏷 <b>Аукцион ID</b> (ставки)\n\n"
+            + ("Выбери лот и делай ставку — кто больше, тот и забирает по концу торгов:"
+               if auctions else "Пока лотов нет. Выставь свой: 📤 На аукцион.")
             + f"\n💰 Баланс: {storage.get_bed(uid)} BED")
+    return body, InlineKeyboardMarkup(rows)
+
+
+def _id_lot_view(storage: Storage, uid: int, pid: int):
+    a = storage.get_auction(pid)
+    if not a or a["ends_at"] <= int(time.time()):
+        return "🏷 Лот уже закрыт.", InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Аукцион", callback_data="id:auction")]])
+    left = _fmt_left(a["ends_at"] - int(time.time()))
+    lead = "— (ставок нет)"
+    if a["bidder"] is not None:
+        lead = "🫵 твоя лучшая!" if a["bidder"] == uid else "чужая лидирует"
+    body = (f"🏷 <b>Лот: ID {pid}</b>\n\n"
+            f"💰 Текущая ставка: <b>{a['bid'] if a['bidder'] is not None else a['start_price']} BED</b> {lead}\n"
+            f"📈 Минимальная ставка: <b>{a['min_next']} BED</b>\n"
+            f"⏳ До конца: {left}\n"
+            f"💼 Твой баланс: {storage.get_bed(uid)} BED")
+    rows = []
+    if a["seller_id"] != uid:
+        steps = [a["min_next"]] + [a["min_next"] + s for s in config.AUCTION_BID_STEPS]
+        seen, brow = set(), []
+        for amt in steps:
+            if amt in seen:
+                continue
+            seen.add(amt)
+            brow.append(InlineKeyboardButton(f"💸 {amt}", callback_data=f"id:bid:{pid}:{amt}"))
+            if len(brow) == 3:
+                rows.append(brow)
+                brow = []
+        if brow:
+            rows.append(brow)
+        rows.append([InlineKeyboardButton("🔄", callback_data=f"id:lot:{pid}"),
+                     InlineKeyboardButton("✍️ Своя ставка: /bid", callback_data=f"id:lot:{pid}")])
+    else:
+        rows.append([InlineKeyboardButton("(это твой лот)", callback_data=f"id:lot:{pid}")])
+    rows.append([InlineKeyboardButton("⬅️ Аукцион", callback_data="id:auction")])
     return body, InlineKeyboardMarkup(rows)
 
 
@@ -1940,31 +1991,71 @@ async def _id_sell(message, context, storage: Storage) -> None:
         await message.reply_text("Это не твой ID.")
 
 
+def _do_list_auction(storage: Storage, uid: int, pid: int, start_price: int):
+    if storage.id_owner(pid) != uid:
+        return False, "Это не твой ID."
+    ends = int(time.time()) + config.AUCTION_DURATION_HOURS * 3600
+    sp = max(config.AUCTION_MIN_START, start_price)
+    if not storage.list_id_auction(pid, uid, sp, ends):
+        return False, "На этот ID уже есть ставка — снять/перевыставить нельзя."
+    return True, (f"🏷 ID {pid} выставлен на аукцион!\nСтартовая ставка {sp} BED, "
+                  f"торги {config.AUCTION_DURATION_HOURS} ч. Снять (пока нет ставок): /unlistid {pid}")
+
+
 async def _id_list_cmd(message, context, storage: Storage) -> None:
     uid = message.from_user.id
     parts = (message.text or "").split()
     if len(parts) < 3 or not parts[1].isdigit() or not parts[2].isdigit():
-        await message.reply_text("📤 На аукцион: <code>/listid ID цена</code> (цена в BED).", parse_mode="HTML")
+        await message.reply_text(
+            "📤 На аукцион: <code>/listid ID стартовая_ставка</code>\n"
+            "Дальше люди перебивают ставками, победитель — по концу торгов.", parse_mode="HTML")
         return
-    pid, price = int(parts[1]), int(parts[2])
-    if price <= 0:
-        await message.reply_text("Цена должна быть больше 0.")
-        return
-    if storage.id_owner(pid) != uid:
-        await message.reply_text("Это не твой ID.")
-        return
-    storage.list_id(pid, uid, price)
-    await message.reply_text(f"🏷 ID {pid} выставлен на аукцион за {price} BED. Снять: /unlistid {pid}")
+    ok, msg = _do_list_auction(storage, uid, int(parts[1]), int(parts[2]))
+    await message.reply_text(msg)
 
 
 async def _id_unlist_cmd(message, context, storage: Storage) -> None:
     uid = message.from_user.id
     parts = (message.text or "").split()
     if len(parts) < 2 or not parts[1].isdigit():
-        await message.reply_text("Снять с аукциона: /unlistid ID")
+        await message.reply_text("Снять с аукциона (пока нет ставок): /unlistid ID")
         return
-    ok = storage.unlist_id(int(parts[1]), uid)
-    await message.reply_text("✅ Снято с аукциона." if ok else "Такого лота у тебя нет.")
+    ok = storage.cancel_auction(int(parts[1]), uid)
+    await message.reply_text("✅ Снято с аукциона." if ok else "Нельзя снять: лота нет или на нём уже есть ставка.")
+
+
+async def _place_bid(context, storage: Storage, uid: int, pid: int, amount: int):
+    """Shared bid placement. Returns (ok, message_html)."""
+    ok, info = storage.place_bid(pid, uid, amount)
+    if ok:
+        # Notify the outbid previous leader.
+        prev = info.get("prev_bidder")
+        if prev:
+            try:
+                await context.bot.send_message(
+                    prev, f"📉 Твою ставку на ID {pid} перебили ({amount} BED). Подними: /bid {pid} <сумма>")
+            except Exception:
+                pass
+        return True, f"✅ Ставка принята: <b>{amount} BED</b> на ID {pid}! Ты лидируешь 🏆"
+    reason = info[0] if isinstance(info, tuple) else info
+    msgs = {"gone": "Лот уже закрыт.", "ended": "Торги по этому лоту завершены.",
+            "own": "Нельзя ставить на свой лот.", "funds": "Не хватает BED на ставку."}
+    if reason == "low":
+        return False, f"⚠️ Мало. Минимальная ставка: <b>{info[1]} BED</b>."
+    return False, "⚠️ " + msgs.get(reason, "Не удалось поставить.")
+
+
+async def _id_bid_cmd(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    parts = (message.text or "").split()
+    if len(parts) < 3 or not parts[1].isdigit() or not parts[2].isdigit():
+        await message.reply_text("💸 Ставка: <code>/bid ID сумма</code> (лоты: /idmarket)", parse_mode="HTML")
+        return
+    if storage.count_ids(uid) >= _id_limit(storage, uid):
+        await message.reply_text("📦 Нет свободных слотов ID — освободи или докупи, потом делай ставку.")
+        return
+    ok, info = await _place_bid(context, storage, uid, int(parts[1]), int(parts[2]))
+    await message.reply_text(info, parse_mode="HTML")
 
 
 async def _id_whois(message, context, storage: Storage) -> None:
@@ -2120,22 +2211,21 @@ async def _id_callback(query, context, storage: Storage) -> None:
         return
     if op == "listpick":
         pid = int(data[2])
-        rows = [[InlineKeyboardButton(f"{pr} BED", callback_data=f"id:listat:{pid}:{pr}")]
+        rows = [[InlineKeyboardButton(f"старт {pr} BED", callback_data=f"id:listat:{pid}:{pr}")]
                 for pr in config.ID_LIST_PRICES]
         rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="id:home")])
         await query.answer()
         try:
-            await query.edit_message_text(f"📤 Цена для ID {pid}:", reply_markup=InlineKeyboardMarkup(rows))
+            await query.edit_message_text(
+                f"📤 Стартовая ставка для ID {pid} (торги {config.AUCTION_DURATION_HOURS} ч):",
+                reply_markup=InlineKeyboardMarkup(rows))
         except Exception:
             pass
         return
     if op == "listat":
         pid, price = int(data[2]), int(data[3])
-        if storage.id_owner(pid) != uid:
-            await query.answer("Не твой ID.", show_alert=True)
-        else:
-            storage.list_id(pid, uid, price)
-            await query.answer(f"🏷 ID {pid} на аукционе за {price} BED!", show_alert=True)
+        ok, msg = _do_list_auction(storage, uid, pid, price)
+        await query.answer(msg[:190], show_alert=True)
         await render_home()
         return
     if op == "auction":
@@ -2146,24 +2236,22 @@ async def _id_callback(query, context, storage: Storage) -> None:
         except Exception:
             pass
         return
-    if op == "buyone":
-        pid = int(data[2])
+    if op == "lot":
+        await query.answer()
+        body, kb = _id_lot_view(storage, uid, int(data[2]))
+        try:
+            await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+        return
+    if op == "bid":
+        pid, amount = int(data[2]), int(data[3])
         if storage.count_ids(uid) >= _id_limit(storage, uid):
-            await query.answer("Лимит ID достигнут — продай лишний.", show_alert=True)
+            await query.answer("Нет свободных слотов ID — освободи или докупи.", show_alert=True)
             return
-        ok, res = storage.buy_listing(pid, uid)
-        if ok:
-            await query.answer(f"✅ Куплен ID {pid} за {res['price']} BED!", show_alert=True)
-            try:
-                await context.bot.send_message(
-                    res["seller_id"], f"💰 Твой ID {pid} купили на аукционе за {res['price']} BED!")
-            except Exception:
-                pass
-        else:
-            msg = {"funds": "Не хватает BED.", "own": "Это твой лот.",
-                   "gone": "Лот уже продан."}.get(res, "Ошибка.")
-            await query.answer(msg, show_alert=True)
-        body, kb = _id_auction_view(storage, uid)
+        ok, info = await _place_bid(context, storage, uid, pid, amount)
+        await query.answer(re.sub("<[^>]+>", "", info)[:190], show_alert=True)
+        body, kb = _id_lot_view(storage, uid, pid)
         try:
             await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
         except Exception:
@@ -2628,6 +2716,13 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         arg = parts[1].strip().split()[0] if len(parts) > 1 and parts[1].strip() else ""
         # BED sale promo code takes priority over work.ink keys / premium promos.
         if arg:
+            slots = storage.redeem_slot_promo(arg, uid)
+            if slots is not None:
+                total = storage.id_slot_bonus(uid)
+                await message.reply_text(
+                    f"📦 <b>+{slots} слот(ов) для ID!</b> Теперь докупленных слотов: {total}.\n"
+                    f"Открыть: /id", parse_mode="HTML")
+                return
             disc = storage.get_discount()
             if disc and arg.upper() == disc["code"]:
                 storage.opt_in_bed_sale(uid, disc["code"])  # reuse redemptions table
@@ -3196,6 +3291,48 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if text.startswith("/idmarket") or text.startswith("/idauction"):
         body, kb = _id_auction_view(storage, message.from_user.id)
         await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
+        return
+    if text.startswith("/bid"):
+        await _id_bid_cmd(message, context, storage)
+        return
+    if text.startswith("/giveid"):
+        if not (admin.is_super(message.from_user.id) or admin.has_perm(storage, message.from_user.id, "users")):
+            return
+        parts = (message.text or "").split()
+        if len(parts) < 2 or not parts[1].lstrip("-").isdigit():
+            await message.reply_text(
+                "🆔 Выдать ID: <code>/giveid user_id [конкретный_ID]</code>\n"
+                "Без второго аргумента — случайный (с блатным шансом). Лимит/цена игнорируются.",
+                parse_mode="HTML")
+            return
+        target = int(parts[1])
+        want = int(parts[2]) if len(parts) >= 3 and parts[2].isdigit() else None
+        pid = storage.grant_id(target, config.ID_MAX_VALUE, pid=want,
+                               cool_chance=_id_cool_chance(storage, target))
+        if pid is None:
+            await message.reply_text("❌ Этот ID уже занят (или не удалось выдать).")
+            return
+        await message.reply_text(f"✅ Пользователю {target} выдан ID <b>{pid}</b>.", parse_mode="HTML")
+        try:
+            await context.bot.send_message(target, f"🎁 Администратор выдал тебе ID <b>{pid}</b>!", parse_mode="HTML")
+        except Exception:
+            pass
+        return
+    if text.startswith("/slotpromo"):
+        if not admin.is_super(message.from_user.id):
+            return
+        parts = (message.text or "").split()
+        if len(parts) != 4 or not parts[2].isdigit() or not parts[3].isdigit():
+            await message.reply_text(
+                "📦 Промокод на слоты ID: <code>/slotpromo код слотов активаций</code>\n"
+                "Напр.: <code>/slotpromo SLOTS3 3 100</code> — +3 слота, 100 активаций.\n"
+                "Юзеры вводят: /redeem код", parse_mode="HTML")
+            return
+        code, slots, uses = parts[1].upper(), int(parts[2]), int(parts[3])
+        storage.create_slot_promo(code, slots, uses)
+        await message.reply_text(
+            f"📦 Промокод <code>{html.escape(code)}</code> создан: +{slots} слот(ов) ID, {uses} активаций.\n"
+            f"Юзеры: /redeem {html.escape(code)}", parse_mode="HTML")
         return
     if text.startswith("/whois"):
         await _id_whois(message, context, storage)
@@ -4739,6 +4876,8 @@ _ADMIN_HINTS = {
     "saves": ("saves", "💾 Сохранёнки:\n/getlog <id> — включить запись\n/stoplog <id> — файл\n/photologcheck <id>"),
     "mod": ("moderation", "⛔ Модерация:\n/blacklist <id> [причина]\n/unblacklist <id>\n/clearlog <id|all>\n/clearphotolog <id|all>"),
     "premium": ("premium", "💎 /give premium <id> <дней>\n/gift <id> <дней>"),
+    "giveid": ("users", "🆔 Выдать ID: /giveid <user_id> [конкретный_ID]\n"
+                        "📦 Промо на слоты: /slotpromo <код> <слотов> <активаций>"),
     "broadcast": ("broadcast", "📢 /broadcast <текст>"),
     "promo": ("promo", "🎟 /createpromo <код> <дней> <активаций>\n/winback"),
 }

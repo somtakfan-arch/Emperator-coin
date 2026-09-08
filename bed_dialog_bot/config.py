@@ -153,6 +153,11 @@ ID_LIST_PRICES = [5, 10, 25, 50, 100]  # preset auction prices (BED)
 ID_COOL_CHANCE_FREE = float(os.environ.get("ID_COOL_CHANCE_FREE", "0.05"))
 ID_COOL_CHANCE_PREMIUM = float(os.environ.get("ID_COOL_CHANCE_PREMIUM", "0.4"))
 ID_COOL_CHANCE_ULTRA = float(os.environ.get("ID_COOL_CHANCE_ULTRA", "0.85"))
+# 🏷 ID auction — real bidding. Duration, rake %, min start, and quick-bid steps.
+AUCTION_DURATION_HOURS = int(os.environ.get("AUCTION_DURATION_HOURS", "24"))
+AUCTION_RAKE_PERCENT = int(os.environ.get("AUCTION_RAKE_PERCENT", "0"))
+AUCTION_MIN_START = int(os.environ.get("AUCTION_MIN_START", "1"))
+AUCTION_BID_STEPS = [1, 5, 10, 25]
 
 # 🛍 BED shop: spend BED on premium/ULTRA. (key, title, bed_cost, kind, days)
 SHOP_ITEMS = [

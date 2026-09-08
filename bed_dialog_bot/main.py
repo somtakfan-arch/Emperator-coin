@@ -151,6 +151,35 @@ async def _reminder_loop(application: Application) -> None:
                             pass
         except Exception:
             logger.exception("Lottery draw error")
+        # 🏷 Settle ended ID auctions.
+        try:
+            for pid in storage.due_auctions(int(_time.time())):
+                res = storage.settle_auction(pid)
+                if not res:
+                    continue
+                if res.get("winner"):
+                    try:
+                        await application.bot.send_message(
+                            chat_id=res["winner"],
+                            text=f"🏆 Ты выиграл аукцион! ID <b>{pid}</b> твой за {res['amount']} BED.",
+                            parse_mode="HTML")
+                    except Exception:
+                        pass
+                    try:
+                        await application.bot.send_message(
+                            chat_id=res["seller"],
+                            text=f"💰 Твой ID {pid} продан на аукционе за {res['payout']} BED!")
+                    except Exception:
+                        pass
+                elif res.get("refunded"):
+                    try:
+                        await application.bot.send_message(
+                            chat_id=res["refunded"],
+                            text=f"↩️ Аукцион ID {pid} отменён (продавец больше не владеет им) — ставка возвращена.")
+                    except Exception:
+                        pass
+        except Exception:
+            logger.exception("Auction settle error")
         # 🏆 Weekly duel tournament: award top-3 of the week that just ended.
         try:
             cur_week = storage.current_week()
