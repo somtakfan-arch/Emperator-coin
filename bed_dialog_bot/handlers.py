@@ -3352,26 +3352,44 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         if not (admin.is_super(message.from_user.id) or admin.has_perm(storage, message.from_user.id, "users")):
             return
         parts = (message.text or "").split()
-        if len(parts) < 2 or not parts[1].lstrip("-").isdigit():
+        if len(parts) < 3:
             await message.reply_text(
-                "🆔 Выдать ID: <code>/giveid user_id [ID]</code>\n"
-                "ID может быть числом ИЛИ буквами (напр. <code>/giveid 123 cozpe</code>).\n"
-                "Без второго аргумента — случайный. Лимит/цена игнорируются.",
+                "🆔 <b>Выдать ID человеку</b>\n"
+                "<code>/giveid КОМУ НОВЫЙ_ID</code>\n"
+                "КОМУ — <b>@username</b> или <b>его существующий ID</b> (плей-айди).\n"
+                "НОВЫЙ_ID — число или буквы (напр. <code>cozpe</code>).\n\n"
+                "Пример: <code>/giveid @vasya 8</code> или <code>/giveid 34338 8</code> "
+                "(даст ID 8 владельцу ID 34338).", parse_mode="HTML")
+            return
+        # Resolve WHO: @username, an existing player-ID's owner, or a big raw
+        # telegram user_id (>ID_MAX, since player-IDs are small).
+        tok = parts[1]
+        target = None
+        if tok.startswith("@"):
+            target = storage.find_user_by_username(tok)
+        else:
+            p = _norm_pid(tok)
+            if p is not None and storage.id_owner(p) is not None:
+                target = storage.id_owner(p)
+            elif tok.isdigit() and int(tok) > config.ID_MAX_VALUE:
+                target = int(tok)
+        if not target:
+            await message.reply_text(
+                "❌ Не нашёл человека. Укажи <b>@username</b> или его <b>существующий ID</b>.",
                 parse_mode="HTML")
             return
-        target = int(parts[1])
-        want = None
-        if len(parts) >= 3:
-            want = _norm_pid(parts[2])
-            if want is None:
-                await message.reply_text("⚠️ ID — только латинские буквы/цифры, до 12 символов.")
-                return
+        want = _norm_pid(parts[2])
+        if want is None:
+            await message.reply_text("⚠️ ID — только латинские буквы/цифры, до 12 символов.")
+            return
         pid = storage.grant_id(target, config.ID_MAX_VALUE, pid=want,
                                cool_chance=_id_cool_chance(storage, target))
         if pid is None:
-            await message.reply_text("❌ Этот ID уже занят (или не удалось выдать).")
+            cur = storage.id_owner(want)
+            await message.reply_text(
+                f"❌ ID <b>{want}</b> уже занят (владелец {cur}). Освободи: /delid {want}", parse_mode="HTML")
             return
-        await message.reply_text(f"✅ Пользователю {target} выдан ID <b>{pid}</b>.", parse_mode="HTML")
+        await message.reply_text(f"✅ Человеку (uid {target}) выдан ID <b>{pid}</b>.", parse_mode="HTML")
         try:
             await context.bot.send_message(target, f"🎁 Администратор выдал тебе ID <b>{pid}</b>!", parse_mode="HTML")
         except Exception:
