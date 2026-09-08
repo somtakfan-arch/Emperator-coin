@@ -1901,16 +1901,18 @@ def _fmt_left(secs: int) -> str:
 
 
 def _id_auction_view(storage: Storage, uid: int):
-    auctions = storage.all_auctions(20, exclude_seller=uid)
+    auctions = storage.all_auctions(30)  # show ALL lots (incl. your own, marked)
     rows = []
     for a in auctions:
         cur = f"{a['bid']} BED" if a["bidder"] is not None else f"старт {a['start_price']} BED"
         left = _fmt_left(a["ends_at"] - int(time.time()))
-        rows.append([InlineKeyboardButton(f"🏷 ID {a['pid']} · {cur} · ⏳{left}",
+        mine = " · ТВОЙ" if a["seller_id"] == uid else ""
+        rows.append([InlineKeyboardButton(f"🏷 ID {a['pid']} · {cur} · ⏳{left}{mine}",
                                           callback_data=f"id:lot:{a['pid']}")])
     rows.append([InlineKeyboardButton("⬅️ К моим ID", callback_data="id:home")])
     body = ("🏷 <b>Аукцион ID</b> (ставки)\n\n"
-            + ("Выбери лот и делай ставку — кто больше, тот и забирает по концу торгов:"
+            + ("Выбери лот и делай ставку — кто больше, тот и забирает по концу торгов.\n"
+               "🫵 «ТВОЙ» — твои лоты (снять можно, пока нет ставок):"
                if auctions else "Пока лотов нет. Выставь свой: 📤 На аукцион.")
             + f"\n💰 Баланс: {storage.get_bed(uid)} BED")
     return body, InlineKeyboardMarkup(rows)
@@ -1946,7 +1948,11 @@ def _id_lot_view(storage: Storage, uid: int, pid: int):
         rows.append([InlineKeyboardButton("🔄", callback_data=f"id:lot:{pid}"),
                      InlineKeyboardButton("✍️ Своя ставка: /bid", callback_data=f"id:lot:{pid}")])
     else:
-        rows.append([InlineKeyboardButton("(это твой лот)", callback_data=f"id:lot:{pid}")])
+        if a["bidder"] is None:
+            rows.append([InlineKeyboardButton("🚫 Снять с аукциона", callback_data=f"id:cancel:{pid}")])
+        else:
+            rows.append([InlineKeyboardButton("🫵 Твой лот (есть ставка — снять нельзя)",
+                                              callback_data=f"id:lot:{pid}")])
     rows.append([InlineKeyboardButton("⬅️ Аукцион", callback_data="id:auction")])
     return body, InlineKeyboardMarkup(rows)
 
@@ -2280,6 +2286,16 @@ async def _id_callback(query, context, storage: Storage) -> None:
         ok, info = await _place_bid(context, storage, uid, pid, amount)
         await query.answer(re.sub("<[^>]+>", "", info)[:190], show_alert=True)
         body, kb = _id_lot_view(storage, uid, pid)
+        try:
+            await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+        return
+    if op == "cancel":
+        ok = storage.cancel_auction(data[2], uid)
+        await query.answer("Снято с аукциона." if ok else "Нельзя снять (уже есть ставка).",
+                           show_alert=True)
+        body, kb = _id_auction_view(storage, uid)
         try:
             await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
         except Exception:
