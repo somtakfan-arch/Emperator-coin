@@ -1914,6 +1914,21 @@ def _norm_pid(tok: str):
     return t if _PID_RE.fullmatch(t) else None
 
 
+def _resolve_person(storage: Storage, tok: str):
+    """Resolve a person from a token: @username, an existing player-ID's owner,
+    or a big raw telegram user_id (>ID_MAX). Returns a user_id or None."""
+    if not tok:
+        return None
+    if tok.startswith("@"):
+        return storage.find_user_by_username(tok)
+    p = _norm_pid(tok)
+    if p is not None and storage.id_owner(p) is not None:
+        return storage.id_owner(p)
+    if tok.isdigit() and int(tok) > config.ID_MAX_VALUE:
+        return int(tok)
+    return None
+
+
 def _id_cool_chance(storage: Storage, uid: int) -> float:
     if storage.is_ultra(uid):
         return config.ID_COOL_CHANCE_ULTRA
@@ -2004,8 +2019,8 @@ def _id_lot_view(storage: Storage, uid: int, pid: int):
         if a["bidder"] is None:
             rows.append([InlineKeyboardButton("🚫 Снять с аукциона", callback_data=f"id:cancel:{pid}")])
         else:
-            rows.append([InlineKeyboardButton("🫵 Твой лот (есть ставка — снять нельзя)",
-                                              callback_data=f"id:lot:{pid}")])
+            rows.append([InlineKeyboardButton(f"✅ Забрать по ставке ({a['bid']} BED)",
+                                              callback_data=f"id:accept:{pid}")])
     rows.append([InlineKeyboardButton("⬅️ Аукцион", callback_data="id:auction")])
     return body, InlineKeyboardMarkup(rows)
 
@@ -2348,6 +2363,31 @@ async def _id_callback(query, context, storage: Storage) -> None:
         ok = storage.cancel_auction(data[2], uid)
         await query.answer("Снято с аукциона." if ok else "Нельзя снять (уже есть ставка).",
                            show_alert=True)
+        body, kb = _id_auction_view(storage, uid)
+        try:
+            await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+        return
+    if op == "accept":
+        a = storage.get_auction(data[2])
+        if not a or a["seller_id"] != uid:
+            await query.answer("Это не твой лот.", show_alert=True)
+            return
+        if a["bidder"] is None:
+            await query.answer("Ставок ещё нет — забирать нечего.", show_alert=True)
+            return
+        res = storage.settle_auction(data[2])
+        if res and res.get("winner"):
+            await query.answer(f"✅ Продано за {res['amount']} BED!", show_alert=True)
+            try:
+                await context.bot.send_message(
+                    res["winner"], f"🏆 Продавец закрыл аукцион — ID <b>{data[2]}</b> твой "
+                                   f"за {res['amount']} BED!", parse_mode="HTML")
+            except Exception:
+                pass
+        else:
+            await query.answer("Лот уже закрыт.", show_alert=True)
         body, kb = _id_auction_view(storage, uid)
         try:
             await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
@@ -3485,6 +3525,43 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
     if text.startswith("/sendid"):
         await _id_sendbed(message, context, storage)
+        return
+    if text.startswith("/passid") or text.startswith("/giveaway") or text.startswith("/подарить"):
+        uid = message.from_user.id
+        parts = (message.text or "").split()
+        pid = _norm_pid(parts[1]) if len(parts) >= 2 else None
+        if pid is None or len(parts) < 3:
+            await message.reply_text(
+                "🎁 Передать свой ID человеку:\n<code>/passid ID @username</code> "
+                "(или по его ID/uid).\nПример: <code>/passid 777 @vasya</code>", parse_mode="HTML")
+            return
+        if storage.id_owner(pid) != uid:
+            await message.reply_text("Это не твой ID.")
+            return
+        if storage.count_ids(uid) <= 1:
+            await message.reply_text("🚫 Нельзя передать последний ID — хотя бы один должен остаться.")
+            return
+        if storage.on_auction(pid):
+            await message.reply_text("Сначала сними ID с аукциона: /unlistid " + str(pid))
+            return
+        target = _resolve_person(storage, parts[2])
+        if not target:
+            await message.reply_text("❌ Не нашёл получателя. Укажи @username или его ID.")
+            return
+        if target == uid:
+            await message.reply_text("Нельзя передать самому себе 🙂")
+            return
+        if storage.count_ids(target) >= _id_limit(storage, target):
+            await message.reply_text("📦 У получателя нет свободных слотов ID.")
+            return
+        storage.reassign_id(pid, target)
+        await message.reply_text(f"🎁 ID <b>{pid}</b> передан пользователю (uid {target})!", parse_mode="HTML")
+        try:
+            sn, su = _display_name(message)
+            await context.bot.send_message(
+                target, f"🎁 {formatting.format_sender(sn, su)} подарил тебе ID <b>{pid}</b>!", parse_mode="HTML")
+        except Exception:
+            pass
         return
     if text.startswith("/id") or text.startswith("/myid") or text.startswith("/айди"):
         storage.ensure_player_id(message.from_user.id, config.ID_MAX_VALUE, _id_cool_chance(storage, message.from_user.id))

@@ -1673,9 +1673,16 @@ class Storage:
                 "DELETE FROM player_ids WHERE pid=? AND owner_id=?", (pid, owner_id))
         return cur.rowcount > 0
 
-    def on_auction(self, pid: int) -> bool:
+    def on_auction(self, pid) -> bool:
         with self._connect() as conn:
-            return conn.execute("SELECT 1 FROM id_auction WHERE pid=?", (pid,)).fetchone() is not None
+            return conn.execute("SELECT 1 FROM id_auction WHERE pid=?", (str(pid),)).fetchone() is not None
+
+    def reassign_id(self, pid, new_owner: int) -> None:
+        """Move an ID to a new owner (direct gift). Delists any auction."""
+        with self._connect() as conn:
+            conn.execute("DELETE FROM id_auction WHERE pid=?", (str(pid),))
+            conn.execute("UPDATE player_ids SET owner_id=?, acquired_at=? WHERE pid=?",
+                         (new_owner, int(time.time()), str(pid)))
 
     # --- 🏷 ID auction (real bidding) ---
 
