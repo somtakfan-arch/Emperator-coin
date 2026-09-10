@@ -258,7 +258,8 @@ CREATE TABLE IF NOT EXISTS quests (
 CREATE TABLE IF NOT EXISTS player_ids (
     pid TEXT PRIMARY KEY,
     owner_id INTEGER NOT NULL,
-    acquired_at INTEGER NOT NULL
+    acquired_at INTEGER NOT NULL,
+    locked INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS id_auction (
@@ -543,11 +544,13 @@ class Storage:
         pi_type = next((r[2].upper() for r in pi_cols if r[1] == "pid"), "TEXT")
         if pi_type != "TEXT":
             conn.execute("ALTER TABLE player_ids RENAME TO player_ids_old")
-            conn.execute("CREATE TABLE player_ids (pid TEXT PRIMARY KEY, "
-                         "owner_id INTEGER NOT NULL, acquired_at INTEGER NOT NULL)")
+            conn.execute("CREATE TABLE player_ids (pid TEXT PRIMARY KEY, owner_id INTEGER NOT NULL, "
+                         "acquired_at INTEGER NOT NULL, locked INTEGER NOT NULL DEFAULT 0)")
             conn.execute("INSERT INTO player_ids (pid, owner_id, acquired_at) "
                          "SELECT CAST(pid AS TEXT), owner_id, acquired_at FROM player_ids_old")
             conn.execute("DROP TABLE player_ids_old")
+        elif "locked" not in {r[1] for r in pi_cols}:
+            conn.execute("ALTER TABLE player_ids ADD COLUMN locked INTEGER NOT NULL DEFAULT 0")
         ac_cols = list(conn.execute("PRAGMA table_info(id_auction)").fetchall())
         ac_type = next((r[2].upper() for r in ac_cols if r[1] == "pid"), "TEXT")
         if ac_type != "TEXT":
@@ -1603,6 +1606,23 @@ class Storage:
         with self._connect() as conn:
             return conn.execute(
                 "SELECT COUNT(*) FROM player_ids WHERE owner_id=?", (user_id,)).fetchone()[0]
+
+    def ids_with_lock(self, user_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT pid, locked FROM player_ids WHERE owner_id=? ORDER BY pid", (user_id,)).fetchall()
+        return [{"pid": r[0], "locked": bool(r[1])} for r in rows]
+
+    def is_id_locked(self, pid) -> bool:
+        with self._connect() as conn:
+            row = conn.execute("SELECT locked FROM player_ids WHERE pid=?", (str(pid),)).fetchone()
+        return bool(row and row[0])
+
+    def set_id_lock(self, pid, owner_id: int, locked: bool) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute("UPDATE player_ids SET locked=? WHERE pid=? AND owner_id=?",
+                               (1 if locked else 0, str(pid), owner_id))
+        return cur.rowcount > 0
 
     def id_owner(self, pid: int):
         with self._connect() as conn:

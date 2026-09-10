@@ -1925,9 +1925,10 @@ def _id_cool_chance(storage: Storage, uid: int) -> float:
 
 
 def _id_home_view(storage: Storage, uid: int):
-    ids = storage.ids_of(uid)
+    id_rows = storage.ids_with_lock(uid)
+    ids = [r["pid"] for r in id_rows]
     limit = _id_limit(storage, uid)
-    ids_str = ", ".join(f"<code>{p}</code>" for p in ids) or "—"
+    ids_str = ", ".join(f"<code>{r['pid']}</code>{'🔒' if r['locked'] else ''}" for r in id_rows) or "—"
     bonus = storage.id_slot_bonus(uid)
     bonus_str = f" (+{bonus} докуплено)" if bonus else ""
     text = (
@@ -1942,6 +1943,8 @@ def _id_home_view(storage: Storage, uid: int):
         [InlineKeyboardButton(f"🆕 Купить ID ({config.ID_BUY_COST} BED)", callback_data="id:buy")],
         [InlineKeyboardButton(f"💰 Продать боту ({config.ID_SELL_PRICE})", callback_data="id:sellmenu"),
          InlineKeyboardButton("📤 На аукцион", callback_data="id:listmenu")],
+        [InlineKeyboardButton("🔒 Замки", callback_data="id:locks"),
+         InlineKeyboardButton(f"💰 Продать ВСЕ (кроме 🔒)", callback_data="id:sellall")],
         [InlineKeyboardButton("🏷 Аукцион (купить у людей)", callback_data="id:auction")],
         [InlineKeyboardButton("🔄 Обновить", callback_data="id:home")],
     ]
@@ -2027,6 +2030,8 @@ def _do_id_buy(storage: Storage, uid: int):
 def _do_id_sell(storage: Storage, uid: int, pid: int):
     if storage.id_owner(pid) != uid:
         return False, "own"
+    if storage.is_id_locked(pid):
+        return False, "locked"
     if storage.count_ids(uid) <= 1:
         return False, "last"  # keep at least one ID (anti-dupe)
     if not storage.release_id(pid, uid):
@@ -2063,6 +2068,8 @@ async def _id_sell(message, context, storage: Storage) -> None:
     if ok:
         await message.reply_text(
             f"💰 Продал ID {pid} боту за {config.ID_SELL_PRICE} BED. Баланс: {storage.get_bed(uid)} BED.")
+    elif reason == "locked":
+        await message.reply_text("🔒 ID заложен — сними замок в /id → 🔒 Замки.")
     elif reason == "last":
         await message.reply_text("🚫 Нельзя продать последний ID — хотя бы один должен остаться.")
     else:
@@ -2072,6 +2079,8 @@ async def _id_sell(message, context, storage: Storage) -> None:
 def _do_list_auction(storage: Storage, uid: int, pid: int, start_price: int):
     if storage.id_owner(pid) != uid:
         return False, "Это не твой ID."
+    if storage.is_id_locked(pid):
+        return False, "🔒 ID заложен — сними замок (/id → 🔒 Замки), чтобы выставить."
     if storage.count_ids(uid) <= 1:
         return False, "🚫 Нельзя выставить последний ID — хотя бы один должен остаться."
     ends = int(time.time()) + config.AUCTION_DURATION_HOURS * 3600
@@ -2280,6 +2289,8 @@ async def _id_callback(query, context, storage: Storage) -> None:
         ok, reason = _do_id_sell(storage, uid, data[2])
         if ok:
             await query.answer(f"Продано ID {data[2]}.")
+        elif reason == "locked":
+            await query.answer("🔒 ID заложен — сними замок.", show_alert=True)
         elif reason == "last":
             await query.answer("🚫 Нельзя продать последний ID.", show_alert=True)
         else:
@@ -2345,6 +2356,58 @@ async def _id_callback(query, context, storage: Storage) -> None:
             await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
         except Exception:
             pass
+        return
+    if op == "locks":
+        id_rows = storage.ids_with_lock(uid)
+        rows = [[InlineKeyboardButton(f"{'🔒' if r['locked'] else '🔓'} {r['pid']}",
+                                      callback_data=f"id:lock:{r['pid']}")] for r in id_rows]
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="id:home")])
+        await query.answer()
+        try:
+            await query.edit_message_text(
+                "🔒 <b>Замки на ID</b>\nЖми на ID, чтобы заложить/снять замок.\n"
+                "🔒 — заложен (нельзя продать/передать/на аукцион).\n🔓 — свободен." if id_rows
+                else "У тебя нет ID.",
+                parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+        except Exception:
+            pass
+        return
+    if op == "lock":
+        pid = data[2]
+        if storage.id_owner(pid) == uid:
+            storage.set_id_lock(pid, uid, not storage.is_id_locked(pid))
+            await query.answer("🔒 Заложен" if storage.is_id_locked(pid) else "🔓 Снят")
+        else:
+            await query.answer("Не твой ID.")
+        id_rows = storage.ids_with_lock(uid)
+        rows = [[InlineKeyboardButton(f"{'🔒' if r['locked'] else '🔓'} {r['pid']}",
+                                      callback_data=f"id:lock:{r['pid']}")] for r in id_rows]
+        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="id:home")])
+        try:
+            await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(rows))
+        except Exception:
+            pass
+        return
+    if op == "sellall":
+        id_rows = storage.ids_with_lock(uid)
+        # sellable = not locked, not on auction
+        sellable = [r["pid"] for r in id_rows if not r["locked"] and not storage.on_auction(r["pid"])]
+        locked_or_held = len(id_rows) - len([r for r in id_rows if not r["locked"] and not storage.on_auction(r["pid"])])
+        # keep at least one ID overall
+        if locked_or_held == 0 and sellable:
+            sellable = sellable[1:]  # keep one
+        sold, earned = 0, 0
+        for pid in sellable:
+            if storage.count_ids(uid) <= 1:
+                break
+            if storage.release_id(pid, uid):
+                storage.add_bed(uid, config.ID_SELL_PRICE, reason="id_sell")
+                sold += 1
+                earned += config.ID_SELL_PRICE
+        await query.answer(
+            f"💰 Продано {sold} ID за {earned} BED." if sold else "Нечего продавать (всё заложено).",
+            show_alert=True)
+        await render_home()
         return
     if op == "cancel":
         ok = storage.cancel_auction(data[2], uid)
@@ -3520,6 +3583,9 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             return
         if storage.id_owner(pid) != uid:
             await message.reply_text("Это не твой ID.")
+            return
+        if storage.is_id_locked(pid):
+            await message.reply_text("🔒 ID заложен — сними замок (/id → 🔒 Замки), чтобы передать.")
             return
         if storage.count_ids(uid) <= 1:
             await message.reply_text("🚫 Нельзя передать последний ID — хотя бы один должен остаться.")
