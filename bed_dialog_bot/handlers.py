@@ -1107,22 +1107,15 @@ def _ref_text(storage: Storage, uid: int, bot_username: str) -> str:
 
 
 def _ref_battle_text(storage: Storage, uid: int) -> str:
-    top = storage.ref_season_top(limit=10)
     prizes = config.REFERRAL_BATTLE_PRIZES
     medals = ["🥇", "🥈", "🥉"]
     secs = 7 * 86400 - (int(time.time()) % (7 * 86400))
-    lines = ["🏆 <b>Батл пригласителей недели</b>",
-             f"⏳ До конца: {secs // 86400}д {secs % 86400 // 3600}ч",
-             "🎁 Призы: " + " · ".join(f"{medals[i]} {p} дн. ULTRA" for i, p in enumerate(prizes)) + "\n"]
-    if not top:
-        lines.append("Пока никто не приглашал на этой неделе. Будь первым: /ref")
-    else:
-        for i, r in enumerate(top):
-            who = formatting.format_sender(r["name"] or "Игрок", r["username"])
-            pos = medals[i] if i < 3 else f"{i + 1}."
-            lines.append(f"{pos} {who} — <b>{r['invites']}</b>")
-    lines.append(f"\nТвои приглашения на неделе: <b>{storage.ref_season_my(uid)}</b> · ссылка: /ref")
-    return "\n".join(lines)
+    return "\n".join([
+        "🏆 <b>Батл пригласителей недели</b>",
+        f"⏳ До конца: {secs // 86400}д {secs % 86400 // 3600}ч",
+        "🎁 Призы лучшим: " + " · ".join(f"{medals[i]} {p} дн. ULTRA" for i, p in enumerate(prizes)),
+        f"\n👥 Твои приглашения на неделе: <b>{storage.ref_season_my(uid)}</b>\nЗови друзей: /ref",
+    ])
 
 
 # --- 🎡 Wheel of Fortune ---------------------------------------------------
@@ -1240,22 +1233,16 @@ def _duel_leaderboard(storage: Storage) -> str:
 
 
 def _tournament_text(storage: Storage, uid: int) -> str:
-    top = storage.season_top(limit=10)
     prizes = config.TOURNAMENT_PRIZES
     medals = ["🥇", "🥈", "🥉"]
     secs = 7 * 86400 - (int(time.time()) % (7 * 86400))
-    lines = ["🏆 <b>Недельный турнир дуэлянтов</b>",
-             f"⏳ До конца недели: {secs // 86400}д {secs % 86400 // 3600}ч\n",
-             "🎁 Призы: " + " · ".join(f"{medals[i]} {p} BED" for i, p in enumerate(prizes)) + "\n"]
-    if not top:
-        lines.append("Пока никто не побеждал. Врывайся: <code>/duel @ник ставка</code>!")
-    else:
-        for i, d in enumerate(top):
-            who = formatting.format_sender(d["name"] or "Боец", d["username"])
-            pos = medals[i] if i < 3 else f"{i + 1}."
-            lines.append(f"{pos} {who} — <b>{d['wins']}</b> побед")
-    lines.append(f"\n⚔️ Твои победы на неделе: <b>{storage.season_my_wins(uid)}</b>")
-    return "\n".join(lines)
+    return "\n".join([
+        "🏆 <b>Недельный турнир дуэлянтов</b>",
+        f"⏳ До конца недели: {secs // 86400}д {secs % 86400 // 3600}ч\n",
+        "🎁 Призы лучшим по победам: " + " · ".join(f"{medals[i]} {p} BED" for i, p in enumerate(prizes)),
+        f"\n⚔️ Твои победы на неделе: <b>{storage.season_my_wins(uid)}</b>\n"
+        "Побеждай в дуэлях: <code>/duel @ник ставка</code>",
+    ])
 
 
 async def _start_duel(message, context, storage: Storage) -> None:
@@ -3357,10 +3344,6 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
         return
 
-    if text.startswith("/dtop") or text.startswith("/dueltop"):
-        await message.reply_text(_duel_leaderboard(storage), parse_mode="HTML")
-        return
-
     if text.startswith("/tournament") or text.startswith("/турнир"):
         await message.reply_text(_tournament_text(storage, message.from_user.id), parse_mode="HTML")
         return
@@ -3376,7 +3359,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             f"📊 Рейтинг: <b>{st['rating']}</b>\n"
             f"✅ Побед: {st['wins']} · ❌ Поражений: {st['losses']} · 🎯 Винрейт: {wr}\n"
             f"🔥 Текущая серия: {st['cur_streak']} · Лучшая: {st['best_streak']}\n\n"
-            f"Вызвать на бой: <code>/duel @ник ставка</code> · Топ: /dtop",
+            f"Вызвать на бой: <code>/duel @ник ставка</code>",
             parse_mode="HTML")
         return
 
@@ -3805,11 +3788,6 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if text.startswith("/ref") or text.startswith("/invite"):
         await message.reply_text(_ref_text(storage, message.from_user.id, context.bot.username),
                                  parse_mode="HTML")
-        return
-
-    if text.startswith("/top"):
-        board = _build_leaderboard(storage)
-        await message.reply_text(board)
         return
 
     remind_match = _REMIND_RE.match(text)
