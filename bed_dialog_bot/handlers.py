@@ -5264,12 +5264,7 @@ async def _handle_bed_callback(query, context: ContextTypes.DEFAULT_TYPE) -> Non
                   "Например: <code>123456789 50</code>\n\nОтмена — /cancel"),
             parse_mode="HTML")
     elif action == "top":
-        await query.answer()
-        await context.bot.send_message(
-            chat_id=query.message.chat_id,
-            text=_build_bed_top(storage, uid),
-            parse_mode="HTML",
-        )
+        await query.answer("Топ держателей отключён.", show_alert=True)
     else:
         await query.answer()
 
