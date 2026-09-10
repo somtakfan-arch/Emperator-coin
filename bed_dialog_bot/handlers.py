@@ -1940,7 +1940,8 @@ def _id_home_view(storage: Storage, uid: int):
         f"🆕 Новый ID — {config.ID_BUY_COST} BED · 💰 продать боту — {config.ID_SELL_PRICE} BED\n"
         f"💸 Перевод по ID: <code>/sendid ID сумма</code>")
     rows = [
-        [InlineKeyboardButton(f"🆕 Купить ID ({config.ID_BUY_COST} BED)", callback_data="id:buy")],
+        [InlineKeyboardButton(f"🆕 Купить ID ({config.ID_BUY_COST})", callback_data="id:buy"),
+         InlineKeyboardButton(f"🆕 Купить 5 ({config.ID_BUY_COST * 5})", callback_data="id:buy5")],
         [InlineKeyboardButton(f"💰 Продать боту ({config.ID_SELL_PRICE})", callback_data="id:sellmenu"),
          InlineKeyboardButton("📤 На аукцион", callback_data="id:listmenu")],
         [InlineKeyboardButton("🔒 Замки", callback_data="id:locks"),
@@ -2016,15 +2017,32 @@ def _id_lot_view(storage: Storage, uid: int, pid: int):
 
 
 def _do_id_buy(storage: Storage, uid: int):
-    if storage.count_ids(uid) >= _id_limit(storage, uid):
-        return False, "limit"
-    if not storage.spend_bed(uid, config.ID_BUY_COST, reason="id_buy"):
-        return False, "funds"
-    pid = storage.assign_random_id(uid, config.ID_MAX_VALUE, _id_cool_chance(storage, uid))
-    if pid is None:
-        storage.add_bed(uid, config.ID_BUY_COST, reason="id_refund")
-        return False, "full"
-    return True, pid
+    pids, err = _do_id_buy_n(storage, uid, 1)
+    if pids:
+        return True, pids[0]
+    return False, err
+
+
+def _do_id_buy_n(storage: Storage, uid: int, n: int):
+    """Buy up to n IDs at once. Returns (list_of_pids, error). Buys as many as
+    fit the hold limit and the balance (never partial-charges for unbought)."""
+    free = _id_limit(storage, uid) - storage.count_ids(uid)
+    if free <= 0:
+        return [], "limit"
+    afford = storage.get_bed(uid) // config.ID_BUY_COST
+    k = min(n, free, afford)
+    if k <= 0:
+        return [], "funds"
+    if not storage.spend_bed(uid, k * config.ID_BUY_COST, reason="id_buy"):
+        return [], "funds"
+    pids = []
+    for _ in range(k):
+        pid = storage.assign_random_id(uid, config.ID_MAX_VALUE, _id_cool_chance(storage, uid))
+        if pid:
+            pids.append(pid)
+    if len(pids) < k:  # refund any that failed to assign (near-impossible)
+        storage.add_bed(uid, (k - len(pids)) * config.ID_BUY_COST, reason="id_refund")
+    return pids, None
 
 
 def _do_id_sell(storage: Storage, uid: int, pid: int):
@@ -2040,18 +2058,23 @@ def _do_id_sell(storage: Storage, uid: int, pid: int):
     return True, None
 
 
-async def _id_buy(message, context, storage: Storage) -> None:
+async def _id_buy(message, context, storage: Storage, n: int = 1) -> None:
     uid = message.from_user.id
-    ok, res = _do_id_buy(storage, uid)
-    if ok:
+    parts = (message.text or "").split()
+    if n == 1 and len(parts) >= 2 and parts[1].isdigit():
+        n = int(parts[1])
+    n = max(1, min(n, 20))
+    pids, err = _do_id_buy_n(storage, uid, n)
+    if pids:
+        spent = len(pids) * config.ID_BUY_COST
+        got = ", ".join(f"<b>{p}</b>" for p in pids)
         await message.reply_text(
-            f"🆕 Ты получил новый ID: <b>{res}</b>! (−{config.ID_BUY_COST} BED)\n"
-            f"💰 Баланс: {storage.get_bed(uid)} BED", parse_mode="HTML")
-    elif res == "limit":
+            f"🆕 Куплено ID: {got} (−{spent} BED)\n💰 Баланс: {storage.get_bed(uid)} BED", parse_mode="HTML")
+    elif err == "limit":
         await message.reply_text(
             f"📦 Достигнут лимит ID ({_id_limit(storage, uid)}). Продай лишний или оформи премиум/ULTRA.")
     else:
-        await message.reply_text(f"❌ Нужно {config.ID_BUY_COST} BED. Баланс: {storage.get_bed(uid)}.")
+        await message.reply_text(f"❌ Нужно {config.ID_BUY_COST} BED за ID. Баланс: {storage.get_bed(uid)}.")
 
 
 async def _id_sell(message, context, storage: Storage) -> None:
@@ -2262,11 +2285,11 @@ async def _id_callback(query, context, storage: Storage) -> None:
         await query.answer()
         await render_home()
         return
-    if op == "buy":
-        ok, res = _do_id_buy(storage, uid)
-        if ok:
-            await query.answer(f"🆕 Новый ID: {res}!", show_alert=True)
-        elif res == "limit":
+    if op in ("buy", "buy5"):
+        pids, err = _do_id_buy_n(storage, uid, 5 if op == "buy5" else 1)
+        if pids:
+            await query.answer(f"🆕 Куплено {len(pids)} ID: {', '.join(pids)}", show_alert=True)
+        elif err == "limit":
             await query.answer(f"Лимит ID ({_id_limit(storage, uid)}) достигнут.", show_alert=True)
         else:
             await query.answer("Не хватает BED.", show_alert=True)
