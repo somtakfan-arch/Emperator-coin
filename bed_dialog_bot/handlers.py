@@ -19,7 +19,7 @@ from telegram import (
 )
 from telegram.ext import ContextTypes
 
-from . import admin, adlink, bedcoin, casino, cmdengine, commands, config, crypto, formatting, i18n, media, menus, texts, ton, workink
+from . import admin, adlink, bedcoin, casino, cmdengine, commands, config, crypto, formatting, i18n, idrarity, media, menus, texts, ton, workink
 from .storage import Storage
 
 
@@ -1928,16 +1928,23 @@ def _id_home_view(storage: Storage, uid: int):
     id_rows = storage.ids_with_lock(uid)
     ids = [r["pid"] for r in id_rows]
     limit = _id_limit(storage, uid)
-    ids_str = ", ".join(f"<code>{r['pid']}</code>{'🔒' if r['locked'] else ''}" for r in id_rows) or "—"
+    ids_str = ", ".join(
+        f"{idrarity.badge(r['pid'])}<code>{r['pid']}</code>{'🔒' if r['locked'] else ''}"
+        for r in id_rows) or "—"
     bonus = storage.id_slot_bonus(uid)
     bonus_str = f" (+{bonus} докуплено)" if bonus else ""
+    # best ID by rarity — a little flex line
+    best = max(ids, key=lambda p: idrarity.classify(p)["score"]) if ids else None
+    best_str = f"⭐ Топ ID: {idrarity.badge(best)} <code>{best}</code> — {idrarity.label(best).split(' ',1)[1]} (~{idrarity.appraise(best, config.ID_BUY_COST)} BED)\n" if best else ""
     text = (
         "🆔 <b>Мои ID</b>\n\n"
         f"Твои ID: {ids_str}\n"
+        f"{best_str}"
         f"📦 Слотов занято: <b>{len(ids)}/{limit}</b>{bonus_str}\n"
         f"<i>free {config.ID_HOLD_FREE} · premium {config.ID_HOLD_PREMIUM} · ULTRA {config.ID_HOLD_ULTRA}</i>\n"
         f"💰 Баланс: {storage.get_bed(uid)} BED\n\n"
         f"🆕 Новый ID — {config.ID_BUY_COST} BED · 💰 продать боту — {config.ID_SELL_PRICE} BED\n"
+        f"🔎 Карточка/редкость: <code>/whois ID</code> · ✍️ <code>/engrave ID текст</code>\n"
         f"💸 Перевод по ID: <code>/sendid ID сумма</code>")
     rows = [
         [InlineKeyboardButton(f"🆕 Купить ID ({config.ID_BUY_COST})", callback_data="id:buy"),
@@ -1947,7 +1954,8 @@ def _id_home_view(storage: Storage, uid: int):
         [InlineKeyboardButton("🔒 Замки", callback_data="id:locks"),
          InlineKeyboardButton(f"💰 Продать ВСЕ (кроме 🔒)", callback_data="id:sellall")],
         [InlineKeyboardButton("🏷 Аукцион (купить у людей)", callback_data="id:auction")],
-        [InlineKeyboardButton("🔄 Обновить", callback_data="id:home")],
+        [InlineKeyboardButton("🏅 Коллекции", callback_data="id:sets"),
+         InlineKeyboardButton("🔄 Обновить", callback_data="id:home")],
     ]
     return text, InlineKeyboardMarkup(rows)
 
@@ -2004,7 +2012,8 @@ def _id_sellmenu_view(storage: Storage, uid: int, page: int = 0):
 
 def _id_listmenu_view(storage: Storage, uid: int, page: int = 0):
     ids = storage.ids_of(uid)
-    btns = [InlineKeyboardButton(f"📤 ID {p}", callback_data=f"id:listpick:{p}") for p in ids]
+    btns = [InlineKeyboardButton(f"📤 {idrarity.badge(p)} ID {p} (~{idrarity.appraise(p, config.ID_BUY_COST)})",
+                                 callback_data=f"id:listpick:{p}") for p in ids]
     if not btns:
         return "У тебя нет ID.", InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="id:home")]])
     rows, page, pages = _paged_rows(btns, page, "id:listmenu")
@@ -2018,7 +2027,7 @@ def _id_auction_view(storage: Storage, uid: int, page: int = 0):
         cur = f"{a['bid']} BED" if a["bidder"] is not None else f"старт {a['start_price']} BED"
         left = _fmt_left(a["ends_at"] - int(time.time()))
         mine = " · ТВОЙ" if a["seller_id"] == uid else ""
-        btns.append(InlineKeyboardButton(f"🏷 ID {a['pid']} · {cur} · ⏳{left}{mine}",
+        btns.append(InlineKeyboardButton(f"{idrarity.badge(a['pid'])} ID {a['pid']} · {cur} · ⏳{left}{mine}",
                                          callback_data=f"id:lot:{a['pid']}"))
     if not btns:
         rows = [[InlineKeyboardButton("⬅️ К моим ID", callback_data="id:home")]]
@@ -2040,7 +2049,9 @@ def _id_lot_view(storage: Storage, uid: int, pid: int):
     lead = "— (ставок нет)"
     if a["bidder"] is not None:
         lead = "🫵 твоя лучшая!" if a["bidder"] == uid else "чужая лидирует"
-    body = (f"🏷 <b>Лот: ID {pid}</b>\n\n"
+    cls = idrarity.classify(pid)
+    body = (f"🏷 <b>Лот: ID {pid}</b> {cls['emoji']}\n"
+            f"{cls['emoji']} {cls['name']} · 💎 оценка ~{idrarity.appraise(pid, config.ID_BUY_COST)} BED\n\n"
             f"💰 Текущая ставка: <b>{a['bid'] if a['bidder'] is not None else a['start_price']} BED</b> {lead}\n"
             f"📈 Минимальная ставка: <b>{a['min_next']} BED</b>\n"
             f"⏳ До конца: {left}\n"
@@ -2069,6 +2080,24 @@ def _id_lot_view(storage: Storage, uid: int, pid: int):
                                               callback_data=f"id:accept:{pid}")])
     rows.append([InlineKeyboardButton("⬅️ Аукцион", callback_data="id:auction")])
     return body, InlineKeyboardMarkup(rows)
+
+
+def _id_sets_view(storage: Storage, uid: int):
+    owned = storage.ids_of(uid)
+    prog = idrarity.set_progress(owned)
+    done = sum(1 for p in prog if p["done"])
+    lines = ["🏅 <b>Коллекции ID</b>\n",
+             "Собери все ID из набора — получишь статус коллекционера. "
+             "Чисто флекс и цель для охотников за крутыми ID.\n"]
+    if done:
+        lines.append(f"✅ Собрано наборов: <b>{done}/{len(prog)}</b> — ты коллекционер! 🏆\n")
+    for p in prog:
+        mark = "✅" if p["done"] else f"{p['have']}/{p['total']}"
+        miss = "" if p["done"] else "  <i>нужно: " + ", ".join(p["missing"][:6]) + "</i>"
+        lines.append(f"{mark} <b>{p['title']}</b>{miss}")
+    rows = [[InlineKeyboardButton("🔄 Обновить", callback_data="id:sets"),
+             InlineKeyboardButton("⬅️ Назад", callback_data="id:home")]]
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 def _do_id_buy(storage: Storage, uid: int):
@@ -2234,16 +2263,31 @@ async def _id_whois(message, context, storage: Storage) -> None:
     if pid is None:
         await message.reply_text("Чей ID? <code>/whois ID</code>", parse_mode="HTML")
         return
+    uid = message.from_user.id
     owner = storage.id_owner(pid)
-    if not owner:
-        await message.reply_text(f"🆔 {pid} — свободен (никем не занят).")
-        return
-    name, username = storage.user_display(owner)
-    who = formatting.format_sender(name or "Пользователь", username)
-    mine = " (это ты)" if owner == message.from_user.id else ""
-    await message.reply_text(
-        f"🆔 <b>{pid}</b> принадлежит: {who}{mine}\n💸 Перевести BED: <code>/sendid {pid} сумма</code>",
-        parse_mode="HTML")
+    cls = idrarity.classify(pid)
+    val = idrarity.appraise(pid, config.ID_BUY_COST)
+    meta = storage.id_meta_get(pid)
+    # Anonymous card: rarity + appraisal + provenance. Never reveals WHO owns it.
+    stars = "★" * min(5, 1 + cls["score"] // 20)
+    lines = [
+        f"🆔 <b>{html.escape(str(pid))}</b>  {cls['emoji']}",
+        f"{cls['emoji']} Редкость: <b>{cls['name']}</b> {stars}",
+        f"💎 Оценка: <b>~{val} BED</b>",
+    ]
+    if owner:
+        mine = " — <b>это твой</b> 🫵" if owner == uid else ""
+        lines.append(f"📌 Статус: занят{mine}")
+    else:
+        lines.append(f"📌 Статус: <b>свободен</b> — можно поймать за {config.ID_BUY_COST} BED (/id → 🆕)")
+    lines.append(f"🔁 Сменил владельцев: <b>{meta['transfers']}</b> раз")
+    if meta.get("engraving"):
+        lines.append(f"✍️ Гравировка: <i>«{html.escape(meta['engraving'])}»</i>")
+    if owner == uid:
+        lines.append("\n✍️ Оставь подпись: <code>/engrave " + html.escape(str(pid)) + " твой текст</code>")
+    elif owner:
+        lines.append(f"\n💸 Перевести BED: <code>/sendid {html.escape(str(pid))} сумма</code>")
+    await message.reply_text("\n".join(lines), parse_mode="HTML")
 
 
 async def _id_sendbed(message, context, storage: Storage) -> None:
@@ -2340,6 +2384,14 @@ async def _id_callback(query, context, storage: Storage) -> None:
         await query.answer()
         await render_home()
         return
+    if op == "sets":
+        await query.answer()
+        body, kb = _id_sets_view(storage, uid)
+        try:
+            await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+        return
     if op in ("buy", "buy5"):
         pids, err = _do_id_buy_n(storage, uid, 5 if op == "buy5" else 1)
         if pids:
@@ -2381,14 +2433,20 @@ async def _id_callback(query, context, storage: Storage) -> None:
         return
     if op == "listpick":
         pid = data[2]
-        rows = [[InlineKeyboardButton(f"старт {pr} BED", callback_data=f"id:listat:{pid}:{pr}")]
-                for pr in config.ID_LIST_PRICES]
+        appr = idrarity.appraise(pid, config.ID_BUY_COST)
+        cls = idrarity.classify(pid)
+        prices = sorted(set(config.ID_LIST_PRICES + [appr]))
+        rows = [[InlineKeyboardButton(
+            f"старт {pr} BED" + (" 💎 оценка" if pr == appr else ""),
+            callback_data=f"id:listat:{pid}:{pr}")] for pr in prices]
         rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="id:home")])
         await query.answer()
         try:
             await query.edit_message_text(
-                f"📤 Стартовая ставка для ID {pid} (торги {config.AUCTION_DURATION_HOURS} ч):",
-                reply_markup=InlineKeyboardMarkup(rows))
+                f"📤 <b>ID {pid}</b> {cls['emoji']} {cls['name']}\n"
+                f"💎 Рыночная оценка: <b>~{appr} BED</b>\n"
+                f"Выбери стартовую ставку (торги {config.AUCTION_DURATION_HOURS} ч):",
+                parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
         except Exception:
             pass
         return
@@ -3629,6 +3687,31 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
     if text.startswith("/whois"):
         await _id_whois(message, context, storage)
+        return
+    if text.startswith("/idsets") or text.startswith("/collections") or text.startswith("/коллекции"):
+        body, kb = _id_sets_view(storage, message.from_user.id)
+        await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
+        return
+    if text.startswith("/engrave") or text.startswith("/гравировка"):
+        uid = message.from_user.id
+        parts = (message.text or "").split(maxsplit=2)
+        pid = _norm_pid(parts[1]) if len(parts) >= 2 else None
+        if pid is None:
+            await message.reply_text(
+                "✍️ Гравировка на своём ID (видна всем в /whois):\n"
+                "<code>/engrave ID твой текст</code>\n"
+                "Стереть: <code>/engrave ID</code> (без текста)", parse_mode="HTML")
+            return
+        if storage.id_owner(pid) != uid:
+            await message.reply_text("Это не твой ID — гравировать нельзя.")
+            return
+        note = parts[2].strip()[:40] if len(parts) >= 3 else ""
+        storage.set_engraving(pid, uid, note)
+        if note:
+            await message.reply_text(
+                f"✍️ Гравировка на ID <b>{html.escape(str(pid))}</b>: «{html.escape(note)}»", parse_mode="HTML")
+        else:
+            await message.reply_text(f"🧽 Гравировка с ID {pid} стёрта.")
         return
     if text.startswith("/sendid"):
         await _id_sendbed(message, context, storage)

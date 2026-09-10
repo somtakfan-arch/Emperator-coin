@@ -272,6 +272,13 @@ CREATE TABLE IF NOT EXISTS id_auction (
     created_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS id_meta (
+    pid TEXT PRIMARY KEY,
+    transfers INTEGER NOT NULL DEFAULT 0,
+    engraving TEXT,
+    first_at INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS slot_promos (
     code TEXT PRIMARY KEY,
     slots INTEGER NOT NULL,
@@ -1638,6 +1645,44 @@ class Storage:
     def _id_taken(self, conn, pid: int) -> bool:
         return conn.execute("SELECT 1 FROM player_ids WHERE pid=?", (pid,)).fetchone() is not None
 
+    # --- 🆔 ID provenance / engraving (anonymous) ---
+
+    def _meta_acquire(self, conn, pid) -> None:
+        """Record an ownership acquisition for provenance. First time creates
+        the row; later acquisitions bump the transfer counter. Never stores
+        WHO — only how many times the ID has changed hands."""
+        pid = str(pid)
+        row = conn.execute("SELECT 1 FROM id_meta WHERE pid=?", (pid,)).fetchone()
+        if row:
+            conn.execute("UPDATE id_meta SET transfers=transfers+1 WHERE pid=?", (pid,))
+        else:
+            conn.execute(
+                "INSERT INTO id_meta (pid, transfers, first_at) VALUES (?, 0, ?)",
+                (pid, int(time.time())))
+
+    def id_meta_get(self, pid) -> dict:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT transfers, engraving, first_at FROM id_meta WHERE pid=?",
+                (str(pid),)).fetchone()
+        if not row:
+            return {"transfers": 0, "engraving": None, "first_at": 0}
+        return {"transfers": row[0], "engraving": row[1], "first_at": row[2]}
+
+    def set_engraving(self, pid, owner_id: int, text) -> bool:
+        """Owner-only: engrave (or clear, with empty text) a short public note
+        on an ID. Returns False if the caller does not own the ID."""
+        pid = str(pid)
+        with self._connect() as conn:
+            own = conn.execute("SELECT owner_id FROM player_ids WHERE pid=?", (pid,)).fetchone()
+            if not own or own[0] != owner_id:
+                return False
+            conn.execute("INSERT OR IGNORE INTO id_meta (pid, transfers, first_at) "
+                         "VALUES (?, 0, ?)", (pid, int(time.time())))
+            conn.execute("UPDATE id_meta SET engraving=? WHERE pid=?",
+                         ((text or None), pid))
+        return True
+
     def assign_random_id(self, user_id: int, max_value: int, cool_chance: float = 0.0):
         """Give the user a fresh random unused ID. With probability cool_chance
         the roll is drawn from the 'cool' pool (short / repeated-digit IDs) —
@@ -1653,6 +1698,7 @@ class Storage:
                         conn.execute(
                             "INSERT INTO player_ids (pid, owner_id, acquired_at) VALUES (?, ?, ?)",
                             (pid, user_id, int(time.time())))
+                        self._meta_acquire(conn, pid)
                         return pid
             for _ in range(200):
                 pid = str(_r.randint(0, max_value))
@@ -1660,6 +1706,7 @@ class Storage:
                     conn.execute(
                         "INSERT INTO player_ids (pid, owner_id, acquired_at) VALUES (?, ?, ?)",
                         (pid, user_id, int(time.time())))
+                    self._meta_acquire(conn, pid)
                     return pid
         return None
 
@@ -1703,6 +1750,7 @@ class Storage:
             conn.execute("DELETE FROM id_auction WHERE pid=?", (str(pid),))
             conn.execute("UPDATE player_ids SET owner_id=?, acquired_at=? WHERE pid=?",
                          (new_owner, int(time.time()), str(pid)))
+            self._meta_acquire(conn, pid)
 
     # --- 🏷 ID auction (real bidding) ---
 
@@ -1815,6 +1863,7 @@ class Storage:
                 self._credit(conn, bidder, bid)  # seller no longer owns — refund
                 return {"pid": pid, "winner": None, "seller": seller_id, "refunded": bidder}
             conn.execute("UPDATE player_ids SET owner_id=?, acquired_at=? WHERE pid=?", (bidder, now, pid))
+            self._meta_acquire(conn, pid)
             from . import config as _cfg
             payout = bid - bid * _cfg.AUCTION_RAKE_PERCENT // 100
             self._credit(conn, seller_id, payout)
@@ -1843,6 +1892,7 @@ class Storage:
                 conn.execute(
                     "INSERT INTO player_ids (pid, owner_id, acquired_at) VALUES (?, ?, ?)",
                     (pid, user_id, int(time.time())))
+                self._meta_acquire(conn, pid)
             return pid
         return self.assign_random_id(user_id, max_value, cool_chance)
 
