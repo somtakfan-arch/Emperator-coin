@@ -1959,20 +1959,75 @@ def _fmt_left(secs: int) -> str:
     return f"{secs // 60}м"
 
 
-def _id_auction_view(storage: Storage, uid: int):
-    auctions = storage.all_auctions(30)  # show ALL lots (incl. your own, marked)
-    rows = []
+_ID_PER_PAGE = 6
+
+
+def _paged_rows(buttons, page, nav_op, back_cb="id:home", per=_ID_PER_PAGE):
+    """Wrap a flat list of single buttons into a paginated keyboard: PER per
+    page, with ◀️/▶️ nav + a page indicator + a Back button."""
+    pages = max(1, (len(buttons) + per - 1) // per)
+    page = max(0, min(page, pages - 1))
+    rows = [[b] for b in buttons[page * per:(page + 1) * per]]
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton("◀️", callback_data=f"{nav_op}:{page - 1}"))
+    if pages > 1:
+        nav.append(InlineKeyboardButton(f"стр. {page + 1}/{pages}", callback_data=f"{nav_op}:{page}"))
+    if page < pages - 1:
+        nav.append(InlineKeyboardButton("▶️", callback_data=f"{nav_op}:{page + 1}"))
+    if nav:
+        rows.append(nav)
+    rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back_cb)])
+    return rows, page, pages
+
+
+def _id_locks_view(storage: Storage, uid: int, page: int = 0):
+    id_rows = storage.ids_with_lock(uid)
+    btns = [InlineKeyboardButton(f"{'🔒' if r['locked'] else '🔓'} {r['pid']}",
+                                 callback_data=f"id:lock:{r['pid']}:{page}") for r in id_rows]
+    if not btns:
+        return "У тебя нет ID.", InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="id:home")]])
+    rows, page, pages = _paged_rows(btns, page, "id:locks")
+    body = ("🔒 <b>Замки на ID</b>\nЖми на ID — заложить/снять замок.\n"
+            "🔒 заложен (нельзя продать/передать/на аукцион) · 🔓 свободен")
+    return body, InlineKeyboardMarkup(rows)
+
+
+def _id_sellmenu_view(storage: Storage, uid: int, page: int = 0):
+    ids = storage.ids_of(uid)
+    btns = [InlineKeyboardButton(f"💰 {p} (+{config.ID_SELL_PRICE})", callback_data=f"id:sellone:{p}") for p in ids]
+    if not btns:
+        return "У тебя нет ID.", InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="id:home")]])
+    rows, page, pages = _paged_rows(btns, page, "id:sellmenu")
+    return "💰 <b>Продать боту</b>\nВыбери ID (🔒 заложенные не продаются):", InlineKeyboardMarkup(rows)
+
+
+def _id_listmenu_view(storage: Storage, uid: int, page: int = 0):
+    ids = storage.ids_of(uid)
+    btns = [InlineKeyboardButton(f"📤 ID {p}", callback_data=f"id:listpick:{p}") for p in ids]
+    if not btns:
+        return "У тебя нет ID.", InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="id:home")]])
+    rows, page, pages = _paged_rows(btns, page, "id:listmenu")
+    return "📤 <b>Выставить на аукцион</b>\nВыбери ID:", InlineKeyboardMarkup(rows)
+
+
+def _id_auction_view(storage: Storage, uid: int, page: int = 0):
+    auctions = storage.all_auctions(200)  # show ALL lots (incl. your own, marked)
+    btns = []
     for a in auctions:
         cur = f"{a['bid']} BED" if a["bidder"] is not None else f"старт {a['start_price']} BED"
         left = _fmt_left(a["ends_at"] - int(time.time()))
         mine = " · ТВОЙ" if a["seller_id"] == uid else ""
-        rows.append([InlineKeyboardButton(f"🏷 ID {a['pid']} · {cur} · ⏳{left}{mine}",
-                                          callback_data=f"id:lot:{a['pid']}")])
-    rows.append([InlineKeyboardButton("⬅️ К моим ID", callback_data="id:home")])
+        btns.append(InlineKeyboardButton(f"🏷 ID {a['pid']} · {cur} · ⏳{left}{mine}",
+                                         callback_data=f"id:lot:{a['pid']}"))
+    if not btns:
+        rows = [[InlineKeyboardButton("⬅️ К моим ID", callback_data="id:home")]]
+    else:
+        rows, page, pages = _paged_rows(btns, page, "id:auction")
     body = ("🏷 <b>Аукцион ID</b> (ставки)\n\n"
             + ("Выбери лот и делай ставку — кто больше, тот и забирает по концу торгов.\n"
                "🫵 «ТВОЙ» — твои лоты (снять можно, пока нет ставок):"
-               if auctions else "Пока лотов нет. Выставь свой: 📤 На аукцион.")
+               if btns else "Пока лотов нет. Выставь свой: 📤 На аукцион.")
             + f"\n💰 Баланс: {storage.get_bed(uid)} BED")
     return body, InlineKeyboardMarkup(rows)
 
@@ -2295,16 +2350,12 @@ async def _id_callback(query, context, storage: Storage) -> None:
             await query.answer("Не хватает BED.", show_alert=True)
         await render_home()
         return
+    page = int(data[2]) if len(data) > 2 and str(data[2]).isdigit() else 0
     if op == "sellmenu":
-        ids = storage.ids_of(uid)
-        rows = [[InlineKeyboardButton(f"💰 {p} (+{config.ID_SELL_PRICE} BED)",
-                                      callback_data=f"id:sellone:{p}")] for p in ids]
-        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="id:home")])
         await query.answer()
+        body, kb = _id_sellmenu_view(storage, uid, page)
         try:
-            await query.edit_message_text(
-                "💰 <b>Продать боту</b>\nВыбери ID:" if ids else "У тебя нет ID.",
-                parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+            await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
         except Exception:
             pass
         return
@@ -2321,14 +2372,10 @@ async def _id_callback(query, context, storage: Storage) -> None:
         await render_home()
         return
     if op == "listmenu":
-        ids = storage.ids_of(uid)
-        rows = [[InlineKeyboardButton(f"📤 ID {p}", callback_data=f"id:listpick:{p}")] for p in ids]
-        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="id:home")])
         await query.answer()
+        body, kb = _id_listmenu_view(storage, uid, page)
         try:
-            await query.edit_message_text(
-                "📤 <b>Выставить на аукцион</b>\nВыбери ID:" if ids else "У тебя нет ID.",
-                parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+            await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
         except Exception:
             pass
         return
@@ -2353,7 +2400,7 @@ async def _id_callback(query, context, storage: Storage) -> None:
         return
     if op == "auction":
         await query.answer()
-        body, kb = _id_auction_view(storage, uid)
+        body, kb = _id_auction_view(storage, uid, page)
         try:
             await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
         except Exception:
@@ -2381,33 +2428,24 @@ async def _id_callback(query, context, storage: Storage) -> None:
             pass
         return
     if op == "locks":
-        id_rows = storage.ids_with_lock(uid)
-        rows = [[InlineKeyboardButton(f"{'🔒' if r['locked'] else '🔓'} {r['pid']}",
-                                      callback_data=f"id:lock:{r['pid']}")] for r in id_rows]
-        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="id:home")])
         await query.answer()
+        body, kb = _id_locks_view(storage, uid, page)
         try:
-            await query.edit_message_text(
-                "🔒 <b>Замки на ID</b>\nЖми на ID, чтобы заложить/снять замок.\n"
-                "🔒 — заложен (нельзя продать/передать/на аукцион).\n🔓 — свободен." if id_rows
-                else "У тебя нет ID.",
-                parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
+            await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
         except Exception:
             pass
         return
     if op == "lock":
         pid = data[2]
+        lpage = int(data[3]) if len(data) > 3 and str(data[3]).isdigit() else 0
         if storage.id_owner(pid) == uid:
             storage.set_id_lock(pid, uid, not storage.is_id_locked(pid))
             await query.answer("🔒 Заложен" if storage.is_id_locked(pid) else "🔓 Снят")
         else:
             await query.answer("Не твой ID.")
-        id_rows = storage.ids_with_lock(uid)
-        rows = [[InlineKeyboardButton(f"{'🔒' if r['locked'] else '🔓'} {r['pid']}",
-                                      callback_data=f"id:lock:{r['pid']}")] for r in id_rows]
-        rows.append([InlineKeyboardButton("⬅️ Назад", callback_data="id:home")])
+        body, kb = _id_locks_view(storage, uid, lpage)
         try:
-            await query.edit_message_reply_markup(reply_markup=InlineKeyboardMarkup(rows))
+            await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
         except Exception:
             pass
         return
