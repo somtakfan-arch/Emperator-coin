@@ -1954,6 +1954,7 @@ def _id_home_view(storage: Storage, uid: int):
         f"📦 Слот хранения — {config.ID_SLOT_PRICE} BED · любое кол-во: <code>/id slots N</code>\n"
         f"🛒 Оптом: <code>/id buy N</code> (напр. <code>/id buy 100</code>)\n"
         f"🔎 Карточка/редкость: <code>/whois ID</code> · ✍️ <code>/engrave ID текст</code>\n"
+        f"🔒 Замок: <code>/lock ID</code> · 🔓 <code>/unlock ID</code>\n"
         f"💸 Перевод по ID: <code>/sendid ID сумма</code>")
     rows = [
         [InlineKeyboardButton(f"🆕 Купить ID ({config.ID_BUY_COST})", callback_data="id:buy"),
@@ -1980,7 +1981,7 @@ def _fmt_left(secs: int) -> str:
     return f"{secs // 60}м"
 
 
-_ID_PER_PAGE = 6
+_ID_PER_PAGE = 16
 
 
 def _paged_rows(buttons, page, nav_op, back_cb="id:home", per=_ID_PER_PAGE):
@@ -3762,6 +3763,36 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
                 f"✍️ Гравировка на ID <b>{html.escape(str(pid))}</b>: «{html.escape(note)}»", parse_mode="HTML")
         else:
             await message.reply_text(f"🧽 Гравировка с ID {pid} стёрта.")
+        return
+    if (text.startswith("/lock") or text.startswith("/unlock")
+            or text.startswith("/замок") or text.startswith("/разлок")):
+        uid = message.from_user.id
+        unlock = text.startswith("/unlock") or text.startswith("/разлок")
+        parts = text.split()
+        pids = [_norm_pid(p) for p in parts[1:] if _norm_pid(p)]
+        if not pids:
+            rows = storage.ids_with_lock(uid)
+            locked = [r["pid"] for r in rows if r["locked"]]
+            cur = ("🔒 Заложены: " + ", ".join(f"<code>{p}</code>" for p in locked)) if locked else "🔓 Ничего не заложено."
+            await message.reply_text(
+                "🔒 <b>Замок на ID</b> — заложенный ID нельзя продать/передать/выставить.\n"
+                "Заложить: <code>/lock ID</code> (можно несколько: <code>/lock 7 77 777</code>)\n"
+                "Снять: <code>/unlock ID</code>\n\n" + cur, parse_mode="HTML")
+            return
+        done, skipped = [], []
+        for pid in pids:
+            if storage.id_owner(pid) != uid:
+                skipped.append(pid)
+                continue
+            storage.set_id_lock(pid, uid, not unlock)
+            done.append(pid)
+        verb = "🔓 снят замок" if unlock else "🔒 заложен"
+        msg = ""
+        if done:
+            msg += f"{verb}: " + ", ".join(f"<code>{p}</code>" for p in done)
+        if skipped:
+            msg += ("\n" if msg else "") + "⚠️ не твои: " + ", ".join(f"<code>{p}</code>" for p in skipped)
+        await message.reply_text(msg or "Нечего менять.", parse_mode="HTML")
         return
     if text.startswith("/sendid"):
         await _id_sendbed(message, context, storage)
