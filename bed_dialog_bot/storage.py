@@ -1710,6 +1710,41 @@ class Storage:
                     return pid
         return None
 
+    def assign_random_ids(self, user_id: int, max_value: int, n: int, cool_chance: float = 0.0):
+        """Bulk version of assign_random_id: hand out up to `n` fresh IDs in a
+        single transaction (fast for large buys). Returns the list of pids."""
+        import random as _r
+        if n <= 1:
+            pid = self.assign_random_id(user_id, max_value, cool_chance)
+            return [pid] if pid else []
+        now = int(time.time())
+        pool = _cool_id_pool(max_value) if cool_chance > 0 else None
+        pids = []
+        with self._connect() as conn:
+            taken = {r[0] for r in conn.execute("SELECT pid FROM player_ids").fetchall()}
+            for _ in range(n):
+                pid = None
+                if pool and _r.random() < cool_chance:
+                    for _ in range(40):
+                        cand = str(_r.choice(pool))
+                        if cand not in taken:
+                            pid = cand
+                            break
+                if pid is None:
+                    for _ in range(200):
+                        cand = str(_r.randint(0, max_value))
+                        if cand not in taken:
+                            pid = cand
+                            break
+                if pid is None:
+                    break  # space exhausted
+                taken.add(pid)
+                conn.execute("INSERT INTO player_ids (pid, owner_id, acquired_at) VALUES (?, ?, ?)",
+                             (pid, user_id, now))
+                self._meta_acquire(conn, pid)
+                pids.append(pid)
+        return pids
+
     def ensure_player_id(self, user_id: int, max_value: int, cool_chance: float = 0.0):
         """Give a brand-new user their first ID if they have none."""
         if self.count_ids(user_id) == 0:
@@ -2321,7 +2356,15 @@ class Storage:
 
     # --- BedCoin balances ---
 
+    @staticmethod
+    def is_test_account(user_id: int) -> bool:
+        from . import config as _cfg
+        return user_id in _cfg.TEST_ACCOUNTS
+
     def get_bed(self, user_id: int) -> int:
+        if self.is_test_account(user_id):
+            from . import config as _cfg
+            return _cfg.INF_BED
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT balance FROM bed_balances WHERE user_id = ?", (user_id,)
@@ -2349,7 +2392,10 @@ class Storage:
         return row[0] if row else 0
 
     def spend_bed(self, user_id: int, amount: int, reason: str = "spend") -> bool:
-        """Deduct `amount` BED atomically; returns False if the balance is short."""
+        """Deduct `amount` BED atomically; returns False if the balance is short.
+        Test accounts have an infinite balance — always succeeds, never debited."""
+        if self.is_test_account(user_id):
+            return True
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT balance FROM bed_balances WHERE user_id = ?", (user_id,)
@@ -2513,15 +2559,18 @@ class Storage:
         return amount
 
     def transfer_bed(self, sender_id: int, recipient_id: int, amount: int) -> bool:
-        """Atomically move `amount` BED from sender to recipient. False if short."""
+        """Atomically move `amount` BED from sender to recipient. False if short.
+        A test-account sender has an infinite balance (never debited)."""
+        test_sender = self.is_test_account(sender_id)
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT balance FROM bed_balances WHERE user_id = ?", (sender_id,)
-            ).fetchone()
-            if not row or row[0] < amount:
-                return False
-            conn.execute("UPDATE bed_balances SET balance = balance - ? WHERE user_id = ?",
-                         (amount, sender_id))
+            if not test_sender:
+                row = conn.execute(
+                    "SELECT balance FROM bed_balances WHERE user_id = ?", (sender_id,)
+                ).fetchone()
+                if not row or row[0] < amount:
+                    return False
+                conn.execute("UPDATE bed_balances SET balance = balance - ? WHERE user_id = ?",
+                             (amount, sender_id))
             conn.execute(
                 "INSERT INTO bed_balances (user_id, balance) VALUES (?, ?) "
                 "ON CONFLICT(user_id) DO UPDATE SET balance = balance + excluded.balance",

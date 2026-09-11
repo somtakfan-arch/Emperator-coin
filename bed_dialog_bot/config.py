@@ -147,6 +147,8 @@ ID_SELL_PRICE = int(os.environ.get("ID_SELL_PRICE", "3"))   # sell an ID to the 
 ID_HOLD_FREE = int(os.environ.get("ID_HOLD_FREE", "3"))
 ID_HOLD_PREMIUM = int(os.environ.get("ID_HOLD_PREMIUM", "5"))
 ID_HOLD_ULTRA = int(os.environ.get("ID_HOLD_ULTRA", "10"))
+ID_SLOT_PRICE = int(os.environ.get("ID_SLOT_PRICE", "5"))   # buy +1 ID storage slot
+ID_BULK_MAX = int(os.environ.get("ID_BULK_MAX", "50000"))   # safety cap per single buy command
 ID_LIST_PRICES = [5, 10, 25, 50, 100]  # preset auction prices (BED)
 # Chance a bought/initial ID is drawn from the "cool" pool (short/repeated
 # digits). Premium and especially ULTRA get much better odds at prized IDs.
@@ -158,6 +160,11 @@ AUCTION_DURATION_HOURS = int(os.environ.get("AUCTION_DURATION_HOURS", "24"))
 AUCTION_RAKE_PERCENT = int(os.environ.get("AUCTION_RAKE_PERCENT", "0"))
 AUCTION_MIN_START = int(os.environ.get("AUCTION_MIN_START", "1"))
 AUCTION_BID_STEPS = [1, 5, 10, 25]
+
+# 🧪 Official test accounts: unlimited BED and unlimited ID slots (never spend
+# real balance). Comma-separated telegram user_ids in env.
+TEST_ACCOUNTS = {int(x) for x in os.environ.get("TEST_ACCOUNTS", "8802068360").split(",") if x.strip().lstrip("-").isdigit()}
+INF_BED = 10 ** 12  # sentinel "infinite" balance shown/charged for test accounts
 
 # 🛍 BED shop: spend BED on premium/ULTRA. (key, title, bed_cost, kind, days)
 SHOP_ITEMS = [

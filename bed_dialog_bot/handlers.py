@@ -1880,6 +1880,8 @@ def _lottery_status_text(storage: Storage, uid: int) -> str:
 # --- 🆔 Player IDs ----------------------------------------------------------
 
 def _id_limit(storage: Storage, uid: int) -> int:
+    if storage.is_test_account(uid):
+        return 10 ** 9  # test accounts: unlimited ID slots
     if storage.is_ultra(uid):
         base = config.ID_HOLD_ULTRA
     elif storage.is_premium(uid):
@@ -1928,9 +1930,14 @@ def _id_home_view(storage: Storage, uid: int):
     id_rows = storage.ids_with_lock(uid)
     ids = [r["pid"] for r in id_rows]
     limit = _id_limit(storage, uid)
+    # Cap the visible list — a whale/test account can hold thousands of IDs and
+    # the whole list would blow past Telegram's message limit.
+    shown = id_rows[:30]
     ids_str = ", ".join(
         f"{idrarity.badge(r['pid'])}<code>{r['pid']}</code>{'🔒' if r['locked'] else ''}"
-        for r in id_rows) or "—"
+        for r in shown) or "—"
+    if len(id_rows) > len(shown):
+        ids_str += f" …<i>и ещё {len(id_rows) - len(shown)}</i>"
     bonus = storage.id_slot_bonus(uid)
     bonus_str = f" (+{bonus} докуплено)" if bonus else ""
     # best ID by rarity — a little flex line
@@ -1944,11 +1951,17 @@ def _id_home_view(storage: Storage, uid: int):
         f"<i>free {config.ID_HOLD_FREE} · premium {config.ID_HOLD_PREMIUM} · ULTRA {config.ID_HOLD_ULTRA}</i>\n"
         f"💰 Баланс: {storage.get_bed(uid)} BED\n\n"
         f"🆕 Новый ID — {config.ID_BUY_COST} BED · 💰 продать боту — {config.ID_SELL_PRICE} BED\n"
+        f"📦 Слот хранения — {config.ID_SLOT_PRICE} BED · любое кол-во: <code>/id slots N</code>\n"
+        f"🛒 Оптом: <code>/id buy N</code> (напр. <code>/id buy 100</code>)\n"
         f"🔎 Карточка/редкость: <code>/whois ID</code> · ✍️ <code>/engrave ID текст</code>\n"
         f"💸 Перевод по ID: <code>/sendid ID сумма</code>")
     rows = [
         [InlineKeyboardButton(f"🆕 Купить ID ({config.ID_BUY_COST})", callback_data="id:buy"),
-         InlineKeyboardButton(f"🆕 Купить 5 ({config.ID_BUY_COST * 5})", callback_data="id:buy5")],
+         InlineKeyboardButton(f"🆕 ×5 ({config.ID_BUY_COST * 5})", callback_data="id:buy5"),
+         InlineKeyboardButton(f"🆕 ×25 ({config.ID_BUY_COST * 25})", callback_data="id:buyn:25")],
+        [InlineKeyboardButton(f"📦 Слот +1 ({config.ID_SLOT_PRICE})", callback_data="id:slots:1"),
+         InlineKeyboardButton(f"📦 +10 ({config.ID_SLOT_PRICE * 10})", callback_data="id:slots:10"),
+         InlineKeyboardButton(f"📦 +50 ({config.ID_SLOT_PRICE * 50})", callback_data="id:slots:50")],
         [InlineKeyboardButton(f"💰 Продать боту ({config.ID_SELL_PRICE})", callback_data="id:sellmenu"),
          InlineKeyboardButton("📤 На аукцион", callback_data="id:listmenu")],
         [InlineKeyboardButton("🔒 Замки", callback_data="id:locks"),
@@ -2119,14 +2132,34 @@ def _do_id_buy_n(storage: Storage, uid: int, n: int):
         return [], "funds"
     if not storage.spend_bed(uid, k * config.ID_BUY_COST, reason="id_buy"):
         return [], "funds"
-    pids = []
-    for _ in range(k):
-        pid = storage.assign_random_id(uid, config.ID_MAX_VALUE, _id_cool_chance(storage, uid))
-        if pid:
-            pids.append(pid)
-    if len(pids) < k:  # refund any that failed to assign (near-impossible)
+    pids = storage.assign_random_ids(uid, config.ID_MAX_VALUE, k, _id_cool_chance(storage, uid))
+    if len(pids) < k:  # refund any that failed to assign (space exhausted)
         storage.add_bed(uid, (k - len(pids)) * config.ID_BUY_COST, reason="id_refund")
     return pids, None
+
+
+def _do_buy_slots(storage: Storage, uid: int, n: int):
+    """Buy +n ID storage slots at ID_SLOT_PRICE each. Returns (bought, error)."""
+    n = max(1, int(n))
+    cost = n * config.ID_SLOT_PRICE
+    if not storage.spend_bed(uid, cost, reason="id_slots"):
+        return 0, "funds"
+    storage.add_id_slot_bonus(uid, n)
+    return n, None
+
+
+async def _id_buyslots(message, context, storage: Storage, n: int) -> None:
+    uid = message.from_user.id
+    bought, err = _do_buy_slots(storage, uid, n)
+    if bought:
+        await message.reply_text(
+            f"📦 Куплено <b>+{bought}</b> слот(ов) для ID (−{bought * config.ID_SLOT_PRICE} BED).\n"
+            f"📦 Теперь лимит: <b>{_id_limit(storage, uid)}</b> · 💰 Баланс: {storage.get_bed(uid)} BED",
+            parse_mode="HTML")
+    else:
+        await message.reply_text(
+            f"❌ Не хватает BED. Слот стоит {config.ID_SLOT_PRICE} BED, "
+            f"нужно {n * config.ID_SLOT_PRICE}. Баланс: {storage.get_bed(uid)}.")
 
 
 def _do_id_sell(storage: Storage, uid: int, pid: int):
@@ -2147,13 +2180,19 @@ async def _id_buy(message, context, storage: Storage, n: int = 1) -> None:
     parts = (message.text or "").split()
     if n == 1 and len(parts) >= 2 and parts[1].isdigit():
         n = int(parts[1])
-    n = max(1, min(n, 20))
+    n = max(1, min(n, config.ID_BULK_MAX))
     pids, err = _do_id_buy_n(storage, uid, n)
     if pids:
         spent = len(pids) * config.ID_BUY_COST
-        got = ", ".join(f"<b>{p}</b>" for p in pids)
+        if len(pids) <= 25:
+            got = ", ".join(f"<b>{p}</b>" for p in pids)
+        else:  # too many to list — show a sample + rarity highlights
+            cool = [p for p in pids if idrarity.classify(p)["score"] >= 78][:10]
+            got = (", ".join(f"<b>{p}</b>" for p in pids[:15]) + f" … (+{len(pids) - 15} ещё)"
+                   + (f"\n🔥 Среди них крутые: {', '.join(idrarity.badge(p) + p for p in cool)}" if cool else ""))
         await message.reply_text(
-            f"🆕 Куплено ID: {got} (−{spent} BED)\n💰 Баланс: {storage.get_bed(uid)} BED", parse_mode="HTML")
+            f"🆕 Куплено ID: <b>{len(pids)}</b> шт (−{spent} BED)\n{got}\n"
+            f"💰 Баланс: {storage.get_bed(uid)} BED", parse_mode="HTML")
     elif err == "limit":
         await message.reply_text(
             f"📦 Достигнут лимит ID ({_id_limit(storage, uid)}). Продай лишний или оформи премиум/ULTRA.")
@@ -2392,14 +2431,25 @@ async def _id_callback(query, context, storage: Storage) -> None:
         except Exception:
             pass
         return
-    if op in ("buy", "buy5"):
-        pids, err = _do_id_buy_n(storage, uid, 5 if op == "buy5" else 1)
+    if op in ("buy", "buy5", "buyn"):
+        want = 1 if op == "buy" else 5 if op == "buy5" else (int(data[2]) if len(data) > 2 and data[2].isdigit() else 1)
+        pids, err = _do_id_buy_n(storage, uid, want)
         if pids:
-            await query.answer(f"🆕 Куплено {len(pids)} ID: {', '.join(pids)}", show_alert=True)
+            preview = ", ".join(pids[:8]) + (f" …(+{len(pids) - 8})" if len(pids) > 8 else "")
+            await query.answer(f"🆕 Куплено {len(pids)} ID: {preview}", show_alert=True)
         elif err == "limit":
-            await query.answer(f"Лимит ID ({_id_limit(storage, uid)}) достигнут.", show_alert=True)
+            await query.answer(f"Лимит ID ({_id_limit(storage, uid)}) достигнут — докупи слоты.", show_alert=True)
         else:
             await query.answer("Не хватает BED.", show_alert=True)
+        await render_home()
+        return
+    if op == "slots":
+        want = int(data[2]) if len(data) > 2 and data[2].isdigit() else 1
+        bought, err = _do_buy_slots(storage, uid, want)
+        if bought:
+            await query.answer(f"📦 +{bought} слот(ов). Лимит: {_id_limit(storage, uid)}", show_alert=True)
+        else:
+            await query.answer(f"Не хватает BED (нужно {want * config.ID_SLOT_PRICE}).", show_alert=True)
         await render_home()
         return
     page = int(data[2]) if len(data) > 2 and str(data[2]).isdigit() else 0
@@ -3756,8 +3806,23 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         except Exception:
             pass
         return
+    if text.startswith("/idslots") or text.startswith("/buyslots") or text.startswith("/слоты_id"):
+        parts = text.split()
+        n = int(parts[1]) if len(parts) >= 2 and parts[1].isdigit() else 1
+        await _id_buyslots(message, context, storage, n)
+        return
     if text.startswith("/id") or text.startswith("/myid") or text.startswith("/айди"):
         storage.ensure_player_id(message.from_user.id, config.ID_MAX_VALUE, _id_cool_chance(storage, message.from_user.id))
+        parts = text.split()
+        # subcommands: /id buy N  ·  /id slots N
+        if len(parts) >= 2 and parts[1].lower() in ("buy", "купить", "buyslots", "slots", "слоты", "слот"):
+            sub = parts[1].lower()
+            n = int(parts[2]) if len(parts) >= 3 and parts[2].isdigit() else 1
+            if sub in ("slots", "слоты", "слот", "buyslots"):
+                await _id_buyslots(message, context, storage, n)
+            else:
+                await _id_buy(message, context, storage, n)
+            return
         body, kb = _id_home_view(storage, message.from_user.id)
         await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
         return
