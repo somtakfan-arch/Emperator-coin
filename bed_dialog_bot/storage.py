@@ -1620,6 +1620,51 @@ class Storage:
                 "SELECT pid, locked FROM player_ids WHERE owner_id=? ORDER BY pid", (user_id,)).fetchall()
         return [{"pid": r[0], "locked": bool(r[1])} for r in rows]
 
+    def ids_page(self, user_id: int, offset: int, limit: int):
+        """One page of the user's IDs — for menus that must not load 200k rows."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT pid FROM player_ids WHERE owner_id=? ORDER BY pid LIMIT ? OFFSET ?",
+                (user_id, limit, max(0, offset))).fetchall()
+        return [r[0] for r in rows]
+
+    def ids_with_lock_page(self, user_id: int, offset: int, limit: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT pid, locked FROM player_ids WHERE owner_id=? ORDER BY pid LIMIT ? OFFSET ?",
+                (user_id, limit, max(0, offset))).fetchall()
+        return [{"pid": r[0], "locked": bool(r[1])} for r in rows]
+
+    def sell_all_ids(self, user_id: int, price: int, keep_at_least: int = 1):
+        """Bulk-sell every unlocked, not-on-auction ID back to the bot in ONE
+        transaction. Keeps at least `keep_at_least` IDs overall. Returns
+        (sold_count, earned_bed). Fast even for hundreds of thousands of IDs."""
+        with self._connect() as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) FROM player_ids WHERE owner_id=?", (user_id,)).fetchone()[0]
+            # sellable = owned, not locked, not currently on auction
+            sellable = [r[0] for r in conn.execute(
+                "SELECT pid FROM player_ids WHERE owner_id=? AND locked=0 "
+                "AND pid NOT IN (SELECT pid FROM id_auction) ORDER BY pid", (user_id,)).fetchall()]
+            held_back = total - len(sellable)  # locked / on-auction stay
+            # ensure at least keep_at_least IDs remain overall
+            need_keep = max(0, keep_at_least - held_back)
+            if need_keep:
+                sellable = sellable[need_keep:]
+            if not sellable:
+                return 0, 0
+            conn.executemany(
+                "DELETE FROM player_ids WHERE pid=? AND owner_id=?",
+                [(p, user_id) for p in sellable])
+            earned = len(sellable) * price
+            if not self.is_test_account(user_id):
+                conn.execute(
+                    "INSERT INTO bed_balances (user_id, balance) VALUES (?, ?) "
+                    "ON CONFLICT(user_id) DO UPDATE SET balance = balance + excluded.balance",
+                    (user_id, earned))
+                self._ledger(conn, user_id, earned, "id_sellall")
+        return len(sellable), earned
+
     def is_id_locked(self, pid) -> bool:
         with self._connect() as conn:
             row = conn.execute("SELECT locked FROM player_ids WHERE pid=?", (str(pid),)).fetchone()

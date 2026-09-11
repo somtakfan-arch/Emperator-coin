@@ -1927,27 +1927,28 @@ def _id_cool_chance(storage: Storage, uid: int) -> float:
 
 
 def _id_home_view(storage: Storage, uid: int):
-    id_rows = storage.ids_with_lock(uid)
-    ids = [r["pid"] for r in id_rows]
+    total = storage.count_ids(uid)
     limit = _id_limit(storage, uid)
-    # Cap the visible list — a whale/test account can hold thousands of IDs and
-    # the whole list would blow past Telegram's message limit.
-    shown = id_rows[:30]
+    # Only pull the first slice for display — a whale/test account can hold
+    # hundreds of thousands of IDs; never load them all just to draw the menu.
+    shown = storage.ids_with_lock_page(uid, 0, 30)
     ids_str = ", ".join(
         f"{idrarity.badge(r['pid'])}<code>{r['pid']}</code>{'🔒' if r['locked'] else ''}"
         for r in shown) or "—"
-    if len(id_rows) > len(shown):
-        ids_str += f" …<i>и ещё {len(id_rows) - len(shown)}</i>"
+    if total > len(shown):
+        ids_str += f" …<i>и ещё {total - len(shown)}</i>"
     bonus = storage.id_slot_bonus(uid)
     bonus_str = f" (+{bonus} докуплено)" if bonus else ""
-    # best ID by rarity — a little flex line
-    best = max(ids, key=lambda p: idrarity.classify(p)["score"]) if ids else None
+    # best ID by rarity — a little flex line. Scan only a bounded sample so a
+    # huge collection never turns the menu into a CPU hog.
+    scan = [r["pid"] for r in shown] if total > 3000 else storage.ids_of(uid)
+    best = max(scan, key=lambda p: idrarity.classify(p)["score"]) if scan else None
     best_str = f"⭐ Топ ID: {idrarity.badge(best)} <code>{best}</code> — {idrarity.label(best).split(' ',1)[1]} (~{idrarity.appraise(best, config.ID_BUY_COST)} BED)\n" if best else ""
     text = (
         "🆔 <b>Мои ID</b>\n\n"
         f"Твои ID: {ids_str}\n"
         f"{best_str}"
-        f"📦 Слотов занято: <b>{len(ids)}/{limit}</b>{bonus_str}\n"
+        f"📦 Слотов занято: <b>{total}/{limit}</b>{bonus_str}\n"
         f"<i>free {config.ID_HOLD_FREE} · premium {config.ID_HOLD_PREMIUM} · ULTRA {config.ID_HOLD_ULTRA}</i>\n"
         f"💰 Баланс: {storage.get_bed(uid)} BED\n\n"
         f"🆕 Новый ID — {config.ID_BUY_COST} BED · 💰 продать боту — {config.ID_SELL_PRICE} BED\n"
@@ -1990,6 +1991,12 @@ def _paged_rows(buttons, page, nav_op, back_cb="id:home", per=_ID_PER_PAGE):
     pages = max(1, (len(buttons) + per - 1) // per)
     page = max(0, min(page, pages - 1))
     rows = [[b] for b in buttons[page * per:(page + 1) * per]]
+    rows += _nav_rows(page, pages, nav_op, back_cb)
+    return rows, page, pages
+
+
+def _nav_rows(page, pages, nav_op, back_cb="id:home"):
+    """Just the ◀️ / page / ▶️ + Back rows for a paginated view."""
     nav = []
     if page > 0:
         nav.append(InlineKeyboardButton("◀️", callback_data=f"{nav_op}:{page - 1}"))
@@ -1997,40 +2004,53 @@ def _paged_rows(buttons, page, nav_op, back_cb="id:home", per=_ID_PER_PAGE):
         nav.append(InlineKeyboardButton(f"стр. {page + 1}/{pages}", callback_data=f"{nav_op}:{page}"))
     if page < pages - 1:
         nav.append(InlineKeyboardButton("▶️", callback_data=f"{nav_op}:{page + 1}"))
-    if nav:
-        rows.append(nav)
+    rows = [nav] if nav else []
     rows.append([InlineKeyboardButton("⬅️ Назад", callback_data=back_cb)])
-    return rows, page, pages
+    return rows
+
+
+def _page_bounds(total: int, page: int, per: int = _ID_PER_PAGE):
+    pages = max(1, (total + per - 1) // per)
+    page = max(0, min(page, pages - 1))
+    return page, pages
 
 
 def _id_locks_view(storage: Storage, uid: int, page: int = 0):
-    id_rows = storage.ids_with_lock(uid)
-    btns = [InlineKeyboardButton(f"{'🔒' if r['locked'] else '🔓'} {r['pid']}",
-                                 callback_data=f"id:lock:{r['pid']}:{page}") for r in id_rows]
-    if not btns:
+    total = storage.count_ids(uid)
+    if not total:
         return "У тебя нет ID.", InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="id:home")]])
-    rows, page, pages = _paged_rows(btns, page, "id:locks")
+    page, pages = _page_bounds(total, page)
+    win = storage.ids_with_lock_page(uid, page * _ID_PER_PAGE, _ID_PER_PAGE)
+    rows = [[InlineKeyboardButton(f"{'🔒' if r['locked'] else '🔓'} {r['pid']}",
+                                  callback_data=f"id:lock:{r['pid']}:{page}")] for r in win]
+    rows += _nav_rows(page, pages, "id:locks")
     body = ("🔒 <b>Замки на ID</b>\nЖми на ID — заложить/снять замок.\n"
-            "🔒 заложен (нельзя продать/передать/на аукцион) · 🔓 свободен")
+            "🔒 заложен (нельзя продать/передать/на аукцион) · 🔓 свободен\n"
+            "💡 Быстро: <code>/lock ID</code> · <code>/unlock ID</code>")
     return body, InlineKeyboardMarkup(rows)
 
 
 def _id_sellmenu_view(storage: Storage, uid: int, page: int = 0):
-    ids = storage.ids_of(uid)
-    btns = [InlineKeyboardButton(f"💰 {p} (+{config.ID_SELL_PRICE})", callback_data=f"id:sellone:{p}") for p in ids]
-    if not btns:
+    total = storage.count_ids(uid)
+    if not total:
         return "У тебя нет ID.", InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="id:home")]])
-    rows, page, pages = _paged_rows(btns, page, "id:sellmenu")
-    return "💰 <b>Продать боту</b>\nВыбери ID (🔒 заложенные не продаются):", InlineKeyboardMarkup(rows)
+    page, pages = _page_bounds(total, page)
+    win = storage.ids_page(uid, page * _ID_PER_PAGE, _ID_PER_PAGE)
+    rows = [[InlineKeyboardButton(f"💰 {p} (+{config.ID_SELL_PRICE})", callback_data=f"id:sellone:{p}")] for p in win]
+    rows += _nav_rows(page, pages, "id:sellmenu")
+    return ("💰 <b>Продать боту</b>\nВыбери ID (🔒 заложенные не продаются).\n"
+            "💡 Продать всё сразу — кнопка «Продать ВСЕ» в меню ID.", InlineKeyboardMarkup(rows))
 
 
 def _id_listmenu_view(storage: Storage, uid: int, page: int = 0):
-    ids = storage.ids_of(uid)
-    btns = [InlineKeyboardButton(f"📤 {idrarity.badge(p)} ID {p} (~{idrarity.appraise(p, config.ID_BUY_COST)})",
-                                 callback_data=f"id:listpick:{p}") for p in ids]
-    if not btns:
+    total = storage.count_ids(uid)
+    if not total:
         return "У тебя нет ID.", InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Назад", callback_data="id:home")]])
-    rows, page, pages = _paged_rows(btns, page, "id:listmenu")
+    page, pages = _page_bounds(total, page)
+    win = storage.ids_page(uid, page * _ID_PER_PAGE, _ID_PER_PAGE)
+    rows = [[InlineKeyboardButton(f"📤 {idrarity.badge(p)} ID {p} (~{idrarity.appraise(p, config.ID_BUY_COST)})",
+                                  callback_data=f"id:listpick:{p}")] for p in win]
+    rows += _nav_rows(page, pages, "id:listmenu")
     return "📤 <b>Выставить на аукцион</b>\nВыбери ID:", InlineKeyboardMarkup(rows)
 
 
@@ -2206,9 +2226,14 @@ async def _id_sell(message, context, storage: Storage) -> None:
     parts = (message.text or "").split()
     pid = _norm_pid(parts[1]) if len(parts) >= 2 else None
     if pid is None:
-        ids = ", ".join(map(str, storage.ids_of(uid))) or "—"
+        total = storage.count_ids(uid)
+        sample = storage.ids_page(uid, 0, 30)
+        ids = ", ".join(map(str, sample)) or "—"
+        if total > len(sample):
+            ids += f" …и ещё {total - len(sample)}"
         await message.reply_text(
-            f"💰 Продать боту за {config.ID_SELL_PRICE} BED: <code>/sellid ID</code>\nТвои ID: {ids}",
+            f"💰 Продать боту за {config.ID_SELL_PRICE} BED: <code>/sellid ID</code>\n"
+            f"Продать всё сразу: <code>/sellall</code>\nТвои ID: {ids}",
             parse_mode="HTML")
         return
     ok, reason = _do_id_sell(storage, uid, pid)
@@ -2559,21 +2584,7 @@ async def _id_callback(query, context, storage: Storage) -> None:
             pass
         return
     if op == "sellall":
-        id_rows = storage.ids_with_lock(uid)
-        # sellable = not locked, not on auction
-        sellable = [r["pid"] for r in id_rows if not r["locked"] and not storage.on_auction(r["pid"])]
-        locked_or_held = len(id_rows) - len([r for r in id_rows if not r["locked"] and not storage.on_auction(r["pid"])])
-        # keep at least one ID overall
-        if locked_or_held == 0 and sellable:
-            sellable = sellable[1:]  # keep one
-        sold, earned = 0, 0
-        for pid in sellable:
-            if storage.count_ids(uid) <= 1:
-                break
-            if storage.release_id(pid, uid):
-                storage.add_bed(uid, config.ID_SELL_PRICE, reason="id_sell")
-                sold += 1
-                earned += config.ID_SELL_PRICE
+        sold, earned = storage.sell_all_ids(uid, config.ID_SELL_PRICE, keep_at_least=1)
         await query.answer(
             f"💰 Продано {sold} ID за {earned} BED." if sold else "Нечего продавать (всё заложено).",
             show_alert=True)
@@ -3635,6 +3646,17 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     if text.startswith("/buyid"):
         await _id_buy(message, context, storage)
+        return
+    if text.startswith("/sellall") or text.startswith("/продатьвсе"):
+        uid = message.from_user.id
+        sold, earned = storage.sell_all_ids(uid, config.ID_SELL_PRICE, keep_at_least=1)
+        if sold:
+            await message.reply_text(
+                f"💰 Продано <b>{sold}</b> ID боту за <b>{earned} BED</b> "
+                f"(по {config.ID_SELL_PRICE} BED).\n🔒 Заложенные и лоты на аукционе не тронуты.\n"
+                f"💰 Баланс: {storage.get_bed(uid)} BED", parse_mode="HTML")
+        else:
+            await message.reply_text("Нечего продавать — всё заложено или на аукционе (либо остался последний ID).")
         return
     if text.startswith("/sellid"):
         await _id_sell(message, context, storage)
