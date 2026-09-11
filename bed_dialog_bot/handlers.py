@@ -2343,6 +2343,11 @@ async def _id_whois(message, context, storage: Storage) -> None:
     if owner:
         mine = " — <b>это твой</b> 🫵" if owner == uid else ""
         lines.append(f"📌 Статус: занят{mine}")
+        # Admins see WHO owns it — this is the only place ownership is revealed.
+        if admin.is_admin(storage, uid) and owner != uid:
+            name, username = storage.user_display(owner)
+            who = formatting.format_sender(name or "—", username)
+            lines.append(f"👤 <b>Владелец</b> (для админа): {who} · <code>{owner}</code>")
     else:
         lines.append(f"📌 Статус: <b>свободен</b> — можно поймать за {config.ID_BUY_COST} BED (/id → 🆕)")
     lines.append(f"🔁 Сменил владельцев: <b>{meta['transfers']}</b> раз")
@@ -3694,6 +3699,49 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
     if text.startswith("/bid"):
         await _id_bid_cmd(message, context, storage)
+        return
+    if text.startswith("/idowner") or text.startswith("/whoowns"):
+        if not admin.is_admin(storage, message.from_user.id):
+            return
+        parts = (message.text or "").split()
+        pid = _norm_pid(parts[1]) if len(parts) >= 2 else None
+        if pid is None:
+            await message.reply_text(
+                "🔎 <b>Чей это ID</b> (для админа):\n<code>/idowner ID</code>\n"
+                "Обратно — все ID человека: <code>/userids @user|id</code>", parse_mode="HTML")
+            return
+        owner = storage.id_owner(pid)
+        if not owner:
+            await message.reply_text(f"🆔 <b>{html.escape(str(pid))}</b> — свободен (никем не занят).", parse_mode="HTML")
+            return
+        name, username = storage.user_display(owner)
+        who = formatting.format_sender(name or "—", username)
+        cls = idrarity.classify(pid)
+        await message.reply_text(
+            f"🆔 <b>{html.escape(str(pid))}</b> {cls['emoji']} {cls['name']}\n"
+            f"👤 Владелец: {who}\n🆔 user_id: <code>{owner}</code>\n"
+            f"💬 Написать: <a href=\"tg://user?id={owner}\">открыть чат</a>", parse_mode="HTML")
+        return
+    if text.startswith("/userids") or text.startswith("/idsof"):
+        if not admin.is_admin(storage, message.from_user.id):
+            return
+        parts = (message.text or "").split()
+        target = _resolve_person(storage, parts[1]) if len(parts) >= 2 else None
+        if not target:
+            await message.reply_text(
+                "🔎 <b>ID человека</b> (для админа):\n<code>/userids @user</code> или его user_id/ID",
+                parse_mode="HTML")
+            return
+        total = storage.count_ids(target)
+        sample = storage.ids_of(target)[:60]
+        name, username = storage.user_display(target)
+        who = formatting.format_sender(name or "—", username)
+        ids_str = ", ".join(f"{idrarity.badge(p)}<code>{p}</code>" for p in sample) or "—"
+        if total > len(sample):
+            ids_str += f" …и ещё {total - len(sample)}"
+        await message.reply_text(
+            f"👤 {who} (<code>{target}</code>)\n📦 ID всего: <b>{total}</b>\n{ids_str}",
+            parse_mode="HTML")
         return
     if text.startswith("/giveid"):
         if not (admin.is_super(message.from_user.id) or admin.has_perm(storage, message.from_user.id, "users")):
@@ -5395,6 +5443,9 @@ _ADMIN_HINTS = {
     "mod": ("moderation", "⛔ Модерация:\n/blacklist <id> [причина]\n/unblacklist <id>\n/clearlog <id|all>\n/clearphotolog <id|all>"),
     "premium": ("premium", "💎 /give premium <id> <дней>\n/gift <id> <дней>"),
     "giveid": ("users", "🆔 Выдать ID: /giveid <user_id> [конкретный_ID]\n"
+                        "🔎 Чей ID: /idowner <ID>\n"
+                        "🔎 ID человека: /userids <@user|id>\n"
+                        "🗑 Удалить чужой: /delid <ID>\n"
                         "📦 Промо на слоты: /slotpromo <код> <слотов> <активаций>"),
     "broadcast": ("broadcast", "📢 /broadcast <текст>"),
     "promo": ("promo", "🎟 /createpromo <код> <дней> <активаций>\n/winback"),

@@ -255,7 +255,7 @@ def kb_admin(uid, storage) -> InlineKeyboardMarkup:
     if "users" in p:
         live.append(_btn("📊 Дашборд", "adm:dash", "primary"))
         live.append(_btn("👥 Пользователи", "adm:users", "primary"))
-        live.append(_btn("🆔 Выдать ID", "adm:giveid", "success"))
+        live.append(_btn("🆔 ID и владельцы", "adm:giveid", "success"))
     if "tickets" in p:
         live.append(_btn("🎫 Тикеты", "adm:tickets", "success"))
     # pack live buttons 2 per row
