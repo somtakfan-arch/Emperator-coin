@@ -1,0 +1,142 @@
+{
+  "canyon": {
+    "file": "File:Grand Canyon Hopi Point with rainbow 2013.jpg",
+    "license": "CC BY-SA 3.0",
+    "author": "<a href=\"//commons.wikimedia.org/wiki/User:Tuxyso\" title=\"User:Tuxyso\">Tuxyso</a>",
+    "bytes": 344885,
+    "page": "https://commons.wikimedia.org/wiki/File%3AGrand_Canyon_Hopi_Point_with_rainbow_2013.jpg"
+  },
+  "denali": {
+    "file": "File:Parque nacional y reserva Denali, Alaska, Estados Unidos, 2017-08-30, DD 72.jpg",
+    "license": "CC BY-SA 4.0",
+    "author": "<bdi><a href=\"https://www.wikidata.org/wiki/Q28147777\" class=\"extiw\" title=\"d:Q28147777\"><span title=\"Spanish photographer\">Diego Delso</span></a></bdi>",
+    "bytes": 146680,
+    "page": "https://commons.wikimedia.org/wiki/File%3AParque_nacional_y_reserva_Denali%2C_Alaska%2C_Estados_Unidos%2C_2017-08-30%2C_DD_72.jpg"
+  },
+  "chichen": {
+    "file": "File:Chichen Itza 3.jpg",
+    "license": "CC BY-SA 4.0",
+    "author": "<a href=\"//commons.wikimedia.org/wiki/User:Dschwen\" title=\"User:Dschwen\">Daniel Schwen</a>",
+    "bytes": 230694,
+    "page": "https://commons.wikimedia.org/wiki/File%3AChichen_Itza_3.jpg"
+  },
+  "panama": {
+    "file": "File:Panama Canal Miraflores Locks.jpg",
+    "license": "CC BY-SA 3.0",
+    "author": "<a href=\"//commons.wikimedia.org/wiki/User:Stan_Shebs\" title=\"User:Stan Shebs\">User:Stan Shebs</a>",
+    "bytes": 190398,
+    "page": "https://commons.wikimedia.org/wiki/File%3APanama_Canal_Miraflores_Locks.jpg"
+  },
+  "amazon": {
+    "file": "File:Aerial view of the Amazon Rainforest.jpg",
+    "license": "CC BY-SA 2.0",
+    "author": "<a rel=\"nofollow\" class=\"external text\" href=\"https://www.flickr.com/people/44577875@N08\">lubasi</a>",
+    "bytes": 339777,
+    "page": "https://commons.wikimedia.org/wiki/File%3AAerial_view_of_the_Amazon_Rainforest.jpg"
+  },
+  "andes": {
+    "file": "File:Aconcagua Provincial Park 04.jpg",
+    "license": "CC BY-SA 4.0",
+    "author": "<a href=\"//commons.wikimedia.org/wiki/User:Bgag\" title=\"User:Bgag\">Bernard Gagnon</a>",
+    "bytes": 354971,
+    "page": "https://commons.wikimedia.org/wiki/File%3AAconcagua_Provincial_Park_04.jpg"
+  },
+  "iguazu": {
+    "file": "File:00 1838 Iguazu Falls from the Brazilian side.jpg",
+    "license": "CC BY-SA 4.0",
+    "author": "<a href=\"//commons.wikimedia.org/wiki/User:W._Bulach\" title=\"User:W. Bulach\">W. Bulach</a>",
+    "bytes": 351934,
+    "page": "https://commons.wikimedia.org/wiki/File%3A00_1838_Iguazu_Falls_from_the_Brazilian_side.jpg"
+  },
+  "machu": {
+    "file": "File:Machu Picchu, Perú, 2015-07-30, DD 47.JPG",
+    "license": "CC BY-SA 4.0",
+    "author": "<bdi><a href=\"https://www.wikidata.org/wiki/Q28147777\" class=\"extiw\" title=\"d:Q28147777\"><span title=\"Spanish photographer\">Diego Delso</span></a></bdi>",
+    "bytes": 367633,
+    "page": "https://commons.wikimedia.org/wiki/File%3AMachu_Picchu%2C_Per%C3%BA%2C_2015-07-30%2C_DD_47.JPG"
+  },
+  "rio": {
+    "file": "File:Panoramic view of Rio de Janeiro at dusk from Sugarloaf Mountain, Brazil.jpg",
+    "license": "CC0",
+    "author": "<a href=\"//commons.wikimedia.org/wiki/User:Wilfredor\" class=\"mw-redirect\" title=\"User:Wilfredor\">Wilfredor</a>",
+    "bytes": 112195,
+    "page": "https://commons.wikimedia.org/wiki/File%3APanoramic_view_of_Rio_de_Janeiro_at_dusk_from_Sugarloaf_Mountain%2C_Brazil.jpg"
+  },
+  "atacama": {
+    "file": "File:Catedrales de Tara, Chile, 2016-02-07, DD 62.JPG",
+    "license": "CC BY-SA 4.0",
+    "author": "<bdi><a href=\"https://www.wikidata.org/wiki/Q28147777\" class=\"extiw\" title=\"d:Q28147777\"><span title=\"Spanish photographer\">Diego Delso</span></a></bdi>",
+    "bytes": 270004,
+    "page": "https://commons.wikimedia.org/wiki/File%3ACatedrales_de_Tara%2C_Chile%2C_2016-02-07%2C_DD_62.JPG"
+  },
+  "caribbean": {
+    "file": "File:The San Bernardo Archipelago in the Caribbean Sea (Copernicus 2024-01-13).jpg",
+    "license": "Attribution",
+    "author": "European Union, Copernicus Sentinel-2 imagery",
+    "bytes": 165875,
+    "page": "https://commons.wikimedia.org/wiki/File%3AThe_San_Bernardo_Archipelago_in_the_Caribbean_Sea_%28Copernicus_2024-01-13%29.jpg"
+  },
+  "mississippi": {
+    "file": "File:Mississippi delta from space.jpg",
+    "license": "Public domain",
+    "author": "NASA",
+    "bytes": 644683,
+    "page": "https://commons.wikimedia.org/wiki/File%3AMississippi_delta_from_space.jpg"
+  },
+  "greenland": {
+    "file": "File:Major Greenland Glacier Is Growing.jpeg",
+    "license": "Public domain",
+    "author": "NASA Earth Observatory images by Joshua Stevens, using Landsat data from the U.S. Geological Survey, and data courtesy of Josh Willis/NASA JPL and the Oceans Melting Greenland (OMG) Program. Story by ",
+    "bytes": 374273,
+    "page": "https://commons.wikimedia.org/wiki/File%3AMajor_Greenland_Glacier_Is_Growing.jpeg"
+  },
+  "globe": {
+    "file": "File:Blue Marble Western Hemisphere.jpg",
+    "license": "Public domain",
+    "author": "NASA images by Reto Stöckli, based on data from NASA and NOAA. Instrument: Terra - MODIS",
+    "bytes": 396486,
+    "page": "https://commons.wikimedia.org/wiki/File%3ABlue_Marble_Western_Hemisphere.jpg"
+  },
+  "niagara": {
+    "file": "File:Niagara Falls Horseshoe Falls 03.jpg",
+    "license": "CC BY-SA 4.0",
+    "author": "<a href=\"//commons.wikimedia.org/w/index.php?title=User:FuchsiaPeacock&amp;action=edit&amp;redlink=1\" class=\"new\" title=\"User:FuchsiaPeacock (page does not exist)\">FuchsiaPeacock</a>",
+    "bytes": 408560,
+    "page": "https://commons.wikimedia.org/wiki/File%3ANiagara_Falls_Horseshoe_Falls_03.jpg"
+  },
+  "nyc": {
+    "file": "File:Lower Manhattan from Governors Island with a fishing boat (46294p).jpg",
+    "license": "CC BY-SA 4.0",
+    "author": "<a href=\"//commons.wikimedia.org/wiki/User:Rhododendrites\" title=\"User:Rhododendrites\">Rhododendrites</a>",
+    "bytes": 219093,
+    "page": "https://commons.wikimedia.org/wiki/File%3ALower_Manhattan_from_Governors_Island_with_a_fishing_boat_%2846294p%29.jpg"
+  },
+  "patagonia": {
+    "file": "File:Cuernos del Paine in Torres del Paine National Park.jpg",
+    "license": "CC BY-SA 2.0",
+    "author": "<a rel=\"nofollow\" class=\"external text\" href=\"https://www.flickr.com/people/43355249@N00\">Pedro Szekely</a> from Los Angeles, USA",
+    "bytes": 303225,
+    "page": "https://commons.wikimedia.org/wiki/File%3ACuernos_del_Paine_in_Torres_del_Paine_National_Park.jpg"
+  },
+  "jaguar": {
+    "file": "File:Jaguar (Panthera onca palustris) male Rio Negro 2.JPG",
+    "license": "CC BY-SA 4.0",
+    "author": "<bdi><a href=\"https://www.wikidata.org/wiki/Q54800218\" class=\"extiw\" title=\"d:Q54800218\"><span title=\"Scottish wildlife photographer\">Charles J. Sharp</span></a></bdi>",
+    "bytes": 502857,
+    "page": "https://commons.wikimedia.org/wiki/File%3AJaguar_%28Panthera_onca_palustris%29_male_Rio_Negro_2.JPG"
+  },
+  "condor": {
+    "file": "File:Condor des Andes mâle adulte.jpg",
+    "license": "CC BY-SA 3.0",
+    "author": "Hugo Pedel",
+    "bytes": 159246,
+    "page": "https://commons.wikimedia.org/wiki/File%3ACondor_des_Andes_m%C3%A2le_adulte.jpg"
+  },
+  "sequoia": {
+    "file": "File:Sequoiadendron giganteum kz11.jpg",
+    "license": "CC BY-SA 4.0",
+    "author": "<a href=\"//commons.wikimedia.org/wiki/User:Kenraiz\" title=\"User:Kenraiz\">Krzysztof Ziarnek, Kenraiz</a>",
+    "bytes": 969840,
+    "page": "https://commons.wikimedia.org/wiki/File%3ASequoiadendron_giganteum_kz11.jpg"
+  }
+}
