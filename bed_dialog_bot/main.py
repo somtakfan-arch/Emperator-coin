@@ -180,6 +180,21 @@ async def _reminder_loop(application: Application) -> None:
                         pass
         except Exception:
             logger.exception("Auction settle error")
+        # 🏠 Return expired ID rentals to their owners.
+        try:
+            for pid in storage.due_rentals(int(_time.time())):
+                r = storage.return_rental(pid)
+                if not r:
+                    continue
+                owner_id, renter_id = r
+                for who, txt in ((owner_id, f"🏠 Аренда ID <b>{pid}</b> закончилась — он вернулся к тебе."),
+                                 (renter_id, f"🏠 Срок аренды ID <b>{pid}</b> истёк — он вернулся владельцу.")):
+                    try:
+                        await application.bot.send_message(chat_id=who, text=txt, parse_mode="HTML")
+                    except Exception:
+                        pass
+        except Exception:
+            logger.exception("Rental return error")
         # 🔥 Weekly referral battle: award top inviters of the week that ended.
         try:
             cur_week = storage.current_week()

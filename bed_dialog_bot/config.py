@@ -160,6 +160,17 @@ AUCTION_DURATION_HOURS = int(os.environ.get("AUCTION_DURATION_HOURS", "24"))
 AUCTION_RAKE_PERCENT = int(os.environ.get("AUCTION_RAKE_PERCENT", "0"))
 AUCTION_MIN_START = int(os.environ.get("AUCTION_MIN_START", "1"))
 AUCTION_BID_STEPS = [1, 5, 10, 25]
+AUCTION_ANTISNIPE_SEC = int(os.environ.get("AUCTION_ANTISNIPE_SEC", "300"))  # extend if bid in last N sec
+# 🔗 fusion: burn N unlocked IDs -> 1 guaranteed better roll
+ID_FUSE_COOL = int(os.environ.get("ID_FUSE_COOL", "10"))     # burn this many -> cool pool
+ID_FUSE_ELITE = int(os.environ.get("ID_FUSE_ELITE", "50"))   # burn this many -> elite pool
+# 🏠 rental
+ID_RENT_MAX_DAYS = int(os.environ.get("ID_RENT_MAX_DAYS", "30"))
+# 💬 anon messages by ID
+ID_MSG_COOLDOWN = int(os.environ.get("ID_MSG_COOLDOWN", "30"))  # sec between anon msgs per sender
+# 🔐 rare-ID transfer protection: score at/above this needs PIN, and undo window
+ID_RARE_SCORE = int(os.environ.get("ID_RARE_SCORE", "80"))
+ID_UNDO_WINDOW = int(os.environ.get("ID_UNDO_WINDOW", "600"))  # sec to /undoid a transfer
 
 # 🧪 Official test accounts: unlimited BED and unlimited ID slots (never spend
 # real balance). Comma-separated telegram user_ids in env.
