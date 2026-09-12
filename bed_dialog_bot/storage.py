@@ -458,43 +458,95 @@ _ULTRA_GRACE_SECONDS = int(os.environ.get("ULTRA_GRACE_DAYS", "3")) * 86400
 _ULTRA_FOREVER_TS = 9999999999  # lifetime sentinel (~year 2286)
 
 _COOL_POOL_CACHE: dict = {}
+_ELITE_POOL_CACHE: dict = {}
 
 
 def _cool_id_pool(max_value: int):
-    """'Cool/prized' IDs: 0-100, repdigits (777, 88888…), one-digit-off
-    repdigits, and round thousands. Cached per max_value."""
+    """'Cool/prized' IDs — only genuinely nice numbers, NO near-repdigit trash.
+    Repdigits, clean rounds, ladders, arithmetic progressions, binary,
+    block patterns, AABB pairs, varied palindromes and 0..100. Cached."""
     cached = _COOL_POOL_CACHE.get(max_value)
     if cached is not None:
         return cached
+    from . import idrarity
     pool = set(range(0, 101))
     digits = len(str(max_value))
+
+    def add(v):
+        if 0 <= v <= max_value:
+            pool.add(v)
+
+    # repdigits: 1, 11, 111 … 9999999
     for length in range(1, digits + 1):
-        for d in range(0, 10):
-            if length > 1 and d == 0:
-                continue
-            v = int(str(d) * length)
-            if v <= max_value:
-                pool.add(v)
-    # numbers where all but one digit are the same (lots of repeats)
+        for d in range(1, 10):
+            add(int(str(d) * length))
+    # clean rounds: d followed by zeros (5000, 70000, 3000000)
+    for d in range(1, 10):
+        p = 1
+        while d * p <= max_value:
+            add(d * p)
+            p *= 10
+    # ladders (consecutive ±1) and arithmetic progressions (step 2,3)
+    for step in (1, 2, 3):
+        for start in range(0, 10):
+            seq = []
+            v = start
+            while 0 <= v <= 9:
+                seq.append(str(v))
+                if len(seq) >= 3:
+                    add(int("".join(seq)))
+                    add(int("".join(reversed(seq))))
+                v += step
+    # binary (only 0/1, leading 1)
     for length in range(3, digits + 1):
-        for d in range(0, 10):
-            base = str(d) * length
-            for i in range(length):
-                for e in range(0, 10):
-                    if e == d:
-                        continue
-                    s = list(base)
-                    s[i] = str(e)
-                    if s[0] == "0":
-                        continue
-                    v = int("".join(s))
-                    if v <= max_value:
-                        pool.add(v)
-    for v in range(1000, max_value + 1, 1000):  # round thousands
-        pool.add(v)
-    result = sorted(pool)
+        for mask in range(1 << (length - 1)):
+            s = "1" + format(mask, f"0{length - 1}b")
+            add(int(s))
+    # AABB pairs
+    for a in range(1, 10):
+        for b in range(0, 10):
+            if a != b:
+                add(int(f"{a}{a}{b}{b}"))
+    # block patterns (ABAB, ABCABC…) — build from 2/3-digit blocks
+    for block in range(10, 1000):
+        bs = str(block)
+        if len(set(bs)) < 2:
+            continue
+        rep = bs * 2
+        while len(rep) <= digits:
+            add(int(rep))
+            rep += bs
+    # varied palindromes (mirror with real variety, not single-digit-dominated)
+    for length in range(3, digits + 1):
+        half = (length + 1) // 2
+        lo, hi = 10 ** (half - 1), 10 ** half
+        if half == 1:
+            lo, hi = 1, 10
+        for h in range(lo, hi):
+            hs = str(h)
+            full = hs + hs[-2::-1] if length % 2 else hs + hs[::-1]
+            if len(full) == length and idrarity.tier(full) == "mirror":
+                add(int(full))
+    # final guard: keep only genuinely cool numbers (drop any dominated /
+    # trashy ones a generator may have produced) so drops never look 'common'
+    result = sorted(v for v in pool if idrarity.tier(str(v)) != "common")
     _COOL_POOL_CACHE[max_value] = result
     return result
+
+
+def _elite_id_pool(max_value: int):
+    """ULTRA 'crazy drop': the flashiest slice — short punchy handles (≤5
+    digits) plus every repdigit and curated legend. Cached."""
+    cached = _ELITE_POOL_CACHE.get(max_value)
+    if cached is not None:
+        return cached
+    from . import idrarity
+    cool = _cool_id_pool(max_value)
+    elite = [v for v in cool
+             if len(str(v)) <= 5 or len(set(str(v))) == 1
+             or str(v) in idrarity._LEGENDARY]
+    _ELITE_POOL_CACHE[max_value] = elite
+    return elite
 
 
 class Storage:
@@ -1728,15 +1780,16 @@ class Storage:
                          ((text or None), pid))
         return True
 
-    def assign_random_id(self, user_id: int, max_value: int, cool_chance: float = 0.0):
+    def assign_random_id(self, user_id: int, max_value: int, cool_chance: float = 0.0,
+                         elite: bool = False):
         """Give the user a fresh random unused ID. With probability cool_chance
-        the roll is drawn from the 'cool' pool (short / repeated-digit IDs) —
-        used to give premium/ULTRA better odds at prized handles. Returns the
+        the roll is drawn from the 'cool' pool (nice structured IDs). ULTRA
+        members (elite=True) draw from the flashier 'elite' pool. Returns the
         pid, or None if the space is exhausted."""
         import random as _r
         with self._connect() as conn:
             if cool_chance > 0 and _r.random() < cool_chance:
-                pool = _cool_id_pool(max_value)
+                pool = _elite_id_pool(max_value) if elite else _cool_id_pool(max_value)
                 for _ in range(80):
                     pid = str(_r.choice(pool))
                     if not self._id_taken(conn, pid):
@@ -1755,15 +1808,17 @@ class Storage:
                     return pid
         return None
 
-    def assign_random_ids(self, user_id: int, max_value: int, n: int, cool_chance: float = 0.0):
+    def assign_random_ids(self, user_id: int, max_value: int, n: int, cool_chance: float = 0.0,
+                          elite: bool = False):
         """Bulk version of assign_random_id: hand out up to `n` fresh IDs in a
         single transaction (fast for large buys). Returns the list of pids."""
         import random as _r
         if n <= 1:
-            pid = self.assign_random_id(user_id, max_value, cool_chance)
+            pid = self.assign_random_id(user_id, max_value, cool_chance, elite)
             return [pid] if pid else []
         now = int(time.time())
-        pool = _cool_id_pool(max_value) if cool_chance > 0 else None
+        pool = ((_elite_id_pool(max_value) if elite else _cool_id_pool(max_value))
+                if cool_chance > 0 else None)
         pids = []
         with self._connect() as conn:
             taken = {r[0] for r in conn.execute("SELECT pid FROM player_ids").fetchall()}
@@ -1790,10 +1845,11 @@ class Storage:
                 pids.append(pid)
         return pids
 
-    def ensure_player_id(self, user_id: int, max_value: int, cool_chance: float = 0.0):
+    def ensure_player_id(self, user_id: int, max_value: int, cool_chance: float = 0.0,
+                         elite: bool = False):
         """Give a brand-new user their first ID if they have none."""
         if self.count_ids(user_id) == 0:
-            return self.assign_random_id(user_id, max_value, cool_chance)
+            return self.assign_random_id(user_id, max_value, cool_chance, elite)
         return None
 
     def _auction_bidder(self, conn, pid: int):

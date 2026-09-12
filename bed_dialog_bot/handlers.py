@@ -1944,10 +1944,14 @@ def _id_home_view(storage: Storage, uid: int):
     scan = [r["pid"] for r in shown] if total > 3000 else storage.ids_of(uid)
     best = max(scan, key=lambda p: idrarity.classify(p)["score"]) if scan else None
     best_str = f"⭐ Топ ID: {idrarity.badge(best)} <code>{best}</code> — {idrarity.label(best).split(' ',1)[1]} (~{idrarity.appraise(best, config.ID_BUY_COST)} BED)\n" if best else ""
+    ultra_str = ("👑 <b>ULTRA дроп</b>: почти всегда падают короткие/редкие ID (легендарные, зеркала, прогрессии)!\n"
+                 if storage.is_ultra(uid) else
+                 "👑 <i>ULTRA — элитный дроп самых крутых ID (короткие/легендарные)</i>\n")
     text = (
         "🆔 <b>Мои ID</b>\n\n"
         f"Твои ID: {ids_str}\n"
         f"{best_str}"
+        f"{ultra_str}"
         f"📦 Слотов занято: <b>{total}/{limit}</b>{bonus_str}\n"
         f"<i>free {config.ID_HOLD_FREE} · premium {config.ID_HOLD_PREMIUM} · ULTRA {config.ID_HOLD_ULTRA}</i>\n"
         f"💰 Баланс: {storage.get_bed(uid)} BED\n\n"
@@ -2153,7 +2157,8 @@ def _do_id_buy_n(storage: Storage, uid: int, n: int):
         return [], "funds"
     if not storage.spend_bed(uid, k * config.ID_BUY_COST, reason="id_buy"):
         return [], "funds"
-    pids = storage.assign_random_ids(uid, config.ID_MAX_VALUE, k, _id_cool_chance(storage, uid))
+    pids = storage.assign_random_ids(uid, config.ID_MAX_VALUE, k, _id_cool_chance(storage, uid),
+                                     elite=storage.is_ultra(uid))
     if len(pids) < k:  # refund any that failed to assign (space exhausted)
         storage.add_bed(uid, (k - len(pids)) * config.ID_BUY_COST, reason="id_refund")
     return pids, None
@@ -2440,7 +2445,7 @@ async def _id_callback(query, context, storage: Storage) -> None:
     uid = query.from_user.id
     data = query.data.split(":")
     op = data[1]
-    storage.ensure_player_id(uid, config.ID_MAX_VALUE, _id_cool_chance(storage, uid))
+    storage.ensure_player_id(uid, config.ID_MAX_VALUE, _id_cool_chance(storage, uid), elite=storage.is_ultra(uid))
 
     async def render_home():
         body, kb = _id_home_view(storage, uid)
@@ -3013,7 +3018,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
 
     if text.startswith("/start"):
         # Give every user their first ID on first contact.
-        storage.ensure_player_id(message.from_user.id, config.ID_MAX_VALUE, _id_cool_chance(storage, message.from_user.id))
+        storage.ensure_player_id(message.from_user.id, config.ID_MAX_VALUE, _id_cool_chance(storage, message.from_user.id), elite=storage.is_ultra(message.from_user.id))
         parts = text.split(maxsplit=1)
         payload = parts[1].strip() if len(parts) == 2 else ""
         # Return from the ad-link: grant the reward.
@@ -3919,7 +3924,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         await _id_buyslots(message, context, storage, n)
         return
     if text.startswith("/id") or text.startswith("/myid") or text.startswith("/айди"):
-        storage.ensure_player_id(message.from_user.id, config.ID_MAX_VALUE, _id_cool_chance(storage, message.from_user.id))
+        storage.ensure_player_id(message.from_user.id, config.ID_MAX_VALUE, _id_cool_chance(storage, message.from_user.id), elite=storage.is_ultra(message.from_user.id))
         parts = text.split()
         # subcommands: /id buy N  ·  /id slots N
         if len(parts) >= 2 and parts[1].lower() in ("buy", "купить", "buyslots", "slots", "слоты", "слот"):
