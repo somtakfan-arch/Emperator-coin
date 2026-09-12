@@ -78,7 +78,7 @@ import os as _os
 MINES_TILES = 25
 # House edge on mines. Bumped hard (was 0.05) — cashout multipliers are lower,
 # so players must reveal more tiles to profit and bust far more often.
-MINES_EDGE = float(_os.environ.get("MINES_EDGE", "0.20"))
+MINES_EDGE = float(_os.environ.get("MINES_EDGE", "0.35"))
 
 
 def mines_new(bombs: int):
