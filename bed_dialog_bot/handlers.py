@@ -2001,13 +2001,13 @@ def _id_home_view(storage: Storage, uid: int):
          _cb("🏠 Аренда", "id:rentmenu", "primary")],
         [_cb(f"💰 Продать боту ({config.ID_SELL_PRICE})", "id:sellmenu", "danger"),
          _cb("📤 На аукцион", "id:listmenu", "success")],
-        [_cb("🔒 Замки", "id:locks", "secondary"),
+        [_cb("🔒 Замки", "id:locks", "primary"),
          _cb(f"💰 Продать ВСЕ (кроме 🔒)", "id:sellall", "danger")],
         [_cb("🏷 Аукцион (купить у людей)", "id:auction", "success"),
          _cb("🔔 Радар", "id:radar", "primary")],
         [_cb("🪪 Визитка / поделиться", "id:card", "primary"),
-         _cb("🏅 Коллекции", "id:sets", "secondary")],
-        [_cb("🔄 Обновить", "id:home", "secondary")],
+         _cb("🏅 Коллекции", "id:sets", "primary")],
+        [_cb("🔄 Обновить", "id:home", "primary")],
     ]
     return text, InlineKeyboardMarkup(rows)
 
@@ -2147,7 +2147,7 @@ def _id_lot_view(storage: Storage, uid: int, pid: int):
         if a.get("buy_now"):
             rows.append([_cb(f"⚡ Купить сразу ({a['buy_now']})", f"id:buynow:{pid}", "danger")])
         rows.append([_cb("🤖 Авто-ставка", f"id:autobidhint:{pid}", "primary"),
-                     _cb("🔄", f"id:lot:{pid}", "secondary")])
+                     _cb("🔄", f"id:lot:{pid}", "primary")])
     else:
         if a["bidder"] is None:
             rows.append([InlineKeyboardButton("🚫 Снять с аукциона", callback_data=f"id:cancel:{pid}")])
@@ -2187,7 +2187,7 @@ def _id_fuse_view(storage: Storage, uid: int):
     rows = [
         [_cb(f"🎲 Слить {config.ID_FUSE_COOL} → крутой", f"id:fusego:{config.ID_FUSE_COOL}", "success")],
         [_cb(f"👑 Слить {config.ID_FUSE_ELITE} → элита", f"id:fusego:{config.ID_FUSE_ELITE}", "danger")],
-        [_cb("⬅️ Назад", "id:home", "secondary")],
+        [_cb("⬅️ Назад", "id:home", "primary")],
     ]
     return body, InlineKeyboardMarkup(rows)
 
@@ -2207,7 +2207,7 @@ def _id_radar_view(storage: Storage, uid: int):
     lines.append("\n➕ <code>/wish ID</code> или <code>/wish редкость</code> "
                  "(legendary/repeat/mirror/ladder/binary/pattern/step/angel/round)\n"
                  "➖ <code>/unwish ...</code>")
-    rows = [[_cb("🔄 Обновить", "id:radar", "secondary"), _cb("⬅️ Назад", "id:home", "secondary")]]
+    rows = [[_cb("🔄 Обновить", "id:radar", "primary"), _cb("⬅️ Назад", "id:home", "primary")]]
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -2226,7 +2226,7 @@ def _id_swaps_view(storage: Storage, uid: int):
                          _cb("❌", f"id:swapno:{o['id']}", "danger")])
     else:
         lines.append("<i>Входящих предложений нет.</i>")
-    rows.append([_cb("🔄 Обновить", "id:swaps", "secondary"), _cb("⬅️ Назад", "id:home", "secondary")])
+    rows.append([_cb("🔄 Обновить", "id:swaps", "primary"), _cb("⬅️ Назад", "id:home", "primary")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
@@ -2239,7 +2239,7 @@ def _id_rent_menu_view(storage: Storage, uid: int):
             "🚫 Снять предложение: <code>/rentoff ID</code>\n"
             "🏠 Взять в аренду: <code>/rentid ID дней</code>\n"
             f"⏳ Максимум {config.ID_RENT_MAX_DAYS} дней.")
-    rows = [[_cb("⬅️ Назад", "id:home", "secondary")]]
+    rows = [[_cb("⬅️ Назад", "id:home", "primary")]]
     return body, InlineKeyboardMarkup(rows)
 
 
@@ -2256,7 +2256,7 @@ def _id_card_view(storage: Storage, uid: int, botname: str):
                 "Кинь её кому угодно — по тапу откроется карточка ID, перевод BED и «написать».")
     body.append("\n🖼 Витрина: <code>/showcase ID ID ID</code> · 🎨 <code>/cardstyle эмодзи</code>")
     rows = [[_cb("🔳 QR-код", f"id:qr:{best}", "primary")] if best else [],
-            [_cb("⬅️ Назад", "id:home", "secondary")]]
+            [_cb("⬅️ Назад", "id:home", "primary")]]
     rows = [r for r in rows if r]
     return "\n".join(body), InlineKeyboardMarkup(rows)
 
