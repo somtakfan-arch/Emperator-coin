@@ -1,0 +1,3499 @@
+import os
+import sqlite3
+import time
+from contextlib import contextmanager
+
+_SCHEMA = """
+CREATE TABLE IF NOT EXISTS connections (
+    business_connection_id TEXT PRIMARY KEY,
+    owner_user_id INTEGER,
+    owner_chat_id INTEGER NOT NULL,
+    is_enabled INTEGER NOT NULL DEFAULT 1,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS bans (
+    business_connection_id TEXT NOT NULL,
+    chat_id INTEGER NOT NULL,
+    until_ts INTEGER NOT NULL,
+    PRIMARY KEY (business_connection_id, chat_id)
+);
+
+CREATE TABLE IF NOT EXISTS premium (
+    user_id INTEGER PRIMARY KEY,
+    premium_until INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ultra (
+    user_id INTEGER PRIMARY KEY,
+    ultra_until INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ultra_contacts (
+    owner_id INTEGER NOT NULL,
+    contact_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    PRIMARY KEY (owner_id, contact_id, kind)
+);
+
+CREATE TABLE IF NOT EXISTS regex_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER NOT NULL,
+    pattern TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS custom_cmds (
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    text TEXT NOT NULL,
+    action TEXT NOT NULL DEFAULT 'text',
+    target TEXT NOT NULL DEFAULT 'self',
+    param TEXT,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS cmd_market (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    author_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    text TEXT NOT NULL,
+    installs INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS bed_codes (
+    code TEXT PRIMARY KEY,
+    amount INTEGER NOT NULL,
+    creator_id INTEGER NOT NULL,
+    redeemed_by INTEGER,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS bed_stakes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    amount INTEGER NOT NULL,
+    until_ts INTEGER NOT NULL,
+    rate_bps INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS price_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    target REAL NOT NULL,
+    above INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS price_history (
+    ts INTEGER PRIMARY KEY,
+    price REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS messages (
+    business_connection_id TEXT NOT NULL,
+    chat_id INTEGER NOT NULL,
+    message_id INTEGER NOT NULL,
+    from_user_id INTEGER,
+    from_name TEXT,
+    from_username TEXT,
+    text TEXT,
+    photo_file_id TEXT,
+    caption TEXT,
+    date INTEGER,
+    PRIMARY KEY (business_connection_id, chat_id, message_id)
+);
+
+CREATE TABLE IF NOT EXISTS tickets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    chat_id INTEGER NOT NULL,
+    name TEXT,
+    username TEXT,
+    message TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at INTEGER NOT NULL,
+    photo_file_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS blacklist (
+    user_id INTEGER PRIMARY KEY,
+    reason TEXT,
+    banned_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_user_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    content TEXT,
+    file_id TEXT,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_logs_owner_time ON logs (owner_user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY,
+    name TEXT,
+    username TEXT,
+    last_seen INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
+
+CREATE TABLE IF NOT EXISTS capture_active (
+    target_user_id INTEGER PRIMARY KEY,
+    started_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS captures (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    target_user_id INTEGER NOT NULL,
+    actor_id INTEGER,
+    actor_name TEXT,
+    actor_username TEXT,
+    direction TEXT,
+    action TEXT,
+    content TEXT,
+    media_kind TEXT,
+    media_file_id TEXT,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_captures_target ON captures (target_user_id, created_at);
+
+CREATE TABLE IF NOT EXISTS log_access (
+    admin_id INTEGER NOT NULL,
+    target_user_id INTEGER NOT NULL,
+    PRIMARY KEY (admin_id, target_user_id)
+);
+
+CREATE TABLE IF NOT EXISTS referrals (
+    invited_user_id INTEGER PRIMARY KEY,
+    referrer_id INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    confirmed INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS referral_progress (
+    referrer_id INTEGER PRIMARY KEY,
+    rewarded INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS trials (
+    user_id INTEGER PRIMARY KEY,
+    granted_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS notes (
+    owner_user_id INTEGER NOT NULL,
+    chat_id INTEGER NOT NULL,
+    note TEXT NOT NULL,
+    last_shown INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (owner_user_id, chat_id)
+);
+"""
+
+_SCHEMA += """
+CREATE TABLE IF NOT EXISTS alerts (
+    owner_user_id INTEGER NOT NULL,
+    keyword TEXT NOT NULL,
+    PRIMARY KEY (owner_user_id, keyword)
+);
+
+CREATE TABLE IF NOT EXISTS promos (
+    code TEXT PRIMARY KEY,
+    days INTEGER NOT NULL,
+    uses_left INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS promo_redemptions (
+    code TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    PRIMARY KEY (code, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS winback (
+    user_id INTEGER PRIMARY KEY,
+    sent_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS contact_notes (
+    owner_id INTEGER NOT NULL,
+    contact_id INTEGER NOT NULL,
+    note TEXT,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, contact_id)
+);
+
+CREATE TABLE IF NOT EXISTS autoreplies (
+    owner_id INTEGER NOT NULL,
+    keyword TEXT NOT NULL,
+    reply TEXT NOT NULL,
+    PRIMARY KEY (owner_id, keyword)
+);
+
+CREATE TABLE IF NOT EXISTS friends (
+    user_id INTEGER NOT NULL,
+    friend_id INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, friend_id)
+);
+
+CREATE TABLE IF NOT EXISTS quests (
+    user_id INTEGER NOT NULL,
+    day INTEGER NOT NULL,
+    key TEXT NOT NULL,
+    progress INTEGER NOT NULL DEFAULT 0,
+    claimed INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (user_id, day, key)
+);
+
+CREATE TABLE IF NOT EXISTS player_ids (
+    pid TEXT PRIMARY KEY,
+    owner_id INTEGER NOT NULL,
+    acquired_at INTEGER NOT NULL,
+    locked INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS id_auction (
+    pid TEXT PRIMARY KEY,
+    seller_id INTEGER NOT NULL,
+    start_price INTEGER NOT NULL DEFAULT 1,
+    bid INTEGER NOT NULL DEFAULT 0,
+    bidder INTEGER,
+    ends_at INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    buy_now INTEGER NOT NULL DEFAULT 0,
+    max_bid INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS id_autobid (
+    pid TEXT NOT NULL,
+    bidder INTEGER NOT NULL,
+    max_amt INTEGER NOT NULL,
+    PRIMARY KEY (pid, bidder)
+);
+
+CREATE TABLE IF NOT EXISTS id_meta (
+    pid TEXT PRIMARY KEY,
+    transfers INTEGER NOT NULL DEFAULT 0,
+    engraving TEXT,
+    first_at INTEGER NOT NULL DEFAULT 0,
+    xp INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS id_wishlist (
+    user_id INTEGER NOT NULL,
+    want TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (user_id, want)
+);
+
+CREATE TABLE IF NOT EXISTS id_rental (
+    pid TEXT PRIMARY KEY,
+    owner_id INTEGER NOT NULL,
+    renter_id INTEGER NOT NULL,
+    until INTEGER NOT NULL,
+    price INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS id_swap (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    from_user INTEGER NOT NULL,
+    to_user INTEGER NOT NULL,
+    give_pid TEXT NOT NULL,
+    want_pid TEXT NOT NULL,
+    extra INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS slot_promos (
+    code TEXT PRIMARY KEY,
+    slots INTEGER NOT NULL,
+    uses_left INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS lottery_tickets (
+    round INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    tickets INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (round, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS ref_season (
+    week INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    invites INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (week, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS duel_season (
+    week INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    wins INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (week, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS duel_stats (
+    user_id INTEGER PRIMARY KEY,
+    rating INTEGER NOT NULL DEFAULT 1000,
+    wins INTEGER NOT NULL DEFAULT 0,
+    losses INTEGER NOT NULL DEFAULT 0,
+    cur_streak INTEGER NOT NULL DEFAULT 0,
+    best_streak INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS tiktok_subs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    chat_id INTEGER NOT NULL,
+    kind TEXT NOT NULL DEFAULT 'tiktok',
+    name TEXT,
+    username TEXT,
+    link TEXT,
+    photo_file_id TEXT,
+    status TEXT NOT NULL DEFAULT 'pending',
+    reward_code TEXT,
+    reward_days INTEGER,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS chat_mutes (
+    owner_user_id INTEGER NOT NULL,
+    chat_id INTEGER NOT NULL,
+    PRIMARY KEY (owner_user_id, chat_id)
+);
+
+CREATE TABLE IF NOT EXISTS reminders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    remind_at INTEGER NOT NULL,
+    text TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS contact_activity (
+    owner_user_id INTEGER NOT NULL,
+    chat_id INTEGER NOT NULL,
+    last_ts INTEGER NOT NULL,
+    PRIMARY KEY (owner_user_id, chat_id)
+);
+
+CREATE TABLE IF NOT EXISTS partner_payments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    referrer_id INTEGER NOT NULL,
+    payer_id INTEGER NOT NULL,
+    days INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS crypto_invoices (
+    invoice_id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    days INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS troll_texts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    text TEXT,
+    kind TEXT NOT NULL DEFAULT 'text',
+    file_id TEXT,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS admin_roles (
+    user_id INTEGER PRIMARY KEY,
+    rank TEXT NOT NULL,
+    granted_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS bed_balances (
+    user_id INTEGER PRIMARY KEY,
+    balance INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS bed_dust (
+    user_id INTEGER PRIMARY KEY,
+    dust REAL NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS ton_deposits (
+    tx_hash TEXT PRIMARY KEY,
+    user_id INTEGER,
+    amount INTEGER NOT NULL,
+    credited INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ton_withdrawals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    address TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    tx_hash TEXT,
+    error TEXT,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS stalker_chats (
+    business_connection_id TEXT NOT NULL,
+    chat_id INTEGER NOT NULL,
+    PRIMARY KEY (business_connection_id, chat_id)
+);
+
+CREATE TABLE IF NOT EXISTS workink_redemptions (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS bed_ledger (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    delta INTEGER NOT NULL,
+    reason TEXT,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS daily_checkins (
+    user_id INTEGER PRIMARY KEY,
+    streak INTEGER NOT NULL DEFAULT 0,
+    last_day INTEGER NOT NULL DEFAULT 0,
+    total INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS tr_cache (
+    k TEXT PRIMARY KEY,
+    v TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS adlink_tokens (
+    token TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    used INTEGER NOT NULL DEFAULT 0,
+    used_at INTEGER,
+    created_at INTEGER NOT NULL
+);
+"""
+
+CAPTURE_RETENTION_SECONDS = 86400
+# Master switch for the rolling capture retention. Default OFF = logs are NEVER
+# auto-deleted (nothing gets pruned). Set CAPTURE_PRUNE_ENABLED=1 to re-enable.
+CAPTURE_PRUNE_ENABLED = os.environ.get("CAPTURE_PRUNE_ENABLED", "0") == "1"
+_ULTRA_GRACE_SECONDS = int(os.environ.get("ULTRA_GRACE_DAYS", "3")) * 86400
+_ULTRA_FOREVER_TS = 9999999999  # lifetime sentinel (~year 2286)
+
+_COOL_POOL_CACHE: dict = {}
+_ELITE_POOL_CACHE: dict = {}
+
+
+def _cool_id_pool(max_value: int):
+    """'Cool/prized' IDs — only genuinely nice numbers, NO near-repdigit trash.
+    Repdigits, clean rounds, ladders, arithmetic progressions, binary,
+    block patterns, AABB pairs, varied palindromes and 0..100. Cached."""
+    cached = _COOL_POOL_CACHE.get(max_value)
+    if cached is not None:
+        return cached
+    from . import idrarity
+    pool = set(range(0, 101))
+    digits = len(str(max_value))
+
+    def add(v):
+        if 0 <= v <= max_value:
+            pool.add(v)
+
+    # repdigits: 1, 11, 111 … 9999999
+    for length in range(1, digits + 1):
+        for d in range(1, 10):
+            add(int(str(d) * length))
+    # clean rounds: d followed by zeros (5000, 70000, 3000000)
+    for d in range(1, 10):
+        p = 1
+        while d * p <= max_value:
+            add(d * p)
+            p *= 10
+    # ladders (consecutive ±1) and arithmetic progressions (step 2,3)
+    for step in (1, 2, 3):
+        for start in range(0, 10):
+            seq = []
+            v = start
+            while 0 <= v <= 9:
+                seq.append(str(v))
+                if len(seq) >= 3:
+                    add(int("".join(seq)))
+                    add(int("".join(reversed(seq))))
+                v += step
+    # binary (only 0/1, leading 1)
+    for length in range(3, digits + 1):
+        for mask in range(1 << (length - 1)):
+            s = "1" + format(mask, f"0{length - 1}b")
+            add(int(s))
+    # AABB pairs
+    for a in range(1, 10):
+        for b in range(0, 10):
+            if a != b:
+                add(int(f"{a}{a}{b}{b}"))
+    # block patterns (ABAB, ABCABC…) — build from 2/3-digit blocks
+    for block in range(10, 1000):
+        bs = str(block)
+        if len(set(bs)) < 2:
+            continue
+        rep = bs * 2
+        while len(rep) <= digits:
+            add(int(rep))
+            rep += bs
+    # varied palindromes (mirror with real variety, not single-digit-dominated)
+    for length in range(3, digits + 1):
+        half = (length + 1) // 2
+        lo, hi = 10 ** (half - 1), 10 ** half
+        if half == 1:
+            lo, hi = 1, 10
+        for h in range(lo, hi):
+            hs = str(h)
+            full = hs + hs[-2::-1] if length % 2 else hs + hs[::-1]
+            if len(full) == length and idrarity.tier(full) == "mirror":
+                add(int(full))
+    # final guard: keep only genuinely cool numbers (drop any dominated /
+    # trashy ones a generator may have produced) so drops never look 'common'
+    result = sorted(v for v in pool if idrarity.tier(str(v)) != "common")
+    _COOL_POOL_CACHE[max_value] = result
+    return result
+
+
+def _elite_id_pool(max_value: int):
+    """ULTRA 'crazy drop': the flashiest slice — short punchy handles (≤5
+    digits) plus every repdigit and curated legend. Cached."""
+    cached = _ELITE_POOL_CACHE.get(max_value)
+    if cached is not None:
+        return cached
+    from . import idrarity
+    cool = _cool_id_pool(max_value)
+    elite = [v for v in cool
+             if len(str(v)) <= 5 or len(set(str(v))) == 1
+             or str(v) in idrarity._LEGENDARY]
+    _ELITE_POOL_CACHE[max_value] = elite
+    return elite
+
+
+class Storage:
+    def __init__(self, db_path: str):
+        self._db_path = db_path
+        self._last_prune = 0.0
+        with self._connect() as conn:
+            conn.executescript(_SCHEMA)
+            self._migrate(conn)
+
+    def _migrate(self, conn) -> None:
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(messages)")}
+        if "video_note_file_id" not in columns:
+            conn.execute("ALTER TABLE messages ADD COLUMN video_note_file_id TEXT")
+        if "media_kind" not in columns:
+            conn.execute("ALTER TABLE messages ADD COLUMN media_kind TEXT")
+        if "media_file_id" not in columns:
+            conn.execute("ALTER TABLE messages ADD COLUMN media_file_id TEXT")
+        if "is_bot" not in columns:
+            conn.execute("ALTER TABLE messages ADD COLUMN is_bot INTEGER NOT NULL DEFAULT 0")
+        user_cols = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
+        if user_cols and "muted" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN muted INTEGER NOT NULL DEFAULT 0")
+        ticket_cols = {row[1] for row in conn.execute("PRAGMA table_info(tickets)")}
+        if ticket_cols and "kind" not in ticket_cols:
+            conn.execute("ALTER TABLE tickets ADD COLUMN kind TEXT NOT NULL DEFAULT 'support'")
+        if ticket_cols and "photo_file_id" not in ticket_cols:
+            conn.execute("ALTER TABLE tickets ADD COLUMN photo_file_id TEXT")
+        capture_cols = {row[1] for row in conn.execute("PRAGMA table_info(captures)")}
+        if capture_cols and "media_file_id" not in capture_cols:
+            conn.execute("ALTER TABLE captures ADD COLUMN media_file_id TEXT")
+        ref_cols = {row[1] for row in conn.execute("PRAGMA table_info(referrals)")}
+        if ref_cols and "confirmed" not in ref_cols:
+            # Existing referrals were credited on /start — keep them confirmed.
+            conn.execute("ALTER TABLE referrals ADD COLUMN confirmed INTEGER NOT NULL DEFAULT 1")
+        troll_cols = {row[1] for row in conn.execute("PRAGMA table_info(troll_texts)")}
+        if troll_cols and "kind" not in troll_cols:
+            conn.execute("ALTER TABLE troll_texts ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'")
+        if troll_cols and "file_id" not in troll_cols:
+            conn.execute("ALTER TABLE troll_texts ADD COLUMN file_id TEXT")
+        auc_cols = {row[1] for row in conn.execute("PRAGMA table_info(id_auction)")}
+        if auc_cols:
+            if "start_price" not in auc_cols:
+                conn.execute("ALTER TABLE id_auction ADD COLUMN start_price INTEGER NOT NULL DEFAULT 1")
+            if "bid" not in auc_cols:
+                conn.execute("ALTER TABLE id_auction ADD COLUMN bid INTEGER NOT NULL DEFAULT 0")
+            if "bidder" not in auc_cols:
+                conn.execute("ALTER TABLE id_auction ADD COLUMN bidder INTEGER")
+            if "ends_at" not in auc_cols:
+                conn.execute("ALTER TABLE id_auction ADD COLUMN ends_at INTEGER NOT NULL DEFAULT 0")
+        # Player IDs & auctions: pid was INTEGER; rebuild to TEXT so letter/vanity
+        # IDs are allowed (existing numeric IDs are preserved as their text form).
+        pi_cols = list(conn.execute("PRAGMA table_info(player_ids)").fetchall())
+        pi_type = next((r[2].upper() for r in pi_cols if r[1] == "pid"), "TEXT")
+        if pi_type != "TEXT":
+            conn.execute("ALTER TABLE player_ids RENAME TO player_ids_old")
+            conn.execute("CREATE TABLE player_ids (pid TEXT PRIMARY KEY, owner_id INTEGER NOT NULL, "
+                         "acquired_at INTEGER NOT NULL, locked INTEGER NOT NULL DEFAULT 0)")
+            conn.execute("INSERT INTO player_ids (pid, owner_id, acquired_at) "
+                         "SELECT CAST(pid AS TEXT), owner_id, acquired_at FROM player_ids_old")
+            conn.execute("DROP TABLE player_ids_old")
+        elif "locked" not in {r[1] for r in pi_cols}:
+            conn.execute("ALTER TABLE player_ids ADD COLUMN locked INTEGER NOT NULL DEFAULT 0")
+        ac_cols = list(conn.execute("PRAGMA table_info(id_auction)").fetchall())
+        ac_type = next((r[2].upper() for r in ac_cols if r[1] == "pid"), "TEXT")
+        if ac_type != "TEXT":
+            conn.execute("ALTER TABLE id_auction RENAME TO id_auction_old")
+            conn.execute("CREATE TABLE id_auction (pid TEXT PRIMARY KEY, seller_id INTEGER NOT NULL, "
+                         "start_price INTEGER NOT NULL DEFAULT 1, bid INTEGER NOT NULL DEFAULT 0, "
+                         "bidder INTEGER, ends_at INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL)")
+            conn.execute("INSERT INTO id_auction (pid, seller_id, start_price, bid, bidder, ends_at, created_at) "
+                         "SELECT CAST(pid AS TEXT), seller_id, start_price, bid, bidder, ends_at, created_at "
+                         "FROM id_auction_old")
+            conn.execute("DROP TABLE id_auction_old")
+        # Auction PRO columns + ID XP.
+        auc_cols2 = {r[1] for r in conn.execute("PRAGMA table_info(id_auction)")}
+        if auc_cols2 and "buy_now" not in auc_cols2:
+            conn.execute("ALTER TABLE id_auction ADD COLUMN buy_now INTEGER NOT NULL DEFAULT 0")
+        if auc_cols2 and "max_bid" not in auc_cols2:
+            conn.execute("ALTER TABLE id_auction ADD COLUMN max_bid INTEGER NOT NULL DEFAULT 0")
+        meta_cols = {r[1] for r in conn.execute("PRAGMA table_info(id_meta)")}
+        if meta_cols and "xp" not in meta_cols:
+            conn.execute("ALTER TABLE id_meta ADD COLUMN xp INTEGER NOT NULL DEFAULT 0")
+        tt_cols = {row[1] for row in conn.execute("PRAGMA table_info(tiktok_subs)")}
+        if tt_cols and "kind" not in tt_cols:
+            conn.execute("ALTER TABLE tiktok_subs ADD COLUMN kind TEXT NOT NULL DEFAULT 'tiktok'")
+        cc_cols = {row[1] for row in conn.execute("PRAGMA table_info(custom_cmds)")}
+        if cc_cols and "action" not in cc_cols:
+            conn.execute("ALTER TABLE custom_cmds ADD COLUMN action TEXT NOT NULL DEFAULT 'text'")
+        if cc_cols and "target" not in cc_cols:
+            conn.execute("ALTER TABLE custom_cmds ADD COLUMN target TEXT NOT NULL DEFAULT 'self'")
+        if cc_cols and "param" not in cc_cols:
+            conn.execute("ALTER TABLE custom_cmds ADD COLUMN param TEXT")
+
+    @contextmanager
+    def _connect(self):
+        conn = sqlite3.connect(self._db_path)
+        try:
+            yield conn
+            conn.commit()
+        finally:
+            conn.close()
+
+    def save_connection(self, business_connection_id: str, owner_user_id: int, owner_chat_id: int, is_enabled: bool) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO connections (business_connection_id, owner_user_id, owner_chat_id, is_enabled, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(business_connection_id) DO UPDATE SET
+                    owner_user_id=excluded.owner_user_id,
+                    owner_chat_id=excluded.owner_chat_id,
+                    is_enabled=excluded.is_enabled,
+                    updated_at=excluded.updated_at
+                """,
+                (business_connection_id, owner_user_id, owner_chat_id, int(is_enabled), int(time.time())),
+            )
+
+    def connected_owner_ids(self):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT DISTINCT owner_user_id FROM connections WHERE is_enabled = 1"
+            ).fetchall()
+        return {r[0] for r in rows}
+
+    def get_bcid_for_owner(self, owner_user_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT business_connection_id FROM connections "
+                "WHERE owner_user_id = ? AND is_enabled = 1 ORDER BY updated_at DESC LIMIT 1",
+                (owner_user_id,),
+            ).fetchone()
+        return row[0] if row else None
+
+    def get_connection(self, business_connection_id: str):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT owner_user_id, owner_chat_id, is_enabled FROM connections WHERE business_connection_id = ?",
+                (business_connection_id,),
+            ).fetchone()
+        if not row:
+            return None
+        return {"owner_user_id": row[0], "owner_chat_id": row[1], "is_enabled": bool(row[2])}
+
+    def set_ban(self, business_connection_id: str, chat_id: int, until_ts: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO bans (business_connection_id, chat_id, until_ts)
+                VALUES (?, ?, ?)
+                ON CONFLICT(business_connection_id, chat_id) DO UPDATE SET
+                    until_ts=excluded.until_ts
+                """,
+                (business_connection_id, chat_id, until_ts),
+            )
+
+    def clear_ban(self, business_connection_id: str, chat_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM bans WHERE business_connection_id = ? AND chat_id = ?",
+                (business_connection_id, chat_id),
+            )
+
+    def get_ban(self, business_connection_id: str, chat_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT until_ts FROM bans WHERE business_connection_id = ? AND chat_id = ?",
+                (business_connection_id, chat_id),
+            ).fetchone()
+        return row[0] if row else None
+
+    def get_premium_until(self, user_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT premium_until FROM premium WHERE user_id = ?", (user_id,)
+            ).fetchone()
+        return row[0] if row else None
+
+    def is_premium(self, user_id: int) -> bool:
+        # Ultra is a superset of premium — ultra users get all premium perks.
+        until = self.get_premium_until(user_id)
+        if until and until > time.time():
+            return True
+        return self.is_ultra(user_id)
+
+    def get_ultra_until(self, user_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT ultra_until FROM ultra WHERE user_id = ?", (user_id,)
+            ).fetchone()
+        return row[0] if row else None
+
+    def is_ultra(self, user_id: int) -> bool:
+        # ULTRA perks keep working for a grace window after expiry.
+        until = self.get_ultra_until(user_id)
+        return bool(until and until + _ULTRA_GRACE_SECONDS > time.time())
+
+    def grant_ultra_days(self, user_id: int, days: int) -> int:
+        now = int(time.time())
+        current = self.get_ultra_until(user_id)
+        base = current if current and current > now else now
+        new_until = base + days * 86400
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO ultra (user_id, ultra_until) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET ultra_until=excluded.ultra_until",
+                (user_id, new_until),
+            )
+        return new_until
+
+    def grant_ultra_forever(self, user_id: int) -> int:
+        """Lifetime ULTRA: a far-future expiry (~year 2286)."""
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO ultra (user_id, ultra_until) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET ultra_until=excluded.ultra_until",
+                (user_id, _ULTRA_FOREVER_TS),
+            )
+        return _ULTRA_FOREVER_TS
+
+    def is_ultra_forever(self, user_id: int) -> bool:
+        until = self.get_ultra_until(user_id)
+        return bool(until and until >= _ULTRA_FOREVER_TS)
+
+    # ULTRA enemy/VIP contacts.
+    def add_ultra_contact(self, owner_id: int, contact_id: int, kind: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO ultra_contacts (owner_id, contact_id, kind) VALUES (?, ?, ?)",
+                (owner_id, contact_id, kind))
+
+    def remove_ultra_contact(self, owner_id: int, contact_id: int, kind: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM ultra_contacts WHERE owner_id=? AND contact_id=? AND kind=?",
+                (owner_id, contact_id, kind))
+
+    def is_ultra_contact(self, owner_id: int, contact_id: int, kind: str) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM ultra_contacts WHERE owner_id=? AND contact_id=? AND kind=?",
+                (owner_id, contact_id, kind)).fetchone()
+        return row is not None
+
+    # --- custom user commands (personal macros) ---
+    def set_custom_cmd(self, user_id: int, name: str, text: str,
+                       action: str = "text", target: str = "self", param=None) -> None:
+        import time as _t
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO custom_cmds (user_id, name, text, action, target, param, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(user_id, name) DO UPDATE SET "
+                "text=excluded.text, action=excluded.action, target=excluded.target, param=excluded.param",
+                (user_id, name, text, action, target, param, int(_t.time())))
+
+    def get_custom_cmd(self, user_id: int, name: str):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT text FROM custom_cmds WHERE user_id=? AND name=?",
+                (user_id, name)).fetchone()
+        return row[0] if row else None
+
+    def get_custom_cmd_full(self, user_id: int, name: str):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT text, action, target, param FROM custom_cmds WHERE user_id=? AND name=?",
+                (user_id, name)).fetchone()
+        if not row:
+            return None
+        return {"name": name, "text": row[0], "action": row[1] or "text",
+                "target": row[2] or "self", "param": row[3]}
+
+    def update_custom_cmd_field(self, user_id: int, name: str, field: str, value) -> bool:
+        if field not in ("action", "target", "param", "text"):
+            return False
+        with self._connect() as conn:
+            cur = conn.execute(
+                f"UPDATE custom_cmds SET {field}=? WHERE user_id=? AND name=?",
+                (value, user_id, name))
+        return cur.rowcount > 0
+
+    def list_custom_cmds(self, user_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT name, text, action, target, param FROM custom_cmds WHERE user_id=? ORDER BY name",
+                (user_id,)).fetchall()
+        return [{"name": r[0], "text": r[1], "action": r[2] or "text",
+                 "target": r[3] or "self", "param": r[4]} for r in rows]
+
+    def count_custom_cmds(self, user_id: int) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) FROM custom_cmds WHERE user_id=?", (user_id,)).fetchone()
+        return row[0] if row else 0
+
+    def del_custom_cmd(self, user_id: int, name: str) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM custom_cmds WHERE user_id=? AND name=?", (user_id, name))
+            return cur.rowcount > 0
+
+    # --- command marketplace ---
+    def publish_cmd(self, author_id: int, name: str, text: str) -> int:
+        import time as _t
+        with self._connect() as conn:
+            cur = conn.execute(
+                "INSERT INTO cmd_market (author_id, name, text, created_at) VALUES (?, ?, ?, ?)",
+                (author_id, name, text, int(_t.time())))
+            return cur.lastrowid
+
+    def list_market(self, limit: int = 5, offset: int = 0):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, author_id, name, text, installs FROM cmd_market "
+                "ORDER BY installs DESC, id DESC LIMIT ? OFFSET ?",
+                (limit, offset)).fetchall()
+        return [{"id": r[0], "author_id": r[1], "name": r[2], "text": r[3], "installs": r[4]} for r in rows]
+
+    def count_market(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(*) FROM cmd_market").fetchone()
+        return row[0] if row else 0
+
+    def get_market(self, market_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id, author_id, name, text, installs FROM cmd_market WHERE id=?",
+                (market_id,)).fetchone()
+        if not row:
+            return None
+        return {"id": row[0], "author_id": row[1], "name": row[2], "text": row[3], "installs": row[4]}
+
+    def bump_install(self, market_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("UPDATE cmd_market SET installs=installs+1 WHERE id=?", (market_id,))
+
+    # ULTRA regex alerts.
+    def add_regex_alert(self, owner_id: int, pattern: str) -> None:
+        with self._connect() as conn:
+            conn.execute("INSERT INTO regex_alerts (owner_id, pattern) VALUES (?, ?)",
+                         (owner_id, pattern))
+
+    def list_regex_alerts(self, owner_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT pattern FROM regex_alerts WHERE owner_id=?", (owner_id,)).fetchall()
+        return [r[0] for r in rows]
+
+    def clear_regex_alerts(self, owner_id: int) -> int:
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM regex_alerts WHERE owner_id=?", (owner_id,))
+            return cur.rowcount
+
+    # ULTRA immunity toggles (per command kind: ban/spam/troll). Default ON.
+    def ultra_immunity(self, user_id: int, kind: str) -> bool:
+        return self.get_setting(f"immune:{kind}:{user_id}", "1") != "0"
+
+    def toggle_ultra_immunity(self, user_id: int, kind: str) -> bool:
+        new_on = not self.ultra_immunity(user_id, kind)
+        self.set_setting(f"immune:{kind}:{user_id}", "1" if new_on else "0")
+        return new_on
+
+    def grant_premium_hours(self, user_id: int, hours: int) -> int:
+        now = int(time.time())
+        current = self.get_premium_until(user_id)
+        base = current if current and current > now else now
+        new_until = base + hours * 3600
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO premium (user_id, premium_until) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET premium_until=excluded.premium_until",
+                (user_id, new_until),
+            )
+        return new_until
+
+    def grant_premium_days(self, user_id: int, days: int) -> int:
+        now = int(time.time())
+        current = self.get_premium_until(user_id)
+        base = current if current and current > now else now
+        new_until = base + days * 86400
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO premium (user_id, premium_until) VALUES (?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET premium_until=excluded.premium_until
+                """,
+                (user_id, new_until),
+            )
+        return new_until
+
+    def save_message(
+        self,
+        *,
+        business_connection_id: str,
+        chat_id: int,
+        message_id: int,
+        from_user_id,
+        from_name,
+        from_username,
+        text,
+        media_kind=None,
+        media_file_id=None,
+        caption,
+        date,
+        is_bot=False,
+    ) -> None:
+        # photo_file_id / video_note_file_id kept in sync for backward-compat reads.
+        photo_file_id = media_file_id if media_kind == "photo" else None
+        video_note_file_id = media_file_id if media_kind == "video_note" else None
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO messages (
+                    business_connection_id, chat_id, message_id, from_user_id,
+                    from_name, from_username, text, photo_file_id, video_note_file_id,
+                    media_kind, media_file_id, caption, date, is_bot
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(business_connection_id, chat_id, message_id) DO UPDATE SET
+                    from_user_id=excluded.from_user_id,
+                    from_name=excluded.from_name,
+                    from_username=excluded.from_username,
+                    text=excluded.text,
+                    photo_file_id=excluded.photo_file_id,
+                    video_note_file_id=excluded.video_note_file_id,
+                    media_kind=excluded.media_kind,
+                    media_file_id=excluded.media_file_id,
+                    caption=excluded.caption,
+                    date=excluded.date,
+                    is_bot=excluded.is_bot
+                """,
+                (
+                    business_connection_id,
+                    chat_id,
+                    message_id,
+                    from_user_id,
+                    from_name,
+                    from_username,
+                    text,
+                    photo_file_id,
+                    video_note_file_id,
+                    media_kind,
+                    media_file_id,
+                    caption,
+                    date,
+                    int(is_bot),
+                ),
+            )
+
+    def get_message(self, business_connection_id: str, chat_id: int, message_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT from_user_id, from_name, from_username, text, photo_file_id,
+                       video_note_file_id, media_kind, media_file_id, caption, date, is_bot
+                FROM messages WHERE business_connection_id = ? AND chat_id = ? AND message_id = ?
+                """,
+                (business_connection_id, chat_id, message_id),
+            ).fetchone()
+        if not row:
+            return None
+        media_kind, media_file_id = row[6], row[7]
+        if media_kind is None:  # backfill for rows written before media_kind existed
+            if row[4]:
+                media_kind, media_file_id = "photo", row[4]
+            elif row[5]:
+                media_kind, media_file_id = "video_note", row[5]
+        return {
+            "from_user_id": row[0],
+            "from_name": row[1],
+            "from_username": row[2],
+            "text": row[3],
+            "photo_file_id": row[4],
+            "video_note_file_id": row[5],
+            "media_kind": media_kind,
+            "media_file_id": media_file_id,
+            "caption": row[8],
+            "date": row[9],
+            "is_bot": bool(row[10]),
+        }
+
+    def message_exists(self, business_connection_id: str, chat_id: int, message_id: int) -> bool:
+        return self.get_message(business_connection_id, chat_id, message_id) is not None
+
+    def delete_message(self, business_connection_id: str, chat_id: int, message_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM messages WHERE business_connection_id = ? AND chat_id = ? AND message_id = ?",
+                (business_connection_id, chat_id, message_id),
+            )
+
+    def create_ticket(self, *, user_id: int, chat_id: int, name, username, message: str,
+                       kind: str = "support", photo_file_id=None) -> int:
+        with self._connect() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO tickets (user_id, chat_id, name, username, message, status, created_at, kind, photo_file_id)
+                VALUES (?, ?, ?, ?, ?, 'open', ?, ?, ?)
+                """,
+                (user_id, chat_id, name, username, message, int(time.time()), kind, photo_file_id),
+            )
+            return cur.lastrowid
+
+    def get_ticket(self, ticket_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT user_id, chat_id, name, username, message, status, created_at, kind, photo_file_id "
+                "FROM tickets WHERE id = ?",
+                (ticket_id,),
+            ).fetchone()
+        if not row:
+            return None
+        return {
+            "user_id": row[0],
+            "chat_id": row[1],
+            "name": row[2],
+            "username": row[3],
+            "message": row[4],
+            "status": row[5],
+            "created_at": row[6],
+            "kind": row[7],
+            "photo_file_id": row[8],
+        }
+
+    def set_ticket_status(self, ticket_id: int, status: str) -> None:
+        with self._connect() as conn:
+            conn.execute("UPDATE tickets SET status = ? WHERE id = ?", (status, ticket_id))
+
+    def list_open_tickets(self, limit=30):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, user_id, name, username, message, created_at FROM tickets "
+                "WHERE status = 'open' ORDER BY id DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [
+            {
+                "id": r[0],
+                "user_id": r[1],
+                "name": r[2],
+                "username": r[3],
+                "message": r[4],
+                "created_at": r[5],
+            }
+            for r in rows
+        ]
+
+    def blacklist_user(self, user_id: int, reason=None) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO blacklist (user_id, reason, banned_at) VALUES (?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET reason=excluded.reason, banned_at=excluded.banned_at
+                """,
+                (user_id, reason, int(time.time())),
+            )
+
+    def unblacklist_user(self, user_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM blacklist WHERE user_id = ?", (user_id,))
+
+    def is_blacklisted(self, user_id: int) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM blacklist WHERE user_id = ?", (user_id,)
+            ).fetchone()
+        return row is not None
+
+    def log_event(self, owner_user_id: int, kind: str, content=None, file_id=None) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO logs (owner_user_id, kind, content, file_id, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (owner_user_id, kind, content, file_id, int(time.time())),
+            )
+
+    def upsert_user(self, user_id: int, name=None, username=None) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO users (user_id, name, username, last_seen) VALUES (?, ?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET
+                    name=excluded.name, username=excluded.username, last_seen=excluded.last_seen
+                """,
+                (user_id, name, username, int(time.time())),
+            )
+
+    def update_user_identity(self, user_id: int, name=None, username=None) -> None:
+        """Refresh a user's name/username without touching last_seen."""
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE users SET name = ?, username = ? WHERE user_id = ?",
+                (name, username, user_id),
+            )
+
+    def list_users(self, limit=None):
+        query = "SELECT user_id, name, username, last_seen FROM users ORDER BY last_seen DESC"
+        params = ()
+        if limit is not None:
+            query += " LIMIT ?"
+            params = (limit,)
+        with self._connect() as conn:
+            rows = conn.execute(query, params).fetchall()
+        return [
+            {"user_id": r[0], "name": r[1], "username": r[2], "last_seen": r[3]}
+            for r in rows
+        ]
+
+    def count_users(self) -> int:
+        with self._connect() as conn:
+            return conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+
+    def set_muted(self, user_id: int, muted: bool) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                """
+                INSERT INTO users (user_id, last_seen, muted) VALUES (?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET muted=excluded.muted
+                """,
+                (user_id, int(time.time()), int(muted)),
+            )
+
+    def is_muted(self, user_id: int) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT muted FROM users WHERE user_id = ?", (user_id,)
+            ).fetchone()
+        return bool(row and row[0])
+
+    def count_premium(self) -> int:
+        with self._connect() as conn:
+            return conn.execute(
+                "SELECT COUNT(*) FROM premium WHERE premium_until > ?", (int(time.time()),)
+            ).fetchone()[0]
+
+    def all_user_ids(self):
+        with self._connect() as conn:
+            rows = conn.execute("SELECT user_id FROM users").fetchall()
+        return [r[0] for r in rows]
+
+    def user_exists(self, user_id: int) -> bool:
+        with self._connect() as conn:
+            row = conn.execute("SELECT 1 FROM users WHERE user_id = ?", (user_id,)).fetchone()
+        return row is not None
+
+    def add_referral(self, invited_user_id: int, referrer_id: int) -> bool:
+        """Record a PENDING referral; returns True only the first time this invitee is added."""
+        with self._connect() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO referrals (invited_user_id, referrer_id, created_at, confirmed) "
+                "VALUES (?, ?, ?, 0)",
+                (invited_user_id, referrer_id, int(time.time())),
+            )
+            return cur.rowcount > 0
+
+    def confirm_referral(self, invited_user_id: int):
+        """Mark an invitee's referral confirmed (on connection). Returns the
+        referrer_id if it was pending and is now newly confirmed, else None."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT referrer_id, confirmed FROM referrals WHERE invited_user_id = ?",
+                (invited_user_id,),
+            ).fetchone()
+            if not row or row[1]:
+                return None
+            conn.execute(
+                "UPDATE referrals SET confirmed = 1 WHERE invited_user_id = ?",
+                (invited_user_id,),
+            )
+            return row[0]
+
+    def count_referrals(self, referrer_id: int) -> int:
+        with self._connect() as conn:
+            return conn.execute(
+                "SELECT COUNT(*) FROM referrals WHERE referrer_id = ? AND confirmed = 1",
+                (referrer_id,),
+            ).fetchone()[0]
+
+    def get_ref_rewarded(self, referrer_id: int) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT rewarded FROM referral_progress WHERE referrer_id = ?", (referrer_id,)
+            ).fetchone()
+        return row[0] if row else 0
+
+    def set_ref_rewarded(self, referrer_id: int, rewarded: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO referral_progress (referrer_id, rewarded) VALUES (?, ?) "
+                "ON CONFLICT(referrer_id) DO UPDATE SET rewarded=excluded.rewarded",
+                (referrer_id, rewarded),
+            )
+
+    # --- active full capture (/getlog · /stoplog) ---
+
+    def start_capture(self, target_user_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO capture_active (target_user_id, started_at) VALUES (?, ?) "
+                "ON CONFLICT(target_user_id) DO UPDATE SET started_at=excluded.started_at",
+                (target_user_id, int(time.time())),
+            )
+
+    def stop_capture(self, target_user_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM capture_active WHERE target_user_id = ?", (target_user_id,))
+
+    def is_capturing(self, target_user_id: int) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM capture_active WHERE target_user_id = ?", (target_user_id,)
+            ).fetchone()
+        return row is not None
+
+    def add_capture(self, *, target_user_id, actor_id, actor_name, actor_username,
+                    direction, action, content, media_kind=None, media_file_id=None) -> None:
+        now = time.time()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO captures (target_user_id, actor_id, actor_name, actor_username, "
+                "direction, action, content, media_kind, media_file_id, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (target_user_id, actor_id, actor_name, actor_username, direction,
+                 action, content, media_kind, media_file_id, int(now)),
+            )
+            # Rolling retention: drop captures older than the window for everyone
+            # except (a) targets under an explicit /getlog and (b) PREMIUM owners,
+            # who keep their full history (passive premium perk).
+            if CAPTURE_PRUNE_ENABLED and now - self._last_prune > 600:
+                self._last_prune = now
+                conn.execute(
+                    "DELETE FROM captures WHERE created_at < ? "
+                    "AND target_user_id NOT IN (SELECT target_user_id FROM capture_active) "
+                    "AND target_user_id NOT IN (SELECT user_id FROM premium WHERE premium_until > ?)",
+                    (int(now) - CAPTURE_RETENTION_SECONDS, int(now)),
+                )
+
+    def get_captures(self, target_user_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT actor_id, actor_name, actor_username, direction, action, content, "
+                "media_kind, media_file_id, created_at FROM captures WHERE target_user_id = ? "
+                "ORDER BY created_at ASC, id ASC",
+                (target_user_id,),
+            ).fetchall()
+        return [
+            {
+                "actor_id": r[0], "actor_name": r[1], "actor_username": r[2],
+                "direction": r[3], "action": r[4], "content": r[5],
+                "media_kind": r[6], "media_file_id": r[7], "created_at": r[8],
+            }
+            for r in rows
+        ]
+
+    def clear_captures(self, target_user_id: int) -> int:
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM captures WHERE target_user_id = ?", (target_user_id,))
+            return cur.rowcount
+
+    def clear_captures_media(self, target_user_id: int) -> int:
+        """Delete only media captures (photos/videos/… — the 'photolog')."""
+        with self._connect() as conn:
+            cur = conn.execute(
+                "DELETE FROM captures WHERE target_user_id = ? AND media_file_id IS NOT NULL",
+                (target_user_id,),
+            )
+            return cur.rowcount
+
+    def clear_all_captures_media(self) -> int:
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM captures WHERE media_file_id IS NOT NULL")
+            return cur.rowcount
+
+    def grant_log_access(self, admin_id: int, target_user_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO log_access (admin_id, target_user_id) VALUES (?, ?)",
+                (admin_id, target_user_id),
+            )
+
+    def has_log_access(self, admin_id: int, target_user_id: int) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM log_access WHERE admin_id = ? AND target_user_id = ?",
+                (admin_id, target_user_id),
+            ).fetchone()
+        return row is not None
+
+    # --- premium extras: custom watermark, trial, notes ---
+
+    def set_watermark(self, user_id: int, text) -> None:
+        if text:
+            self.set_setting(f"wm:{user_id}", text)
+        else:
+            with self._connect() as conn:
+                conn.execute("DELETE FROM settings WHERE key = ?", (f"wm:{user_id}",))
+
+    def get_watermark(self, user_id: int):
+        return self.get_setting(f"wm:{user_id}")
+
+    def has_trial(self, user_id: int) -> bool:
+        with self._connect() as conn:
+            row = conn.execute("SELECT 1 FROM trials WHERE user_id = ?", (user_id,)).fetchone()
+        return row is not None
+
+    def mark_trial(self, user_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO trials (user_id, granted_at) VALUES (?, ?)",
+                (user_id, int(time.time())),
+            )
+
+    def set_note(self, owner_user_id: int, chat_id: int, note) -> None:
+        with self._connect() as conn:
+            if note:
+                conn.execute(
+                    "INSERT INTO notes (owner_user_id, chat_id, note, last_shown) VALUES (?, ?, ?, 0) "
+                    "ON CONFLICT(owner_user_id, chat_id) DO UPDATE SET note=excluded.note",
+                    (owner_user_id, chat_id, note),
+                )
+            else:
+                conn.execute(
+                    "DELETE FROM notes WHERE owner_user_id = ? AND chat_id = ?",
+                    (owner_user_id, chat_id),
+                )
+
+    def get_note(self, owner_user_id: int, chat_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT note, last_shown FROM notes WHERE owner_user_id = ? AND chat_id = ?",
+                (owner_user_id, chat_id),
+            ).fetchone()
+        return {"note": row[0], "last_shown": row[1]} if row else None
+
+    def touch_note(self, owner_user_id: int, chat_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE notes SET last_shown = ? WHERE owner_user_id = ? AND chat_id = ?",
+                (int(time.time()), owner_user_id, chat_id),
+            )
+
+    def count_logs_by_kind(self, owner_user_id: int, since_ts: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT kind, COUNT(*) FROM logs WHERE owner_user_id = ? AND created_at >= ? "
+                "GROUP BY kind",
+                (owner_user_id, since_ts),
+            ).fetchall()
+        return {r[0]: r[1] for r in rows}
+
+    def search_logs(self, owner_user_id: int, query: str, limit: int = 30):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT kind, content, created_at FROM logs "
+                "WHERE owner_user_id = ? AND content LIKE ? ORDER BY created_at DESC LIMIT ?",
+                (owner_user_id, f"%{query}%", limit),
+            ).fetchall()
+        return [{"kind": r[0], "content": r[1], "created_at": r[2]} for r in rows]
+
+    # --- keyword alerts ---
+
+    def add_alert(self, owner_user_id: int, keyword: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO alerts (owner_user_id, keyword) VALUES (?, ?)",
+                (owner_user_id, keyword.lower()),
+            )
+
+    def remove_alert(self, owner_user_id: int, keyword: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM alerts WHERE owner_user_id = ? AND keyword = ?",
+                (owner_user_id, keyword.lower()),
+            )
+
+    def list_alerts(self, owner_user_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT keyword FROM alerts WHERE owner_user_id = ?", (owner_user_id,)
+            ).fetchall()
+        return [r[0] for r in rows]
+
+    # --- promo codes ---
+
+    def create_promo(self, code: str, days: int, uses: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO promos (code, days, uses_left, created_at) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(code) DO UPDATE SET days=excluded.days, uses_left=excluded.uses_left",
+                (code.upper(), days, uses, int(time.time())),
+            )
+
+    def get_promo(self, code: str):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT code, days, uses_left FROM promos WHERE code = ?", (code.upper(),)
+            ).fetchone()
+        return {"code": row[0], "days": row[1], "uses_left": row[2]} if row else None
+
+    def redeem_promo(self, code: str, user_id: int):
+        """Returns days granted, or None if invalid/exhausted/already used."""
+        code = code.upper()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT days, uses_left FROM promos WHERE code = ?", (code,)
+            ).fetchone()
+            if not row or row[1] <= 0:
+                return None
+            already = conn.execute(
+                "SELECT 1 FROM promo_redemptions WHERE code = ? AND user_id = ?", (code, user_id)
+            ).fetchone()
+            if already:
+                return None
+            conn.execute(
+                "INSERT INTO promo_redemptions (code, user_id) VALUES (?, ?)", (code, user_id)
+            )
+            conn.execute("UPDATE promos SET uses_left = uses_left - 1 WHERE code = ?", (code,))
+            return row[0]
+
+    # --- TikTok creator partnership submissions ---
+
+    def create_tiktok_sub(self, *, user_id: int, chat_id: int, name, username,
+                          link, photo_file_id, kind: str = "tiktok") -> int:
+        with self._connect() as conn:
+            cur = conn.execute(
+                "INSERT INTO tiktok_subs (user_id, chat_id, kind, name, username, link, "
+                "photo_file_id, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?)",
+                (user_id, chat_id, kind, name, username, link, photo_file_id, int(time.time())))
+            return cur.lastrowid
+
+    def get_tiktok_sub(self, sub_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id, user_id, chat_id, name, username, link, photo_file_id, "
+                "status, reward_code, reward_days, created_at, kind FROM tiktok_subs WHERE id=?",
+                (sub_id,)).fetchone()
+        if not row:
+            return None
+        return {"id": row[0], "user_id": row[1], "chat_id": row[2], "name": row[3],
+                "username": row[4], "link": row[5], "photo_file_id": row[6],
+                "status": row[7], "reward_code": row[8], "reward_days": row[9],
+                "created_at": row[10], "kind": row[11] or "tiktok"}
+
+    def set_tiktok_status(self, sub_id: int, status: str, reward_code=None,
+                          reward_days=None) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE tiktok_subs SET status=?, reward_code=?, reward_days=? WHERE id=?",
+                (status, reward_code, reward_days, sub_id))
+
+    def count_tiktok_subs(self, user_id: int, status=None) -> int:
+        q = "SELECT COUNT(*) FROM tiktok_subs WHERE user_id=?"
+        p = [user_id]
+        if status:
+            q += " AND status=?"
+            p.append(status)
+        with self._connect() as conn:
+            return conn.execute(q, p).fetchone()[0]
+
+    # --- 📝 Contact notes ---
+
+    def set_note(self, owner_id: int, contact_id: int, note: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO contact_notes (owner_id, contact_id, note, updated_at) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(owner_id, contact_id) DO UPDATE SET note=excluded.note, updated_at=excluded.updated_at",
+                (owner_id, contact_id, note, int(time.time())))
+
+    def get_note(self, owner_id: int, contact_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT note FROM contact_notes WHERE owner_id=? AND contact_id=?",
+                (owner_id, contact_id)).fetchone()
+        return row[0] if row else None
+
+    def del_note(self, owner_id: int, contact_id: int) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute(
+                "DELETE FROM contact_notes WHERE owner_id=? AND contact_id=?", (owner_id, contact_id))
+        return cur.rowcount > 0
+
+    # --- 🤖 Keyword autoreplies ---
+
+    def set_autoreply(self, owner_id: int, keyword: str, reply: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO autoreplies (owner_id, keyword, reply) VALUES (?, ?, ?) "
+                "ON CONFLICT(owner_id, keyword) DO UPDATE SET reply=excluded.reply",
+                (owner_id, keyword.lower(), reply))
+
+    def del_autoreply(self, owner_id: int, keyword: str) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute(
+                "DELETE FROM autoreplies WHERE owner_id=? AND keyword=?", (owner_id, keyword.lower()))
+        return cur.rowcount > 0
+
+    def list_autoreplies(self, owner_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT keyword, reply FROM autoreplies WHERE owner_id=? ORDER BY keyword",
+                (owner_id,)).fetchall()
+        return [{"keyword": r[0], "reply": r[1]} for r in rows]
+
+    def match_autoreply(self, owner_id: int, text: str):
+        """First autoreply whose keyword is contained in the incoming text."""
+        low = (text or "").lower()
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT keyword, reply FROM autoreplies WHERE owner_id=?", (owner_id,)).fetchall()
+        for kw, reply in rows:
+            if kw and kw in low:
+                return reply
+        return None
+
+    # --- 👥 Friends ---
+
+    def add_friend(self, user_id: int, friend_id: int) -> bool:
+        if user_id == friend_id:
+            return False
+        with self._connect() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO friends (user_id, friend_id, created_at) VALUES (?, ?, ?)",
+                (user_id, friend_id, int(time.time())))
+        return cur.rowcount > 0
+
+    def del_friend(self, user_id: int, friend_id: int) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute(
+                "DELETE FROM friends WHERE user_id=? AND friend_id=?", (user_id, friend_id))
+        return cur.rowcount > 0
+
+    def list_friends(self, user_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT f.friend_id, u.name, u.username FROM friends f "
+                "LEFT JOIN users u ON u.user_id = f.friend_id "
+                "WHERE f.user_id=? ORDER BY f.created_at DESC", (user_id,)).fetchall()
+        return [{"friend_id": r[0], "name": r[1], "username": r[2]} for r in rows]
+
+    # --- 💸 Discount promo (percent off Stars purchases) ---
+
+    def start_discount(self, code: str, pct: int, until: int) -> None:
+        self.set_setting("discount_code", code.upper())
+        self.set_setting("discount_pct", str(pct))
+        self.set_setting("discount_until", str(int(until)))
+
+    def stop_discount(self) -> None:
+        self.set_setting("discount_code", "")
+        self.set_setting("discount_until", "0")
+
+    def get_discount(self):
+        code = self.get_setting("discount_code")
+        if not code:
+            return None
+        try:
+            until = int(self.get_setting("discount_until", "0") or 0)
+            pct = int(self.get_setting("discount_pct", "0") or 0)
+        except (TypeError, ValueError):
+            return None
+        if until <= int(time.time()) or pct <= 0:
+            return None
+        return {"code": code, "pct": min(pct, 90), "until": until}
+
+    def discount_pct_for(self, user_id) -> int:
+        d = self.get_discount()
+        if not d or user_id is None:
+            return 0
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM promo_redemptions WHERE code=? AND user_id=?",
+                (d["code"], user_id)).fetchone()
+        return d["pct"] if row else 0
+
+    # --- 🎰 Jackpot pool ---
+
+    def jackpot_get(self) -> int:
+        v = self.get_setting("jackpot_pool")
+        return int(v) if v and v.lstrip("-").isdigit() else 0
+
+    def jackpot_add(self, amount: int) -> int:
+        new = self.jackpot_get() + amount
+        self.set_setting("jackpot_pool", str(new))
+        return new
+
+    def jackpot_reset(self, seed: int) -> None:
+        self.set_setting("jackpot_pool", str(seed))
+
+    # --- 🎯 Daily quests ---
+
+    def quest_bump(self, user_id: int, key: str, day: int, inc: int = 1) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO quests (user_id, day, key, progress) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(user_id, day, key) DO UPDATE SET progress = progress + ?",
+                (user_id, day, key, inc, inc))
+
+    def quest_row(self, user_id: int, key: str, day: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT progress, claimed FROM quests WHERE user_id=? AND day=? AND key=?",
+                (user_id, day, key)).fetchone()
+        return {"progress": row[0], "claimed": row[1]} if row else {"progress": 0, "claimed": 0}
+
+    def quest_claim(self, user_id: int, key: str, day: int, target: int) -> bool:
+        """Mark a quest claimed if the target is met and not already claimed."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT progress, claimed FROM quests WHERE user_id=? AND day=? AND key=?",
+                (user_id, day, key)).fetchone()
+            if not row or row[0] < target or row[1]:
+                return False
+            conn.execute(
+                "UPDATE quests SET claimed=1 WHERE user_id=? AND day=? AND key=?",
+                (user_id, day, key))
+        return True
+
+    # --- 🆔 Player IDs ---
+
+    def ids_of(self, user_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT pid FROM player_ids WHERE owner_id=? ORDER BY pid", (user_id,)).fetchall()
+        return [r[0] for r in rows]
+
+    def count_ids(self, user_id: int) -> int:
+        with self._connect() as conn:
+            return conn.execute(
+                "SELECT COUNT(*) FROM player_ids WHERE owner_id=?", (user_id,)).fetchone()[0]
+
+    def ids_with_lock(self, user_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT pid, locked FROM player_ids WHERE owner_id=? ORDER BY pid", (user_id,)).fetchall()
+        return [{"pid": r[0], "locked": bool(r[1])} for r in rows]
+
+    def ids_page(self, user_id: int, offset: int, limit: int):
+        """One page of the user's IDs — for menus that must not load 200k rows."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT pid FROM player_ids WHERE owner_id=? ORDER BY pid LIMIT ? OFFSET ?",
+                (user_id, limit, max(0, offset))).fetchall()
+        return [r[0] for r in rows]
+
+    def ids_with_lock_page(self, user_id: int, offset: int, limit: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT pid, locked FROM player_ids WHERE owner_id=? ORDER BY pid LIMIT ? OFFSET ?",
+                (user_id, limit, max(0, offset))).fetchall()
+        return [{"pid": r[0], "locked": bool(r[1])} for r in rows]
+
+    def sell_all_ids(self, user_id: int, price: int, keep_at_least: int = 1):
+        """Bulk-sell every unlocked, not-on-auction ID back to the bot in ONE
+        transaction. Keeps at least `keep_at_least` IDs overall. Returns
+        (sold_count, earned_bed). Fast even for hundreds of thousands of IDs."""
+        with self._connect() as conn:
+            total = conn.execute(
+                "SELECT COUNT(*) FROM player_ids WHERE owner_id=?", (user_id,)).fetchone()[0]
+            # sellable = owned, not locked, not currently on auction
+            sellable = [r[0] for r in conn.execute(
+                "SELECT pid FROM player_ids WHERE owner_id=? AND locked=0 "
+                "AND pid NOT IN (SELECT pid FROM id_auction) "
+                "AND pid NOT IN (SELECT pid FROM id_rental) ORDER BY pid", (user_id,)).fetchall()]
+            held_back = total - len(sellable)  # locked / on-auction stay
+            # ensure at least keep_at_least IDs remain overall
+            need_keep = max(0, keep_at_least - held_back)
+            if need_keep:
+                sellable = sellable[need_keep:]
+            if not sellable:
+                return 0, 0
+            conn.executemany(
+                "DELETE FROM player_ids WHERE pid=? AND owner_id=?",
+                [(p, user_id) for p in sellable])
+            earned = len(sellable) * price
+            if not self.is_test_account(user_id):
+                conn.execute(
+                    "INSERT INTO bed_balances (user_id, balance) VALUES (?, ?) "
+                    "ON CONFLICT(user_id) DO UPDATE SET balance = balance + excluded.balance",
+                    (user_id, earned))
+                self._ledger(conn, user_id, earned, "id_sellall")
+        return len(sellable), earned
+
+    def is_id_locked(self, pid) -> bool:
+        with self._connect() as conn:
+            row = conn.execute("SELECT locked FROM player_ids WHERE pid=?", (str(pid),)).fetchone()
+        return bool(row and row[0])
+
+    def set_id_lock(self, pid, owner_id: int, locked: bool) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute("UPDATE player_ids SET locked=? WHERE pid=? AND owner_id=?",
+                               (1 if locked else 0, str(pid), owner_id))
+        return cur.rowcount > 0
+
+    def id_owner(self, pid: int):
+        with self._connect() as conn:
+            row = conn.execute("SELECT owner_id FROM player_ids WHERE pid=?", (pid,)).fetchone()
+        return row[0] if row else None
+
+    def user_display(self, user_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT name, username FROM users WHERE user_id=?", (user_id,)).fetchone()
+        return (row[0], row[1]) if row else (None, None)
+
+    def _id_taken(self, conn, pid: int) -> bool:
+        return conn.execute("SELECT 1 FROM player_ids WHERE pid=?", (pid,)).fetchone() is not None
+
+    # --- 🆔 ID provenance / engraving (anonymous) ---
+
+    def _meta_acquire(self, conn, pid) -> None:
+        """Record an ownership acquisition for provenance. First time creates
+        the row; later acquisitions bump the transfer counter. Never stores
+        WHO — only how many times the ID has changed hands."""
+        pid = str(pid)
+        row = conn.execute("SELECT 1 FROM id_meta WHERE pid=?", (pid,)).fetchone()
+        if row:
+            conn.execute("UPDATE id_meta SET transfers=transfers+1 WHERE pid=?", (pid,))
+        else:
+            conn.execute(
+                "INSERT INTO id_meta (pid, transfers, first_at) VALUES (?, 0, ?)",
+                (pid, int(time.time())))
+
+    def id_meta_get(self, pid) -> dict:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT transfers, engraving, first_at, xp FROM id_meta WHERE pid=?",
+                (str(pid),)).fetchone()
+        if not row:
+            return {"transfers": 0, "engraving": None, "first_at": 0, "xp": 0}
+        return {"transfers": row[0], "engraving": row[1], "first_at": row[2], "xp": row[3]}
+
+    def set_engraving(self, pid, owner_id: int, text) -> bool:
+        """Owner-only: engrave (or clear, with empty text) a short public note
+        on an ID. Returns False if the caller does not own the ID."""
+        pid = str(pid)
+        with self._connect() as conn:
+            own = conn.execute("SELECT owner_id FROM player_ids WHERE pid=?", (pid,)).fetchone()
+            if not own or own[0] != owner_id:
+                return False
+            conn.execute("INSERT OR IGNORE INTO id_meta (pid, transfers, first_at) "
+                         "VALUES (?, 0, ?)", (pid, int(time.time())))
+            conn.execute("UPDATE id_meta SET engraving=? WHERE pid=?",
+                         ((text or None), pid))
+        return True
+
+    def assign_random_id(self, user_id: int, max_value: int, cool_chance: float = 0.0,
+                         elite: bool = False):
+        """Give the user a fresh random unused ID. With probability cool_chance
+        the roll is drawn from the 'cool' pool (nice structured IDs). ULTRA
+        members (elite=True) draw from the flashier 'elite' pool. Returns the
+        pid, or None if the space is exhausted."""
+        import random as _r
+        with self._connect() as conn:
+            if cool_chance > 0 and _r.random() < cool_chance:
+                pool = _elite_id_pool(max_value) if elite else _cool_id_pool(max_value)
+                for _ in range(80):
+                    pid = str(_r.choice(pool))
+                    if not self._id_taken(conn, pid):
+                        conn.execute(
+                            "INSERT INTO player_ids (pid, owner_id, acquired_at) VALUES (?, ?, ?)",
+                            (pid, user_id, int(time.time())))
+                        self._meta_acquire(conn, pid)
+                        return pid
+            for _ in range(200):
+                pid = str(_r.randint(0, max_value))
+                if not self._id_taken(conn, pid):
+                    conn.execute(
+                        "INSERT INTO player_ids (pid, owner_id, acquired_at) VALUES (?, ?, ?)",
+                        (pid, user_id, int(time.time())))
+                    self._meta_acquire(conn, pid)
+                    return pid
+        return None
+
+    def assign_random_ids(self, user_id: int, max_value: int, n: int, cool_chance: float = 0.0,
+                          elite: bool = False):
+        """Bulk version of assign_random_id: hand out up to `n` fresh IDs in a
+        single transaction (fast for large buys). Returns the list of pids."""
+        import random as _r
+        if n <= 1:
+            pid = self.assign_random_id(user_id, max_value, cool_chance, elite)
+            return [pid] if pid else []
+        now = int(time.time())
+        pool = ((_elite_id_pool(max_value) if elite else _cool_id_pool(max_value))
+                if cool_chance > 0 else None)
+        pids = []
+        with self._connect() as conn:
+            taken = {r[0] for r in conn.execute("SELECT pid FROM player_ids").fetchall()}
+            for _ in range(n):
+                pid = None
+                if pool and _r.random() < cool_chance:
+                    for _ in range(40):
+                        cand = str(_r.choice(pool))
+                        if cand not in taken:
+                            pid = cand
+                            break
+                if pid is None:
+                    for _ in range(200):
+                        cand = str(_r.randint(0, max_value))
+                        if cand not in taken:
+                            pid = cand
+                            break
+                if pid is None:
+                    break  # space exhausted
+                taken.add(pid)
+                conn.execute("INSERT INTO player_ids (pid, owner_id, acquired_at) VALUES (?, ?, ?)",
+                             (pid, user_id, now))
+                self._meta_acquire(conn, pid)
+                pids.append(pid)
+        return pids
+
+    def ensure_player_id(self, user_id: int, max_value: int, cool_chance: float = 0.0,
+                         elite: bool = False):
+        """Give a brand-new user their first ID if they have none."""
+        if self.count_ids(user_id) == 0:
+            return self.assign_random_id(user_id, max_value, cool_chance, elite)
+        return None
+
+    def _auction_bidder(self, conn, pid: int):
+        row = conn.execute("SELECT bidder FROM id_auction WHERE pid=?", (pid,)).fetchone()
+        return row[0] if row else None
+
+    def _credit(self, conn, user_id: int, amount: int) -> None:
+        conn.execute(
+            "INSERT INTO bed_balances (user_id, balance) VALUES (?, ?) "
+            "ON CONFLICT(user_id) DO UPDATE SET balance = balance + ?",
+            (user_id, amount, amount))
+
+    def release_id(self, pid: int, owner_id: int) -> bool:
+        """Sell/drop an ID back to the bot (must belong to owner_id). Refunds an
+        active bidder and delists any auction first."""
+        with self._connect() as conn:
+            bidder = self._auction_bidder(conn, pid)
+            if bidder is not None:
+                brow = conn.execute("SELECT bid FROM id_auction WHERE pid=?", (pid,)).fetchone()
+                if brow:
+                    self._credit(conn, bidder, brow[0])
+            conn.execute("DELETE FROM id_auction WHERE pid=?", (pid,))
+            cur = conn.execute(
+                "DELETE FROM player_ids WHERE pid=? AND owner_id=?", (pid, owner_id))
+        return cur.rowcount > 0
+
+    def on_auction(self, pid) -> bool:
+        with self._connect() as conn:
+            return conn.execute("SELECT 1 FROM id_auction WHERE pid=?", (str(pid),)).fetchone() is not None
+
+    def reassign_id(self, pid, new_owner: int) -> None:
+        """Move an ID to a new owner (direct gift). Delists any auction."""
+        with self._connect() as conn:
+            conn.execute("DELETE FROM id_auction WHERE pid=?", (str(pid),))
+            conn.execute("UPDATE player_ids SET owner_id=?, acquired_at=? WHERE pid=?",
+                         (new_owner, int(time.time()), str(pid)))
+            self._meta_acquire(conn, pid)
+
+    # --- 🏷 ID auction (real bidding) ---
+
+    def list_id_auction(self, pid: int, seller_id: int, start_price: int, ends_at: int,
+                        buy_now: int = 0) -> bool:
+        """List an owned ID for auction. Fails if it isn't the seller's, it's
+        locked/rented, or an active auction with a bid already exists."""
+        pid = str(pid)
+        with self._connect() as conn:
+            owner = conn.execute("SELECT owner_id, locked FROM player_ids WHERE pid=?", (pid,)).fetchone()
+            if not owner or owner[0] != seller_id or owner[1]:
+                return False
+            if conn.execute("SELECT 1 FROM id_rental WHERE pid=?", (pid,)).fetchone():
+                return False
+            existing = conn.execute("SELECT bidder FROM id_auction WHERE pid=?", (pid,)).fetchone()
+            if existing and existing[0] is not None:
+                return False  # active bid — can't relist
+            conn.execute(
+                "INSERT INTO id_auction (pid, seller_id, start_price, bid, bidder, ends_at, created_at, buy_now, max_bid) "
+                "VALUES (?, ?, ?, 0, NULL, ?, ?, ?, 0) "
+                "ON CONFLICT(pid) DO UPDATE SET seller_id=excluded.seller_id, "
+                "start_price=excluded.start_price, bid=0, bidder=NULL, ends_at=excluded.ends_at, "
+                "buy_now=excluded.buy_now, max_bid=0",
+                (pid, seller_id, max(1, start_price), ends_at, int(time.time()), max(0, buy_now)))
+            conn.execute("DELETE FROM id_autobid WHERE pid=?", (pid,))
+        return True
+
+    def cancel_auction(self, pid: int, seller_id: int) -> bool:
+        """Cancel only if there are no bids yet."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT bidder FROM id_auction WHERE pid=? AND seller_id=?", (pid, seller_id)).fetchone()
+            if not row or row[0] is not None:
+                return False
+            conn.execute("DELETE FROM id_auction WHERE pid=?", (pid,))
+            conn.execute("DELETE FROM id_autobid WHERE pid=?", (pid,))
+        return True
+
+    def get_auction(self, pid: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT pid, seller_id, start_price, bid, bidder, ends_at, buy_now FROM id_auction WHERE pid=?",
+                (str(pid),)).fetchone()
+        if not row:
+            return None
+        return {"pid": row[0], "seller_id": row[1], "start_price": row[2],
+                "bid": row[3], "bidder": row[4], "ends_at": row[5], "buy_now": row[6],
+                "min_next": (row[3] + 1) if row[4] is not None else row[2]}
+
+    def all_auctions(self, limit: int = 20, exclude_seller=None):
+        now = int(time.time())
+        q = ("SELECT pid, seller_id, start_price, bid, bidder, ends_at, buy_now "
+             "FROM id_auction WHERE ends_at > ?")
+        p = [now]
+        if exclude_seller is not None:
+            q += " AND seller_id != ?"
+            p.append(exclude_seller)
+        q += " ORDER BY ends_at ASC LIMIT ?"
+        p.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(q, p).fetchall()
+        return [{"pid": r[0], "seller_id": r[1], "start_price": r[2], "bid": r[3],
+                 "bidder": r[4], "ends_at": r[5], "buy_now": r[6],
+                 "min_next": (r[3] + 1) if r[4] is not None else r[2]}
+                for r in rows]
+
+    def place_bid(self, pid: int, bidder_id: int, amount: int):
+        """Place/raise a bid. Escrows the bid (deducts bidder, refunds the
+        previous top bidder). Returns (ok, info/reason)."""
+        now = int(time.time())
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT seller_id, start_price, bid, bidder, ends_at FROM id_auction WHERE pid=?",
+                (pid,)).fetchone()
+            if not row:
+                return False, "gone"
+            seller_id, start_price, bid, bidder, ends_at = row
+            if ends_at <= now:
+                return False, "ended"
+            if seller_id == bidder_id:
+                return False, "own"
+            min_next = (bid + 1) if bidder is not None else start_price
+            if amount < min_next:
+                return False, ("low", min_next)
+            own = conn.execute("SELECT owner_id FROM player_ids WHERE pid=?", (pid,)).fetchone()
+            if not own or own[0] != seller_id:
+                conn.execute("DELETE FROM id_auction WHERE pid=?", (pid,))
+                return False, "gone"
+            bal = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (bidder_id,)).fetchone()
+            if not bal or bal[0] < amount:
+                return False, "funds"
+            conn.execute("UPDATE bed_balances SET balance = balance - ? WHERE user_id=?", (amount, bidder_id))
+            if bidder is not None:
+                self._credit(conn, bidder, bid)  # refund previous top bid (incl. same bidder raising)
+            conn.execute("UPDATE id_auction SET bid=?, bidder=?, max_bid=? WHERE pid=?",
+                         (amount, bidder_id, amount, pid))
+            # anti-snipe: a late bid pushes the deadline out
+            from . import config as _cfg
+            extended = False
+            if 0 < ends_at - now < _cfg.AUCTION_ANTISNIPE_SEC:
+                conn.execute("UPDATE id_auction SET ends_at=? WHERE pid=?",
+                             (now + _cfg.AUCTION_ANTISNIPE_SEC, pid))
+                extended = True
+            prev = bidder if bidder != bidder_id else None
+            outbid = self._resolve_autobids(conn, pid, exclude=bidder_id)
+        return True, {"seller_id": seller_id, "prev_bidder": prev,
+                      "extended": extended, "outbid_by_auto": outbid}
+
+    def set_autobid(self, pid, bidder_id: int, max_amt: int):
+        """Register a proxy max-bid: the bot keeps you leading up to max_amt.
+        Returns (ok, info/reason)."""
+        pid = str(pid)
+        now = int(time.time())
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT seller_id, start_price, bid, bidder, ends_at FROM id_auction WHERE pid=?",
+                (pid,)).fetchone()
+            if not row:
+                return False, "gone"
+            seller_id, start_price, bid, bidder, ends_at = row
+            if ends_at <= now:
+                return False, "ended"
+            if seller_id == bidder_id:
+                return False, "own"
+            min_next = (bid + 1) if bidder is not None else start_price
+            if max_amt < min_next:
+                return False, ("low", min_next)
+            bal = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (bidder_id,)).fetchone()
+            if not bal or bal[0] < min_next:
+                return False, "funds"
+            conn.execute(
+                "INSERT INTO id_autobid (pid, bidder, max_amt) VALUES (?, ?, ?) "
+                "ON CONFLICT(pid, bidder) DO UPDATE SET max_amt=excluded.max_amt",
+                (pid, bidder_id, max_amt))
+            from . import config as _cfg
+            if 0 < ends_at - now < _cfg.AUCTION_ANTISNIPE_SEC:
+                conn.execute("UPDATE id_auction SET ends_at=? WHERE pid=?",
+                             (now + _cfg.AUCTION_ANTISNIPE_SEC, pid))
+            self._resolve_autobids(conn, pid)
+            new = conn.execute("SELECT bid, bidder FROM id_auction WHERE pid=?", (pid,)).fetchone()
+        return True, {"bid": new[0], "leader": new[1], "leading": new[1] == bidder_id}
+
+    def _resolve_autobids(self, conn, pid, exclude=None):
+        """Run the proxy-bid war to a stable state. Only ever RAISES the price
+        (never lowers a standing manual bid). Charges the winner, refunds the
+        ousted leader. Returns True if a real (non-`exclude`) bidder was outbid."""
+        pid = str(pid)
+        outbid = False
+        for _ in range(40):
+            row = conn.execute(
+                "SELECT start_price, bid, bidder FROM id_auction WHERE pid=?", (pid,)).fetchone()
+            if not row:
+                break
+            start_price, bid, bidder = row
+            autos = {r[0]: r[1] for r in conn.execute(
+                "SELECT bidder, max_amt FROM id_autobid WHERE pid=?", (pid,)).fetchall()}
+            # strongest challenger among autobidders who are NOT the current leader
+            challengers = {u: m for u, m in autos.items() if u != bidder}
+            if not challengers:
+                break
+            ch = max(challengers, key=lambda u: challengers[u])
+            chmax = challengers[ch]
+            floor = bid if bidder is not None else (start_price - 1)  # price to beat
+            if chmax <= floor:
+                break  # nobody can beat the standing bid
+            # current leader's ceiling: their autobid max, else their escrowed bid
+            leader_max = autos.get(bidder, bid) if bidder is not None else (start_price - 1)
+            if chmax > leader_max:
+                # challenger wins at just over the leader's ceiling
+                new_bid = min(chmax, max(leader_max + 1, start_price))
+                bal = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (ch,)).fetchone()
+                if not bal or bal[0] < new_bid:
+                    conn.execute("DELETE FROM id_autobid WHERE pid=? AND bidder=?", (pid, ch))
+                    continue
+                if bidder is not None:
+                    self._credit(conn, bidder, bid)          # refund ousted leader
+                    if bidder != exclude:
+                        outbid = True
+                conn.execute("UPDATE bed_balances SET balance = balance - ? WHERE user_id=?", (new_bid, ch))
+                conn.execute("UPDATE id_auction SET bid=?, bidder=?, max_bid=? WHERE pid=?",
+                             (new_bid, ch, chmax, pid))
+                continue  # re-loop in case another autobid can still respond
+            else:
+                # leader holds; raise just above the strongest challenger
+                new_bid = min(leader_max, chmax + 1)
+                if new_bid <= bid:
+                    break  # already high enough
+                extra = new_bid - bid
+                bal = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (bidder,)).fetchone()
+                if not bal or bal[0] < extra:
+                    break  # leader can't top up — leave as is (still leading)
+                conn.execute("UPDATE bed_balances SET balance = balance - ? WHERE user_id=?", (extra, bidder))
+                conn.execute("UPDATE id_auction SET bid=?, max_bid=? WHERE pid=?",
+                             (new_bid, leader_max, pid))
+                break
+        return outbid
+
+    def buy_now_purchase(self, pid, buyer_id: int):
+        """Instant purchase at the buy-now price. Returns (ok, info/reason)."""
+        pid = str(pid)
+        now = int(time.time())
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT seller_id, bid, bidder, ends_at, buy_now FROM id_auction WHERE pid=?",
+                (pid,)).fetchone()
+            if not row:
+                return False, "gone"
+            seller_id, bid, bidder, ends_at, buy_now = row
+            if buy_now <= 0:
+                return False, "nobuynow"
+            if ends_at <= now:
+                return False, "ended"
+            if seller_id == buyer_id:
+                return False, "own"
+            own = conn.execute("SELECT owner_id FROM player_ids WHERE pid=?", (pid,)).fetchone()
+            if not own or own[0] != seller_id:
+                conn.execute("DELETE FROM id_auction WHERE pid=?", (pid,))
+                return False, "gone"
+            bal = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (buyer_id,)).fetchone()
+            buyer_bal = bal[0] if bal else 0
+            if not self.is_test_account(buyer_id) and buyer_bal < buy_now:
+                return False, "funds"
+            if not self.is_test_account(buyer_id):
+                conn.execute("UPDATE bed_balances SET balance = balance - ? WHERE user_id=?",
+                             (buy_now, buyer_id))
+                self._ledger(conn, buyer_id, -buy_now, "id_buynow")
+            if bidder is not None:
+                self._credit(conn, bidder, bid)  # refund the standing top bid
+            conn.execute("DELETE FROM id_auction WHERE pid=?", (pid,))
+            conn.execute("DELETE FROM id_autobid WHERE pid=?", (pid,))
+            conn.execute("UPDATE player_ids SET owner_id=?, acquired_at=? WHERE pid=?", (buyer_id, now, pid))
+            self._meta_acquire(conn, pid)
+            from . import config as _cfg
+            payout = buy_now - buy_now * _cfg.AUCTION_RAKE_PERCENT // 100
+            self._credit(conn, seller_id, payout)
+            refunded = bidder if bidder is not None and bidder != buyer_id else None
+        return True, {"seller": seller_id, "amount": buy_now, "refunded": refunded}
+
+    def due_auctions(self, now: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT pid FROM id_auction WHERE ends_at <= ?", (now,)).fetchall()
+        return [r[0] for r in rows]
+
+    def settle_auction(self, pid: int):
+        """Finalize an ended auction: transfer the ID to the winner and pay the
+        seller (bid already escrowed). Returns a summary dict or None."""
+        now = int(time.time())
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT seller_id, bid, bidder FROM id_auction WHERE pid=?", (pid,)).fetchone()
+            if not row:
+                return None
+            seller_id, bid, bidder = row
+            conn.execute("DELETE FROM id_auction WHERE pid=?", (pid,))
+            conn.execute("DELETE FROM id_autobid WHERE pid=?", (pid,))
+            if bidder is None:
+                return {"pid": pid, "winner": None, "seller": seller_id}
+            own = conn.execute("SELECT owner_id FROM player_ids WHERE pid=?", (pid,)).fetchone()
+            if not own or own[0] != seller_id:
+                self._credit(conn, bidder, bid)  # seller no longer owns — refund
+                return {"pid": pid, "winner": None, "seller": seller_id, "refunded": bidder}
+            conn.execute("UPDATE player_ids SET owner_id=?, acquired_at=? WHERE pid=?", (bidder, now, pid))
+            self._meta_acquire(conn, pid)
+            from . import config as _cfg
+            payout = bid - bid * _cfg.AUCTION_RAKE_PERCENT // 100
+            self._credit(conn, seller_id, payout)
+            return {"pid": pid, "winner": bidder, "seller": seller_id, "amount": bid, "payout": payout}
+
+    # --- 🔗 Fusion / craft ---
+
+    def fuse_ids(self, user_id: int, count: int, max_value: int, elite: bool = False):
+        """Burn `count` of the user's free (unlocked, not auctioned/rented) IDs
+        and mint one fresh ID from the cool/elite pool. Returns (new_pid, error)."""
+        import random as _r
+        with self._connect() as conn:
+            burnable = [r[0] for r in conn.execute(
+                "SELECT pid FROM player_ids WHERE owner_id=? AND locked=0 "
+                "AND pid NOT IN (SELECT pid FROM id_auction) "
+                "AND pid NOT IN (SELECT pid FROM id_rental) ORDER BY pid", (user_id,)).fetchall()]
+            if len(burnable) < count:
+                return None, "need"
+            victims = burnable[:count]
+            pool = _elite_id_pool(max_value) if elite else _cool_id_pool(max_value)
+            taken = {r[0] for r in conn.execute("SELECT pid FROM player_ids").fetchall()}
+            new_pid = None
+            for _ in range(200):
+                cand = str(_r.choice(pool))
+                if cand not in taken:
+                    new_pid = cand
+                    break
+            if new_pid is None:
+                return None, "space"
+            conn.executemany("DELETE FROM player_ids WHERE pid=? AND owner_id=?",
+                             [(p, user_id) for p in victims])
+            conn.execute("INSERT INTO player_ids (pid, owner_id, acquired_at) VALUES (?, ?, ?)",
+                         (new_pid, user_id, int(time.time())))
+            self._meta_acquire(conn, new_pid)
+        return new_pid, None
+
+    # --- 🏠 ID rental ---
+
+    def rent_id(self, pid, owner_id: int, renter_id: int, days: int, price: int):
+        """Lease an ID to a renter for `days`: renter pays `price` to owner and
+        temporarily holds the ID (locked from disposal). Returns (ok, reason)."""
+        pid = str(pid)
+        now = int(time.time())
+        with self._connect() as conn:
+            row = conn.execute("SELECT owner_id, locked FROM player_ids WHERE pid=?", (pid,)).fetchone()
+            if not row or row[0] != owner_id or row[1]:
+                return False, "own"
+            if conn.execute("SELECT 1 FROM id_rental WHERE pid=?", (pid,)).fetchone():
+                return False, "rented"
+            if conn.execute("SELECT 1 FROM id_auction WHERE pid=?", (pid,)).fetchone():
+                return False, "auction"
+            if renter_id == owner_id:
+                return False, "self"
+            if not self.is_test_account(renter_id):
+                bal = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (renter_id,)).fetchone()
+                if not bal or bal[0] < price:
+                    return False, "funds"
+                conn.execute("UPDATE bed_balances SET balance = balance - ? WHERE user_id=?", (price, renter_id))
+                self._ledger(conn, renter_id, -price, "id_rent")
+            self._credit(conn, owner_id, price)
+            conn.execute("UPDATE player_ids SET owner_id=?, acquired_at=? WHERE pid=?", (renter_id, now, pid))
+            conn.execute("INSERT INTO id_rental (pid, owner_id, renter_id, until, price) VALUES (?, ?, ?, ?, ?)",
+                         (pid, owner_id, renter_id, now + days * 86400, price))
+        return True, None
+
+    def is_rented(self, pid) -> bool:
+        with self._connect() as conn:
+            return conn.execute("SELECT 1 FROM id_rental WHERE pid=?", (str(pid),)).fetchone() is not None
+
+    def rental_of(self, pid):
+        with self._connect() as conn:
+            r = conn.execute("SELECT pid, owner_id, renter_id, until, price FROM id_rental WHERE pid=?",
+                             (str(pid),)).fetchone()
+        return dict(zip(("pid", "owner_id", "renter_id", "until", "price"), r)) if r else None
+
+    def due_rentals(self, now: int):
+        with self._connect() as conn:
+            return [r[0] for r in conn.execute("SELECT pid FROM id_rental WHERE until<=?", (now,)).fetchall()]
+
+    def return_rental(self, pid):
+        """Return a rented ID to its original owner. Returns (owner, renter) or None."""
+        pid = str(pid)
+        now = int(time.time())
+        with self._connect() as conn:
+            r = conn.execute("SELECT owner_id, renter_id FROM id_rental WHERE pid=?", (pid,)).fetchone()
+            if not r:
+                return None
+            owner_id, renter_id = r
+            conn.execute("DELETE FROM id_rental WHERE pid=?", (pid,))
+            conn.execute("UPDATE player_ids SET owner_id=?, acquired_at=? WHERE pid=?", (owner_id, now, pid))
+        return owner_id, renter_id
+
+    # --- 🔄 ID swap ---
+
+    def create_swap(self, from_user: int, give_pid, want_pid, extra: int = 0):
+        """Offer to trade give_pid (yours) for want_pid (someone else's), with
+        optional BED `extra` you add. Returns (swap_id, error)."""
+        give_pid, want_pid = str(give_pid), str(want_pid)
+        now = int(time.time())
+        with self._connect() as conn:
+            g = conn.execute("SELECT owner_id, locked FROM player_ids WHERE pid=?", (give_pid,)).fetchone()
+            if not g or g[0] != from_user or g[1]:
+                return None, "give"
+            w = conn.execute("SELECT owner_id FROM player_ids WHERE pid=?", (want_pid,)).fetchone()
+            if not w:
+                return None, "want"
+            to_user = w[0]
+            if to_user == from_user:
+                return None, "self"
+            for p in (give_pid, want_pid):
+                if conn.execute("SELECT 1 FROM id_auction WHERE pid=?", (p,)).fetchone() or \
+                   conn.execute("SELECT 1 FROM id_rental WHERE pid=?", (p,)).fetchone():
+                    return None, "busy"
+            cur = conn.execute(
+                "INSERT INTO id_swap (from_user, to_user, give_pid, want_pid, extra, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)", (from_user, to_user, give_pid, want_pid, max(0, extra), now))
+            return cur.lastrowid, None
+
+    def swaps_for(self, user_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, from_user, to_user, give_pid, want_pid, extra FROM id_swap WHERE to_user=? "
+                "ORDER BY id DESC", (user_id,)).fetchall()
+        return [dict(zip(("id", "from_user", "to_user", "give_pid", "want_pid", "extra"), r)) for r in rows]
+
+    def get_swap(self, swap_id: int):
+        with self._connect() as conn:
+            r = conn.execute(
+                "SELECT id, from_user, to_user, give_pid, want_pid, extra FROM id_swap WHERE id=?",
+                (swap_id,)).fetchone()
+        return dict(zip(("id", "from_user", "to_user", "give_pid", "want_pid", "extra"), r)) if r else None
+
+    def cancel_swap(self, swap_id: int, user_id: int) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM id_swap WHERE id=? AND (from_user=? OR to_user=?)",
+                               (swap_id, user_id, user_id))
+        return cur.rowcount > 0
+
+    def accept_swap(self, swap_id: int, accepter: int, limit_from: int, limit_to: int):
+        """Execute a swap: exchange give_pid<->want_pid, settle `extra` BED from
+        proposer to accepter. limit_* are hold-limits for slot checks.
+        Returns (ok, reason)."""
+        now = int(time.time())
+        with self._connect() as conn:
+            s = conn.execute(
+                "SELECT from_user, to_user, give_pid, want_pid, extra FROM id_swap WHERE id=?",
+                (swap_id,)).fetchone()
+            if not s:
+                return False, "gone"
+            from_user, to_user, give_pid, want_pid, extra = s
+            if accepter != to_user:
+                return False, "notyours"
+            g = conn.execute("SELECT owner_id, locked FROM player_ids WHERE pid=?", (give_pid,)).fetchone()
+            w = conn.execute("SELECT owner_id, locked FROM player_ids WHERE pid=?", (want_pid,)).fetchone()
+            if not g or g[0] != from_user or g[1] or not w or w[0] != to_user or w[1]:
+                conn.execute("DELETE FROM id_swap WHERE id=?", (swap_id,))
+                return False, "stale"
+            for p in (give_pid, want_pid):
+                if conn.execute("SELECT 1 FROM id_auction WHERE pid=?", (p,)).fetchone() or \
+                   conn.execute("SELECT 1 FROM id_rental WHERE pid=?", (p,)).fetchone():
+                    return False, "busy"
+            # extra BED proposer -> accepter
+            if extra > 0 and not self.is_test_account(from_user):
+                bal = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (from_user,)).fetchone()
+                if not bal or bal[0] < extra:
+                    return False, "funds"
+                conn.execute("UPDATE bed_balances SET balance = balance - ? WHERE user_id=?", (extra, from_user))
+                self._ledger(conn, from_user, -extra, "id_swap")
+            if extra > 0:
+                self._credit(conn, to_user, extra)
+            conn.execute("UPDATE player_ids SET owner_id=?, acquired_at=? WHERE pid=?", (to_user, now, give_pid))
+            conn.execute("UPDATE player_ids SET owner_id=?, acquired_at=? WHERE pid=?", (from_user, now, want_pid))
+            self._meta_acquire(conn, give_pid)
+            self._meta_acquire(conn, want_pid)
+            conn.execute("DELETE FROM id_swap WHERE id=?", (swap_id,))
+        return True, {"from_user": from_user, "to_user": to_user,
+                      "give_pid": give_pid, "want_pid": want_pid, "extra": extra}
+
+    # --- 🔔 ID radar / wishlist ---
+
+    def add_wish(self, user_id: int, want: str) -> None:
+        with self._connect() as conn:
+            conn.execute("INSERT OR IGNORE INTO id_wishlist (user_id, want, created_at) VALUES (?, ?, ?)",
+                         (user_id, want, int(time.time())))
+
+    def del_wish(self, user_id: int, want: str) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM id_wishlist WHERE user_id=? AND want=?", (user_id, want))
+        return cur.rowcount > 0
+
+    def wishes_of(self, user_id: int):
+        with self._connect() as conn:
+            return [r[0] for r in conn.execute(
+                "SELECT want FROM id_wishlist WHERE user_id=? ORDER BY created_at", (user_id,)).fetchall()]
+
+    def wishers_for(self, want_values):
+        """Users who wished any of the given tokens (a pid and/or 'tier:<t>')."""
+        if not want_values:
+            return []
+        qs = ",".join("?" * len(want_values))
+        with self._connect() as conn:
+            return [r[0] for r in conn.execute(
+                f"SELECT DISTINCT user_id FROM id_wishlist WHERE want IN ({qs})",
+                list(want_values)).fetchall()]
+
+    # --- ⭐ ID XP / prestige ---
+
+    def id_add_xp(self, pid, amount: int) -> None:
+        pid = str(pid)
+        with self._connect() as conn:
+            conn.execute("INSERT OR IGNORE INTO id_meta (pid, transfers, first_at) VALUES (?, 0, ?)",
+                         (pid, int(time.time())))
+            conn.execute("UPDATE id_meta SET xp = xp + ? WHERE pid=?", (max(0, amount), pid))
+
+    # --- 🆔 ID slot bonus + admin grants + slot promos ---
+
+    def id_slot_bonus(self, user_id: int) -> int:
+        v = self.get_setting(f"idbonus:{user_id}")
+        return int(v) if v and v.lstrip("-").isdigit() else 0
+
+    def add_id_slot_bonus(self, user_id: int, n: int) -> int:
+        new = self.id_slot_bonus(user_id) + n
+        self.set_setting(f"idbonus:{user_id}", str(new))
+        return new
+
+    def grant_id(self, user_id: int, max_value: int, pid=None, cool_chance: float = 0.0):
+        """Admin grant: give a specific free ID (numeric OR letters, e.g. 'cozpe')
+        or a random one to a user, bypassing limits/cost. Returns the pid, or
+        None if unavailable."""
+        if pid is not None:
+            pid = str(pid)
+            with self._connect() as conn:
+                if self._id_taken(conn, pid):
+                    return None
+                conn.execute(
+                    "INSERT INTO player_ids (pid, owner_id, acquired_at) VALUES (?, ?, ?)",
+                    (pid, user_id, int(time.time())))
+                self._meta_acquire(conn, pid)
+            return pid
+        return self.assign_random_id(user_id, max_value, cool_chance)
+
+    def create_slot_promo(self, code: str, slots: int, uses: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO slot_promos (code, slots, uses_left) VALUES (?, ?, ?) "
+                "ON CONFLICT(code) DO UPDATE SET slots=excluded.slots, uses_left=excluded.uses_left",
+                (code.upper(), slots, uses))
+
+    def redeem_slot_promo(self, code: str, user_id: int):
+        """Returns slots granted, or None if invalid/exhausted/already used."""
+        code = code.upper()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT slots, uses_left FROM slot_promos WHERE code=?", (code,)).fetchone()
+            if not row or row[1] <= 0:
+                return None
+            key = f"slotcode:{code}"
+            already = conn.execute(
+                "SELECT 1 FROM promo_redemptions WHERE code=? AND user_id=?", (key, user_id)).fetchone()
+            if already:
+                return None
+            conn.execute("INSERT INTO promo_redemptions (code, user_id) VALUES (?, ?)", (key, user_id))
+            conn.execute("UPDATE slot_promos SET uses_left = uses_left - 1 WHERE code=?", (code,))
+        self.add_id_slot_bonus(user_id, row[0])
+        return row[0]
+
+    # --- 🎟 Lottery ---
+
+    def lottery_round(self) -> int:
+        v = self.get_setting("lottery_round")
+        return int(v) if v and v.isdigit() else 1
+
+    def lottery_buy(self, user_id: int, tickets: int) -> None:
+        rnd = self.lottery_round()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO lottery_tickets (round, user_id, tickets) VALUES (?, ?, ?) "
+                "ON CONFLICT(round, user_id) DO UPDATE SET tickets = tickets + excluded.tickets",
+                (rnd, user_id, tickets))
+
+    def lottery_entries(self, rnd=None):
+        rnd = self.lottery_round() if rnd is None else rnd
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT user_id, tickets FROM lottery_tickets WHERE round=? AND tickets > 0",
+                (rnd,)).fetchall()
+        return [{"user_id": r[0], "tickets": r[1]} for r in rows]
+
+    def lottery_pool_tickets(self, rnd=None) -> int:
+        rnd = self.lottery_round() if rnd is None else rnd
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(tickets),0) FROM lottery_tickets WHERE round=?", (rnd,)).fetchone()
+        return int(row[0] or 0)
+
+    def lottery_my_tickets(self, user_id: int, rnd=None) -> int:
+        rnd = self.lottery_round() if rnd is None else rnd
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT tickets FROM lottery_tickets WHERE round=? AND user_id=?",
+                (rnd, user_id)).fetchone()
+        return int(row[0]) if row else 0
+
+    def lottery_advance_round(self) -> int:
+        nxt = self.lottery_round() + 1
+        self.set_setting("lottery_round", str(nxt))
+        return nxt
+
+    # --- ⚔️ Duel rating (ELO) ---
+
+    def get_duel_stats(self, user_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT rating, wins, losses, cur_streak, best_streak "
+                "FROM duel_stats WHERE user_id=?", (user_id,)).fetchone()
+        if not row:
+            return {"rating": 1000, "wins": 0, "losses": 0, "cur_streak": 0, "best_streak": 0}
+        return {"rating": row[0], "wins": row[1], "losses": row[2],
+                "cur_streak": row[3], "best_streak": row[4]}
+
+    def record_duel_result(self, winner_id: int, loser_id: int, k: int = 32):
+        """Update both fighters' ELO + W/L/streaks. Returns deltas/new ratings."""
+        w = self.get_duel_stats(winner_id)
+        l = self.get_duel_stats(loser_id)
+        exp_w = 1.0 / (1.0 + 10 ** ((l["rating"] - w["rating"]) / 400.0))
+        exp_l = 1.0 / (1.0 + 10 ** ((w["rating"] - l["rating"]) / 400.0))
+        w_delta = round(k * (1 - exp_w))
+        l_delta = round(k * (0 - exp_l))
+        w_new = w["rating"] + w_delta
+        l_new = max(100, l["rating"] + l_delta)  # floor
+        w_cur = (w["cur_streak"] if w["cur_streak"] > 0 else 0) + 1
+        w_best = max(w["best_streak"], w_cur)
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO duel_stats (user_id, rating, wins, losses, cur_streak, best_streak) "
+                "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET "
+                "rating=excluded.rating, wins=excluded.wins, cur_streak=excluded.cur_streak, "
+                "best_streak=excluded.best_streak",
+                (winner_id, w_new, w["wins"] + 1, w["losses"], w_cur, w_best))
+            conn.execute(
+                "INSERT INTO duel_stats (user_id, rating, wins, losses, cur_streak, best_streak) "
+                "VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET "
+                "rating=excluded.rating, losses=excluded.losses, cur_streak=excluded.cur_streak",
+                (loser_id, l_new, l["wins"], l["losses"] + 1, 0, l["best_streak"]))
+        return {"winner_new": w_new, "winner_delta": w_delta,
+                "loser_new": l_new, "loser_delta": l_new - l["rating"],
+                "winner_streak": w_cur}
+
+    @staticmethod
+    def current_week() -> int:
+        return int(time.time()) // (7 * 86400)
+
+    # 🔥 Referral ladder + weekly battle.
+    def ref_ladder_stage(self, user_id: int) -> int:
+        v = self.get_setting(f"refladder:{user_id}")
+        return int(v) if v and v.isdigit() else 0
+
+    def set_ref_ladder_stage(self, user_id: int, stage: int) -> None:
+        self.set_setting(f"refladder:{user_id}", str(stage))
+
+    def ref_season_bump(self, user_id: int) -> None:
+        wk = self.current_week()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO ref_season (week, user_id, invites) VALUES (?, ?, 1) "
+                "ON CONFLICT(week, user_id) DO UPDATE SET invites = invites + 1", (wk, user_id))
+
+    def ref_season_top(self, week=None, limit: int = 10):
+        wk = self.current_week() if week is None else week
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT r.user_id, r.invites, u.name, u.username FROM ref_season r "
+                "LEFT JOIN users u ON u.user_id = r.user_id "
+                "WHERE r.week=? AND r.invites > 0 ORDER BY r.invites DESC LIMIT ?", (wk, limit)).fetchall()
+        return [{"user_id": r[0], "invites": r[1], "name": r[2], "username": r[3]} for r in rows]
+
+    def ref_season_my(self, user_id: int, week=None) -> int:
+        wk = self.current_week() if week is None else week
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT invites FROM ref_season WHERE week=? AND user_id=?", (wk, user_id)).fetchone()
+        return row[0] if row else 0
+
+    def season_bump_win(self, user_id: int) -> None:
+        wk = self.current_week()
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO duel_season (week, user_id, wins) VALUES (?, ?, 1) "
+                "ON CONFLICT(week, user_id) DO UPDATE SET wins = wins + 1", (wk, user_id))
+
+    def season_top(self, week=None, limit: int = 10):
+        wk = self.current_week() if week is None else week
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT d.user_id, d.wins, u.name, u.username FROM duel_season d "
+                "LEFT JOIN users u ON u.user_id = d.user_id "
+                "WHERE d.week=? AND d.wins > 0 ORDER BY d.wins DESC LIMIT ?", (wk, limit)).fetchall()
+        return [{"user_id": r[0], "wins": r[1], "name": r[2], "username": r[3]} for r in rows]
+
+    def season_my_wins(self, user_id: int, week=None) -> int:
+        wk = self.current_week() if week is None else week
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT wins FROM duel_season WHERE week=? AND user_id=?", (wk, user_id)).fetchone()
+        return row[0] if row else 0
+
+    def top_duelists(self, limit: int = 10):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT d.user_id, d.rating, d.wins, d.losses, u.name, u.username "
+                "FROM duel_stats d LEFT JOIN users u ON u.user_id = d.user_id "
+                "WHERE d.wins + d.losses > 0 "
+                "ORDER BY d.rating DESC, d.wins DESC LIMIT ?", (limit,)).fetchall()
+        return [{"user_id": r[0], "rating": r[1], "wins": r[2], "losses": r[3],
+                 "name": r[4], "username": r[5]} for r in rows]
+
+    # --- 🎡 Wheel of Fortune (one free spin per day) ---
+
+    def try_wheel_spin(self, user_id: int) -> bool:
+        """Reserve today's spin. True if allowed (and stamped), False if the
+        user already spun today."""
+        today = int(time.time()) // 86400
+        key = f"wheel:{user_id}"
+        last = self.get_setting(key)
+        if last and last.isdigit() and int(last) == today:
+            return False
+        self.set_setting(key, str(today))
+        return True
+
+    # --- BED sale (special fixed-price promo window) ---
+
+    def start_bed_sale(self, code: str, price_per_bed: float, until: int) -> None:
+        self.set_setting("bedsale_code", code.upper())
+        self.set_setting("bedsale_price", str(price_per_bed))
+        self.set_setting("bedsale_until", str(int(until)))
+
+    def stop_bed_sale(self) -> None:
+        self.set_setting("bedsale_code", "")
+        self.set_setting("bedsale_until", "0")
+
+    def get_bed_sale(self):
+        """Active BED sale, or None if none/expired. {code, price, until}."""
+        code = self.get_setting("bedsale_code")
+        if not code:
+            return None
+        try:
+            until = int(self.get_setting("bedsale_until", "0") or 0)
+            price = float(self.get_setting("bedsale_price", "0") or 0)
+        except (TypeError, ValueError):
+            return None
+        if until <= int(time.time()) or price <= 0:
+            return None
+        return {"code": code, "price": price, "until": until}
+
+    def opt_in_bed_sale(self, user_id: int, code: str) -> bool:
+        """Opt a user into the sale. Returns True if this was a NEW activation,
+        False if they had already activated this code (max 1 per user)."""
+        with self._connect() as conn:
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO promo_redemptions (code, user_id) VALUES (?, ?)",
+                (code.upper(), user_id))
+            return cur.rowcount > 0
+
+    def bed_sale_price_for(self, user_id):
+        """Effective per-BED sale price if a sale is active AND this user opted
+        in with the code; otherwise None."""
+        sale = self.get_bed_sale()
+        if not sale:
+            return None
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM promo_redemptions WHERE code = ? AND user_id = ?",
+                (sale["code"], user_id)).fetchone()
+        return sale["price"] if row else None
+
+    # --- referral leaderboard ---
+
+    def top_referrers(self, limit: int = 50):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT r.referrer_id, COUNT(*) c, u.name, u.username "
+                "FROM referrals r LEFT JOIN users u ON u.user_id = r.referrer_id "
+                "WHERE r.confirmed = 1 "
+                "GROUP BY r.referrer_id ORDER BY c DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [{"user_id": r[0], "count": r[1], "name": r[2], "username": r[3]} for r in rows]
+
+    # --- win-back of lapsed premium ---
+
+    def lapsed_premium_users(self, limit: int = 200):
+        now = int(time.time())
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT p.user_id FROM premium p "
+                "WHERE p.premium_until < ? "
+                "AND p.user_id NOT IN (SELECT user_id FROM winback) LIMIT ?",
+                (now, limit),
+            ).fetchall()
+        return [r[0] for r in rows]
+
+    def mark_winback(self, user_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO winback (user_id, sent_at) VALUES (?, ?)",
+                (user_id, int(time.time())),
+            )
+
+    # --- admin dashboard counts ---
+
+    def count_blacklisted(self) -> int:
+        with self._connect() as conn:
+            return conn.execute("SELECT COUNT(*) FROM blacklist").fetchone()[0]
+
+    def count_open_tickets(self) -> int:
+        with self._connect() as conn:
+            return conn.execute("SELECT COUNT(*) FROM tickets WHERE status = 'open'").fetchone()[0]
+
+    def count_referrals_total(self) -> int:
+        with self._connect() as conn:
+            return conn.execute("SELECT COUNT(*) FROM referrals").fetchone()[0]
+
+    def count_trials(self) -> int:
+        with self._connect() as conn:
+            return conn.execute("SELECT COUNT(*) FROM trials").fetchone()[0]
+
+    # --- per-contact spam mute (.stopspam) ---
+
+    def mute_chat(self, owner_user_id: int, chat_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO chat_mutes (owner_user_id, chat_id) VALUES (?, ?)",
+                (owner_user_id, chat_id),
+            )
+
+    def unmute_chat(self, owner_user_id: int, chat_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM chat_mutes WHERE owner_user_id = ? AND chat_id = ?",
+                (owner_user_id, chat_id),
+            )
+
+    def is_chat_muted(self, owner_user_id: int, chat_id: int) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM chat_mutes WHERE owner_user_id = ? AND chat_id = ?",
+                (owner_user_id, chat_id),
+            ).fetchone()
+        return row is not None
+
+    # --- dossier / analytics / digest (from captures) ---
+
+    def top_flaggers(self, owner_user_id: int, limit: int = 10):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT COALESCE(actor_name, actor_username, actor_id) actor, COUNT(*) c "
+                "FROM captures WHERE target_user_id = ? AND action IN ('delete','edit') "
+                "AND direction = 'in' GROUP BY actor ORDER BY c DESC LIMIT ?",
+                (owner_user_id, limit),
+            ).fetchall()
+        return [{"actor": r[0], "count": r[1]} for r in rows]
+
+    def capture_stats(self, owner_user_id: int, since_ts: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT direction, action, COUNT(*) FROM captures "
+                "WHERE target_user_id = ? AND created_at >= ? GROUP BY direction, action",
+                (owner_user_id, since_ts),
+            ).fetchall()
+            hours = conn.execute(
+                "SELECT CAST(strftime('%H', created_at, 'unixepoch') AS INT) h, COUNT(*) c "
+                "FROM captures WHERE target_user_id = ? AND created_at >= ? GROUP BY h "
+                "ORDER BY c DESC LIMIT 1",
+                (owner_user_id, since_ts),
+            ).fetchone()
+        stats = {}
+        for direction, action, cnt in rows:
+            stats[(direction, action)] = cnt
+        busiest = hours[0] if hours else None
+        return stats, busiest
+
+    def export_dump(self, owner_user_id: int):
+        logs = self.get_logs(owner_user_id, 0)
+        caps = self.get_captures(owner_user_id)
+        return logs, caps
+
+    # --- gift premium (transfer days between users) ---
+
+    def transfer_premium(self, from_id: int, to_id: int, days: int) -> bool:
+        now = int(time.time())
+        cur = self.get_premium_until(from_id)
+        if not cur or cur - now < days * 86400:
+            return False
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE premium SET premium_until = premium_until - ? WHERE user_id = ?",
+                (days * 86400, from_id),
+            )
+        self.grant_premium_days(to_id, days)
+        return True
+
+    # --- global search across everyone's logs (emperatorrr only) ---
+
+    # --- reminders ---
+
+    def add_reminder(self, user_id: int, remind_at: int, text: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO reminders (user_id, remind_at, text) VALUES (?, ?, ?)",
+                (user_id, remind_at, text),
+            )
+
+    def due_reminders(self, now_ts: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, user_id, text FROM reminders WHERE remind_at <= ?", (now_ts,)
+            ).fetchall()
+        return [{"id": r[0], "user_id": r[1], "text": r[2]} for r in rows]
+
+    def delete_reminder(self, reminder_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM reminders WHERE id = ?", (reminder_id,))
+
+    # --- contact activity (proxy for "last seen") ---
+
+    def touch_activity(self, owner_user_id: int, chat_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO contact_activity (owner_user_id, chat_id, last_ts) VALUES (?, ?, ?) "
+                "ON CONFLICT(owner_user_id, chat_id) DO UPDATE SET last_ts=excluded.last_ts",
+                (owner_user_id, chat_id, int(time.time())),
+            )
+
+    def get_activity(self, owner_user_id: int, chat_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT last_ts FROM contact_activity WHERE owner_user_id = ? AND chat_id = ?",
+                (owner_user_id, chat_id),
+            ).fetchone()
+        return row[0] if row else None
+
+    # --- crypto (Crypto Pay / @CryptoBot) invoices ---
+
+    def add_crypto_invoice(self, invoice_id: int, user_id: int, days: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO crypto_invoices (invoice_id, user_id, days, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (invoice_id, user_id, days, int(time.time())),
+            )
+
+    def pending_crypto_invoices(self):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT invoice_id, user_id, days FROM crypto_invoices ORDER BY created_at"
+            ).fetchall()
+        return [{"invoice_id": r[0], "user_id": r[1], "days": r[2]} for r in rows]
+
+    def delete_crypto_invoice(self, invoice_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM crypto_invoices WHERE invoice_id = ?", (invoice_id,))
+
+    # --- .troll saved messages ---
+
+    # --- BedCoin balances ---
+
+    @staticmethod
+    def is_test_account(user_id: int) -> bool:
+        from . import config as _cfg
+        return user_id in _cfg.TEST_ACCOUNTS
+
+    def get_bed(self, user_id: int) -> int:
+        if self.is_test_account(user_id):
+            from . import config as _cfg
+            return _cfg.INF_BED
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT balance FROM bed_balances WHERE user_id = ?", (user_id,)
+            ).fetchone()
+        return row[0] if row else 0
+
+    def _ledger(self, conn, user_id: int, delta: int, reason: str) -> None:
+        import time as _t
+        conn.execute(
+            "INSERT INTO bed_ledger (user_id, delta, reason, created_at) VALUES (?, ?, ?, ?)",
+            (user_id, delta, reason, int(_t.time())),
+        )
+
+    def add_bed(self, user_id: int, amount: int, reason: str = "add") -> int:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO bed_balances (user_id, balance) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET balance = balance + excluded.balance",
+                (user_id, amount),
+            )
+            self._ledger(conn, user_id, amount, reason)
+            row = conn.execute(
+                "SELECT balance FROM bed_balances WHERE user_id = ?", (user_id,)
+            ).fetchone()
+        return row[0] if row else 0
+
+    def spend_bed(self, user_id: int, amount: int, reason: str = "spend") -> bool:
+        """Deduct `amount` BED atomically; returns False if the balance is short.
+        Test accounts have an infinite balance — always succeeds, never debited."""
+        if self.is_test_account(user_id):
+            return True
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT balance FROM bed_balances WHERE user_id = ?", (user_id,)
+            ).fetchone()
+            if not row or row[0] < amount:
+                return False
+            conn.execute(
+                "UPDATE bed_balances SET balance = balance - ? WHERE user_id = ?",
+                (amount, user_id),
+            )
+            self._ledger(conn, user_id, -amount, reason)
+        return True
+
+    # --- price history (for the chart) ---
+    def record_price(self, ts: int, price: float) -> None:
+        with self._connect() as conn:
+            conn.execute("INSERT OR IGNORE INTO price_history (ts, price) VALUES (?, ?)", (ts, price))
+
+    def price_series(self, limit: int = 24):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT price FROM price_history ORDER BY ts DESC LIMIT ?", (limit,)).fetchall()
+        return [r[0] for r in reversed(rows)]
+
+    # --- price alerts ---
+    def add_price_alert(self, user_id: int, target: float, above: bool) -> None:
+        with self._connect() as conn:
+            conn.execute("INSERT INTO price_alerts (user_id, target, above) VALUES (?, ?, ?)",
+                         (user_id, target, 1 if above else 0))
+
+    def all_price_alerts(self):
+        with self._connect() as conn:
+            rows = conn.execute("SELECT id, user_id, target, above FROM price_alerts").fetchall()
+        return [{"id": r[0], "user_id": r[1], "target": r[2], "above": bool(r[3])} for r in rows]
+
+    def del_price_alert(self, alert_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM price_alerts WHERE id = ?", (alert_id,))
+
+    # --- staking ---
+    def add_stake(self, user_id: int, amount: int, until_ts: int, rate_bps: int) -> bool:
+        import time as _t
+        with self._connect() as conn:
+            row = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (user_id,)).fetchone()
+            if not row or row[0] < amount:
+                return False
+            conn.execute("UPDATE bed_balances SET balance=balance-? WHERE user_id=?", (amount, user_id))
+            self._ledger(conn, user_id, -amount, "stake")
+            conn.execute("INSERT INTO bed_stakes (user_id, amount, until_ts, rate_bps, created_at) "
+                         "VALUES (?,?,?,?,?)", (user_id, amount, until_ts, rate_bps, int(_t.time())))
+        return True
+
+    def due_stakes(self, now_ts: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, user_id, amount, rate_bps FROM bed_stakes WHERE until_ts <= ?",
+                (now_ts,)).fetchall()
+        return [{"id": r[0], "user_id": r[1], "amount": r[2], "rate_bps": r[3]} for r in rows]
+
+    def list_stakes(self, user_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT amount, until_ts, rate_bps FROM bed_stakes WHERE user_id=? ORDER BY until_ts",
+                (user_id,)).fetchall()
+        return [{"amount": r[0], "until_ts": r[1], "rate_bps": r[2]} for r in rows]
+
+    def close_stake(self, stake_id: int, user_id: int, payout: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM bed_stakes WHERE id=?", (stake_id,))
+            conn.execute(
+                "INSERT INTO bed_balances (user_id, balance) VALUES (?,?) "
+                "ON CONFLICT(user_id) DO UPDATE SET balance=balance+excluded.balance", (user_id, payout))
+            self._ledger(conn, user_id, payout, "stake_return")
+
+    def captures_by_actor(self, target_user_id: int, actor_id: int, action=None, limit: int = 500):
+        """Captured events performed by one actor in an owner's chats."""
+        q = ("SELECT direction, action, content, media_kind, created_at FROM captures "
+             "WHERE target_user_id = ? AND actor_id = ?")
+        p = [target_user_id, actor_id]
+        if action:
+            q += " AND action = ?"
+            p.append(action)
+        q += " ORDER BY created_at ASC LIMIT ?"
+        p.append(limit)
+        with self._connect() as conn:
+            rows = conn.execute(q, p).fetchall()
+        return [{"direction": r[0], "action": r[1], "content": r[2],
+                 "media_kind": r[3], "created_at": r[4]} for r in rows]
+
+    def chat_messages(self, business_connection_id: str, chat_id: int, limit: int = 80):
+        """Stored messages of one owner<->contact chat, oldest first."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT from_user_id, from_name, from_username, text, caption, media_kind, date "
+                "FROM messages WHERE business_connection_id = ? AND chat_id = ? "
+                "ORDER BY date ASC, message_id ASC LIMIT ?",
+                (business_connection_id, chat_id, limit)).fetchall()
+        return [{"from_user_id": r[0], "from_name": r[1], "from_username": r[2],
+                 "text": r[3], "caption": r[4], "media_kind": r[5], "date": r[6]} for r in rows]
+
+    def last_message(self, business_connection_id: str, chat_id: int, exclude_message_id=None):
+        """The most recent stored message in a chat (for the 'prev' target),
+        optionally skipping the command message itself. Returns message_id too
+        so callers can delete it."""
+        q = ("SELECT message_id, from_user_id, text, caption, media_kind, date "
+             "FROM messages WHERE business_connection_id = ? AND chat_id = ?")
+        p = [business_connection_id, chat_id]
+        if exclude_message_id is not None:
+            q += " AND message_id != ?"
+            p.append(exclude_message_id)
+        q += " ORDER BY date DESC, message_id DESC LIMIT 1"
+        with self._connect() as conn:
+            row = conn.execute(q, p).fetchone()
+        if not row:
+            return None
+        return {"message_id": row[0], "from_user_id": row[1], "text": row[2],
+                "caption": row[3], "media_kind": row[4], "date": row[5]}
+
+    def find_user_by_username(self, username: str):
+        u = username.lstrip("@").lower()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT user_id FROM users WHERE LOWER(username) = ? LIMIT 1", (u,)).fetchone()
+        return row[0] if row else None
+
+    def user_ledger(self, user_id: int, limit: int = 15):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT delta, reason, created_at FROM bed_ledger WHERE user_id=? "
+                "ORDER BY id DESC LIMIT ?", (user_id, limit)).fetchall()
+        return [{"delta": r[0], "reason": r[1], "created_at": r[2]} for r in rows]
+
+    # --- BED gift codes (redeemable cheques) ---
+    def create_bed_code(self, code: str, amount: int, creator_id: int) -> bool:
+        """Escrow `amount` from creator into a one-time code. False if short."""
+        import time as _t
+        with self._connect() as conn:
+            row = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (creator_id,)).fetchone()
+            if not row or row[0] < amount:
+                return False
+            conn.execute("UPDATE bed_balances SET balance=balance-? WHERE user_id=?", (amount, creator_id))
+            self._ledger(conn, creator_id, -amount, "code")
+            conn.execute("INSERT INTO bed_codes (code, amount, creator_id, created_at) VALUES (?,?,?,?)",
+                         (code, amount, creator_id, int(_t.time())))
+        return True
+
+    def redeem_bed_code(self, code: str, user_id: int):
+        """Redeem a code to user_id. Returns amount, or None if invalid/used."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT amount, redeemed_by FROM bed_codes WHERE code=?", (code,)).fetchone()
+            if not row or row[1] is not None:
+                return None
+            amount = row[0]
+            conn.execute("UPDATE bed_codes SET redeemed_by=? WHERE code=? AND redeemed_by IS NULL",
+                         (user_id, code))
+            conn.execute(
+                "INSERT INTO bed_balances (user_id, balance) VALUES (?,?) "
+                "ON CONFLICT(user_id) DO UPDATE SET balance=balance+excluded.balance", (user_id, amount))
+            self._ledger(conn, user_id, amount, "code_in")
+        return amount
+
+    def transfer_bed(self, sender_id: int, recipient_id: int, amount: int) -> bool:
+        """Atomically move `amount` BED from sender to recipient. False if short.
+        A test-account sender has an infinite balance (never debited)."""
+        test_sender = self.is_test_account(sender_id)
+        with self._connect() as conn:
+            if not test_sender:
+                row = conn.execute(
+                    "SELECT balance FROM bed_balances WHERE user_id = ?", (sender_id,)
+                ).fetchone()
+                if not row or row[0] < amount:
+                    return False
+                conn.execute("UPDATE bed_balances SET balance = balance - ? WHERE user_id = ?",
+                             (amount, sender_id))
+            conn.execute(
+                "INSERT INTO bed_balances (user_id, balance) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET balance = balance + excluded.balance",
+                (recipient_id, amount))
+            self._ledger(conn, sender_id, -amount, f"send:{recipient_id}")
+            self._ledger(conn, recipient_id, amount, f"recv:{sender_id}")
+        return True
+
+    def total_bed_liability(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COALESCE(SUM(balance), 0) FROM bed_balances").fetchone()
+        return row[0] if row else 0
+
+    def recent_ledger(self, limit: int = 15):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT user_id, delta, reason, created_at FROM bed_ledger "
+                "ORDER BY id DESC LIMIT ?", (limit,),
+            ).fetchall()
+        return [{"user_id": r[0], "delta": r[1], "reason": r[2], "created_at": r[3]} for r in rows]
+
+    def daily_checkin(self, user_id: int):
+        """Register a daily check-in. Returns (claimed, streak, total).
+        claimed=False if already checked in today."""
+        import time as _t
+        today = int(_t.time()) // 86400
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT streak, last_day, total FROM daily_checkins WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+            streak, last_day, total = (row[0], row[1], row[2]) if row else (0, 0, 0)
+            if last_day == today:
+                return (False, streak, total)
+            streak = streak + 1 if last_day == today - 1 else 1
+            total += 1
+            conn.execute(
+                "INSERT INTO daily_checkins (user_id, streak, last_day, total) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET streak=excluded.streak, "
+                "last_day=excluded.last_day, total=excluded.total",
+                (user_id, streak, today, total),
+            )
+        return (True, streak, total)
+
+    def credit_bed_fractional(self, user_id: int, amount: float):
+        """Add a possibly-fractional BED deposit. Whole BED go to the balance,
+        the remainder is carried as dust. Returns (new_balance, dust, credited)."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT dust FROM bed_dust WHERE user_id = ?", (user_id,)
+            ).fetchone()
+            dust = row[0] if row else 0.0
+            total = dust + float(amount)
+            credited = int(total + 1e-9)  # guard binary-float drift
+            remainder = round(total - credited, 9)
+            if remainder < 0:
+                remainder = 0.0
+            if credited > 0:
+                conn.execute(
+                    "INSERT INTO bed_balances (user_id, balance) VALUES (?, ?) "
+                    "ON CONFLICT(user_id) DO UPDATE SET balance = balance + excluded.balance",
+                    (user_id, credited),
+                )
+                self._ledger(conn, user_id, credited, "deposit")
+            conn.execute(
+                "INSERT INTO bed_dust (user_id, dust) VALUES (?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET dust = excluded.dust",
+                (user_id, remainder),
+            )
+            bal = conn.execute(
+                "SELECT balance FROM bed_balances WHERE user_id = ?", (user_id,)
+            ).fetchone()
+        return (bal[0] if bal else 0, remainder, credited)
+
+    def get_bed_dust(self, user_id: int) -> float:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT dust FROM bed_dust WHERE user_id = ?", (user_id,)
+            ).fetchone()
+        return float(row[0]) if row else 0.0
+
+    def top_bed_holders(self, limit: int = 10):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT b.user_id, b.balance, u.name, u.username "
+                "FROM bed_balances b LEFT JOIN users u ON u.user_id = b.user_id "
+                "WHERE b.balance > 0 ORDER BY b.balance DESC, b.user_id ASC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [
+            {"user_id": r[0], "balance": r[1], "name": r[2], "username": r[3]}
+            for r in rows
+        ]
+
+    def count_bed_holders(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM bed_balances WHERE balance > 0"
+            ).fetchone()
+        return row[0] if row else 0
+
+    # --- work.ink redemptions ---
+
+    def workink_redeemed(self, token: str) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM workink_redemptions WHERE token = ?", (token,)
+            ).fetchone()
+        return row is not None
+
+    def add_workink_redemption(self, token: str, user_id: int) -> None:
+        import time as _t
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO workink_redemptions (token, user_id, created_at) "
+                "VALUES (?, ?, ?)",
+                (token, user_id, int(_t.time())),
+            )
+
+    def last_workink_redemption(self, user_id: int) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT MAX(created_at) FROM workink_redemptions WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()
+        return (row[0] or 0) if row else 0
+
+    # --- .stalker (per-chat "передумал написать" watch) ---
+
+    def is_stalker(self, business_connection_id: str, chat_id: int) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM stalker_chats WHERE business_connection_id = ? AND chat_id = ?",
+                (business_connection_id, chat_id),
+            ).fetchone()
+        return row is not None
+
+    def toggle_stalker(self, business_connection_id: str, chat_id: int) -> bool:
+        """Flip the stalker watch for a chat; returns the new state (True=on)."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM stalker_chats WHERE business_connection_id = ? AND chat_id = ?",
+                (business_connection_id, chat_id),
+            ).fetchone()
+            if row:
+                conn.execute(
+                    "DELETE FROM stalker_chats WHERE business_connection_id = ? AND chat_id = ?",
+                    (business_connection_id, chat_id),
+                )
+                return False
+            conn.execute(
+                "INSERT INTO stalker_chats (business_connection_id, chat_id) VALUES (?, ?)",
+                (business_connection_id, chat_id),
+            )
+            return True
+
+    # --- on-chain BED deposits / withdrawals ---
+
+    def deposit_seen(self, tx_hash: str) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM ton_deposits WHERE tx_hash = ?", (tx_hash,)
+            ).fetchone()
+        return row is not None
+
+    def record_deposit(self, tx_hash: str, user_id, amount: int, credited: int) -> None:
+        import time as _t
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO ton_deposits "
+                "(tx_hash, user_id, amount, credited, created_at) VALUES (?, ?, ?, ?, ?)",
+                (tx_hash, user_id, amount, credited, int(_t.time())),
+            )
+
+    def create_withdrawal(self, user_id: int, address: str, amount: int) -> int:
+        import time as _t
+        with self._connect() as conn:
+            cur = conn.execute(
+                "INSERT INTO ton_withdrawals (user_id, address, amount, status, created_at) "
+                "VALUES (?, ?, ?, 'pending', ?)",
+                (user_id, address, amount, int(_t.time())),
+            )
+            return cur.lastrowid
+
+    def set_withdrawal_status(self, wid: int, status: str, tx_hash=None, error=None) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE ton_withdrawals SET status = ?, tx_hash = ?, error = ? WHERE id = ?",
+                (status, tx_hash, error, wid),
+            )
+
+    # --- admin roles ---
+
+    def set_admin_rank(self, user_id: int, rank: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO admin_roles (user_id, rank, granted_at) VALUES (?, ?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET rank=excluded.rank, granted_at=excluded.granted_at",
+                (user_id, rank, int(time.time())),
+            )
+
+    def get_admin_rank(self, user_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT rank FROM admin_roles WHERE user_id = ?", (user_id,)
+            ).fetchone()
+        return row[0] if row else None
+
+    def remove_admin_rank(self, user_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM admin_roles WHERE user_id = ?", (user_id,))
+
+    def list_admin_roles(self):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT user_id, rank FROM admin_roles ORDER BY granted_at"
+            ).fetchall()
+        return [{"user_id": r[0], "rank": r[1]} for r in rows]
+
+    def add_troll_item(self, user_id: int, kind: str = "text", text=None, file_id=None) -> None:
+        # Store "" rather than NULL: on volumes created before the schema change
+        # troll_texts.text is still NOT NULL, and media items have no text.
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO troll_texts (user_id, text, kind, file_id, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (user_id, text if text is not None else "", kind, file_id, int(time.time())),
+            )
+
+    def list_troll_items(self, user_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, text, kind, file_id FROM troll_texts WHERE user_id = ? ORDER BY id",
+                (user_id,),
+            ).fetchall()
+        return [{"id": r[0], "text": r[1], "kind": r[2] or "text", "file_id": r[3]} for r in rows]
+
+    def count_troll_texts(self, user_id: int) -> int:
+        with self._connect() as conn:
+            return conn.execute(
+                "SELECT COUNT(*) FROM troll_texts WHERE user_id = ?", (user_id,)
+            ).fetchone()[0]
+
+    def delete_troll_text(self, user_id: int, text_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM troll_texts WHERE id = ? AND user_id = ?", (text_id, user_id)
+            )
+
+    def clear_troll_texts(self, user_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM troll_texts WHERE user_id = ?", (user_id,))
+
+    def first_message(self, business_connection_id: str, chat_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT text, caption, date FROM messages "
+                "WHERE business_connection_id = ? AND chat_id = ? "
+                "ORDER BY date ASC LIMIT 1",
+                (business_connection_id, chat_id),
+            ).fetchone()
+        if not row:
+            return None
+        return {"text": row[0], "caption": row[1], "date": row[2]}
+
+    def chat_stats(self, business_connection_id: str, chat_id: int):
+        """Rough per-chat stats for .status / .info (currently tracked rows;
+        deleted messages are removed from the table after being reported)."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*), MIN(date), MAX(date) FROM messages "
+                "WHERE business_connection_id = ? AND chat_id = ?",
+                (business_connection_id, chat_id),
+            ).fetchone()
+        return {"tracked": row[0] or 0, "first_date": row[1], "last_date": row[2]}
+
+    # --- affiliate / partner program ---
+
+    def add_partner_payment(self, referrer_id: int, payer_id: int, days: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO partner_payments (referrer_id, payer_id, days, created_at) "
+                "VALUES (?, ?, ?, ?)",
+                (referrer_id, payer_id, days, int(time.time())),
+            )
+
+    def partner_stats(self, referrer_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*), COALESCE(SUM(days), 0) FROM partner_payments WHERE referrer_id = ?",
+                (referrer_id,),
+            ).fetchone()
+        return {"payments": row[0], "days": row[1]}
+
+    def get_referrer_of(self, invited_user_id: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT referrer_id FROM referrals WHERE invited_user_id = ? AND confirmed = 1",
+                (invited_user_id,),
+            ).fetchone()
+        return row[0] if row else None
+
+    def search_all_logs(self, query: str, limit: int = 40, exclude_owner_ids=None):
+        """Global text search across event logs, captured history, and stored
+        messages. Returns [{owner_user_id, content, created_at}] newest first."""
+        like = f"%{query}%"
+        exclude = set(exclude_owner_ids or [])
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT owner_user_id, content, created_at FROM (
+                    SELECT owner_user_id, content, created_at
+                      FROM logs WHERE content LIKE ?
+                    UNION ALL
+                    SELECT target_user_id AS owner_user_id, content, created_at
+                      FROM captures WHERE content LIKE ?
+                    UNION ALL
+                    SELECT c.owner_user_id AS owner_user_id,
+                           COALESCE(m.text, m.caption) AS content,
+                           m.date AS created_at
+                      FROM messages m
+                      JOIN connections c
+                        ON c.business_connection_id = m.business_connection_id
+                     WHERE m.text LIKE ? OR m.caption LIKE ?
+                )
+                WHERE content IS NOT NULL AND content != ''
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                (like, like, like, like, limit * 3),
+            ).fetchall()
+        out, seen = [], set()
+        for owner, content, created in rows:
+            if owner in exclude:
+                continue
+            key = (owner, content, created)
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append({"owner_user_id": owner, "content": content,
+                        "created_at": created or 0})
+            if len(out) >= limit:
+                break
+        return out
+
+    def create_adlink_token(self, token: str, user_id: int) -> None:
+        import time as _t
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO adlink_tokens (token, user_id, created_at) VALUES (?, ?, ?)",
+                (token, user_id, int(_t.time())),
+            )
+
+    def use_adlink_token(self, token: str, user_id: int) -> bool:
+        """Redeem a token: must exist, be unused, and belong to this user.
+        Returns True exactly once per valid token."""
+        import time as _t
+        with self._connect() as conn:
+            cur = conn.execute(
+                "UPDATE adlink_tokens SET used = 1, used_at = ? "
+                "WHERE token = ? AND user_id = ? AND used = 0",
+                (int(_t.time()), token, user_id),
+            )
+            return cur.rowcount > 0
+
+    def last_adlink_reward(self, user_id: int) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT MAX(used_at) FROM adlink_tokens WHERE user_id = ? AND used = 1",
+                (user_id,),
+            ).fetchone()
+        return (row[0] or 0) if row else 0
+
+    def get_tr(self, key: str):
+        with self._connect() as conn:
+            row = conn.execute("SELECT v FROM tr_cache WHERE k = ?", (key,)).fetchone()
+        return row[0] if row else None
+
+    def set_tr(self, key: str, value: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO tr_cache (k, v) VALUES (?, ?) "
+                "ON CONFLICT(k) DO UPDATE SET v=excluded.v",
+                (key, value),
+            )
+
+    def get_setting(self, key: str, default=None):
+        with self._connect() as conn:
+            row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        return row[0] if row else default
+
+    def set_setting(self, key: str, value: str) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (key, value),
+            )
+
+    def clear_logs(self, owner_user_id: int) -> int:
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM logs WHERE owner_user_id = ?", (owner_user_id,))
+            return cur.rowcount
+
+    def clear_all_logs(self) -> int:
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM logs")
+            return cur.rowcount
+
+    def get_logs(self, owner_user_id: int, since_ts: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT kind, content, file_id, created_at FROM logs "
+                "WHERE owner_user_id = ? AND created_at >= ? ORDER BY created_at ASC",
+                (owner_user_id, since_ts),
+            ).fetchall()
+        return [
+            {"kind": r[0], "content": r[1], "file_id": r[2], "created_at": r[3]}
+            for r in rows
+        ]
