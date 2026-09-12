@@ -2188,6 +2188,8 @@ def _do_id_sell(storage: Storage, uid: int, pid: int):
         return False, "own"
     if storage.is_id_locked(pid):
         return False, "locked"
+    if storage.on_auction(pid):
+        return False, "auction"  # can't sell while listed for bidding
     if storage.count_ids(uid) <= 1:
         return False, "last"  # keep at least one ID (anti-dupe)
     if not storage.release_id(pid, uid):
@@ -2242,6 +2244,8 @@ async def _id_sell(message, context, storage: Storage) -> None:
             f"💰 Продал ID {pid} боту за {config.ID_SELL_PRICE} BED. Баланс: {storage.get_bed(uid)} BED.")
     elif reason == "locked":
         await message.reply_text("🔒 ID заложен — сними замок в /id → 🔒 Замки.")
+    elif reason == "auction":
+        await message.reply_text("🏷 ID на аукционе — сначала сними его: /unlistid " + str(pid))
     elif reason == "last":
         await message.reply_text("🚫 Нельзя продать последний ID — хотя бы один должен остаться.")
     else:
@@ -2498,6 +2502,8 @@ async def _id_callback(query, context, storage: Storage) -> None:
             await query.answer(f"Продано ID {data[2]}.")
         elif reason == "locked":
             await query.answer("🔒 ID заложен — сними замок.", show_alert=True)
+        elif reason == "auction":
+            await query.answer("🏷 ID на аукционе — сначала сними его (/unlistid ID).", show_alert=True)
         elif reason == "last":
             await query.answer("🚫 Нельзя продать последний ID.", show_alert=True)
         else:
