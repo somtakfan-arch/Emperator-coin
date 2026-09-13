@@ -172,6 +172,45 @@ ID_MSG_COOLDOWN = int(os.environ.get("ID_MSG_COOLDOWN", "30"))  # sec between an
 ID_RARE_SCORE = int(os.environ.get("ID_RARE_SCORE", "80"))
 ID_UNDO_WINDOW = int(os.environ.get("ID_UNDO_WINDOW", "600"))  # sec to /undoid a transfer
 
+# 🪙 Soft in-game currency ("Монеты") — SEPARATE from real-value BED, so
+# grinding/gambling never inflates the on-chain BED liability.
+COIN_NAME = os.environ.get("COIN_NAME", "монет")
+WORK_MIN = int(os.environ.get("WORK_MIN", "40"))
+WORK_MAX = int(os.environ.get("WORK_MAX", "120"))
+WORK_CD = int(os.environ.get("WORK_CD", "3600"))          # sec
+CRIME_MIN = int(os.environ.get("CRIME_MIN", "120"))
+CRIME_MAX = int(os.environ.get("CRIME_MAX", "400"))
+CRIME_CD = int(os.environ.get("CRIME_CD", "7200"))
+CRIME_FAIL = float(os.environ.get("CRIME_FAIL", "0.45"))   # chance to fail (lose fine)
+CRIME_FINE_MIN = int(os.environ.get("CRIME_FINE_MIN", "60"))
+CRIME_FINE_MAX = int(os.environ.get("CRIME_FINE_MAX", "200"))
+ROB_CD = int(os.environ.get("ROB_CD", "10800"))
+ROB_FAIL = float(os.environ.get("ROB_FAIL", "0.55"))       # chance to fail
+ROB_PCT = float(os.environ.get("ROB_PCT", "0.20"))         # of victim wallet
+ROB_FINE = int(os.environ.get("ROB_FINE", "150"))
+ROB_MIN_TARGET = int(os.environ.get("ROB_MIN_TARGET", "100"))  # target needs at least this
+BANK_DAILY_RATE = float(os.environ.get("BANK_DAILY_RATE", "0.02"))  # 2%/day on deposits
+FARM_COST = int(os.environ.get("FARM_COST", "1000"))       # coins to buy a farm level
+FARM_YIELD = int(os.environ.get("FARM_YIELD", "50"))       # coins/hour per farm level
+FARM_MAX_LEVEL = int(os.environ.get("FARM_MAX_LEVEL", "20"))
+FARM_CAP_HOURS = int(os.environ.get("FARM_CAP_HOURS", "24"))  # max accrual before collect
+
+# 🏰 Clans
+CLAN_CREATE_COST = int(os.environ.get("CLAN_CREATE_COST", "2000"))   # coins
+CLAN_MAX_MEMBERS = int(os.environ.get("CLAN_MAX_MEMBERS", "30"))
+CLAN_WAR_PRIZES_ULTRA = [int(x) for x in os.environ.get("CLAN_WAR_PRIZES_ULTRA", "5,3,2").split(",")]
+CLAN_LEVEL_STEP = int(os.environ.get("CLAN_LEVEL_STEP", "5000"))     # clan xp per level
+CLAN_WORK_BONUS = float(os.environ.get("CLAN_WORK_BONUS", "0.03"))   # +3%/clan level to work
+
+# 💞 Marriage
+MARRY_WORK_BONUS = float(os.environ.get("MARRY_WORK_BONUS", "0.10"))  # +10% work while married
+REP_CD = int(os.environ.get("REP_CD", "86400"))
+
+# 🎲 Coin games (house edge keeps the faucet in check)
+FLIP_EDGE = float(os.environ.get("FLIP_EDGE", "0.05"))
+RPS_EDGE = float(os.environ.get("RPS_EDGE", "0.05"))
+COIN_BET_MAX = int(os.environ.get("COIN_BET_MAX", "100000"))
+
 # 🧪 Official test accounts: unlimited BED and unlimited ID slots (never spend
 # real balance). Comma-separated telegram user_ids in env.
 TEST_ACCOUNTS = {int(x) for x in os.environ.get("TEST_ACCOUNTS", "8802068360").split(",") if x.strip().lstrip("-").isdigit()}

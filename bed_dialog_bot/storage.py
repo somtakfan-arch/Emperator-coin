@@ -281,6 +281,59 @@ CREATE TABLE IF NOT EXISTS id_autobid (
     PRIMARY KEY (pid, bidder)
 );
 
+CREATE TABLE IF NOT EXISTS coins (
+    user_id INTEGER PRIMARY KEY,
+    wallet INTEGER NOT NULL DEFAULT 0,
+    bank INTEGER NOT NULL DEFAULT 0,
+    bank_ts INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS clans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    tag TEXT NOT NULL DEFAULT '',
+    emblem TEXT NOT NULL DEFAULT '🏰',
+    leader_id INTEGER NOT NULL,
+    bank INTEGER NOT NULL DEFAULT 0,
+    xp INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS clan_members (
+    user_id INTEGER PRIMARY KEY,
+    clan_id INTEGER NOT NULL,
+    role TEXT NOT NULL DEFAULT 'member',
+    contributed INTEGER NOT NULL DEFAULT 0,
+    joined_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS clan_war (
+    clan_id INTEGER NOT NULL,
+    week INTEGER NOT NULL,
+    points INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (clan_id, week)
+);
+
+CREATE TABLE IF NOT EXISTS marriages (
+    user_id INTEGER PRIMARY KEY,
+    spouse_id INTEGER NOT NULL,
+    since INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS user_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    text TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS templates (
+    user_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    text TEXT NOT NULL,
+    PRIMARY KEY (user_id, name)
+);
+
 CREATE TABLE IF NOT EXISTS id_meta (
     pid TEXT PRIMARY KEY,
     transfers INTEGER NOT NULL DEFAULT 0,
@@ -2412,6 +2465,361 @@ class Storage:
             conn.execute("INSERT OR IGNORE INTO id_meta (pid, transfers, first_at) VALUES (?, 0, ?)",
                          (pid, int(time.time())))
             conn.execute("UPDATE id_meta SET xp = xp + ? WHERE pid=?", (max(0, amount), pid))
+
+    # --- 🪙 Soft currency (coins), bank, farm ---
+
+    def get_coins(self, user_id: int) -> int:
+        with self._connect() as conn:
+            r = conn.execute("SELECT wallet FROM coins WHERE user_id=?", (user_id,)).fetchone()
+        return r[0] if r else 0
+
+    def add_coins(self, user_id: int, amount: int) -> int:
+        with self._connect() as conn:
+            conn.execute("INSERT INTO coins (user_id, wallet) VALUES (?, ?) "
+                         "ON CONFLICT(user_id) DO UPDATE SET wallet = wallet + excluded.wallet",
+                         (user_id, amount))
+            r = conn.execute("SELECT wallet FROM coins WHERE user_id=?", (user_id,)).fetchone()
+        return r[0] if r else 0
+
+    def spend_coins(self, user_id: int, amount: int) -> bool:
+        with self._connect() as conn:
+            r = conn.execute("SELECT wallet FROM coins WHERE user_id=?", (user_id,)).fetchone()
+            if not r or r[0] < amount:
+                return False
+            conn.execute("UPDATE coins SET wallet = wallet - ? WHERE user_id=?", (amount, user_id))
+        return True
+
+    def _accrue_bank(self, conn, user_id: int):
+        from . import config as _cfg
+        r = conn.execute("SELECT bank, bank_ts FROM coins WHERE user_id=?", (user_id,)).fetchone()
+        if not r or r[0] <= 0:
+            if r:
+                conn.execute("UPDATE coins SET bank_ts=? WHERE user_id=?", (int(time.time()), user_id))
+            return 0
+        bank, ts = r
+        now = int(time.time())
+        if ts <= 0:
+            conn.execute("UPDATE coins SET bank_ts=? WHERE user_id=?", (now, user_id))
+            return 0
+        days = (now - ts) / 86400.0
+        interest = int(bank * _cfg.BANK_DAILY_RATE * days)
+        if interest > 0:
+            conn.execute("UPDATE coins SET bank = bank + ?, bank_ts=? WHERE user_id=?",
+                         (interest, now, user_id))
+        return interest
+
+    def get_bank(self, user_id: int):
+        with self._connect() as conn:
+            self._accrue_bank(conn, user_id)
+            r = conn.execute("SELECT bank FROM coins WHERE user_id=?", (user_id,)).fetchone()
+        return r[0] if r else 0
+
+    def bank_deposit(self, user_id: int, amount: int) -> bool:
+        with self._connect() as conn:
+            self._accrue_bank(conn, user_id)
+            r = conn.execute("SELECT wallet FROM coins WHERE user_id=?", (user_id,)).fetchone()
+            if not r or r[0] < amount:
+                return False
+            conn.execute("UPDATE coins SET wallet = wallet - ?, bank = bank + ?, bank_ts=? WHERE user_id=?",
+                         (amount, amount, int(time.time()), user_id))
+        return True
+
+    def bank_withdraw(self, user_id: int, amount: int) -> bool:
+        with self._connect() as conn:
+            self._accrue_bank(conn, user_id)
+            r = conn.execute("SELECT bank FROM coins WHERE user_id=?", (user_id,)).fetchone()
+            if not r or r[0] < amount:
+                return False
+            conn.execute("UPDATE coins SET bank = bank - ?, wallet = wallet + ? WHERE user_id=?",
+                         (amount, amount, user_id))
+        return True
+
+    def rob_coins(self, robber: int, victim: int, pct: float, fine: int, fail_chance: float,
+                  min_target: int):
+        """Attempt a robbery of the victim's WALLET (bank is safe). Returns a
+        dict describing the outcome."""
+        import random as _r
+        with self._connect() as conn:
+            vr = conn.execute("SELECT wallet FROM coins WHERE user_id=?", (victim,)).fetchone()
+            vw = vr[0] if vr else 0
+            if vw < min_target:
+                return {"result": "poor", "amount": 0}
+            if _r.random() < fail_chance:
+                conn.execute("INSERT INTO coins (user_id, wallet) VALUES (?, 0) "
+                             "ON CONFLICT(user_id) DO NOTHING", (robber,))
+                rr = conn.execute("SELECT wallet FROM coins WHERE user_id=?", (robber,)).fetchone()
+                lost = min(fine, rr[0] if rr else 0)
+                if lost > 0:
+                    conn.execute("UPDATE coins SET wallet = wallet - ? WHERE user_id=?", (lost, robber))
+                return {"result": "caught", "amount": lost}
+            take = max(1, int(vw * pct))
+            conn.execute("UPDATE coins SET wallet = wallet - ? WHERE user_id=?", (take, victim))
+            conn.execute("INSERT INTO coins (user_id, wallet) VALUES (?, ?) "
+                         "ON CONFLICT(user_id) DO UPDATE SET wallet = wallet + excluded.wallet",
+                         (robber, take))
+        return {"result": "ok", "amount": take}
+
+    # --- 🏰 Clans ---
+
+    def clan_of(self, user_id: int):
+        with self._connect() as conn:
+            r = conn.execute(
+                "SELECT c.id, c.name, c.tag, c.emblem, c.leader_id, c.bank, c.xp, c.created_at, "
+                "m.role, m.contributed FROM clan_members m JOIN clans c ON m.clan_id=c.id "
+                "WHERE m.user_id=?", (user_id,)).fetchone()
+        if not r:
+            return None
+        return dict(zip(("id", "name", "tag", "emblem", "leader_id", "bank", "xp", "created_at",
+                         "role", "contributed"), r))
+
+    def clan_get(self, clan_id: int):
+        with self._connect() as conn:
+            r = conn.execute("SELECT id, name, tag, emblem, leader_id, bank, xp, created_at "
+                             "FROM clans WHERE id=?", (clan_id,)).fetchone()
+        if not r:
+            return None
+        return dict(zip(("id", "name", "tag", "emblem", "leader_id", "bank", "xp", "created_at"), r))
+
+    def clan_by_name(self, name: str):
+        with self._connect() as conn:
+            r = conn.execute("SELECT id FROM clans WHERE name=? COLLATE NOCASE", (name,)).fetchone()
+        return r[0] if r else None
+
+    def clan_member_count(self, clan_id: int) -> int:
+        with self._connect() as conn:
+            return conn.execute("SELECT COUNT(*) FROM clan_members WHERE clan_id=?", (clan_id,)).fetchone()[0]
+
+    def clan_members(self, clan_id: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT user_id, role, contributed FROM clan_members WHERE clan_id=? "
+                "ORDER BY contributed DESC", (clan_id,)).fetchall()
+        return [dict(zip(("user_id", "role", "contributed"), r)) for r in rows]
+
+    def list_clans(self, limit: int = 15):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT c.id, c.name, c.emblem, c.xp, COUNT(m.user_id) "
+                "FROM clans c LEFT JOIN clan_members m ON m.clan_id=c.id "
+                "GROUP BY c.id ORDER BY c.created_at DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(zip(("id", "name", "emblem", "xp", "members"), r)) for r in rows]
+
+    def create_clan(self, user_id: int, name: str, tag: str, emblem: str, cost: int):
+        with self._connect() as conn:
+            if conn.execute("SELECT 1 FROM clan_members WHERE user_id=?", (user_id,)).fetchone():
+                return None, "inclan"
+            if conn.execute("SELECT 1 FROM clans WHERE name=? COLLATE NOCASE", (name,)).fetchone():
+                return None, "name"
+            w = conn.execute("SELECT wallet FROM coins WHERE user_id=?", (user_id,)).fetchone()
+            if not w or w[0] < cost:
+                return None, "funds"
+            conn.execute("UPDATE coins SET wallet = wallet - ? WHERE user_id=?", (cost, user_id))
+            cur = conn.execute(
+                "INSERT INTO clans (name, tag, emblem, leader_id, created_at) VALUES (?, ?, ?, ?, ?)",
+                (name, tag[:5], emblem[:4] or "🏰", user_id, int(time.time())))
+            cid = cur.lastrowid
+            conn.execute("INSERT INTO clan_members (user_id, clan_id, role, joined_at) VALUES (?, ?, 'leader', ?)",
+                         (user_id, cid, int(time.time())))
+        return cid, None
+
+    def join_clan(self, user_id: int, clan_id: int, max_members: int):
+        with self._connect() as conn:
+            if conn.execute("SELECT 1 FROM clan_members WHERE user_id=?", (user_id,)).fetchone():
+                return False, "inclan"
+            if not conn.execute("SELECT 1 FROM clans WHERE id=?", (clan_id,)).fetchone():
+                return False, "gone"
+            n = conn.execute("SELECT COUNT(*) FROM clan_members WHERE clan_id=?", (clan_id,)).fetchone()[0]
+            if n >= max_members:
+                return False, "full"
+            conn.execute("INSERT INTO clan_members (user_id, clan_id, role, joined_at) VALUES (?, ?, 'member', ?)",
+                         (user_id, clan_id, int(time.time())))
+        return True, None
+
+    def leave_clan(self, user_id: int):
+        with self._connect() as conn:
+            r = conn.execute("SELECT clan_id, role FROM clan_members WHERE user_id=?", (user_id,)).fetchone()
+            if not r:
+                return False, "noclan"
+            if r[1] == "leader":
+                return False, "leader"
+            conn.execute("DELETE FROM clan_members WHERE user_id=?", (user_id,))
+        return True, None
+
+    def kick_member(self, leader: int, target: int):
+        with self._connect() as conn:
+            lr = conn.execute("SELECT clan_id, role FROM clan_members WHERE user_id=?", (leader,)).fetchone()
+            if not lr or lr[1] != "leader":
+                return False, "notleader"
+            tr = conn.execute("SELECT clan_id FROM clan_members WHERE user_id=?", (target,)).fetchone()
+            if not tr or tr[0] != lr[0]:
+                return False, "notmember"
+            if target == leader:
+                return False, "self"
+            conn.execute("DELETE FROM clan_members WHERE user_id=?", (target,))
+        return True, None
+
+    def disband_clan(self, leader: int):
+        with self._connect() as conn:
+            lr = conn.execute("SELECT clan_id, role FROM clan_members WHERE user_id=?", (leader,)).fetchone()
+            if not lr or lr[1] != "leader":
+                return False, "notleader"
+            cid = lr[0]
+            conn.execute("DELETE FROM clan_members WHERE clan_id=?", (cid,))
+            conn.execute("DELETE FROM clans WHERE id=?", (cid,))
+            conn.execute("DELETE FROM clan_war WHERE clan_id=?", (cid,))
+        return True, None
+
+    def rename_clan(self, leader: int, name: str = None, tag: str = None, emblem: str = None):
+        with self._connect() as conn:
+            lr = conn.execute("SELECT clan_id, role FROM clan_members WHERE user_id=?", (leader,)).fetchone()
+            if not lr or lr[1] != "leader":
+                return False, "notleader"
+            if name is not None:
+                if conn.execute("SELECT 1 FROM clans WHERE name=? COLLATE NOCASE AND id!=?",
+                                (name, lr[0])).fetchone():
+                    return False, "name"
+                conn.execute("UPDATE clans SET name=? WHERE id=?", (name, lr[0]))
+            if tag is not None:
+                conn.execute("UPDATE clans SET tag=? WHERE id=?", (tag[:5], lr[0]))
+            if emblem is not None:
+                conn.execute("UPDATE clans SET emblem=? WHERE id=?", (emblem[:4] or "🏰", lr[0]))
+        return True, None
+
+    def clan_deposit(self, user_id: int, amount: int, week: int):
+        """Contribute wallet coins to the clan bank; grows clan xp + war points."""
+        with self._connect() as conn:
+            m = conn.execute("SELECT clan_id FROM clan_members WHERE user_id=?", (user_id,)).fetchone()
+            if not m:
+                return False, "noclan"
+            w = conn.execute("SELECT wallet FROM coins WHERE user_id=?", (user_id,)).fetchone()
+            if not w or w[0] < amount:
+                return False, "funds"
+            cid = m[0]
+            conn.execute("UPDATE coins SET wallet = wallet - ? WHERE user_id=?", (amount, user_id))
+            conn.execute("UPDATE clans SET bank = bank + ?, xp = xp + ? WHERE id=?", (amount, amount, cid))
+            conn.execute("UPDATE clan_members SET contributed = contributed + ? WHERE user_id=?",
+                         (amount, user_id))
+            conn.execute("INSERT INTO clan_war (clan_id, week, points) VALUES (?, ?, ?) "
+                         "ON CONFLICT(clan_id, week) DO UPDATE SET points = points + excluded.points",
+                         (cid, week, amount))
+        return True, cid
+
+    def clan_withdraw(self, leader: int, amount: int):
+        with self._connect() as conn:
+            lr = conn.execute("SELECT clan_id, role FROM clan_members WHERE user_id=?", (leader,)).fetchone()
+            if not lr or lr[1] != "leader":
+                return False, "notleader"
+            c = conn.execute("SELECT bank FROM clans WHERE id=?", (lr[0],)).fetchone()
+            if not c or c[0] < amount:
+                return False, "funds"
+            conn.execute("UPDATE clans SET bank = bank - ? WHERE id=?", (amount, lr[0]))
+            conn.execute("INSERT INTO coins (user_id, wallet) VALUES (?, ?) "
+                         "ON CONFLICT(user_id) DO UPDATE SET wallet = wallet + excluded.wallet",
+                         (leader, amount))
+        return True, None
+
+    def clan_add_xp(self, clan_id: int, amount: int, week: int):
+        with self._connect() as conn:
+            conn.execute("UPDATE clans SET xp = xp + ? WHERE id=?", (amount, clan_id))
+            conn.execute("INSERT INTO clan_war (clan_id, week, points) VALUES (?, ?, ?) "
+                         "ON CONFLICT(clan_id, week) DO UPDATE SET points = points + excluded.points",
+                         (clan_id, week, amount))
+
+    def clan_war_top(self, week: int, limit: int = 3):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT w.clan_id, w.points, c.name, c.emblem FROM clan_war w JOIN clans c ON w.clan_id=c.id "
+                "WHERE w.week=? AND w.points>0 ORDER BY w.points DESC LIMIT ?", (week, limit)).fetchall()
+        return [dict(zip(("clan_id", "points", "name", "emblem"), r)) for r in rows]
+
+    def clan_war_points(self, clan_id: int, week: int) -> int:
+        with self._connect() as conn:
+            r = conn.execute("SELECT points FROM clan_war WHERE clan_id=? AND week=?", (clan_id, week)).fetchone()
+        return r[0] if r else 0
+
+    # --- 💞 Marriage · ⭐ reputation · 🎚 global XP ---
+
+    def spouse_of(self, user_id: int):
+        with self._connect() as conn:
+            r = conn.execute("SELECT spouse_id, since FROM marriages WHERE user_id=?", (user_id,)).fetchone()
+        return dict(zip(("spouse_id", "since"), r)) if r else None
+
+    def marry(self, a: int, b: int) -> bool:
+        now = int(time.time())
+        with self._connect() as conn:
+            if conn.execute("SELECT 1 FROM marriages WHERE user_id IN (?, ?)", (a, b)).fetchone():
+                return False
+            conn.execute("INSERT INTO marriages (user_id, spouse_id, since) VALUES (?, ?, ?)", (a, b, now))
+            conn.execute("INSERT INTO marriages (user_id, spouse_id, since) VALUES (?, ?, ?)", (b, a, now))
+        return True
+
+    def divorce(self, user_id: int):
+        with self._connect() as conn:
+            r = conn.execute("SELECT spouse_id FROM marriages WHERE user_id=?", (user_id,)).fetchone()
+            if not r:
+                return None
+            spouse = r[0]
+            conn.execute("DELETE FROM marriages WHERE user_id IN (?, ?)", (user_id, spouse))
+        return spouse
+
+    def get_rep(self, user_id: int) -> int:
+        v = self.get_setting(f"rep:{user_id}")
+        return int(v) if v and v.lstrip("-").isdigit() else 0
+
+    def add_rep(self, user_id: int, n: int = 1) -> int:
+        new = self.get_rep(user_id) + n
+        self.set_setting(f"rep:{user_id}", str(new))
+        return new
+
+    def get_gxp(self, user_id: int) -> int:
+        v = self.get_setting(f"gxp:{user_id}")
+        return int(v) if v and v.isdigit() else 0
+
+    def add_gxp(self, user_id: int, n: int) -> int:
+        new = self.get_gxp(user_id) + max(0, n)
+        self.set_setting(f"gxp:{user_id}", str(new))
+        return new
+
+    # --- 📝 Notes · 📋 templates ---
+
+    def add_note(self, user_id: int, text: str) -> int:
+        with self._connect() as conn:
+            cur = conn.execute("INSERT INTO user_notes (user_id, text, created_at) VALUES (?, ?, ?)",
+                               (user_id, text, int(time.time())))
+        return cur.lastrowid
+
+    def list_notes(self, user_id: int):
+        with self._connect() as conn:
+            rows = conn.execute("SELECT id, text, created_at FROM user_notes WHERE user_id=? ORDER BY id",
+                                (user_id,)).fetchall()
+        return [dict(zip(("id", "text", "created_at"), r)) for r in rows]
+
+    def del_note(self, user_id: int, note_id: int) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM user_notes WHERE id=? AND user_id=?", (note_id, user_id))
+        return cur.rowcount > 0
+
+    def set_template(self, user_id: int, name: str, text: str) -> None:
+        with self._connect() as conn:
+            conn.execute("INSERT INTO templates (user_id, name, text) VALUES (?, ?, ?) "
+                         "ON CONFLICT(user_id, name) DO UPDATE SET text=excluded.text",
+                         (user_id, name.lower(), text))
+
+    def get_template(self, user_id: int, name: str):
+        with self._connect() as conn:
+            r = conn.execute("SELECT text FROM templates WHERE user_id=? AND name=?",
+                             (user_id, name.lower())).fetchone()
+        return r[0] if r else None
+
+    def list_templates(self, user_id: int):
+        with self._connect() as conn:
+            rows = conn.execute("SELECT name FROM templates WHERE user_id=? ORDER BY name", (user_id,)).fetchall()
+        return [r[0] for r in rows]
+
+    def del_template(self, user_id: int, name: str) -> bool:
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM templates WHERE user_id=? AND name=?", (user_id, name.lower()))
+        return cur.rowcount > 0
 
     # --- 🆔 ID slot bonus + admin grants + slot promos ---
 

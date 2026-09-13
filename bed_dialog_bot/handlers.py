@@ -1911,6 +1911,266 @@ def _make_qr(text: str):
         return None
 
 
+def _reply_target(message):
+    r = getattr(message, "reply_to_message", None)
+    if r and r.from_user and not r.from_user.is_bot:
+        return r.from_user.id
+    return None
+
+
+def _parse_delay(s: str):
+    m = re.fullmatch(r"(\d+)([smhdсмчд]?)", (s or "").strip().lower())
+    if not m:
+        return None
+    n = int(m.group(1))
+    unit = {"s": 1, "с": 1, "m": 60, "м": 60, "h": 3600, "ч": 3600, "d": 86400, "д": 86400,
+            "": 60}[m.group(2)]
+    v = n * unit
+    return v if 1 <= v <= 30 * 86400 else None
+
+
+_SCAM_PATTERNS = [
+    (r"сид[- ]?фраз|seed\s*phrase|мнемоник|mnemonic", 45, "просят сид-фразу"),
+    (r"приватн\w* ключ|private key|секретн\w* ключ", 45, "просят приватный ключ"),
+    (r"код из смс|одноразов\w* код|otp|код подтвержд", 35, "просят код подтверждения"),
+    (r"верификац\w* кошель|подтверд\w* кошель|синхрониз\w* кошель", 30, "«верификация кошелька»"),
+    (r"удво|x2|умнож\w* ваши|верну вдвое|double your", 30, "схема удвоения"),
+    (r"аирдроп|airdrop|раздача|бесплатн\w* крипт", 20, "«бесплатная раздача»"),
+    (r"срочно|немедленно|только сегодня|последний шанс", 15, "давление срочностью"),
+    (r"перевед\w* \d|пополни\w* счёт|отправь \d+.*(usdt|ton|btc|руб)", 20, "просят перевод"),
+    (r"t\.me/\+|bit\.ly|goo\.gl|tinyurl|clck\.ru", 15, "подозрительная ссылка"),
+    (r"менеджер поддержк|тех.?поддержк.*напиш|support.*dm", 15, "фейк-поддержка"),
+]
+
+
+def _scam_score(text: str):
+    t = (text or "").lower()
+    risk, flags = 0, []
+    for pat, w, label in _SCAM_PATTERNS:
+        if re.search(pat, t):
+            risk += w
+            flags.append(label)
+    return min(100, risk), flags
+
+
+def _cooldown_left(storage: Storage, uid: int, action: str, period: int) -> int:
+    v = storage.get_setting(f"cd:{action}:{uid}")
+    if v and v.isdigit():
+        left = period - (int(time.time()) - int(v))
+        return max(0, left)
+    return 0
+
+
+def _cooldown_arm(storage: Storage, uid: int, action: str) -> None:
+    storage.set_setting(f"cd:{action}:{uid}", str(int(time.time())))
+
+
+def _gxp_level(xp: int) -> int:
+    lvl = 1
+    while xp >= lvl * lvl * 100:
+        lvl += 1
+    return lvl
+
+
+def _clan_level(xp: int) -> int:
+    return 1 + xp // config.CLAN_LEVEL_STEP
+
+
+def _farm_get(storage: Storage, uid: int):
+    v = storage.get_setting(f"farm:{uid}") or "0:0"
+    try:
+        lvl, ts = v.split(":")
+        return int(lvl), int(ts)
+    except Exception:
+        return 0, 0
+
+
+def _farm_set(storage: Storage, uid: int, lvl: int, ts: int) -> None:
+    storage.set_setting(f"farm:{uid}", f"{lvl}:{ts}")
+
+
+def _farm_accrued(lvl: int, ts: int) -> int:
+    if lvl <= 0 or ts <= 0:
+        return 0
+    hours = min(config.FARM_CAP_HOURS, (int(time.time()) - ts) / 3600.0)
+    return int(lvl * config.FARM_YIELD * hours)
+
+
+def _work_multiplier(storage: Storage, uid: int) -> float:
+    mult = 1.0
+    c = storage.clan_of(uid)
+    if c:
+        mult += _clan_level(c["xp"]) * config.CLAN_WORK_BONUS
+    if storage.spouse_of(uid):
+        mult += config.MARRY_WORK_BONUS
+    return mult
+
+
+def _clan_text(storage: Storage, uid: int) -> str:
+    c = storage.clan_of(uid)
+    if not c:
+        return ("🏰 <b>Кланы</b>\n\nТы не в клане.\n"
+                f"Создать: <code>/clan create Название</code> ({config.CLAN_CREATE_COST} монет)\n"
+                "Вступить: <code>/clan join Название</code> · список: <code>/clan list</code>")
+    lvl = _clan_level(c["xp"])
+    members = storage.clan_member_count(c["id"])
+    wk = storage.current_week()
+    pts = storage.clan_war_points(c["id"], wk)
+    lines = [f"{c['emblem']} <b>{html.escape(c['name'])}</b>" + (f" [{html.escape(c['tag'])}]" if c['tag'] else ""),
+             f"🏅 Уровень {lvl} · XP {c['xp']} · 👥 {members}/{config.CLAN_MAX_MEMBERS}",
+             f"🏦 Клан-банк: {c['bank']} монет · ⚔️ очки войны (нед): {pts}",
+             f"🎖 Твоя роль: {'вождь' if c['role']=='leader' else 'боец'} · твой вклад: {c['contributed']}",
+             f"💪 Бонус к /work за клан: +{int(lvl*config.CLAN_WORK_BONUS*100)}%",
+             "\n💰 <code>/clan deposit N</code> — вложить (растит XP и очки войны)",
+             "👥 <code>/clan members</code> · 🚪 <code>/clan leave</code>"]
+    if c["role"] == "leader":
+        lines.append("👑 Вождь: <code>/clan withdraw N</code> · <code>/clan kick @ник</code> · "
+                     "<code>/clan rename Имя</code> · <code>/clan emblem 🔥</code> · <code>/clan disband</code>")
+    lines.append("\n⚔️ Раз в неделю клан с наибольшими очками войны получает ULTRA-дни всем бойцам!")
+    return "\n".join(lines)
+
+
+async def _clan_command(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    parts = (message.text or "").split(maxsplit=2)
+    sub = parts[1].lower() if len(parts) >= 2 else ""
+    arg = parts[2].strip() if len(parts) >= 3 else ""
+
+    if sub in ("", "info", "инфо"):
+        await message.reply_text(_clan_text(storage, uid), parse_mode="HTML")
+        return
+    if sub in ("create", "создать"):
+        name = (arg or (parts[1] if False else "")).strip()[:24]
+        if not name:
+            await message.reply_text("🏰 <code>/clan create Название</code>", parse_mode="HTML")
+            return
+        cid, err = storage.create_clan(uid, name, "", "🏰", config.CLAN_CREATE_COST)
+        if cid:
+            await message.reply_text(f"🏰 Клан «{html.escape(name)}» создан! (−{config.CLAN_CREATE_COST} монет)\n"
+                                     "Настрой: /clan emblem 🔥 · /clan tag ABC · зови людей: /clan info", parse_mode="HTML")
+        else:
+            await message.reply_text({"inclan": "Ты уже в клане.", "name": "Имя занято.",
+                                      "funds": f"Нужно {config.CLAN_CREATE_COST} монет."}.get(err, "Не вышло."))
+        return
+    if sub in ("join", "вступить"):
+        cid = None
+        if arg.isdigit():
+            cid = int(arg)
+        else:
+            cid = storage.clan_by_name(arg)
+        if not cid:
+            await message.reply_text("Клан не найден. Список: /clan list")
+            return
+        ok, err = storage.join_clan(uid, cid, config.CLAN_MAX_MEMBERS)
+        if ok:
+            c = storage.clan_get(cid)
+            await message.reply_text(f"✅ Ты вступил в {c['emblem']} {html.escape(c['name'])}!")
+        else:
+            await message.reply_text({"inclan": "Ты уже в клане (сначала /clan leave).",
+                                      "full": "В клане нет мест.", "gone": "Клан исчез."}.get(err, "Не вышло."))
+        return
+    if sub in ("list", "список"):
+        cl = storage.list_clans(15)
+        if not cl:
+            await message.reply_text("Кланов пока нет — создай первым: /clan create Имя")
+            return
+        body = "\n".join(f"{c['emblem']} <b>{html.escape(c['name'])}</b> — ур.{_clan_level(c['xp'])}, "
+                         f"👥{c['members']} · вступить: <code>/clan join {c['id']}</code>" for c in cl)
+        await message.reply_text("🏰 <b>Кланы</b>\n" + body, parse_mode="HTML")
+        return
+    if sub in ("members", "состав"):
+        c = storage.clan_of(uid)
+        if not c:
+            await message.reply_text("Ты не в клане.")
+            return
+        rows = storage.clan_members(c["id"])
+        lines = [f"{c['emblem']} <b>{html.escape(c['name'])}</b> — состав:"]
+        for m in rows[:40]:
+            nm, un = storage.user_display(m["user_id"])
+            who = ("@" + un) if un else (nm or str(m["user_id"]))
+            crown = "👑" if m["role"] == "leader" else "•"
+            lines.append(f"{crown} {html.escape(str(who))} — вклад {m['contributed']}")
+        await message.reply_text("\n".join(lines), parse_mode="HTML")
+        return
+    if sub in ("leave", "выйти"):
+        ok, err = storage.leave_clan(uid)
+        await message.reply_text("🚪 Ты покинул клан." if ok else
+                                 {"leader": "Вождь не может выйти — передай/распусти: /clan disband",
+                                  "noclan": "Ты не в клане."}.get(err, "Не вышло."))
+        return
+    if sub in ("disband", "распустить"):
+        ok, err = storage.disband_clan(uid)
+        await message.reply_text("💥 Клан распущен." if ok else "Только вождь может распустить клан.")
+        return
+    if sub in ("kick", "кик", "выгнать"):
+        target = _resolve_person(storage, arg.split()[0]) if arg else None
+        if not target:
+            await message.reply_text("👢 <code>/clan kick @ник</code>", parse_mode="HTML")
+            return
+        ok, err = storage.kick_member(uid, target)
+        await message.reply_text("👢 Готово." if ok else
+                                 {"notleader": "Только вождь.", "notmember": "Он не в твоём клане.",
+                                  "self": "Себя нельзя."}.get(err, "Не вышло."))
+        return
+    if sub in ("rename", "переименовать"):
+        ok, err = storage.rename_clan(uid, name=arg[:24]) if arg else (False, "name")
+        await message.reply_text("✏️ Переименован." if ok else
+                                 {"notleader": "Только вождь.", "name": "Имя занято/пустое."}.get(err, "Не вышло."))
+        return
+    if sub in ("tag", "тег"):
+        ok, err = storage.rename_clan(uid, tag=arg[:5])
+        await message.reply_text("🏷 Тег обновлён." if ok else "Только вождь.")
+        return
+    if sub in ("emblem", "эмблема"):
+        ok, err = storage.rename_clan(uid, emblem=arg[:4])
+        await message.reply_text("🛡 Эмблема обновлена." if ok else "Только вождь.")
+        return
+    if sub in ("deposit", "вложить", "dep"):
+        n = int(arg) if arg.isdigit() else 0
+        if n <= 0:
+            await message.reply_text("💰 <code>/clan deposit N</code>", parse_mode="HTML")
+            return
+        ok, res = storage.clan_deposit(uid, n, storage.current_week())
+        if ok:
+            storage.add_gxp(uid, n // 20)
+            await message.reply_text(f"💰 Вложено {n} в клан-банк! Растут XP и очки войны.")
+        else:
+            await message.reply_text({"noclan": "Ты не в клане.", "funds": "Не хватает монет."}.get(res, "Не вышло."))
+        return
+    if sub in ("withdraw", "снять", "wd"):
+        n = int(arg) if arg.isdigit() else 0
+        ok, err = storage.clan_withdraw(uid, n) if n > 0 else (False, "x")
+        await message.reply_text(f"🏦 Снято {n} из клан-банка." if ok else
+                                 {"notleader": "Только вождь.", "funds": "В клан-банке столько нет."}.get(err, "Не вышло."))
+        return
+    await message.reply_text("🏰 Команды клана: create/join/list/members/deposit/withdraw/leave/"
+                             "kick/rename/tag/emblem/disband")
+
+
+def _profile_text(storage: Storage, uid: int, name_disp: str) -> str:
+    gxp = storage.get_gxp(uid)
+    lvl = _gxp_level(gxp)
+    coins = storage.get_coins(uid)
+    bank = storage.get_bank(uid)
+    bed = storage.get_bed(uid)
+    rep = storage.get_rep(uid)
+    c = storage.clan_of(uid)
+    sp = storage.spouse_of(uid)
+    ids = storage.ids_of(uid)
+    best = max(ids, key=lambda p: idrarity.classify(p)["score"]) if ids else None
+    lines = [f"👤 <b>{html.escape(name_disp)}</b>",
+             f"🎚 Уровень <b>{lvl}</b> ({gxp} XP) · ⭐ репутация: {rep}",
+             f"🪙 Монеты: {coins} (+ банк {bank}) · 💎 BED: {bed}"]
+    if c:
+        lines.append(f"🏰 Клан: {c['emblem']} {html.escape(c['name'])} (ур. {_clan_level(c['xp'])})")
+    if sp:
+        lines.append(f"💞 В браке")
+    if best:
+        lines.append(f"🆔 Топ ID: {idrarity.badge(best)} <code>{best}</code> · всего ID: {len(ids)}")
+    lines.append("\n🪙 /work /crime /rob · 🏦 /bank · 🌾 /farm · 🏰 /clan · 💞 /marry · 🎲 /flip /rps")
+    return "\n".join(lines)
+
+
 def _id_level(xp: int) -> int:
     """ID prestige level from accumulated XP."""
     lvl = 0
@@ -4160,6 +4420,388 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             lines.append("\n<i>Ещё впереди:</i>")
             lines += [f"⬜ {t}" for t in miss]
         await message.reply_text("\n".join(lines), parse_mode="HTML")
+        return
+    # ================= 🪙 Coins economy · 🏰 clans · 💞 social =================
+    if text.startswith("/coins") or text.startswith("/balance") or text.startswith("/монеты"):
+        uid = message.from_user.id
+        await message.reply_text(
+            f"🪙 <b>Монеты</b>: {storage.get_coins(uid)}\n🏦 В банке: {storage.get_bank(uid)}\n\n"
+            "Зарабатывай: /work /crime /rob · 🌾 /farm · 🏦 /bank\n"
+            "<i>Монеты — игровая валюта, отдельная от BED.</i>", parse_mode="HTML")
+        return
+    if text.startswith("/work") or text.startswith("/работать"):
+        uid = message.from_user.id
+        left = _cooldown_left(storage, uid, "work", config.WORK_CD)
+        if left:
+            await message.reply_text(f"😮‍💨 Ты уже поработал. Отдых ещё {_fmt_left(left)}.")
+            return
+        import random as _r
+        base = _r.randint(config.WORK_MIN, config.WORK_MAX)
+        earn = int(base * _work_multiplier(storage, uid))
+        storage.add_coins(uid, earn)
+        storage.add_gxp(uid, 10)
+        c = storage.clan_of(uid)
+        if c:
+            storage.clan_add_xp(c["id"], max(1, earn // 10), storage.current_week())
+        _cooldown_arm(storage, uid, "work")
+        jobs = ["развозил заказы", "чинил краны", "писал код", "выгуливал собак",
+                "торговал на рынке", "стримил", "таксовал"]
+        await message.reply_text(
+            f"💼 Ты {_r.choice(jobs)} и заработал <b>+{earn}</b> монет!\n🪙 Баланс: {storage.get_coins(uid)}",
+            parse_mode="HTML")
+        return
+    if text.startswith("/crime") or text.startswith("/крайм") or text.startswith("/преступление"):
+        uid = message.from_user.id
+        left = _cooldown_left(storage, uid, "crime", config.CRIME_CD)
+        if left:
+            await message.reply_text(f"🚔 Слишком горячо. Заляг на дно ещё {_fmt_left(left)}.")
+            return
+        import random as _r
+        _cooldown_arm(storage, uid, "crime")
+        if _r.random() < config.CRIME_FAIL:
+            fine = _r.randint(config.CRIME_FINE_MIN, config.CRIME_FINE_MAX)
+            have = storage.get_coins(uid)
+            lost = min(fine, have)
+            if lost:
+                storage.spend_coins(uid, lost)
+            await message.reply_text(f"🚨 Тебя поймали! Штраф <b>−{lost}</b> монет. 🪙 Баланс: {storage.get_coins(uid)}",
+                                     parse_mode="HTML")
+        else:
+            earn = int(_r.randint(config.CRIME_MIN, config.CRIME_MAX) * _work_multiplier(storage, uid))
+            storage.add_coins(uid, earn)
+            storage.add_gxp(uid, 20)
+            crimes = ["обнёс ларёк", "угнал самокат", "провернул схему", "взломал автомат"]
+            await message.reply_text(f"🕶 Ты {_r.choice(crimes)}: <b>+{earn}</b> монет! 🪙 Баланс: {storage.get_coins(uid)}",
+                                     parse_mode="HTML")
+        return
+    if text.startswith("/rob") or text.startswith("/ограбить"):
+        uid = message.from_user.id
+        parts = text.split()
+        target = _resolve_person(storage, parts[1]) if len(parts) >= 2 else (
+            _reply_target(message))
+        if not target:
+            await message.reply_text("🦹 Кого грабим? <code>/rob @ник</code> (или его ID/uid, или реплаем).",
+                                     parse_mode="HTML")
+            return
+        if target == uid:
+            await message.reply_text("Себя грабить — так себе бизнес 🙂")
+            return
+        left = _cooldown_left(storage, uid, "rob", config.ROB_CD)
+        if left:
+            await message.reply_text(f"🦹 Ствол ещё не остыл. Жди {_fmt_left(left)}.")
+            return
+        _cooldown_arm(storage, uid, "rob")
+        res = storage.rob_coins(uid, target, config.ROB_PCT, config.ROB_FINE, config.ROB_FAIL,
+                                config.ROB_MIN_TARGET)
+        if res["result"] == "poor":
+            await message.reply_text("💸 У жертвы пусто в кошельке — грабить нечего (монеты в банке не отнять).")
+        elif res["result"] == "caught":
+            await message.reply_text(f"🚔 Провал! Тебя приняли, штраф <b>−{res['amount']}</b> монет.",
+                                     parse_mode="HTML")
+        else:
+            await message.reply_text(f"🦹 Успех! Ты вынес <b>+{res['amount']}</b> монет. 🪙 Баланс: {storage.get_coins(uid)}",
+                                     parse_mode="HTML")
+            try:
+                await context.bot.send_message(target, f"🦹 Тебя ограбили на {res['amount']} монет! Прячь в банк: /bank")
+            except Exception:
+                pass
+        return
+    if text.startswith("/bank") or text.startswith("/банк"):
+        uid = message.from_user.id
+        parts = text.split()
+        if len(parts) >= 3 and parts[1].lower() in ("dep", "deposit", "put", "вложить", "положить") and parts[2].isdigit():
+            n = int(parts[2])
+            ok = storage.bank_deposit(uid, n)
+            await message.reply_text(f"🏦 Внёс {n} монет. В банке: {storage.get_bank(uid)}, в кошельке: {storage.get_coins(uid)}"
+                                     if ok else "Не хватает монет в кошельке.")
+            return
+        if len(parts) >= 3 and parts[1].lower() in ("wd", "withdraw", "take", "снять", "вывести") and parts[2].isdigit():
+            n = int(parts[2])
+            ok = storage.bank_withdraw(uid, n)
+            await message.reply_text(f"🏦 Снял {n} монет. В банке: {storage.get_bank(uid)}, в кошельке: {storage.get_coins(uid)}"
+                                     if ok else "В банке столько нет.")
+            return
+        await message.reply_text(
+            f"🏦 <b>Банк</b>\nВ банке: <b>{storage.get_bank(uid)}</b> монет (защищены от грабежа, "
+            f"+{int(config.BANK_DAILY_RATE*100)}%/день)\nВ кошельке: {storage.get_coins(uid)}\n\n"
+            "Вложить: <code>/bank dep N</code> · снять: <code>/bank wd N</code>", parse_mode="HTML")
+        return
+    if text.startswith("/farm") or text.startswith("/ферма"):
+        uid = message.from_user.id
+        parts = text.split()
+        lvl, ts = _farm_get(storage, uid)
+        if len(parts) >= 2 and parts[1].lower() in ("collect", "собрать"):
+            got = _farm_accrued(lvl, ts)
+            if got <= 0:
+                await message.reply_text("🌾 Пока нечего собирать.")
+                return
+            storage.add_coins(uid, got)
+            _farm_set(storage, uid, lvl, int(time.time()))
+            await message.reply_text(f"🌾 Собрано <b>+{got}</b> монет! 🪙 Баланс: {storage.get_coins(uid)}",
+                                     parse_mode="HTML")
+            return
+        if len(parts) >= 2 and parts[1].lower() in ("buy", "upgrade", "купить", "улучшить"):
+            if lvl >= config.FARM_MAX_LEVEL:
+                await message.reply_text(f"🌾 Ферма уже максимального уровня ({config.FARM_MAX_LEVEL}).")
+                return
+            cost = config.FARM_COST * (lvl + 1)
+            if not storage.spend_coins(uid, cost):
+                await message.reply_text(f"Не хватает монет (нужно {cost}).")
+                return
+            # collect pending before leveling so rate change is clean
+            pend = _farm_accrued(lvl, ts)
+            if pend:
+                storage.add_coins(uid, pend)
+            _farm_set(storage, uid, lvl + 1, int(time.time()))
+            await message.reply_text(
+                f"🌾 Ферма улучшена до уровня <b>{lvl+1}</b>! Доход {(lvl+1)*config.FARM_YIELD}/час."
+                + (f" (собрано {pend} по пути)" if pend else ""), parse_mode="HTML")
+            return
+        got = _farm_accrued(lvl, ts)
+        nextcost = config.FARM_COST * (lvl + 1)
+        await message.reply_text(
+            f"🌾 <b>Ферма</b> — уровень {lvl}\nДоход: {lvl*config.FARM_YIELD}/час "
+            f"(накоплено {got}, кап {config.FARM_CAP_HOURS}ч)\n\n"
+            f"Собрать: <code>/farm collect</code> · улучшить: <code>/farm buy</code> ({nextcost} монет)",
+            parse_mode="HTML")
+        return
+    if text.startswith("/clan") or text.startswith("/клан"):
+        await _clan_command(message, context, storage)
+        return
+    if text.startswith("/marry") or text.startswith("/брак") or text.startswith("/жениться"):
+        uid = message.from_user.id
+        parts = text.split()
+        if len(parts) >= 2 and parts[1].lower() in ("accept", "yes", "да", "принять"):
+            proposer = storage.get_setting(f"marryreq:{uid}")
+            if not proposer or not proposer.isdigit():
+                await message.reply_text("Тебе никто не делал предложение 💔")
+                return
+            proposer = int(proposer)
+            if storage.spouse_of(uid) or storage.spouse_of(proposer):
+                await message.reply_text("Кто-то уже в браке 💔")
+                storage.set_setting(f"marryreq:{uid}", "")
+                return
+            storage.marry(uid, proposer)
+            storage.set_setting(f"marryreq:{uid}", "")
+            await message.reply_text("💞 Поздравляем с браком! Теперь у вас +бонус к /work 💍")
+            try:
+                await context.bot.send_message(proposer, "💞 Твоё предложение приняли! Вы в браке 💍")
+            except Exception:
+                pass
+            return
+        target = _resolve_person(storage, parts[1]) if len(parts) >= 2 else _reply_target(message)
+        if not target or target == uid:
+            await message.reply_text("💍 Предложение руки: <code>/marry @ник</code>. Принять: <code>/marry accept</code>",
+                                     parse_mode="HTML")
+            return
+        if storage.spouse_of(uid):
+            await message.reply_text("Ты уже в браке. Сначала /divorce.")
+            return
+        if storage.spouse_of(target):
+            await message.reply_text("Этот человек уже занят 💔")
+            return
+        storage.set_setting(f"marryreq:{target}", str(uid))
+        await message.reply_text("💌 Предложение отправлено! Пусть примет: /marry accept")
+        try:
+            sn, su = _display_name(message)
+            await context.bot.send_message(
+                target, f"💍 {formatting.format_sender(sn, su)} зовёт тебя замуж/жениться!\n"
+                        "Принять: /marry accept", parse_mode="HTML")
+        except Exception:
+            pass
+        return
+    if text.startswith("/divorce") or text.startswith("/развод"):
+        uid = message.from_user.id
+        spouse = storage.divorce(uid)
+        if spouse:
+            await message.reply_text("💔 Развод оформлен.")
+            try:
+                await context.bot.send_message(spouse, "💔 С тобой развелись.")
+            except Exception:
+                pass
+        else:
+            await message.reply_text("Ты не в браке.")
+        return
+    if text.startswith("/rep") or text.startswith("/реп"):
+        uid = message.from_user.id
+        parts = text.split()
+        target = _resolve_person(storage, parts[1]) if len(parts) >= 2 else _reply_target(message)
+        if not target or target == uid:
+            await message.reply_text("⭐ Поднять репутацию: <code>/rep @ник</code> (раз в сутки).", parse_mode="HTML")
+            return
+        left = _cooldown_left(storage, uid, "rep", config.REP_CD)
+        if left:
+            await message.reply_text(f"⭐ Уже сегодня плюсовал. Ещё через {_fmt_left(left)}.")
+            return
+        _cooldown_arm(storage, uid, "rep")
+        newrep = storage.add_rep(target, 1)
+        await message.reply_text(f"⭐ +1 к репутации! Теперь у него {newrep}.")
+        try:
+            await context.bot.send_message(target, f"⭐ Тебе подняли репутацию! Всего: {newrep}.")
+        except Exception:
+            pass
+        return
+    if text.startswith("/profile") or text.startswith("/профиль") or text.startswith("/me"):
+        uid = message.from_user.id
+        parts = text.split()
+        target = _resolve_person(storage, parts[1]) if len(parts) >= 2 else _reply_target(message)
+        if target and target != uid:
+            nm, un = storage.user_display(target)
+            await message.reply_text(_profile_text(storage, target, un and ("@" + un) or (nm or str(target))),
+                                     parse_mode="HTML")
+        else:
+            sn, su = _display_name(message)
+            await message.reply_text(_profile_text(storage, uid, su and ("@" + su) or (sn or "Ты")),
+                                     parse_mode="HTML")
+        return
+    if text.startswith("/flip") or text.startswith("/coinflip"):
+        uid = message.from_user.id
+        parts = text.split()
+        bet = int(parts[1]) if len(parts) >= 2 and parts[1].isdigit() else 0
+        if bet <= 0 or bet > config.COIN_BET_MAX:
+            await message.reply_text(f"🪙 Орёл/решка: <code>/flip ставка</code> (1..{config.COIN_BET_MAX} монет)",
+                                     parse_mode="HTML")
+            return
+        if not storage.spend_coins(uid, bet):
+            await message.reply_text(f"Не хватает монет (у тебя {storage.get_coins(uid)}).")
+            return
+        import random as _r
+        if _r.random() < 0.5:
+            win = int(bet * 2 * (1 - config.FLIP_EDGE))
+            storage.add_coins(uid, win)
+            await message.reply_text(f"🪙 Выпал ОРЁЛ — ты выиграл! +{win - bet} чистыми. 🪙 {storage.get_coins(uid)}")
+        else:
+            await message.reply_text(f"🪙 Выпала РЕШКА — мимо, −{bet}. 🪙 {storage.get_coins(uid)}")
+        return
+    if text.startswith("/rps") or text.startswith("/кнб"):
+        uid = message.from_user.id
+        parts = text.split()
+        moves = {"к": "камень", "камень": "камень", "r": "камень", "rock": "камень",
+                 "н": "ножницы", "ножницы": "ножницы", "s": "ножницы", "scissors": "ножницы",
+                 "б": "бумага", "бумага": "бумага", "p": "бумага", "paper": "бумага"}
+        choice = moves.get(parts[1].lower()) if len(parts) >= 2 else None
+        bet = int(parts[2]) if len(parts) >= 3 and parts[2].isdigit() else 0
+        if not choice or bet <= 0 or bet > config.COIN_BET_MAX:
+            await message.reply_text("✊ Камень-ножницы-бумага: <code>/rps камень|ножницы|бумага ставка</code>",
+                                     parse_mode="HTML")
+            return
+        if not storage.spend_coins(uid, bet):
+            await message.reply_text(f"Не хватает монет (у тебя {storage.get_coins(uid)}).")
+            return
+        import random as _r
+        bot_move = _r.choice(["камень", "ножницы", "бумага"])
+        beats = {"камень": "ножницы", "ножницы": "бумага", "бумага": "камень"}
+        emo = {"камень": "✊", "ножницы": "✌️", "бумага": "✋"}
+        if bot_move == choice:
+            storage.add_coins(uid, bet)  # push
+            res = "ничья — ставка возвращена"
+        elif beats[choice] == bot_move:
+            win = int(bet * 2 * (1 - config.RPS_EDGE))
+            storage.add_coins(uid, win)
+            res = f"ты выиграл +{win - bet}!"
+        else:
+            res = f"ты проиграл −{bet}"
+        await message.reply_text(f"{emo[choice]} vs {emo[bot_move]} ({bot_move}) — {res}. 🪙 {storage.get_coins(uid)}")
+        return
+    if text.startswith("/remind") or text.startswith("/напомни"):
+        uid = message.from_user.id
+        parts = text.split(maxsplit=2)
+        if len(parts) < 3:
+            await message.reply_text("⏰ Напоминание: <code>/remind 10m текст</code> "
+                                     "(s/m/h/d, напр. 2h, 1d).", parse_mode="HTML")
+            return
+        when = _parse_delay(parts[1])
+        if when is None:
+            await message.reply_text("Формат времени: 30s / 10m / 2h / 1d.")
+            return
+        storage.add_reminder(uid, int(time.time()) + when, parts[2][:400])
+        await message.reply_text(f"⏰ Напомню через {_fmt_left(when)}.")
+        return
+    if text.startswith("/notes") or text.startswith("/заметки"):
+        uid = message.from_user.id
+        ns = storage.list_notes(uid)
+        if not ns:
+            await message.reply_text("📝 Заметок нет. Добавить: <code>/note текст</code>", parse_mode="HTML")
+            return
+        body = "\n".join(f"#{n['id']} — {html.escape(n['text'][:80])}" for n in ns[:40])
+        await message.reply_text(f"📝 <b>Заметки</b>\n{body}\n\nУдалить: <code>/delnote id</code>", parse_mode="HTML")
+        return
+    if text.startswith("/delnote"):
+        uid = message.from_user.id
+        parts = text.split()
+        if len(parts) >= 2 and parts[1].isdigit() and storage.del_note(uid, int(parts[1])):
+            await message.reply_text("🗑 Удалено.")
+        else:
+            await message.reply_text("Не нашёл такую заметку.")
+        return
+    if text.startswith("/note") or text.startswith("/заметка"):
+        uid = message.from_user.id
+        parts = text.split(maxsplit=1)
+        if len(parts) < 2:
+            await message.reply_text("📝 Сохранить заметку: <code>/note текст</code> · список: /notes", parse_mode="HTML")
+            return
+        nid = storage.add_note(uid, parts[1][:400])
+        await message.reply_text(f"📝 Заметка #{nid} сохранена. Список: /notes")
+        return
+    if text.startswith("/tpls") or text.startswith("/шаблоны"):
+        uid = message.from_user.id
+        ts = storage.list_templates(uid)
+        await message.reply_text(("📋 <b>Шаблоны</b>: " + ", ".join(f"<code>{html.escape(t)}</code>" for t in ts)
+                                  if ts else "📋 Шаблонов нет.") +
+                                 "\n\nСоздать: <code>/tpl save имя текст</code> · вставить: <code>/tpl имя</code>",
+                                 parse_mode="HTML")
+        return
+    if text.startswith("/deltpl"):
+        uid = message.from_user.id
+        parts = text.split()
+        if len(parts) >= 2 and storage.del_template(uid, parts[1]):
+            await message.reply_text("🗑 Шаблон удалён.")
+        else:
+            await message.reply_text("Нет такого шаблона.")
+        return
+    if text.startswith("/tpl"):
+        uid = message.from_user.id
+        parts = text.split(maxsplit=3)
+        if len(parts) >= 4 and parts[1].lower() in ("save", "add", "сохранить"):
+            storage.set_template(uid, parts[2], parts[3][:1500])
+            await message.reply_text(f"📋 Шаблон «{html.escape(parts[2])}» сохранён. Вставить: /tpl {html.escape(parts[2])}",
+                                     parse_mode="HTML")
+            return
+        if len(parts) >= 2:
+            t = storage.get_template(uid, parts[1])
+            await message.reply_text(t if t else "Нет такого шаблона. Список: /tpls")
+            return
+        await message.reply_text("📋 <code>/tpl save имя текст</code> · <code>/tpl имя</code> · /tpls · /deltpl имя",
+                                 parse_mode="HTML")
+        return
+    if text.startswith("/away") or text.startswith("/автоответ_офлайн"):
+        uid = message.from_user.id
+        parts = text.split(maxsplit=1)
+        if len(parts) >= 2 and parts[1].strip().lower() in ("off", "выкл", "стоп"):
+            storage.set_setting(f"autoreply:{uid}", "")
+            await message.reply_text("🟢 Авто-ответ «не на месте» выключен.")
+            return
+        if len(parts) < 2:
+            cur = storage.get_setting(f"autoreply:{uid}")
+            await message.reply_text(
+                f"💤 <b>Авто-ответ «не на месте»</b>\nСейчас: {('«'+html.escape(cur)+'»') if cur else 'выключен'}\n\n"
+                "Включить: <code>/away текст</code> — бот сам ответит контакту, когда тебя нет "
+                "(не чаще раза в час на чат).\nВыключить: <code>/away off</code>", parse_mode="HTML")
+            return
+        storage.set_setting(f"autoreply:{uid}", parts[1][:800])
+        await message.reply_text("💤 Авто-ответ включён. Контактам ответит автоматически. Выкл: /away off")
+        return
+    if text.startswith("/scan") or text.startswith("/антискам"):
+        parts = message.text.split(maxsplit=1) if message.text else []
+        if len(parts) < 2:
+            await message.reply_text("🛡 Проверить текст на скам: <code>/scan текст сообщения</code>", parse_mode="HTML")
+            return
+        risk, flags = _scam_score(parts[1])
+        bar = "🔴 ВЫСОКИЙ" if risk >= 60 else ("🟡 средний" if risk >= 30 else "🟢 низкий")
+        await message.reply_text(
+            f"🛡 <b>Риск скама: {bar}</b> ({risk}/100)\n" +
+            ("Признаки: " + ", ".join(flags) if flags else "Явных признаков не найдено.") +
+            "\n\n<i>Никогда не отправляй сид-фразу/коды/приватные ключи.</i>", parse_mode="HTML")
         return
     if text.startswith("/engrave") or text.startswith("/гравировка"):
         uid = message.from_user.id
