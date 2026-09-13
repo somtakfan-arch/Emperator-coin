@@ -2006,6 +2006,101 @@ def _work_multiplier(storage: Storage, uid: int) -> float:
     return mult
 
 
+def _do_work(storage: Storage, uid: int) -> str:
+    left = _cooldown_left(storage, uid, "work", config.WORK_CD)
+    if left:
+        return f"😮‍💨 Ты уже поработал. Отдых ещё {_fmt_left(left)}."
+    import random as _r
+    earn = int(_r.randint(config.WORK_MIN, config.WORK_MAX) * _work_multiplier(storage, uid))
+    storage.add_coins(uid, earn)
+    storage.add_gxp(uid, 10)
+    c = storage.clan_of(uid)
+    if c:
+        storage.clan_add_xp(c["id"], max(1, earn // 10), storage.current_week())
+    _cooldown_arm(storage, uid, "work")
+    job = _r.choice(["развозил заказы", "чинил краны", "писал код", "выгуливал собак",
+                     "торговал на рынке", "стримил", "таксовал"])
+    return f"💼 Ты {job} и заработал +{earn} монет! 🪙 Баланс: {storage.get_coins(uid)}"
+
+
+def _do_crime(storage: Storage, uid: int) -> str:
+    left = _cooldown_left(storage, uid, "crime", config.CRIME_CD)
+    if left:
+        return f"🚔 Слишком горячо. Заляг на дно ещё {_fmt_left(left)}."
+    import random as _r
+    _cooldown_arm(storage, uid, "crime")
+    if _r.random() < config.CRIME_FAIL:
+        fine = _r.randint(config.CRIME_FINE_MIN, config.CRIME_FINE_MAX)
+        lost = min(fine, storage.get_coins(uid))
+        if lost:
+            storage.spend_coins(uid, lost)
+        return f"🚨 Тебя поймали! Штраф −{lost} монет. 🪙 Баланс: {storage.get_coins(uid)}"
+    earn = int(_r.randint(config.CRIME_MIN, config.CRIME_MAX) * _work_multiplier(storage, uid))
+    storage.add_coins(uid, earn)
+    storage.add_gxp(uid, 20)
+    crime = _r.choice(["обнёс ларёк", "угнал самокат", "провернул схему", "взломал автомат"])
+    return f"🕶 Ты {crime}: +{earn} монет! 🪙 Баланс: {storage.get_coins(uid)}"
+
+
+def _do_farm_collect(storage: Storage, uid: int) -> str:
+    lvl, ts = _farm_get(storage, uid)
+    got = _farm_accrued(lvl, ts)
+    if got <= 0:
+        return "🌾 Пока нечего собирать."
+    storage.add_coins(uid, got)
+    _farm_set(storage, uid, lvl, int(time.time()))
+    return f"🌾 Собрано +{got} монет! 🪙 Баланс: {storage.get_coins(uid)}"
+
+
+def _do_farm_buy(storage: Storage, uid: int) -> str:
+    lvl, ts = _farm_get(storage, uid)
+    if lvl >= config.FARM_MAX_LEVEL:
+        return f"🌾 Ферма уже максимального уровня ({config.FARM_MAX_LEVEL})."
+    cost = config.FARM_COST * (lvl + 1)
+    if not storage.spend_coins(uid, cost):
+        return f"Не хватает монет (нужно {cost})."
+    pend = _farm_accrued(lvl, ts)
+    if pend:
+        storage.add_coins(uid, pend)
+    _farm_set(storage, uid, lvl + 1, int(time.time()))
+    return f"🌾 Ферма улучшена до ур.{lvl+1}! Доход {(lvl+1)*config.FARM_YIELD}/час." + (
+        f" (+{pend} по пути)" if pend else "")
+
+
+def _do_flip(storage: Storage, uid: int, bet: int) -> str:
+    if bet <= 0 or bet > config.COIN_BET_MAX:
+        return f"🪙 Ставка 1..{config.COIN_BET_MAX} монет."
+    if not storage.spend_coins(uid, bet):
+        return f"Не хватает монет (у тебя {storage.get_coins(uid)})."
+    import random as _r
+    if _r.random() < 0.5:
+        win = int(bet * 2 * (1 - config.FLIP_EDGE))
+        storage.add_coins(uid, win)
+        return f"🪙 ОРЁЛ — выигрыш +{win - bet} чистыми! 🪙 {storage.get_coins(uid)}"
+    return f"🪙 РЕШКА — мимо, −{bet}. 🪙 {storage.get_coins(uid)}"
+
+
+def _do_rps(storage: Storage, uid: int, choice: str, bet: int) -> str:
+    if bet <= 0 or bet > config.COIN_BET_MAX:
+        return f"✊ Ставка 1..{config.COIN_BET_MAX} монет."
+    if not storage.spend_coins(uid, bet):
+        return f"Не хватает монет (у тебя {storage.get_coins(uid)})."
+    import random as _r
+    bot_move = _r.choice(["камень", "ножницы", "бумага"])
+    beats = {"камень": "ножницы", "ножницы": "бумага", "бумага": "камень"}
+    emo = {"камень": "✊", "ножницы": "✌️", "бумага": "✋"}
+    if bot_move == choice:
+        storage.add_coins(uid, bet)
+        res = "ничья — ставка возвращена"
+    elif beats[choice] == bot_move:
+        win = int(bet * 2 * (1 - config.RPS_EDGE))
+        storage.add_coins(uid, win)
+        res = f"ты выиграл +{win - bet}!"
+    else:
+        res = f"проигрыш −{bet}"
+    return f"{emo[choice]} vs {emo[bot_move]} — {res}. 🪙 {storage.get_coins(uid)}"
+
+
 def _clan_text(storage: Storage, uid: int) -> str:
     c = storage.clan_of(uid)
     if not c:
@@ -2889,6 +2984,325 @@ def _friends_view(storage: Storage, uid: int):
         callback_data=f"fr:del:{f['friend_id']}")] for f in fr[:10]]
     rows.append([InlineKeyboardButton("🔄 Обновить", callback_data="fr:home")])
     return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+# ===================== 🎮 Social / economy inline UI =======================
+
+def _social_hub_view(storage: Storage, uid: int):
+    text = (f"🎮 <b>Тусовка и экономика</b>\n\n"
+            f"🪙 Монеты: <b>{storage.get_coins(uid)}</b> (банк {storage.get_bank(uid)}) · "
+            f"🎚 ур. {_gxp_level(storage.get_gxp(uid))} · ⭐ реп {storage.get_rep(uid)}")
+    rows = [
+        [_cb("🪙 Заработок", "soc:econ", "success"), _cb("🏦 Банк", "soc:bank", "primary")],
+        [_cb("🌾 Ферма", "soc:farm", "success"), _cb("🎲 Игры", "soc:games", "danger")],
+        [_cb("🏰 Кланы", "soc:clan", "primary"), _cb("👤 Профиль", "soc:profile", "primary")],
+        [_cb("💞 Брак", "soc:love", "primary"), _cb("🧰 Инструменты", "soc:tools", "primary")],
+        [_cb("🔄 Обновить", "soc:hub", "primary")],
+    ]
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _econ_view(storage: Storage, uid: int):
+    wl = _cooldown_left(storage, uid, "work", config.WORK_CD)
+    cl = _cooldown_left(storage, uid, "crime", config.CRIME_CD)
+    text = (f"🪙 <b>Заработок</b>\nМонеты: <b>{storage.get_coins(uid)}</b> · банк {storage.get_bank(uid)}\n\n"
+            f"💼 Работа {'⏳ '+_fmt_left(wl) if wl else '✅ готова'} · "
+            f"🕶 Крайм {'⏳ '+_fmt_left(cl) if cl else '✅ готов'}")
+    rows = [
+        [_cb("💼 Работать", "soc:work", "success"), _cb("🕶 Крайм", "soc:crime", "danger")],
+        [_cb("🌾 Ферма", "soc:farm", "success"), _cb("🏦 Банк", "soc:bank", "primary")],
+        [_cb("🦹 Ограбить: /rob @ник", "soc:hub", "primary")],
+        [_cb("⬅️ Назад", "soc:hub", "primary")],
+    ]
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _bank_view(storage: Storage, uid: int):
+    text = (f"🏦 <b>Банк</b>\nВ банке: <b>{storage.get_bank(uid)}</b> (защищено, "
+            f"+{int(config.BANK_DAILY_RATE*100)}%/день)\nВ кошельке: {storage.get_coins(uid)}")
+    rows = [
+        [_cb("➕ 100", "soc:bankdep:100", "success"), _cb("➕ 1000", "soc:bankdep:1000", "success"),
+         _cb("➕ Всё", "soc:bankdep:all", "success")],
+        [_cb("➖ 100", "soc:bankwd:100", "danger"), _cb("➖ 1000", "soc:bankwd:1000", "danger"),
+         _cb("➖ Всё", "soc:bankwd:all", "danger")],
+        [_cb("🔄", "soc:bank", "primary"), _cb("⬅️ Назад", "soc:hub", "primary")],
+    ]
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _farm_view(storage: Storage, uid: int):
+    lvl, ts = _farm_get(storage, uid)
+    got = _farm_accrued(lvl, ts)
+    nextcost = config.FARM_COST * (lvl + 1)
+    text = (f"🌾 <b>Ферма</b> — уровень {lvl}\nДоход: {lvl*config.FARM_YIELD}/час "
+            f"(накоплено {got}, кап {config.FARM_CAP_HOURS}ч)\n🪙 Баланс: {storage.get_coins(uid)}")
+    rows = [
+        [_cb(f"🧺 Собрать ({got})", "soc:farmcollect", "success")],
+        [_cb(f"⬆️ Улучшить ({nextcost})", "soc:farmbuy", "primary")],
+        [_cb("🔄", "soc:farm", "primary"), _cb("⬅️ Назад", "soc:hub", "primary")],
+    ]
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _games_view(storage: Storage, uid: int):
+    text = (f"🎲 <b>Игры на монеты</b>\n🪙 Баланс: <b>{storage.get_coins(uid)}</b>\n\n"
+            "Орёл/решка и камень-ножницы-бумага. Ставки крупнее — командами "
+            "<code>/flip N</code>, <code>/rps камень N</code>.")
+    rows = [
+        [_cb("🪙 Флип 10", "soc:flip:10", "success"), _cb("🪙 50", "soc:flip:50", "success"),
+         _cb("🪙 100", "soc:flip:100", "success")],
+        [_cb("✊ 50", "soc:rps:камень:50", "primary"), _cb("✌️ 50", "soc:rps:ножницы:50", "primary"),
+         _cb("✋ 50", "soc:rps:бумага:50", "primary")],
+        [_cb("🔄", "soc:games", "primary"), _cb("⬅️ Назад", "soc:hub", "primary")],
+    ]
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _clan_view(storage: Storage, uid: int):
+    text = _clan_text(storage, uid)
+    c = storage.clan_of(uid)
+    if not c:
+        rows = [[_cb("📋 Список кланов", "soc:clanlist", "primary")],
+                [_cb("⬅️ Назад", "soc:hub", "primary")]]
+        return text, InlineKeyboardMarkup(rows)
+    rows = [
+        [_cb("💰 +50", "soc:clandep:50", "success"), _cb("💰 +200", "soc:clandep:200", "success"),
+         _cb("💰 +1000", "soc:clandep:1000", "success")],
+        [_cb("👥 Состав", "soc:clanmembers", "primary"), _cb("🚪 Выйти", "soc:clanleave", "danger")],
+        [_cb("🔄", "soc:clan", "primary"), _cb("⬅️ Назад", "soc:hub", "primary")],
+    ]
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _love_view(storage: Storage, uid: int):
+    sp = storage.spouse_of(uid)
+    if sp:
+        text = "💞 <b>Брак</b>\nТы в браке 💍 (+бонус к /work). Развестись — кнопкой ниже."
+        rows = [[_cb("💔 Развестись", "soc:divorce", "danger")], [_cb("⬅️ Назад", "soc:hub", "primary")]]
+    else:
+        req = storage.get_setting(f"marryreq:{uid}")
+        text = ("💞 <b>Брак</b>\nСделай предложение: <code>/marry @ник</code>.\n"
+                + ("💌 Тебе сделали предложение! Прими кнопкой." if req and req.isdigit() else ""))
+        rows = []
+        if req and req.isdigit():
+            rows.append([_cb("💍 Принять предложение", "soc:marryok", "success")])
+        rows.append([_cb("⬅️ Назад", "soc:hub", "primary")])
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _tools_view(storage: Storage, uid: int):
+    away = storage.get_setting(f"autoreply:{uid}")
+    text = ("🧰 <b>Инструменты</b>\n\n"
+            "⏰ Напоминания: <code>/remind 10m текст</code>\n"
+            "📝 Заметки: <code>/note текст</code> · /notes\n"
+            "📋 Шаблоны: <code>/tpl save имя текст</code> · /tpls\n"
+            f"💤 Авто-ответ «не на месте»: {'ВКЛ' if away else 'выкл'} — <code>/away текст</code> / <code>/away off</code>\n"
+            "🛡 Анти-скам: <code>/scan текст</code>\n"
+            "🤖 Автоответчик по словам: <code>/autoreply слово ответ</code>")
+    rows = [[_cb("📝 Заметки", "soc:notes", "primary"), _cb("📋 Шаблоны", "soc:tpls", "primary")],
+            [_cb("⬅️ Назад", "soc:hub", "primary")]]
+    return text, InlineKeyboardMarkup(rows)
+
+
+async def _social_callback(query, context, storage: Storage) -> None:
+    uid = query.from_user.id
+    data = query.data.split(":")
+    op = data[1] if len(data) > 1 else "hub"
+
+    async def _show(view):
+        await query.answer()
+        body, kb = view
+        try:
+            await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+
+    if op == "open":
+        # Entry from the photo main-menu: send a NEW text message (photo caption
+        # can't be edited to text). Optional data[2] picks the section.
+        await query.answer()
+        section = data[2] if len(data) > 2 else "hub"
+        view = {"clan": _clan_view, "profile": None, "games": _games_view,
+                "hub": _social_hub_view}.get(section, _social_hub_view)
+        if section == "profile":
+            sn = storage.user_display(uid)
+            disp = ("@" + sn[1]) if sn[1] else (sn[0] or "Ты")
+            body, kb = (_profile_text(storage, uid, disp),
+                        InlineKeyboardMarkup([[_cb("🔄", "soc:profile", "primary"),
+                                               _cb("⬅️ Меню", "soc:hub", "primary")]]))
+        else:
+            body, kb = view(storage, uid)
+        await context.bot.send_message(query.message.chat_id, body, parse_mode="HTML", reply_markup=kb)
+        return
+    if op == "hub":
+        await _show(_social_hub_view(storage, uid))
+        return
+    if op == "econ":
+        await _show(_econ_view(storage, uid))
+        return
+    if op == "work":
+        await query.answer(_do_work(storage, uid), show_alert=True)
+        await _show(_econ_view(storage, uid))
+        return
+    if op == "crime":
+        await query.answer(_do_crime(storage, uid), show_alert=True)
+        await _show(_econ_view(storage, uid))
+        return
+    if op == "bank":
+        await _show(_bank_view(storage, uid))
+        return
+    if op in ("bankdep", "bankwd"):
+        spec = data[2] if len(data) > 2 else "0"
+        if op == "bankdep":
+            amt = storage.get_coins(uid) if spec == "all" else (int(spec) if spec.isdigit() else 0)
+            ok = storage.bank_deposit(uid, amt) if amt > 0 else False
+            await query.answer(f"🏦 Внёс {amt}." if ok else "Не хватает монет.", show_alert=True)
+        else:
+            amt = storage.get_bank(uid) if spec == "all" else (int(spec) if spec.isdigit() else 0)
+            ok = storage.bank_withdraw(uid, amt) if amt > 0 else False
+            await query.answer(f"🏦 Снял {amt}." if ok else "В банке столько нет.", show_alert=True)
+        await _show(_bank_view(storage, uid))
+        return
+    if op == "farm":
+        await _show(_farm_view(storage, uid))
+        return
+    if op == "farmcollect":
+        await query.answer(_do_farm_collect(storage, uid), show_alert=True)
+        await _show(_farm_view(storage, uid))
+        return
+    if op == "farmbuy":
+        await query.answer(_do_farm_buy(storage, uid), show_alert=True)
+        await _show(_farm_view(storage, uid))
+        return
+    if op == "games":
+        await _show(_games_view(storage, uid))
+        return
+    if op == "flip":
+        bet = int(data[2]) if len(data) > 2 and data[2].isdigit() else 0
+        await query.answer(_do_flip(storage, uid, bet), show_alert=True)
+        await _show(_games_view(storage, uid))
+        return
+    if op == "rps":
+        choice = data[2] if len(data) > 2 else ""
+        bet = int(data[3]) if len(data) > 3 and data[3].isdigit() else 0
+        await query.answer(_do_rps(storage, uid, choice, bet), show_alert=True)
+        await _show(_games_view(storage, uid))
+        return
+    if op == "clan":
+        await _show(_clan_view(storage, uid))
+        return
+    if op == "clanlist":
+        cl = storage.list_clans(15)
+        if cl:
+            body = "🏰 <b>Кланы</b> — вступить: <code>/clan join id</code>\n" + "\n".join(
+                f"{c['emblem']} <b>{html.escape(c['name'])}</b> — ур.{_clan_level(c['xp'])}, 👥{c['members']} "
+                f"(id {c['id']})" for c in cl)
+        else:
+            body = "Кланов пока нет. Создай: /clan create Имя"
+        await query.answer()
+        try:
+            await query.edit_message_text(body, parse_mode="HTML",
+                                          reply_markup=InlineKeyboardMarkup([[_cb("⬅️ Назад", "soc:clan", "primary")]]))
+        except Exception:
+            pass
+        return
+    if op == "clanmembers":
+        c = storage.clan_of(uid)
+        if not c:
+            await query.answer("Ты не в клане.", show_alert=True)
+            return
+        rows = storage.clan_members(c["id"])
+        lines = [f"{c['emblem']} <b>{html.escape(c['name'])}</b> — состав:"]
+        for m in rows[:40]:
+            nm, un = storage.user_display(m["user_id"])
+            who = ("@" + un) if un else (nm or str(m["user_id"]))
+            lines.append(f"{'👑' if m['role']=='leader' else '•'} {html.escape(str(who))} — вклад {m['contributed']}")
+        await query.answer()
+        try:
+            await query.edit_message_text("\n".join(lines), parse_mode="HTML",
+                                          reply_markup=InlineKeyboardMarkup([[_cb("⬅️ Назад", "soc:clan", "primary")]]))
+        except Exception:
+            pass
+        return
+    if op == "clandep":
+        n = int(data[2]) if len(data) > 2 and data[2].isdigit() else 0
+        ok, res = storage.clan_deposit(uid, n, storage.current_week()) if n > 0 else (False, "x")
+        if ok:
+            storage.add_gxp(uid, n // 20)
+            await query.answer(f"💰 Вложено {n} в клан!", show_alert=True)
+        else:
+            await query.answer({"noclan": "Ты не в клане.", "funds": "Не хватает монет."}.get(res, "Не вышло."),
+                               show_alert=True)
+        await _show(_clan_view(storage, uid))
+        return
+    if op == "clanleave":
+        ok, err = storage.leave_clan(uid)
+        await query.answer("🚪 Ты вышел." if ok else
+                           {"leader": "Вождь не может выйти (распусти: /clan disband).",
+                            "noclan": "Ты не в клане."}.get(err, "Не вышло."), show_alert=True)
+        await _show(_clan_view(storage, uid))
+        return
+    if op == "profile":
+        sn = storage.user_display(uid)
+        disp = ("@" + sn[1]) if sn[1] else (sn[0] or "Ты")
+        await _show((_profile_text(storage, uid, disp),
+                     InlineKeyboardMarkup([[_cb("🔄", "soc:profile", "primary"), _cb("⬅️ Назад", "soc:hub", "primary")]])))
+        return
+    if op == "love":
+        await _show(_love_view(storage, uid))
+        return
+    if op == "marryok":
+        proposer = storage.get_setting(f"marryreq:{uid}")
+        if proposer and proposer.isdigit() and not storage.spouse_of(uid) and not storage.spouse_of(int(proposer)):
+            storage.marry(uid, int(proposer))
+            storage.set_setting(f"marryreq:{uid}", "")
+            await query.answer("💞 Поздравляем с браком!", show_alert=True)
+            try:
+                await context.bot.send_message(int(proposer), "💞 Твоё предложение приняли! Вы в браке 💍")
+            except Exception:
+                pass
+        else:
+            await query.answer("Предложение неактуально.", show_alert=True)
+        await _show(_love_view(storage, uid))
+        return
+    if op == "divorce":
+        sp = storage.divorce(uid)
+        await query.answer("💔 Развод оформлен." if sp else "Ты не в браке.", show_alert=True)
+        if sp:
+            try:
+                await context.bot.send_message(sp, "💔 С тобой развелись.")
+            except Exception:
+                pass
+        await _show(_love_view(storage, uid))
+        return
+    if op == "tools":
+        await _show(_tools_view(storage, uid))
+        return
+    if op == "notes":
+        ns = storage.list_notes(uid)
+        body = ("📝 <b>Заметки</b>\n" + "\n".join(f"#{n['id']} — {html.escape(n['text'][:80])}" for n in ns[:40])
+                + "\n\nДобавить: <code>/note текст</code> · удалить: <code>/delnote id</code>") if ns else \
+               "📝 Заметок нет. Добавь: <code>/note текст</code>"
+        await query.answer()
+        try:
+            await query.edit_message_text(body, parse_mode="HTML",
+                                          reply_markup=InlineKeyboardMarkup([[_cb("⬅️ Назад", "soc:tools", "primary")]]))
+        except Exception:
+            pass
+        return
+    if op == "tpls":
+        ts = storage.list_templates(uid)
+        body = ("📋 <b>Шаблоны</b>: " + ", ".join(f"<code>{html.escape(t)}</code>" for t in ts)
+                if ts else "📋 Шаблонов нет.") + "\n\nСоздать: <code>/tpl save имя текст</code>"
+        await query.answer()
+        try:
+            await query.edit_message_text(body, parse_mode="HTML",
+                                          reply_markup=InlineKeyboardMarkup([[_cb("⬅️ Назад", "soc:tools", "primary")]]))
+        except Exception:
+            pass
+        return
+    await query.answer("Кнопка устарела 🔄", show_alert=False)
+    await _show(_social_hub_view(storage, uid))
 
 
 async def _id_callback(query, context, storage: Storage) -> None:
@@ -4430,49 +4844,10 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             "<i>Монеты — игровая валюта, отдельная от BED.</i>", parse_mode="HTML")
         return
     if text.startswith("/work") or text.startswith("/работать"):
-        uid = message.from_user.id
-        left = _cooldown_left(storage, uid, "work", config.WORK_CD)
-        if left:
-            await message.reply_text(f"😮‍💨 Ты уже поработал. Отдых ещё {_fmt_left(left)}.")
-            return
-        import random as _r
-        base = _r.randint(config.WORK_MIN, config.WORK_MAX)
-        earn = int(base * _work_multiplier(storage, uid))
-        storage.add_coins(uid, earn)
-        storage.add_gxp(uid, 10)
-        c = storage.clan_of(uid)
-        if c:
-            storage.clan_add_xp(c["id"], max(1, earn // 10), storage.current_week())
-        _cooldown_arm(storage, uid, "work")
-        jobs = ["развозил заказы", "чинил краны", "писал код", "выгуливал собак",
-                "торговал на рынке", "стримил", "таксовал"]
-        await message.reply_text(
-            f"💼 Ты {_r.choice(jobs)} и заработал <b>+{earn}</b> монет!\n🪙 Баланс: {storage.get_coins(uid)}",
-            parse_mode="HTML")
+        await message.reply_text(_do_work(storage, message.from_user.id))
         return
     if text.startswith("/crime") or text.startswith("/крайм") or text.startswith("/преступление"):
-        uid = message.from_user.id
-        left = _cooldown_left(storage, uid, "crime", config.CRIME_CD)
-        if left:
-            await message.reply_text(f"🚔 Слишком горячо. Заляг на дно ещё {_fmt_left(left)}.")
-            return
-        import random as _r
-        _cooldown_arm(storage, uid, "crime")
-        if _r.random() < config.CRIME_FAIL:
-            fine = _r.randint(config.CRIME_FINE_MIN, config.CRIME_FINE_MAX)
-            have = storage.get_coins(uid)
-            lost = min(fine, have)
-            if lost:
-                storage.spend_coins(uid, lost)
-            await message.reply_text(f"🚨 Тебя поймали! Штраф <b>−{lost}</b> монет. 🪙 Баланс: {storage.get_coins(uid)}",
-                                     parse_mode="HTML")
-        else:
-            earn = int(_r.randint(config.CRIME_MIN, config.CRIME_MAX) * _work_multiplier(storage, uid))
-            storage.add_coins(uid, earn)
-            storage.add_gxp(uid, 20)
-            crimes = ["обнёс ларёк", "угнал самокат", "провернул схему", "взломал автомат"]
-            await message.reply_text(f"🕶 Ты {_r.choice(crimes)}: <b>+{earn}</b> монет! 🪙 Баланс: {storage.get_coins(uid)}",
-                                     parse_mode="HTML")
+        await message.reply_text(_do_crime(storage, message.from_user.id))
         return
     if text.startswith("/rob") or text.startswith("/ограбить"):
         uid = message.from_user.id
@@ -4531,31 +4906,10 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         parts = text.split()
         lvl, ts = _farm_get(storage, uid)
         if len(parts) >= 2 and parts[1].lower() in ("collect", "собрать"):
-            got = _farm_accrued(lvl, ts)
-            if got <= 0:
-                await message.reply_text("🌾 Пока нечего собирать.")
-                return
-            storage.add_coins(uid, got)
-            _farm_set(storage, uid, lvl, int(time.time()))
-            await message.reply_text(f"🌾 Собрано <b>+{got}</b> монет! 🪙 Баланс: {storage.get_coins(uid)}",
-                                     parse_mode="HTML")
+            await message.reply_text(_do_farm_collect(storage, uid))
             return
         if len(parts) >= 2 and parts[1].lower() in ("buy", "upgrade", "купить", "улучшить"):
-            if lvl >= config.FARM_MAX_LEVEL:
-                await message.reply_text(f"🌾 Ферма уже максимального уровня ({config.FARM_MAX_LEVEL}).")
-                return
-            cost = config.FARM_COST * (lvl + 1)
-            if not storage.spend_coins(uid, cost):
-                await message.reply_text(f"Не хватает монет (нужно {cost}).")
-                return
-            # collect pending before leveling so rate change is clean
-            pend = _farm_accrued(lvl, ts)
-            if pend:
-                storage.add_coins(uid, pend)
-            _farm_set(storage, uid, lvl + 1, int(time.time()))
-            await message.reply_text(
-                f"🌾 Ферма улучшена до уровня <b>{lvl+1}</b>! Доход {(lvl+1)*config.FARM_YIELD}/час."
-                + (f" (собрано {pend} по пути)" if pend else ""), parse_mode="HTML")
+            await message.reply_text(_do_farm_buy(storage, uid))
             return
         got = _farm_accrued(lvl, ts)
         nextcost = config.FARM_COST * (lvl + 1)
@@ -4655,53 +5009,26 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
                                      parse_mode="HTML")
         return
     if text.startswith("/flip") or text.startswith("/coinflip"):
-        uid = message.from_user.id
         parts = text.split()
         bet = int(parts[1]) if len(parts) >= 2 and parts[1].isdigit() else 0
-        if bet <= 0 or bet > config.COIN_BET_MAX:
+        if bet <= 0:
             await message.reply_text(f"🪙 Орёл/решка: <code>/flip ставка</code> (1..{config.COIN_BET_MAX} монет)",
                                      parse_mode="HTML")
             return
-        if not storage.spend_coins(uid, bet):
-            await message.reply_text(f"Не хватает монет (у тебя {storage.get_coins(uid)}).")
-            return
-        import random as _r
-        if _r.random() < 0.5:
-            win = int(bet * 2 * (1 - config.FLIP_EDGE))
-            storage.add_coins(uid, win)
-            await message.reply_text(f"🪙 Выпал ОРЁЛ — ты выиграл! +{win - bet} чистыми. 🪙 {storage.get_coins(uid)}")
-        else:
-            await message.reply_text(f"🪙 Выпала РЕШКА — мимо, −{bet}. 🪙 {storage.get_coins(uid)}")
+        await message.reply_text(_do_flip(storage, message.from_user.id, bet))
         return
     if text.startswith("/rps") or text.startswith("/кнб"):
-        uid = message.from_user.id
         parts = text.split()
         moves = {"к": "камень", "камень": "камень", "r": "камень", "rock": "камень",
                  "н": "ножницы", "ножницы": "ножницы", "s": "ножницы", "scissors": "ножницы",
                  "б": "бумага", "бумага": "бумага", "p": "бумага", "paper": "бумага"}
         choice = moves.get(parts[1].lower()) if len(parts) >= 2 else None
         bet = int(parts[2]) if len(parts) >= 3 and parts[2].isdigit() else 0
-        if not choice or bet <= 0 or bet > config.COIN_BET_MAX:
+        if not choice or bet <= 0:
             await message.reply_text("✊ Камень-ножницы-бумага: <code>/rps камень|ножницы|бумага ставка</code>",
                                      parse_mode="HTML")
             return
-        if not storage.spend_coins(uid, bet):
-            await message.reply_text(f"Не хватает монет (у тебя {storage.get_coins(uid)}).")
-            return
-        import random as _r
-        bot_move = _r.choice(["камень", "ножницы", "бумага"])
-        beats = {"камень": "ножницы", "ножницы": "бумага", "бумага": "камень"}
-        emo = {"камень": "✊", "ножницы": "✌️", "бумага": "✋"}
-        if bot_move == choice:
-            storage.add_coins(uid, bet)  # push
-            res = "ничья — ставка возвращена"
-        elif beats[choice] == bot_move:
-            win = int(bet * 2 * (1 - config.RPS_EDGE))
-            storage.add_coins(uid, win)
-            res = f"ты выиграл +{win - bet}!"
-        else:
-            res = f"ты проиграл −{bet}"
-        await message.reply_text(f"{emo[choice]} vs {emo[bot_move]} ({bot_move}) — {res}. 🪙 {storage.get_coins(uid)}")
+        await message.reply_text(_do_rps(storage, message.from_user.id, choice, bet))
         return
     if text.startswith("/remind") or text.startswith("/напомни"):
         uid = message.from_user.id
@@ -7428,6 +7755,9 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         body, kb = _wheel_preview(storage, query.from_user.id)
         await context.bot.send_message(
             chat_id=query.message.chat_id, text=body, parse_mode="HTML", reply_markup=kb)
+    elif query.data.startswith("soc:"):
+        storage = context.bot_data["storage"]
+        await _social_callback(query, context, storage)
     elif query.data.startswith("id:"):
         storage = context.bot_data["storage"]
         await _id_callback(query, context, storage)
