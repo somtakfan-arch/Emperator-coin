@@ -172,13 +172,6 @@ ID_MSG_COOLDOWN = int(os.environ.get("ID_MSG_COOLDOWN", "30"))  # sec between an
 ID_RARE_SCORE = int(os.environ.get("ID_RARE_SCORE", "80"))
 ID_UNDO_WINDOW = int(os.environ.get("ID_UNDO_WINDOW", "600"))  # sec to /undoid a transfer
 
-# 🎴 Collectibles (NFT-style)
-NFT_CRAFT_BURN = int(os.environ.get("NFT_CRAFT_BURN", "3"))     # burn N of a rarity -> 1 next rarity
-NFT_PET_FEED_COST = int(os.environ.get("NFT_PET_FEED_COST", "5"))   # BED per feed
-NFT_PET_FEED_XP = int(os.environ.get("NFT_PET_FEED_XP", "34"))      # xp per feed (~3 feeds/level)
-NFT_DAILY_CASE_HOURS = int(os.environ.get("NFT_DAILY_CASE_HOURS", "24"))
-NFT_SERIES_REWARD_DAYS = int(os.environ.get("NFT_SERIES_REWARD_DAYS", "3"))  # premium days per completed series
-
 # 🧪 Official test accounts: unlimited BED and unlimited ID slots (never spend
 # real balance). Comma-separated telegram user_ids in env.
 TEST_ACCOUNTS = {int(x) for x in os.environ.get("TEST_ACCOUNTS", "8802068360").split(",") if x.strip().lstrip("-").isdigit()}

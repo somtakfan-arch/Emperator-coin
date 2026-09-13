@@ -5,7 +5,7 @@ import time as _time
 from telegram import Update
 from telegram.ext import AIORateLimiter, Application, TypeHandler
 
-from . import bedcoin, collectibles, config, crypto, ton
+from . import bedcoin, config, crypto, ton
 from .config import BOT_TOKEN, DB_PATH
 from .handlers import dispatch
 from .storage import Storage
@@ -423,7 +423,6 @@ def main() -> None:
         .build()
     )
     application.bot_data["storage"] = Storage(DB_PATH)
-    application.bot_data["storage"].seed_templates(collectibles.CATALOG)  # collectibles catalog
     application.add_handler(TypeHandler(Update, dispatch))
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
