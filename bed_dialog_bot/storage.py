@@ -511,6 +511,9 @@ def _cool_id_pool(max_value: int):
         if 0 <= v <= max_value:
             pool.add(v)
 
+    # 😂 meme numbers (67, 52, 42, 69, 420, 1337, …)
+    for m in idrarity._MEME:
+        add(int(m))
     # repdigits: 1, 11, 111 … 9999999
     for length in range(1, digits + 1):
         for d in range(1, 10):

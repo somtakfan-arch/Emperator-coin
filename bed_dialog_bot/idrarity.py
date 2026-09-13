@@ -16,16 +16,25 @@ from __future__ import annotations
 
 # Hand-picked legends — the IDs everyone secretly wants.
 _LEGENDARY = {
-    "0", "1", "7", "8", "69", "100", "228", "322", "420",
-    "666", "777", "888", "999", "1000", "1337", "1234", "4321",
+    "0", "1", "7", "8", "100",
+    "666", "777", "888", "999", "1000", "1234", "4321",
     "7777", "8888", "9999", "10000", "100000", "1000000", "10000000",
     "100000000", "12345", "54321", "123456", "654321", "1234567",
-    "7654321", "12345678", "87654321", "123456789", "80085", "1234321",
+    "7654321", "12345678", "87654321", "123456789", "1234321",
+}
+
+# 😂 Meme numbers — internet/culture references (checked before legendary so
+# they get the fun meme tier). Deliberately excludes hate symbols.
+_MEME = {
+    "42", "52", "67", "69", "228", "322", "404", "420", "502", "1337",
+    "8008", "80085", "9000", "300", "143", "247", "360", "69420", "42069",
+    "6900", "4200", "2107", "1440", "5318008",
 }
 
 _TIER_INFO = {
     # tier:     (emoji, human name, appraisal multiplier over the buy cost)
     "legendary": ("👑", "Легендарный", 35),
+    "meme":      ("😂", "Мемная", 22),
     "repeat":    ("🎰", "Повторы", 16),
     "binary":    ("🤖", "Бинарный", 15),
     "pattern":   ("🎭", "Узор", 12),
@@ -41,8 +50,8 @@ _TIER_INFO = {
 }
 
 _TIER_SCORE = {
-    "legendary": 100, "repeat": 92, "binary": 90, "pattern": 86, "mirror": 84,
-    "ladder": 82, "step": 80, "pair": 74, "round": 66, "angel": 72,
+    "legendary": 100, "meme": 94, "repeat": 92, "binary": 90, "pattern": 86,
+    "mirror": 84, "ladder": 82, "step": 80, "pair": 74, "round": 66, "angel": 72,
     "double": 60, "vanity": 64, "common": 12,
 }
 
@@ -90,6 +99,8 @@ def tier(pid) -> str:
         return "common"
     if not s.isdigit():                       # letters → a named/vanity handle
         return "vanity"
+    if s in _MEME:
+        return "meme"                         # 67, 52, 42, 69, 420, 1337…
     if s in _LEGENDARY:
         return "legendary"
     n = len(s)
@@ -172,6 +183,7 @@ SETS = [
     ("zeros", "⭕ Повелитель нулей", ["100", "1000", "10000", "100000"]),
     ("emperor", "👑 Императорский", ["1", "100", "10000", "1000000"]),
     ("millions", "💠 Миллионы", ["1000000", "10000000", "100000000"]),
+    ("memes", "😂 Мемный набор", ["42", "67", "69", "420", "1337", "80085"]),
 ]
 
 
