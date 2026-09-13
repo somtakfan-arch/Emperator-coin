@@ -319,7 +319,7 @@ def kb_main(uid=None, storage=None) -> InlineKeyboardMarkup:
         [_btn("🗓 Ежедневная награда", "daily:claim", "success"),
          _btn("🎰 Казино", "menu:casino", "danger")],
         [_btn("🆔 Мои ID", "id:open", "primary"),
-         _btn("🎴 Коллекция", "col:home", "danger")],
+         _btn("🎴 Коллекция", "col:open", "danger")],
         [_btn("🎯 Задания", "quest:open", "success"),
          _btn("🎟 Ежедневный кейс", "col:daily", "success")],
         [_btn("🛍 BED-магазин", "shop:open", "success"),

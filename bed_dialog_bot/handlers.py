@@ -2812,6 +2812,14 @@ async def _collect_callback(query, context, storage: Storage) -> None:
         except Exception:
             pass
 
+    if op == "open":
+        # Entry from the photo main-menu: send a NEW text message (a photo
+        # caption can't be edited into text), then navigation edits it.
+        await query.answer()
+        storage.seed_templates(collectibles.CATALOG)
+        body, kb = _collect_home_view(storage, uid)
+        await context.bot.send_message(query.message.chat_id, body, parse_mode="HTML", reply_markup=kb)
+        return
     if op == "home":
         await _show(_collect_home_view(storage, uid))
         return
@@ -2895,7 +2903,15 @@ async def _collect_callback(query, context, storage: Storage) -> None:
         _collect_series_rewards(storage, uid)
         await query.answer(f"🎟 Тебе выпал(а): {it['name']} ({collectibles.rarity_name(it['rarity'])})!",
                            show_alert=True)
-        await _show(_collect_home_view(storage, uid))
+        # Reachable from the photo main-menu — send a fresh message, don't edit.
+        body, kb = _collect_home_view(storage, uid)
+        try:
+            await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            try:
+                await context.bot.send_message(query.message.chat_id, body, parse_mode="HTML", reply_markup=kb)
+            except Exception:
+                pass
         return
     if op == "sell":
         item_id = int(data[2])
