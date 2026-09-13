@@ -2067,6 +2067,17 @@ def _do_farm_buy(storage: Storage, uid: int) -> str:
         f" (+{pend} по пути)" if pend else "")
 
 
+def _do_buycoins(storage: Storage, uid: int, bed: int) -> str:
+    if bed <= 0:
+        return f"💱 Курс: 1 BED = {config.COINS_PER_BED} монет. Сколько BED обменять?"
+    if not storage.spend_bed(uid, bed, reason="buy_coins"):
+        return f"❌ Не хватает BED (у тебя {storage.get_bed(uid)})."
+    coins = bed * config.COINS_PER_BED
+    storage.add_coins(uid, coins)
+    return (f"💱 Обменял {bed} BED → +{coins} монет!\n"
+            f"🪙 Монеты: {storage.get_coins(uid)} · 💎 BED: {storage.get_bed(uid)}")
+
+
 def _do_flip(storage: Storage, uid: int, bet: int) -> str:
     if bet <= 0 or bet > config.COIN_BET_MAX:
         return f"🪙 Ставка 1..{config.COIN_BET_MAX} монет."
@@ -3011,8 +3022,23 @@ def _econ_view(storage: Storage, uid: int):
     rows = [
         [_cb("💼 Работать", "soc:work", "success"), _cb("🕶 Крайм", "soc:crime", "danger")],
         [_cb("🌾 Ферма", "soc:farm", "success"), _cb("🏦 Банк", "soc:bank", "primary")],
-        [_cb("🦹 Ограбить: /rob @ник", "soc:hub", "primary")],
+        [_cb("💱 Купить монеты за BED", "soc:buy", "danger")],
         [_cb("⬅️ Назад", "soc:hub", "primary")],
+    ]
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _buycoins_view(storage: Storage, uid: int):
+    text = (f"💱 <b>Обмен BED → монеты</b>\nКурс: 1 BED = <b>{config.COINS_PER_BED}</b> монет\n\n"
+            f"💎 Твой BED: {storage.get_bed(uid)} · 🪙 Монеты: {storage.get_coins(uid)}\n"
+            f"<i>Обмен только в одну сторону (монеты назад в BED не меняются).</i>\n"
+            f"Другое количество: <code>/buycoins N</code>")
+    rows = [
+        [_cb(f"1 BED → {config.COINS_PER_BED}", "soc:buycoins:1", "success"),
+         _cb(f"5 → {5*config.COINS_PER_BED}", "soc:buycoins:5", "success")],
+        [_cb(f"10 → {10*config.COINS_PER_BED}", "soc:buycoins:10", "success"),
+         _cb(f"50 → {50*config.COINS_PER_BED}", "soc:buycoins:50", "success")],
+        [_cb("⬅️ Назад", "soc:econ", "primary")],
     ]
     return text, InlineKeyboardMarkup(rows)
 
@@ -3147,6 +3173,14 @@ async def _social_callback(query, context, storage: Storage) -> None:
     if op == "crime":
         await query.answer(_do_crime(storage, uid), show_alert=True)
         await _show(_econ_view(storage, uid))
+        return
+    if op == "buy":
+        await _show(_buycoins_view(storage, uid))
+        return
+    if op == "buycoins":
+        bed = int(data[2]) if len(data) > 2 and data[2].isdigit() else 0
+        await query.answer(_do_buycoins(storage, uid, bed), show_alert=True)
+        await _show(_buycoins_view(storage, uid))
         return
     if op == "bank":
         await _show(_bank_view(storage, uid))
@@ -4841,7 +4875,20 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         await message.reply_text(
             f"🪙 <b>Монеты</b>: {storage.get_coins(uid)}\n🏦 В банке: {storage.get_bank(uid)}\n\n"
             "Зарабатывай: /work /crime /rob · 🌾 /farm · 🏦 /bank\n"
+            f"💱 Купить за BED: <code>/buycoins N</code> (1 BED = {config.COINS_PER_BED} монет)\n"
             "<i>Монеты — игровая валюта, отдельная от BED.</i>", parse_mode="HTML")
+        return
+    if text.startswith("/buycoins") or text.startswith("/обмен_монет") or text.startswith("/exchangecoins"):
+        uid = message.from_user.id
+        parts = text.split()
+        bed = int(parts[1]) if len(parts) >= 2 and parts[1].isdigit() else 0
+        if bed <= 0:
+            await message.reply_text(
+                f"💱 <b>Обмен BED → монеты</b>\nКурс: 1 BED = {config.COINS_PER_BED} монет.\n"
+                f"<code>/buycoins N</code> — обменять N BED.\n💎 Твой BED: {storage.get_bed(uid)}",
+                parse_mode="HTML")
+            return
+        await message.reply_text(_do_buycoins(storage, uid, bed))
         return
     if text.startswith("/work") or text.startswith("/работать"):
         await message.reply_text(_do_work(storage, message.from_user.id))

@@ -210,6 +210,8 @@ REP_CD = int(os.environ.get("REP_CD", "86400"))
 FLIP_EDGE = float(os.environ.get("FLIP_EDGE", "0.05"))
 RPS_EDGE = float(os.environ.get("RPS_EDGE", "0.05"))
 COIN_BET_MAX = int(os.environ.get("COIN_BET_MAX", "100000"))
+# 💱 Buy coins for BED (one-way sink; coins can't be cashed back to BED).
+COINS_PER_BED = int(os.environ.get("COINS_PER_BED", "1000"))
 
 # 🧪 Official test accounts: unlimited BED and unlimited ID slots (never spend
 # real balance). Comma-separated telegram user_ids in env.
