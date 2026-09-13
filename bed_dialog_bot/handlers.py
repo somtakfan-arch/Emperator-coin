@@ -19,7 +19,7 @@ from telegram import (
 )
 from telegram.ext import ContextTypes
 
-from . import admin, adlink, bedcoin, casino, cmdengine, collectibles, commands, config, crypto, formatting, i18n, idrarity, media, menus, texts, ton, workink
+from . import admin, adlink, bedcoin, cardart, casino, cmdengine, collectibles, commands, config, crypto, formatting, i18n, idrarity, media, menus, texts, ton, workink
 from .storage import Storage
 
 
@@ -2709,6 +2709,34 @@ def _collect_item_view(storage: Storage, uid: int, item_id: int, back: str = "co
     return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
+def _collect_card_caption(it, uid: int):
+    """Caption + action keyboard for an item shown as a photo card."""
+    supply = it["max_supply"]
+    serial = f"#{it['serial']}" + (f"/{supply}" if supply > 0 else "")
+    val = collectibles.value_of(it["rarity"])
+    lines = [f"{collectibles.rarity_emoji(it['rarity'])}{it['emoji']} <b>{html.escape(it['name'])}</b> {serial}",
+             f"Серия: {it['series']} · {collectibles.rarity_name(it['rarity'])}",
+             f"💎 оценка ~{val} BED · 🔁 переходов: {it['transfers']}"]
+    if it["kind"] == "pet":
+        lines.append(f"🐾 Уровень <b>{it['level']}</b> ({it['xp']} XP)")
+    if it.get("price"):
+        lines.append(f"🏷 На продаже за <b>{it['price']} BED</b>")
+    lines.append(f"🎁 <code>/giftnft {it['item_id']} @ник</code> · 🏷 <code>/sellnft {it['item_id']} цена</code>")
+    rows = []
+    if it["kind"] == "pet":
+        rows.append([_cb(f"🍖 Покормить ({config.NFT_PET_FEED_COST})", f"col:feed:{it['item_id']}", "success")])
+        ev = collectibles.PET_EVOLVE.get(it["tid"])
+        if ev and it["level"] >= ev[1]:
+            rows.append([_cb("✨ ЭВОЛЮЦИЯ!", f"col:evolve:{it['item_id']}", "danger")])
+    if it.get("price"):
+        rows.append([_cb("🚫 Снять с продажи", f"col:unlist:{it['item_id']}", "danger")])
+    else:
+        rows.append([_cb(f"🏷 Продать (~{val})", f"col:sell:{it['item_id']}:{val}", "success"),
+                     _cb("🔥 Сжечь", f"col:burn:{it['item_id']}", "danger")])
+    rows.append([_cb("❌ Закрыть", "col:closecard", "primary")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
 def _collect_packs_view(storage: Storage, uid: int):
     lines = ["📦 <b>Паки и кейсы</b>\n", f"💰 Баланс: {storage.get_bed(uid)} BED\n"]
     rows = []
@@ -2786,6 +2814,32 @@ def _open_pack(storage: Storage, uid: int, pack: dict, charge: bool = True):
     return minted, None
 
 
+async def _send_cards(context, chat_id, items):
+    """Send collectible items as real card images (photo or media group)."""
+    from telegram import InputMediaPhoto
+    photos = []
+    for it in items:
+        buf = cardart.render_card(it)
+        if not buf:
+            continue
+        supply = it["max_supply"]
+        serial = f"#{it['serial']}" + (f"/{supply}" if supply > 0 else "")
+        cap = (f"{collectibles.rarity_emoji(it['rarity'])}{it['emoji']} <b>{html.escape(it['name'])}</b> "
+               f"{serial} · {collectibles.rarity_name(it['rarity'])}")
+        photos.append((buf, cap))
+    if not photos:
+        return False
+    try:
+        if len(photos) == 1:
+            await context.bot.send_photo(chat_id, photos[0][0], caption=photos[0][1], parse_mode="HTML")
+        else:
+            media = [InputMediaPhoto(media=b, caption=c, parse_mode="HTML") for b, c in photos]
+            await context.bot.send_media_group(chat_id, media)
+        return True
+    except Exception:
+        return False
+
+
 def _collect_series_rewards(storage: Storage, uid: int):
     """Grant premium once per newly completed series. Returns granted series names."""
     granted = []
@@ -2809,6 +2863,20 @@ async def _collect_callback(query, context, storage: Storage) -> None:
         body, kb = view
         try:
             await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+
+    async def _refresh_card(item_id):
+        it = storage.nft_item(item_id)
+        if not it:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            return
+        cap, kb = _collect_card_caption(it, uid)
+        try:
+            await query.edit_message_caption(caption=cap, parse_mode="HTML", reply_markup=kb)
         except Exception:
             pass
 
@@ -2846,10 +2914,30 @@ async def _collect_callback(query, context, storage: Storage) -> None:
         return
     if op == "item":
         item_id = int(data[2])
-        page = data[3] if len(data) > 3 else "0"
-        is_pet = len(data) > 4 and data[4] == "1"
-        back = f"col:pets:{page}" if is_pet else f"col:album:{page}"
-        await _show(_collect_item_view(storage, uid, item_id, back=back))
+        await query.answer()
+        it = storage.nft_item(item_id)
+        if not it:
+            return
+        if it["owner_id"] != uid:
+            await context.bot.send_message(query.message.chat_id, "Это не твой предмет.")
+            return
+        cap, kb = _collect_card_caption(it, uid)
+        photo = cardart.render_card(it)
+        try:
+            if photo:
+                await context.bot.send_photo(query.message.chat_id, photo, caption=cap,
+                                             parse_mode="HTML", reply_markup=kb)
+            else:
+                await context.bot.send_message(query.message.chat_id, cap, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+        return
+    if op == "closecard":
+        await query.answer()
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
         return
     if op == "openp":
         key = data[2] if len(data) > 2 else ""
@@ -2877,12 +2965,15 @@ async def _collect_callback(query, context, storage: Storage) -> None:
         if granted:
             lines.append(f"\n🏅 Серия собрана: {', '.join(granted)} → +{config.NFT_SERIES_REWARD_DAYS} дн. премиума!")
         await query.answer(f"Выпало: {best['name']} ({top})!", show_alert=True)
+        # Reveal the actual collectible cards as images.
+        await _send_cards(context, query.message.chat_id, items)
         try:
-            await query.edit_message_text("\n".join(lines), parse_mode="HTML",
-                                          reply_markup=InlineKeyboardMarkup([
-                                              [_cb("📦 Ещё пак", "col:packs", "success")],
-                                              [_cb("🎴 Альбом", "col:album:0", "primary"),
-                                               _cb("⬅️ Меню", "col:home", "primary")]]))
+            await context.bot.send_message(
+                query.message.chat_id, "\n".join(lines), parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([
+                    [_cb("📦 Ещё пак", "col:packs", "success")],
+                    [_cb("🎴 Альбом", "col:album:0", "primary"),
+                     _cb("⬅️ Меню", "col:open", "primary")]]))
         except Exception:
             pass
         return
@@ -2903,28 +2994,27 @@ async def _collect_callback(query, context, storage: Storage) -> None:
         _collect_series_rewards(storage, uid)
         await query.answer(f"🎟 Тебе выпал(а): {it['name']} ({collectibles.rarity_name(it['rarity'])})!",
                            show_alert=True)
-        # Reachable from the photo main-menu — send a fresh message, don't edit.
-        body, kb = _collect_home_view(storage, uid)
+        # Reveal the card image, then a home button (works from the photo menu).
+        await _send_cards(context, query.message.chat_id, items)
         try:
-            await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
+            await context.bot.send_message(
+                query.message.chat_id, f"🎟 Ежедневный кейс открыт! 💰 Баланс: {storage.get_bed(uid)} BED",
+                reply_markup=InlineKeyboardMarkup([[_cb("🎴 Коллекция", "col:open", "primary")]]))
         except Exception:
-            try:
-                await context.bot.send_message(query.message.chat_id, body, parse_mode="HTML", reply_markup=kb)
-            except Exception:
-                pass
+            pass
         return
     if op == "sell":
         item_id = int(data[2])
         price = int(data[3]) if len(data) > 3 and data[3].isdigit() else 1
         ok, _ = storage.nft_market_list(item_id, uid, price)
         await query.answer(f"🏷 Выставлено за {price} BED." if ok else "Не твой предмет.", show_alert=True)
-        await _show(_collect_item_view(storage, uid, item_id))
+        await _refresh_card(item_id)
         return
     if op == "unlist":
         item_id = int(data[2])
         ok = storage.nft_market_unlist(item_id, uid)
         await query.answer("🚫 Снято с продажи." if ok else "Не найдено.", show_alert=True)
-        await _show(_collect_item_view(storage, uid, item_id))
+        await _refresh_card(item_id)
         return
     if op == "buy":
         item_id = int(data[2])
@@ -2951,7 +3041,11 @@ async def _collect_callback(query, context, storage: Storage) -> None:
             return
         burned = storage.nft_burn(uid, [item_id])
         await query.answer("🔥 Сожжён." if burned else "Нельзя сжечь (на продаже).", show_alert=True)
-        await _show(_collect_album_view(storage, uid, 0))
+        if burned:
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
         return
     if op == "craftgo":
         import random as _r
@@ -3002,7 +3096,7 @@ async def _collect_callback(query, context, storage: Storage) -> None:
         ev = collectibles.PET_EVOLVE.get(it["tid"])
         extra = " ✨ готов к эволюции!" if ev and lvl >= ev[1] else ""
         await query.answer(f"🍖 Покормил! Уровень {lvl} ({xp} XP).{extra}", show_alert=True)
-        await _show(_collect_item_view(storage, uid, item_id))
+        await _refresh_card(item_id)
         return
     if op == "evolve":
         item_id = int(data[2])
@@ -3018,7 +3112,22 @@ async def _collect_callback(query, context, storage: Storage) -> None:
         newt = collectibles.CATALOG_BY_ID.get(ev[0], {})
         _collect_series_rewards(storage, uid)
         await query.answer(f"✨ Эволюция! Теперь: {newt.get('emoji','')} {newt.get('name','')}", show_alert=True)
-        await _show(_collect_item_view(storage, uid, item_id))
+        # Art changed — replace the photo card with the evolved one.
+        it2 = storage.nft_item(item_id)
+        cap, kb = _collect_card_caption(it2, uid)
+        photo = cardart.render_card(it2)
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
+        try:
+            if photo:
+                await context.bot.send_photo(query.message.chat_id, photo, caption=cap,
+                                             parse_mode="HTML", reply_markup=kb)
+            else:
+                await context.bot.send_message(query.message.chat_id, cap, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
         return
     await query.answer("Кнопка устарела 🔄", show_alert=False)
     await _show(_collect_home_view(storage, uid))
