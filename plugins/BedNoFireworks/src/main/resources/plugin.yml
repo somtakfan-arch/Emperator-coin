@@ -1,0 +1,22 @@
+name: BedNoFireworks
+version: '${project.version}'
+main: ru.bedsmp.nofireworks.BedNoFireworks
+api-version: '1.21'
+authors: [Emperatorrr]
+description: Полностью убирает фейерверки со всего сервера BedSMP.
+website: https://discord.gg/D5JEqtup
+
+commands:
+  nofireworks:
+    description: Управление плагином BedNoFireworks
+    usage: /nofireworks <scan|stats|reload|toggle>
+    aliases: [bnf, nofw, nofire]
+    permission: bednofireworks.admin
+
+permissions:
+  bednofireworks.admin:
+    description: Доступ к команде /nofireworks
+    default: op
+  bednofireworks.bypass:
+    description: Исключение из очистки (работает только если включено в config.yml)
+    default: false
