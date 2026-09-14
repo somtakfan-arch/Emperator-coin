@@ -226,6 +226,7 @@ AURA_DECAY_PCT = float(os.environ.get("AURA_DECAY_PCT", "0.05"))  # % toward 0 p
 AURA_DECAY_MIN = int(os.environ.get("AURA_DECAY_MIN", "1"))
 AURA_PROMPT_BATCH = int(os.environ.get("AURA_PROMPT_BATCH", "25"))  # daily-prompt drip per tick
 AURA_DUEL_MAX = int(os.environ.get("AURA_DUEL_MAX", "150"))
+AURA_PER_ID_BUY = int(os.environ.get("AURA_PER_ID_BUY", "60"))   # aura per purchased ID (stacks)
 
 # 🧪 Official test accounts: unlimited BED and unlimited ID slots (never spend
 # real balance). Comma-separated telegram user_ids in env.

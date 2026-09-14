@@ -2742,10 +2742,9 @@ def _do_id_buy_n(storage: Storage, uid: int, n: int):
                                      elite=storage.is_ultra(uid))
     if len(pids) < k:  # refund any that failed to assign (space exhausted)
         storage.add_bed(uid, (k - len(pids)) * config.ID_BUY_COST, reason="id_refund")
-    # 🗿 aura for pulling rare handles
-    bonus = sum({"legendary": 5, "meme": 4, "mythic": 6}.get(idrarity.tier(p), 0) for p in pids)
-    if bonus:
-        _aura_event(storage, uid, min(bonus, 30))
+    # 🗿 aura: +AURA_PER_ID_BUY per purchased ID (stacks)
+    if pids:
+        _aura_event(storage, uid, len(pids) * config.AURA_PER_ID_BUY)
     return pids, None
 
 
