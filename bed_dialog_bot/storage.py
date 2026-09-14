@@ -2232,6 +2232,49 @@ class Storage:
                 "SELECT pid FROM id_auction WHERE ends_at <= ?", (now,)).fetchall()
         return [r[0] for r in rows]
 
+    def create_auto_auction(self, system_id: int, max_value: int, hours: int):
+        """Bot lists a random FREE (preferably nice) ID for auction. Mints it to
+        the system inventory, then lists it. Returns {pid, tier, start, buy_now}
+        or None if none could be picked."""
+        import random as _r
+        from . import idrarity
+        from . import config as _cfg
+        now = int(time.time())
+        with self._connect() as conn:
+            taken = {row[0] for row in conn.execute("SELECT pid FROM player_ids").fetchall()}
+            pid = None
+            pool = _cool_id_pool(max_value)
+            _r.shuffle(pool)
+            for v in pool[:400]:                 # try a nice one first
+                if str(v) not in taken:
+                    pid = str(v)
+                    break
+            if pid is None:                      # fallback: any free id
+                for _ in range(200):
+                    cand = str(_r.randint(0, max_value))
+                    if cand not in taken:
+                        pid = cand
+                        break
+            if pid is None:
+                return None
+            conn.execute("INSERT INTO player_ids (pid, owner_id, acquired_at) VALUES (?, ?, ?)",
+                         (pid, system_id, now))
+            self._meta_acquire(conn, pid)
+            appr = idrarity.appraise(pid, _cfg.ID_BUY_COST)
+            start = max(_cfg.AUCTION_MIN_START, appr // 3)
+            buy_now = max(start + 1, appr * 2)
+            conn.execute(
+                "INSERT INTO id_auction (pid, seller_id, start_price, bid, bidder, ends_at, created_at, buy_now, max_bid) "
+                "VALUES (?, ?, ?, 0, NULL, ?, ?, ?, 0)",
+                (pid, system_id, start, now + hours * 3600, now, buy_now))
+        return {"pid": pid, "tier": idrarity.tier(pid), "start": start, "buy_now": buy_now}
+
+    def release_system_id(self, pid, system_id: int) -> bool:
+        """Free an unsold system-owned ID back to the pool."""
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM player_ids WHERE pid=? AND owner_id=?", (str(pid), system_id))
+        return cur.rowcount > 0
+
     def settle_auction(self, pid: int):
         """Finalize an ended auction: transfer the ID to the winner and pay the
         seller (bid already escrowed). Returns a summary dict or None."""

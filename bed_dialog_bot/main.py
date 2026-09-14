@@ -178,8 +178,33 @@ async def _reminder_loop(application: Application) -> None:
                             text=f"↩️ Аукцион ID {pid} отменён (продавец больше не владеет им) — ставка возвращена.")
                     except Exception:
                         pass
+                # Unsold bot lot → return the ID to the free pool.
+                if not res.get("winner") and res.get("seller") == config.SYSTEM_SELLER_ID:
+                    storage.release_system_id(pid, config.SYSTEM_SELLER_ID)
         except Exception:
             logger.exception("Auction settle error")
+        # 🤖 Auto-auction: every N minutes the bot lists a random free nice ID.
+        try:
+            now_ts = int(_time.time())
+            last = storage.get_setting("auto_auction_last")
+            last = int(last) if last and last.isdigit() else 0
+            if now_ts - last >= config.AUTO_AUCTION_MINUTES * 60:
+                storage.set_setting("auto_auction_last", str(now_ts))
+                lot = storage.create_auto_auction(config.SYSTEM_SELLER_ID, config.ID_MAX_VALUE,
+                                                  config.AUTO_AUCTION_HOURS)
+                if lot:
+                    tokens = [lot["pid"], "tier:" + lot["tier"]]
+                    for wu in storage.wishers_for(tokens):
+                        try:
+                            await application.bot.send_message(
+                                chat_id=wu,
+                                text=(f"🤖 Аукцион! Бот выставил ID <b>{lot['pid']}</b> "
+                                      f"(старт {lot['start']} BED, купить сразу {lot['buy_now']} BED). /idmarket"),
+                                parse_mode="HTML")
+                        except Exception:
+                            pass
+        except Exception:
+            logger.exception("Auto-auction error")
         # 🏠 Return expired ID rentals to their owners.
         try:
             for pid in storage.due_rentals(int(_time.time())):

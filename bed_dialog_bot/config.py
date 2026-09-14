@@ -161,6 +161,10 @@ AUCTION_RAKE_PERCENT = int(os.environ.get("AUCTION_RAKE_PERCENT", "0"))
 AUCTION_MIN_START = int(os.environ.get("AUCTION_MIN_START", "1"))
 AUCTION_BID_STEPS = [1, 5, 10, 25]
 AUCTION_ANTISNIPE_SEC = int(os.environ.get("AUCTION_ANTISNIPE_SEC", "300"))  # extend if bid in last N sec
+# 🤖 Auto-auction: the bot lists a random free (nice) ID every N minutes.
+AUTO_AUCTION_MINUTES = int(os.environ.get("AUTO_AUCTION_MINUTES", "20"))
+AUTO_AUCTION_HOURS = int(os.environ.get("AUTO_AUCTION_HOURS", "6"))   # duration of an auto lot
+SYSTEM_SELLER_ID = int(os.environ.get("SYSTEM_SELLER_ID", "1000000000000"))  # bot inventory holder
 # 🔗 fusion: burn N unlocked IDs -> 1 guaranteed better roll
 ID_FUSE_COOL = int(os.environ.get("ID_FUSE_COOL", "10"))     # burn this many -> cool pool
 ID_FUSE_ELITE = int(os.environ.get("ID_FUSE_ELITE", "50"))   # burn this many -> elite pool
