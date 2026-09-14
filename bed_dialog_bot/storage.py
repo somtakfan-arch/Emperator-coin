@@ -281,6 +281,13 @@ CREATE TABLE IF NOT EXISTS id_autobid (
     PRIMARY KEY (pid, bidder)
 );
 
+CREATE TABLE IF NOT EXISTS aura (
+    user_id INTEGER PRIMARY KEY,
+    value INTEGER NOT NULL DEFAULT 0,
+    board INTEGER NOT NULL DEFAULT 0,
+    updated INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS coins (
     user_id INTEGER PRIMARY KEY,
     wallet INTEGER NOT NULL DEFAULT 0,
@@ -2813,6 +2820,46 @@ class Storage:
         new = self.get_rep(user_id) + n
         self.set_setting(f"rep:{user_id}", str(new))
         return new
+
+    # --- 🗿 Aura (non-purchasable meme reputation) ---
+
+    def get_aura(self, user_id: int) -> int:
+        with self._connect() as conn:
+            r = conn.execute("SELECT value FROM aura WHERE user_id=?", (user_id,)).fetchone()
+        return r[0] if r else 0
+
+    def add_aura(self, user_id: int, n: int) -> int:
+        with self._connect() as conn:
+            conn.execute("INSERT INTO aura (user_id, value, updated) VALUES (?, ?, ?) "
+                         "ON CONFLICT(user_id) DO UPDATE SET value = value + excluded.value, updated=excluded.updated",
+                         (user_id, n, int(time.time())))
+            r = conn.execute("SELECT value FROM aura WHERE user_id=?", (user_id,)).fetchone()
+        return r[0] if r else 0
+
+    def set_aura_board(self, user_id: int, on: bool) -> None:
+        with self._connect() as conn:
+            conn.execute("INSERT INTO aura (user_id, board, updated) VALUES (?, ?, ?) "
+                         "ON CONFLICT(user_id) DO UPDATE SET board=excluded.board",
+                         (user_id, 1 if on else 0, int(time.time())))
+
+    def get_aura_board(self, user_id: int) -> bool:
+        with self._connect() as conn:
+            r = conn.execute("SELECT board FROM aura WHERE user_id=?", (user_id,)).fetchone()
+        return bool(r and r[0])
+
+    def aura_top(self, limit: int = 3, opted_in: bool = True):
+        q = "SELECT user_id, value FROM aura"
+        if opted_in:
+            q += " WHERE board=1"
+        q += " ORDER BY value DESC LIMIT ?"
+        with self._connect() as conn:
+            rows = conn.execute(q, (limit,)).fetchall()
+        return [{"user_id": r[0], "value": r[1]} for r in rows]
+
+    def aura_nonzero(self):
+        with self._connect() as conn:
+            rows = conn.execute("SELECT user_id, value FROM aura WHERE value != 0").fetchall()
+        return [{"user_id": r[0], "value": r[1]} for r in rows]
 
     def get_gxp(self, user_id: int) -> int:
         v = self.get_setting(f"gxp:{user_id}")

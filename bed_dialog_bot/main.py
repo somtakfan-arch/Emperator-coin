@@ -205,6 +205,51 @@ async def _reminder_loop(application: Application) -> None:
                             pass
         except Exception:
             logger.exception("Auto-auction error")
+        # 🗿 Aura: daily decay toward 0.
+        try:
+            today = int(_time.time()) // 86400
+            last = storage.get_setting("aura_decay_day")
+            last = int(last) if last and last.isdigit() else 0
+            if today > last:
+                storage.set_setting("aura_decay_day", str(today))
+                for row in storage.aura_nonzero():
+                    v = row["value"]
+                    step = max(config.AURA_DECAY_MIN, int(abs(v) * config.AURA_DECAY_PCT))
+                    step = min(step, abs(v))
+                    storage.add_aura(row["user_id"], -step if v > 0 else step)
+        except Exception:
+            logger.exception("Aura decay error")
+        # 🗿 Aura leaderboard: drip a daily opt-in prompt to users (throttled).
+        try:
+            from telegram import InlineKeyboardButton as _Btn, InlineKeyboardMarkup as _Kb
+            now_ts = int(_time.time())
+            ptick = storage.get_setting("aura_prompt_tick")
+            ptick = int(ptick) if ptick and ptick.isdigit() else 0
+            if now_ts - ptick >= 60:
+                storage.set_setting("aura_prompt_tick", str(now_ts))
+                today = now_ts // 86400
+                sent = 0
+                for u in storage.list_users():
+                    if sent >= config.AURA_PROMPT_BATCH:
+                        break
+                    uid = u["user_id"]
+                    if storage.get_aura_board(uid) or storage.get_setting(f"auranoask:{uid}") == "1":
+                        continue
+                    if storage.get_setting(f"auraday:{uid}") == str(today):
+                        continue
+                    storage.set_setting(f"auraday:{uid}", str(today))
+                    kb = _Kb([[_Btn("✅ Да", callback_data="aura:yes"),
+                               _Btn("🚫 Нет", callback_data="aura:no")]])
+                    try:
+                        await application.bot.send_message(
+                            chat_id=uid,
+                            text="🗿 Хочешь быть в <b>аура-лидерборде</b>? Отвечу — покажу топ-3 по ауре!",
+                            parse_mode="HTML", reply_markup=kb)
+                        sent += 1
+                    except Exception:
+                        pass
+        except Exception:
+            logger.exception("Aura prompt error")
         # 🏠 Return expired ID rentals to their owners.
         try:
             for pid in storage.due_rentals(int(_time.time())):

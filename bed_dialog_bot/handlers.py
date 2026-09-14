@@ -2018,6 +2018,7 @@ def _do_work(storage: Storage, uid: int) -> str:
     if c:
         storage.clan_add_xp(c["id"], max(1, earn // 10), storage.current_week())
     _cooldown_arm(storage, uid, "work")
+    _aura_event(storage, uid, 1)
     job = _r.choice(["развозил заказы", "чинил краны", "писал код", "выгуливал собак",
                      "торговал на рынке", "стримил", "таксовал"])
     return f"💼 Ты {job} и заработал +{earn} монет! 🪙 Баланс: {storage.get_coins(uid)}"
@@ -2034,10 +2035,12 @@ def _do_crime(storage: Storage, uid: int) -> str:
         lost = min(fine, storage.get_coins(uid))
         if lost:
             storage.spend_coins(uid, lost)
+        _aura_event(storage, uid, -3)
         return f"🚨 Тебя поймали! Штраф −{lost} монет. 🪙 Баланс: {storage.get_coins(uid)}"
     earn = int(_r.randint(config.CRIME_MIN, config.CRIME_MAX) * _work_multiplier(storage, uid))
     storage.add_coins(uid, earn)
     storage.add_gxp(uid, 20)
+    _aura_event(storage, uid, 2)
     crime = _r.choice(["обнёс ларёк", "угнал самокат", "провернул схему", "взломал автомат"])
     return f"🕶 Ты {crime}: +{earn} монет! 🪙 Баланс: {storage.get_coins(uid)}"
 
@@ -2253,6 +2256,93 @@ async def _clan_command(message, context, storage: Storage) -> None:
                              "kick/rename/tag/emblem/disband")
 
 
+_AURA_RANKS = [
+    (-10 ** 12, "🤡", "Клоун"),
+    (-50, "💀", "Минус-аура"),
+    (0, "😐", "Ноль ауры"),
+    (50, "🙂", "Есть аура"),
+    (200, "😎", "Респект"),
+    (500, "🔥", "Ауровый"),
+    (1000, "🗿", "Сигма"),
+    (2500, "👑", "GigaChad"),
+]
+
+
+def _aura_rank(value: int):
+    emo, name = _AURA_RANKS[0][1], _AURA_RANKS[0][2]
+    for thr, e, n in _AURA_RANKS:
+        if value >= thr:
+            emo, name = e, n
+    return emo, name
+
+
+def _aura_event(storage: Storage, uid: int, n: int) -> None:
+    """Auto-aura from deeds (never purchasable)."""
+    try:
+        if n:
+            storage.add_aura(uid, n)
+    except Exception:
+        pass
+
+
+def _aura_view(storage: Storage, uid: int):
+    v = storage.get_aura(uid)
+    emo, name = _aura_rank(v)
+    day = int(time.time()) // 86400
+    rolled = storage.get_setting(f"auraroll:{uid}") == str(day)
+    board = storage.get_aura_board(uid)
+    text = (f"🗿 <b>Аура</b>\n{emo} <b>{v}</b> — {name}\n\n"
+            "Ауру <b>нельзя купить</b> — только заслужить делами и голосами.\n"
+            "➕ поднять: <code>/aura @ник</code> · ➖ снизить: <code>/cringe @ник</code> (раз в сутки)\n"
+            "⚔️ дуэль: <code>/auraduel @ник N</code>\n"
+            f"🏆 В лидерборде: {'да' if board else 'нет'}")
+    rows = [
+        [_cb("🎲 Аура-чек дня" + (" ✅" if rolled else ""), "aura:roll",
+             "primary" if rolled else "success")],
+        [_cb("🏆 Лидерборд", "aura:board", "primary"),
+         _cb(("🚫 Выйти из борда" if board else "✅ В лидерборд"),
+             "aura:optout" if board else "aura:optin", "danger" if board else "success")],
+        [_cb("🔄", "aura:home", "primary"), _cb("⬅️ Меню", "soc:hub", "primary")],
+    ]
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _aura_board_text(storage: Storage, uid: int) -> str:
+    top = storage.aura_top(3, opted_in=True)
+    if not top:
+        return "🏆 <b>Аура-лидерборд</b>\nПока пусто — вступи в борд, чтобы попасть в топ!"
+    medals = ["🥇", "🥈", "🥉"]
+    lines = ["🏆 <b>Аура-лидерборд</b> (топ-3)"]
+    for i, r in enumerate(top):
+        nm, un = storage.user_display(r["user_id"])
+        who = ("@" + un) if un else (nm or f"id{r['user_id']}")
+        emo, name = _aura_rank(r["value"])
+        me = " ← ты" if r["user_id"] == uid else ""
+        lines.append(f"{medals[i]} {emo} <b>{html.escape(str(who))}</b> — {r['value']} ({name}){me}")
+    return "\n".join(lines)
+
+
+def _do_aura_roll(storage: Storage, uid: int) -> str:
+    day = int(time.time()) // 86400
+    if storage.get_setting(f"auraroll:{uid}") == str(day):
+        return "🎲 Аура-чек уже был сегодня. Заходи завтра."
+    import random as _r
+    swing = _r.randint(config.AURA_DAILY_MIN, config.AURA_DAILY_MAX)
+    storage.set_setting(f"auraroll:{uid}", str(day))
+    newv = storage.add_aura(uid, swing)
+    emo, name = _aura_rank(newv)
+    if swing >= 25:
+        msg = _r.choice(["ты сегодня в ударе 🔥", "аура зашкаливает 🗿", "все чувствуют твою мощь 😎"])
+    elif swing >= 0:
+        msg = _r.choice(["норм денёк 🙂", "аура капнула", "потихоньку растёшь"])
+    elif swing > -15:
+        msg = _r.choice(["чуток кринжанул 😬", "аура просела", "бывает"])
+    else:
+        msg = _r.choice(["жёсткий кринж сегодня 💀", "аура утекла 🤡", "соберись"])
+    sign = "+" if swing >= 0 else ""
+    return f"🎲 Аура-чек: {sign}{swing} — {msg}\n{emo} Аура: {newv} ({name})"
+
+
 def _profile_text(storage: Storage, uid: int, name_disp: str) -> str:
     gxp = storage.get_gxp(uid)
     lvl = _gxp_level(gxp)
@@ -2264,8 +2354,10 @@ def _profile_text(storage: Storage, uid: int, name_disp: str) -> str:
     sp = storage.spouse_of(uid)
     ids = storage.ids_of(uid)
     best = max(ids, key=lambda p: idrarity.classify(p)["score"]) if ids else None
+    av = storage.get_aura(uid)
+    aemo, aname = _aura_rank(av)
     lines = [f"👤 <b>{html.escape(name_disp)}</b>",
-             f"🎚 Уровень <b>{lvl}</b> ({gxp} XP) · ⭐ репутация: {rep}",
+             f"🎚 Уровень <b>{lvl}</b> ({gxp} XP) · ⭐ реп: {rep} · {aemo} аура: <b>{av}</b> ({aname})",
              f"🪙 Монеты: {coins} (+ банк {bank}) · 💎 BED: {bed}"]
     if c:
         lines.append(f"🏰 Клан: {c['emblem']} {html.escape(c['name'])} (ур. {_clan_level(c['xp'])})")
@@ -2650,6 +2742,10 @@ def _do_id_buy_n(storage: Storage, uid: int, n: int):
                                      elite=storage.is_ultra(uid))
     if len(pids) < k:  # refund any that failed to assign (space exhausted)
         storage.add_bed(uid, (k - len(pids)) * config.ID_BUY_COST, reason="id_refund")
+    # 🗿 aura for pulling rare handles
+    bonus = sum({"legendary": 5, "meme": 4, "mythic": 6}.get(idrarity.tier(p), 0) for p in pids)
+    if bonus:
+        _aura_event(storage, uid, min(bonus, 30))
     return pids, None
 
 
@@ -3007,7 +3103,8 @@ def _social_hub_view(storage: Storage, uid: int):
         [_cb("🪙 Заработок", "soc:econ", "success"), _cb("🏦 Банк", "soc:bank", "primary")],
         [_cb("🌾 Ферма", "soc:farm", "success"), _cb("🎲 Игры", "soc:games", "danger")],
         [_cb("🏰 Кланы", "soc:clan", "primary"), _cb("👤 Профиль", "soc:profile", "primary")],
-        [_cb("💞 Брак", "soc:love", "primary"), _cb("🧰 Инструменты", "soc:tools", "primary")],
+        [_cb("🗿 Аура", "aura:open", "danger"), _cb("💞 Брак", "soc:love", "primary")],
+        [_cb("🧰 Инструменты", "soc:tools", "primary")],
         [_cb("🔄 Обновить", "soc:hub", "primary")],
     ]
     return text, InlineKeyboardMarkup(rows)
@@ -3339,6 +3436,73 @@ async def _social_callback(query, context, storage: Storage) -> None:
     await _show(_social_hub_view(storage, uid))
 
 
+async def _aura_callback(query, context, storage: Storage) -> None:
+    uid = query.from_user.id
+    data = query.data.split(":")
+    op = data[1] if len(data) > 1 else "home"
+
+    async def _show(view):
+        await query.answer()
+        body, kb = view
+        try:
+            await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+
+    if op == "open":  # entry from a photo message → new text message
+        await query.answer()
+        body, kb = _aura_view(storage, uid)
+        await context.bot.send_message(query.message.chat_id, body, parse_mode="HTML", reply_markup=kb)
+        return
+    if op == "home":
+        await _show(_aura_view(storage, uid))
+        return
+    if op == "roll":
+        await query.answer(_do_aura_roll(storage, uid), show_alert=True)
+        await _show(_aura_view(storage, uid))
+        return
+    if op == "board":
+        await _show((_aura_board_text(storage, uid),
+                     InlineKeyboardMarkup([[_cb("⬅️ Назад", "aura:home", "primary")]])))
+        return
+    if op == "optin":
+        storage.set_aura_board(uid, True)
+        storage.set_setting(f"auranoask:{uid}", "1")  # already decided; stop daily asking
+        await query.answer("✅ Ты в аура-лидерборде!", show_alert=True)
+        await _show((_aura_board_text(storage, uid),
+                     InlineKeyboardMarkup([[_cb("⬅️ Назад", "aura:home", "primary")]])))
+        return
+    if op == "optout":
+        storage.set_aura_board(uid, False)
+        storage.set_setting(f"auranoask:{uid}", "1")
+        await query.answer("🚫 Ты вне лидерборда.", show_alert=True)
+        await _show(_aura_view(storage, uid))
+        return
+    # Daily prompt answers
+    if op == "yes":  # aura:yes — opt into leaderboard from the daily prompt
+        storage.set_aura_board(uid, True)
+        storage.set_setting(f"auranoask:{uid}", "1")
+        await query.answer("✅ Ты в аура-лидерборде!")
+        try:
+            await query.edit_message_text(
+                _aura_board_text(storage, uid), parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup([[_cb("🗿 Моя аура", "aura:open", "primary")]]))
+        except Exception:
+            pass
+        return
+    if op == "no":  # aura:no — don't ask again
+        storage.set_aura_board(uid, False)
+        storage.set_setting(f"auranoask:{uid}", "1")
+        await query.answer("Ок, больше не спрошу.")
+        try:
+            await query.edit_message_text("👌 Ок, в аура-лидерборд не добавляю. Передумаешь — /aura → «В лидерборд».")
+        except Exception:
+            pass
+        return
+    await query.answer()
+    await _show(_aura_view(storage, uid))
+
+
 async def _id_callback(query, context, storage: Storage) -> None:
     uid = query.from_user.id
     data = query.data.split(":")
@@ -3381,6 +3545,7 @@ async def _id_callback(query, context, storage: Storage) -> None:
         new, err = storage.fuse_ids(uid, n, config.ID_MAX_VALUE, elite=elite)
         if new:
             storage.id_add_xp(new, 25)
+            _aura_event(storage, uid, {"legendary": 5, "meme": 4, "mythic": 6}.get(idrarity.tier(new), 1))
             cls = idrarity.classify(new)
             await query.answer(f"🔗 Сжёг {n} → {cls['emoji']} {new} ({cls['name']})!", show_alert=True)
         elif err == "need":
@@ -4918,13 +5083,16 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         if res["result"] == "poor":
             await message.reply_text("💸 У жертвы пусто в кошельке — грабить нечего (монеты в банке не отнять).")
         elif res["result"] == "caught":
-            await message.reply_text(f"🚔 Провал! Тебя приняли, штраф <b>−{res['amount']}</b> монет.",
+            _aura_event(storage, uid, -4)
+            await message.reply_text(f"🚔 Провал! Тебя приняли, штраф <b>−{res['amount']}</b> монет. 💀 −аура.",
                                      parse_mode="HTML")
         else:
-            await message.reply_text(f"🦹 Успех! Ты вынес <b>+{res['amount']}</b> монет. 🪙 Баланс: {storage.get_coins(uid)}",
+            _aura_event(storage, uid, 3)
+            _aura_event(storage, target, -2)
+            await message.reply_text(f"🦹 Успех! Ты вынес <b>+{res['amount']}</b> монет. 🗿 +аура. 🪙 Баланс: {storage.get_coins(uid)}",
                                      parse_mode="HTML")
             try:
-                await context.bot.send_message(target, f"🦹 Тебя ограбили на {res['amount']} монет! Прячь в банк: /bank")
+                await context.bot.send_message(target, f"🦹 Тебя ограбили на {res['amount']} монет (💀 −аура)! Прячь в банк: /bank")
             except Exception:
                 pass
         return
@@ -5041,6 +5209,115 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             await context.bot.send_message(target, f"⭐ Тебе подняли репутацию! Всего: {newrep}.")
         except Exception:
             pass
+        return
+    if text.startswith("/giveaura"):  # admin: grant/remove aura
+        if not admin.is_admin(storage, message.from_user.id):
+            return
+        parts = text.split()
+        target = _resolve_person(storage, parts[1]) if len(parts) >= 2 else None
+        amount = None
+        if len(parts) >= 3:
+            try:
+                amount = int(parts[2])
+            except ValueError:
+                amount = None
+        if not target or amount is None:
+            await message.reply_text("🗿 <code>/giveaura @ник N</code> (N можно отрицательное)", parse_mode="HTML")
+            return
+        newv = storage.add_aura(target, amount)
+        emo, name = _aura_rank(newv)
+        await message.reply_text(f"🗿 Аура изменена на {amount:+}. Теперь у него: {newv} {emo} ({name}).")
+        try:
+            await context.bot.send_message(target, f"🗿 Тебе {'начислили' if amount>=0 else 'сняли'} ауру "
+                                                   f"({amount:+}). Теперь: {newv} {emo} ({name}).")
+        except Exception:
+            pass
+        return
+    if text.startswith("/auraduel") or text.startswith("/дуэльауры"):
+        uid = message.from_user.id
+        parts = text.split()
+        if len(parts) >= 2 and parts[1].lower() in ("accept", "yes", "принять", "да"):
+            pend = storage.get_setting(f"auraduel:{uid}")
+            if not pend or ":" not in pend:
+                await message.reply_text("Тебя никто не вызывал на дуэль ауры.")
+                return
+            opp_s, amt_s = pend.split(":", 1)
+            opp, amt = int(opp_s), int(amt_s)
+            storage.set_setting(f"auraduel:{uid}", "")
+            import random as _r
+            uid_wins = _r.random() < 0.5
+            winner, loser = (uid, opp) if uid_wins else (opp, uid)
+            storage.add_aura(winner, amt)
+            storage.add_aura(loser, -amt)
+            await message.reply_text(
+                f"⚔️ Дуэль ауры! Победитель забирает {amt} ауры. "
+                f"{'🏆 Ты победил!' if winner==uid else '💀 Ты проиграл.'}")
+            try:
+                await context.bot.send_message(
+                    opp, f"⚔️ Дуэль ауры завершена: "
+                         f"{'🏆 ты победил (+' if winner==opp else '💀 ты проиграл (−'}{amt} ауры).")
+            except Exception:
+                pass
+            return
+        target = _resolve_person(storage, parts[1]) if len(parts) >= 2 else _reply_target(message)
+        amount = int(parts[2]) if len(parts) >= 3 and parts[2].isdigit() else 0
+        if not target or target == uid or amount <= 0:
+            await message.reply_text("⚔️ Дуэль ауры: <code>/auraduel @ник N</code>. Принять: /auraduel accept",
+                                     parse_mode="HTML")
+            return
+        amount = min(amount, config.AURA_DUEL_MAX)
+        storage.set_setting(f"auraduel:{target}", f"{uid}:{amount}")
+        await message.reply_text(f"⚔️ Вызов на дуэль ауры на {amount} отправлен! Ждём: /auraduel accept у него.")
+        try:
+            sn, su = _display_name(message)
+            await context.bot.send_message(
+                target, f"⚔️ {formatting.format_sender(sn, su)} вызвал тебя на дуэль ауры на {amount}!\n"
+                        "Принять: /auraduel accept", parse_mode="HTML")
+        except Exception:
+            pass
+        return
+    if text.startswith("/cringe") or text.startswith("/кринж"):
+        uid = message.from_user.id
+        parts = text.split()
+        target = _resolve_person(storage, parts[1]) if len(parts) >= 2 else _reply_target(message)
+        if not target or target == uid:
+            await message.reply_text("💀 Снять ауру: <code>/cringe @ник</code> (раз в сутки).", parse_mode="HTML")
+            return
+        left = _cooldown_left(storage, uid, "auravote", config.AURA_GIVE_CD)
+        if left:
+            await message.reply_text(f"🗿 Ты уже голосовал за ауру сегодня. Ещё через {_fmt_left(left)}.")
+            return
+        _cooldown_arm(storage, uid, "auravote")
+        newv = storage.add_aura(target, -config.AURA_GIVE_AMOUNT)
+        emo, name = _aura_rank(newv)
+        await message.reply_text(f"💀 −{config.AURA_GIVE_AMOUNT} ауры. Теперь у него: {newv} {emo} ({name}).")
+        try:
+            await context.bot.send_message(target, f"💀 Тебе снизили ауру (−{config.AURA_GIVE_AMOUNT}). "
+                                                   f"Теперь: {newv} {emo} ({name}).")
+        except Exception:
+            pass
+        return
+    if text.startswith("/aura") or text.startswith("/аура"):
+        uid = message.from_user.id
+        parts = text.split()
+        target = _resolve_person(storage, parts[1]) if len(parts) >= 2 else _reply_target(message)
+        if target and target != uid:  # give +aura
+            left = _cooldown_left(storage, uid, "auravote", config.AURA_GIVE_CD)
+            if left:
+                await message.reply_text(f"🗿 Ты уже голосовал за ауру сегодня. Ещё через {_fmt_left(left)}.")
+                return
+            _cooldown_arm(storage, uid, "auravote")
+            newv = storage.add_aura(target, config.AURA_GIVE_AMOUNT)
+            emo, name = _aura_rank(newv)
+            await message.reply_text(f"🗿 +{config.AURA_GIVE_AMOUNT} ауры! Теперь у него: {newv} {emo} ({name}).")
+            try:
+                await context.bot.send_message(target, f"🗿 Тебе подняли ауру (+{config.AURA_GIVE_AMOUNT})! "
+                                                       f"Теперь: {newv} {emo} ({name}).")
+            except Exception:
+                pass
+            return
+        body, kb = _aura_view(storage, uid)
+        await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
         return
     if text.startswith("/profile") or text.startswith("/профиль") or text.startswith("/me"):
         uid = message.from_user.id
@@ -5261,6 +5538,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         new, err = storage.fuse_ids(uid, n, config.ID_MAX_VALUE, elite=elite)
         if new:
             storage.id_add_xp(new, 25)
+            _aura_event(storage, uid, {"legendary": 5, "meme": 4, "mythic": 6}.get(idrarity.tier(new), 1))
             cls = idrarity.classify(new)
             await message.reply_text(
                 f"🔗 Сжёг {n} ID → получил {cls['emoji']} <b>{new}</b> ({cls['name']}, "
@@ -7805,6 +8083,9 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     elif query.data.startswith("soc:"):
         storage = context.bot_data["storage"]
         await _social_callback(query, context, storage)
+    elif query.data.startswith("aura:"):
+        storage = context.bot_data["storage"]
+        await _aura_callback(query, context, storage)
     elif query.data.startswith("id:"):
         storage = context.bot_data["storage"]
         await _id_callback(query, context, storage)

@@ -217,6 +217,16 @@ COIN_BET_MAX = int(os.environ.get("COIN_BET_MAX", "100000"))
 # 💱 Buy coins for BED (one-way sink; coins can't be cashed back to BED).
 COINS_PER_BED = int(os.environ.get("COINS_PER_BED", "1000"))
 
+# 🗿 Aura — a meme reputation you CANNOT buy (only earn/lose by deeds & votes).
+AURA_GIVE_CD = int(os.environ.get("AURA_GIVE_CD", "86400"))     # give/cringe once a day per giver
+AURA_GIVE_AMOUNT = int(os.environ.get("AURA_GIVE_AMOUNT", "5"))
+AURA_DAILY_MIN = int(os.environ.get("AURA_DAILY_MIN", "-25"))   # daily aura-check swing
+AURA_DAILY_MAX = int(os.environ.get("AURA_DAILY_MAX", "40"))
+AURA_DECAY_PCT = float(os.environ.get("AURA_DECAY_PCT", "0.05"))  # % toward 0 per day
+AURA_DECAY_MIN = int(os.environ.get("AURA_DECAY_MIN", "1"))
+AURA_PROMPT_BATCH = int(os.environ.get("AURA_PROMPT_BATCH", "25"))  # daily-prompt drip per tick
+AURA_DUEL_MAX = int(os.environ.get("AURA_DUEL_MAX", "150"))
+
 # 🧪 Official test accounts: unlimited BED and unlimited ID slots (never spend
 # real balance). Comma-separated telegram user_ids in env.
 TEST_ACCOUNTS = {int(x) for x in os.environ.get("TEST_ACCOUNTS", "8802068360").split(",") if x.strip().lstrip("-").isdigit()}
