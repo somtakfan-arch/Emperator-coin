@@ -1996,14 +1996,37 @@ def _farm_accrued(lvl: int, ts: int) -> int:
     return int(lvl * config.FARM_YIELD * hours)
 
 
+def _couple_level(love: int) -> int:
+    return 1 + max(0, love) // config.LOVE_LEVEL_STEP
+
+
+def _ring_info(level: int):
+    for lv, name, emoji, cost, love_mult, work_bonus in config.RINGS:
+        if lv == level:
+            return {"level": lv, "name": name, "emoji": emoji, "cost": cost,
+                    "love_mult": love_mult, "work_bonus": work_bonus}
+    return None
+
+
 def _work_multiplier(storage: Storage, uid: int) -> float:
     mult = 1.0
     c = storage.clan_of(uid)
     if c:
         mult += _clan_level(c["xp"]) * config.CLAN_WORK_BONUS
-    if storage.spouse_of(uid):
-        mult += config.MARRY_WORK_BONUS
+    cp = storage.couple_of(uid)
+    if cp:
+        mult += config.MARRY_WORK_BONUS + _couple_level(cp["love"]) * config.MARRY_WORK_PER_LEVEL
+        ring = _ring_info(cp["ring"])
+        if ring:
+            mult += ring["work_bonus"]
     return mult
+
+
+def _couple_farm_mult(storage: Storage, uid: int) -> float:
+    cp = storage.couple_of(uid)
+    if not cp:
+        return 1.0
+    return 1.0 + _couple_level(cp["love"]) * config.MARRY_FARM_PER_LEVEL
 
 
 def _do_work(storage: Storage, uid: int) -> str:
@@ -2047,7 +2070,7 @@ def _do_crime(storage: Storage, uid: int) -> str:
 
 def _do_farm_collect(storage: Storage, uid: int) -> str:
     lvl, ts = _farm_get(storage, uid)
-    got = _farm_accrued(lvl, ts)
+    got = int(_farm_accrued(lvl, ts) * _couple_farm_mult(storage, uid))
     if got <= 0:
         return "🌾 Пока нечего собирать."
     storage.add_coins(uid, got)
@@ -2361,8 +2384,10 @@ def _profile_text(storage: Storage, uid: int, name_disp: str) -> str:
              f"🪙 Монеты: {coins} (+ банк {bank}) · 💎 BED: {bed}"]
     if c:
         lines.append(f"🏰 Клан: {c['emblem']} {html.escape(c['name'])} (ур. {_clan_level(c['xp'])})")
-    if sp:
-        lines.append(f"💞 В браке")
+    cp = storage.couple_of(uid)
+    if cp:
+        ring = _ring_info(cp["ring"])
+        lines.append(f"💞 В браке {ring['emoji'] if ring else ''} · любовь {cp['love']} (ур. {_couple_level(cp['love'])})")
     if best:
         lines.append(f"🆔 Топ ID: {idrarity.badge(best)} <code>{best}</code> · всего ID: {len(ids)}")
     lines.append("\n🪙 /work /crime /rob · 🏦 /bank · 🌾 /farm · 🏰 /clan · 💞 /marry · 🎲 /flip /rps")
@@ -3196,12 +3221,45 @@ def _clan_view(storage: Storage, uid: int):
     return text, InlineKeyboardMarkup(rows)
 
 
+_INTERACTIONS = {
+    "kiss": ("💋", "поцеловал(а)", "LOVE_KISS", 0),
+    "hug": ("🤗", "обнял(а)", "LOVE_HUG", 0),
+    "gift": ("🎁", "подарил(а) подарок", "LOVE_GIFT", "LOVE_GIFT_COST"),
+}
+
+
+def _do_interaction(storage: Storage, uid: int, kind: str) -> str:
+    cp = storage.couple_of(uid)
+    if not cp:
+        return "Ты не в браке 💔"
+    emoji, verb, love_key, cost_key = _INTERACTIONS[kind]
+    left = _cooldown_left(storage, uid, f"love_{kind}", 86400)
+    if left:
+        return f"{emoji} Уже сегодня. Ещё через {_fmt_left(left)}."
+    cost = getattr(config, cost_key) if cost_key else 0
+    if cost and not storage.spend_coins(uid, cost):
+        return f"🎁 Не хватает монет на подарок (нужно {cost})."
+    _cooldown_arm(storage, uid, f"love_{kind}")
+    base = getattr(config, love_key)
+    ring = _ring_info(cp["ring"])
+    gain = int(base * (ring["love_mult"] if ring else 1.0))
+    # streak: advance once per day when a couple interacts
+    day = int(time.time()) // 86400
+    streak = cp["streak"]
+    if cp["last_together"] != day:
+        streak = streak + 1 if cp["last_together"] == day - 1 else 1
+        storage.couple_set_streak(cp["pair"], streak, day)
+        gain += min(streak, 30)  # streak bonus love
+    love = storage.couple_add_love(cp["pair"], gain)
+    _aura_event(storage, uid, 1)
+    lvl = _couple_level(love)
+    return (f"{emoji} Ты {verb} супруга(у)! +{gain} ❤️\n"
+            f"❤️ Любовь: {love} · 💞 уровень {lvl} · 🔥 стрик {streak} дн.")
+
+
 def _love_view(storage: Storage, uid: int):
-    sp = storage.spouse_of(uid)
-    if sp:
-        text = "💞 <b>Брак</b>\nТы в браке 💍 (+бонус к /work). Развестись — кнопкой ниже."
-        rows = [[_cb("💔 Развестись", "soc:divorce", "danger")], [_cb("⬅️ Назад", "soc:hub", "primary")]]
-    else:
+    cp = storage.couple_of(uid)
+    if not cp:
         req = storage.get_setting(f"marryreq:{uid}")
         text = ("💞 <b>Брак</b>\nСделай предложение: <code>/marry @ник</code>.\n"
                 + ("💌 Тебе сделали предложение! Прими кнопкой." if req and req.isdigit() else ""))
@@ -3209,7 +3267,73 @@ def _love_view(storage: Storage, uid: int):
         if req and req.isdigit():
             rows.append([_cb("💍 Принять предложение", "soc:marryok", "success")])
         rows.append([_cb("⬅️ Назад", "soc:hub", "primary")])
+        return text, InlineKeyboardMarkup(rows)
+    lvl = _couple_level(cp["love"])
+    days = (int(time.time()) - cp["since"]) // 86400
+    ring = _ring_info(cp["ring"])
+    ring_s = f"{ring['emoji']} {ring['name']} кольцо" if ring else "без кольца"
+    text = (f"💞 <b>Брак</b> 💍 ({ring_s})\n"
+            f"❤️ Любовь: <b>{cp['love']}</b> · 💞 уровень <b>{lvl}</b> · 🔥 стрик {cp['streak']} дн.\n"
+            f"📅 Вместе: {days} дн. · 🏦 семейный банк: {cp['bank']} монет\n"
+            f"💪 Бонусы: +{int((config.MARRY_WORK_BONUS + lvl*config.MARRY_WORK_PER_LEVEL + (ring['work_bonus'] if ring else 0))*100)}% к работе, "
+            f"+{int(lvl*config.MARRY_FARM_PER_LEVEL*100)}% к ферме\n\n"
+            "Взаимодействия раз в день: 💋 /kiss · 🤗 /hug · 🎁 /gift")
+    rows = [
+        [_cb("💋 Поцеловать", "soc:love_kiss", "danger"), _cb("🤗 Обнять", "soc:love_hug", "primary"),
+         _cb("🎁 Подарок", "soc:love_gift", "success")],
+        [_cb("💍 Кольца", "soc:rings", "success"), _cb("🏦 Семейный банк", "soc:cbank", "primary")],
+        [_cb("🔄", "soc:love", "primary"), _cb("💔 Развод", "soc:divorce", "danger")],
+        [_cb("⬅️ Назад", "soc:hub", "primary")],
+    ]
     return text, InlineKeyboardMarkup(rows)
+
+
+def _rings_view(storage: Storage, uid: int):
+    cp = storage.couple_of(uid)
+    if not cp:
+        return "Ты не в браке 💔", InlineKeyboardMarkup([[_cb("⬅️ Назад", "soc:love", "primary")]])
+    cur = cp["ring"]
+    lines = [f"💍 <b>Кольца</b> — текущее: {(_ring_info(cur)['emoji']+' '+_ring_info(cur)['name']) if cur else 'нет'}",
+             "Выше кольцо → больше ❤️ за взаимодействия и бонус к работе.\n"]
+    rows = []
+    for lv, name, emoji, cost, love_mult, wb in config.RINGS:
+        mark = " ✅" if lv <= cur else ""
+        lines.append(f"{emoji} {name} — {cost} монет (×{love_mult} к ❤️, +{int(wb*100)}% работа){mark}")
+        if lv > cur:
+            rows.append([_cb(f"{emoji} Купить {name} ({cost})", f"soc:ringbuy:{lv}", "success")])
+    rows.append([_cb("⬅️ Назад", "soc:love", "primary")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _cbank_view(storage: Storage, uid: int):
+    cp = storage.couple_of(uid)
+    if not cp:
+        return "Ты не в браке 💔", InlineKeyboardMarkup([[_cb("⬅️ Назад", "soc:love", "primary")]])
+    text = (f"🏦 <b>Семейный банк</b>\nВ банке: <b>{cp['bank']}</b> монет (общий на двоих)\n"
+            f"🪙 У тебя в кошельке: {storage.get_coins(uid)}")
+    rows = [
+        [_cb("➕ 100", "soc:cbankdep:100", "success"), _cb("➕ 1000", "soc:cbankdep:1000", "success"),
+         _cb("➕ Всё", "soc:cbankdep:all", "success")],
+        [_cb("➖ 100", "soc:cbankwd:100", "danger"), _cb("➖ 1000", "soc:cbankwd:1000", "danger"),
+         _cb("➖ Всё", "soc:cbankwd:all", "danger")],
+        [_cb("🔄", "soc:cbank", "primary"), _cb("⬅️ Назад", "soc:love", "primary")],
+    ]
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _do_ring_buy(storage: Storage, uid: int, lv: int) -> str:
+    cp = storage.couple_of(uid)
+    if not cp:
+        return "Ты не в браке 💔"
+    if lv <= cp["ring"]:
+        return "У вас уже есть это (или лучше) кольцо."
+    ring = _ring_info(lv)
+    if not ring:
+        return "Нет такого кольца."
+    if not storage.spend_coins(uid, ring["cost"]):
+        return f"Не хватает монет (нужно {ring['cost']})."
+    storage.couple_set_ring(cp["pair"], lv)
+    return f"{ring['emoji']} Куплено {ring['name']} кольцо! Теперь ×{ring['love_mult']} к ❤️."
 
 
 def _tools_view(storage: Storage, uid: int):
@@ -3380,6 +3504,38 @@ async def _social_callback(query, context, storage: Storage) -> None:
         return
     if op == "love":
         await _show(_love_view(storage, uid))
+        return
+    if op in ("love_kiss", "love_hug", "love_gift"):
+        kind = op.split("_", 1)[1]
+        await query.answer(_do_interaction(storage, uid, kind), show_alert=True)
+        await _show(_love_view(storage, uid))
+        return
+    if op == "rings":
+        await _show(_rings_view(storage, uid))
+        return
+    if op == "ringbuy":
+        lv = int(data[2]) if len(data) > 2 and data[2].isdigit() else 0
+        await query.answer(_do_ring_buy(storage, uid, lv), show_alert=True)
+        await _show(_rings_view(storage, uid))
+        return
+    if op == "cbank":
+        await _show(_cbank_view(storage, uid))
+        return
+    if op in ("cbankdep", "cbankwd"):
+        cp = storage.couple_of(uid)
+        if not cp:
+            await query.answer("Ты не в браке 💔", show_alert=True)
+            return
+        spec = data[2] if len(data) > 2 else "0"
+        if op == "cbankdep":
+            amt = storage.get_coins(uid) if spec == "all" else (int(spec) if spec.isdigit() else 0)
+            ok = storage.couple_bank_deposit(cp["pair"], uid, amt) if amt > 0 else False
+            await query.answer(f"🏦 Внёс {amt} в семейный банк." if ok else "Не хватает монет.", show_alert=True)
+        else:
+            amt = cp["bank"] if spec == "all" else (int(spec) if spec.isdigit() else 0)
+            ok = storage.couple_bank_withdraw(cp["pair"], uid, amt) if amt > 0 else False
+            await query.answer(f"🏦 Снял {amt}." if ok else "В банке столько нет.", show_alert=True)
+        await _show(_cbank_view(storage, uid))
         return
     if op == "marryok":
         proposer = storage.get_setting(f"marryreq:{uid}")
@@ -5072,6 +5228,10 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         if target == uid:
             await message.reply_text("Себя грабить — так себе бизнес 🙂")
             return
+        sp = storage.spouse_of(uid)
+        if sp and sp["spouse_id"] == target:
+            await message.reply_text("💞 Супруга грабить нельзя! Это святое.")
+            return
         left = _cooldown_left(storage, uid, "rob", config.ROB_CD)
         if left:
             await message.reply_text(f"🦹 Ствол ещё не остыл. Жди {_fmt_left(left)}.")
@@ -5189,6 +5349,23 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
                 pass
         else:
             await message.reply_text("Ты не в браке.")
+        return
+    if text.startswith("/kiss") or text.startswith("/поцелуй"):
+        await message.reply_text(_do_interaction(storage, message.from_user.id, "kiss"))
+        return
+    if text.startswith("/hug") or text.startswith("/обнять"):
+        await message.reply_text(_do_interaction(storage, message.from_user.id, "hug"))
+        return
+    if (text.startswith("/gift") or text.startswith("/подарок")) and not _GIFT_RE.match(text):
+        await message.reply_text(_do_interaction(storage, message.from_user.id, "gift"))
+        return
+    if text.startswith("/couple") or text.startswith("/пара") or text.startswith("/love"):
+        body, kb = _love_view(storage, message.from_user.id)
+        await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
+        return
+    if text.startswith("/ring") or text.startswith("/кольцо"):
+        body, kb = _rings_view(storage, message.from_user.id)
+        await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
         return
     if text.startswith("/rep") or text.startswith("/реп"):
         uid = message.from_user.id

@@ -327,6 +327,19 @@ CREATE TABLE IF NOT EXISTS marriages (
     since INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS couples (
+    pair TEXT PRIMARY KEY,
+    a_id INTEGER NOT NULL,
+    b_id INTEGER NOT NULL,
+    love INTEGER NOT NULL DEFAULT 0,
+    ring INTEGER NOT NULL DEFAULT 0,
+    bank INTEGER NOT NULL DEFAULT 0,
+    streak INTEGER NOT NULL DEFAULT 0,
+    last_together INTEGER NOT NULL DEFAULT 0,
+    since INTEGER NOT NULL DEFAULT 0,
+    anniv_paid INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS user_notes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -728,6 +741,18 @@ class Storage:
         meta_cols = {r[1] for r in conn.execute("PRAGMA table_info(id_meta)")}
         if meta_cols and "xp" not in meta_cols:
             conn.execute("ALTER TABLE id_meta ADD COLUMN xp INTEGER NOT NULL DEFAULT 0")
+        # Backfill couple rows for marriages made before the couples table existed.
+        try:
+            existing = {r[0] for r in conn.execute("SELECT pair FROM couples")}
+            for uid, sp, since in conn.execute("SELECT user_id, spouse_id, since FROM marriages").fetchall():
+                lo, hi = (uid, sp) if uid <= sp else (sp, uid)
+                pair = f"{lo}:{hi}"
+                if pair not in existing:
+                    conn.execute("INSERT OR IGNORE INTO couples (pair, a_id, b_id, since) VALUES (?, ?, ?, ?)",
+                                 (pair, lo, hi, since))
+                    existing.add(pair)
+        except Exception:
+            pass
         tt_cols = {row[1] for row in conn.execute("PRAGMA table_info(tiktok_subs)")}
         if tt_cols and "kind" not in tt_cols:
             conn.execute("ALTER TABLE tiktok_subs ADD COLUMN kind TEXT NOT NULL DEFAULT 'tiktok'")
@@ -2794,6 +2819,11 @@ class Storage:
             r = conn.execute("SELECT spouse_id, since FROM marriages WHERE user_id=?", (user_id,)).fetchone()
         return dict(zip(("spouse_id", "since"), r)) if r else None
 
+    @staticmethod
+    def _pair(a: int, b: int) -> str:
+        lo, hi = (a, b) if a <= b else (b, a)
+        return f"{lo}:{hi}"
+
     def marry(self, a: int, b: int) -> bool:
         now = int(time.time())
         with self._connect() as conn:
@@ -2801,6 +2831,11 @@ class Storage:
                 return False
             conn.execute("INSERT INTO marriages (user_id, spouse_id, since) VALUES (?, ?, ?)", (a, b, now))
             conn.execute("INSERT INTO marriages (user_id, spouse_id, since) VALUES (?, ?, ?)", (b, a, now))
+            lo, hi = (a, b) if a <= b else (b, a)
+            conn.execute(
+                "INSERT INTO couples (pair, a_id, b_id, since) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(pair) DO UPDATE SET since=excluded.since, love=0, streak=0, anniv_paid=0",
+                (self._pair(a, b), lo, hi, now))
         return True
 
     def divorce(self, user_id: int):
@@ -2810,7 +2845,70 @@ class Storage:
                 return None
             spouse = r[0]
             conn.execute("DELETE FROM marriages WHERE user_id IN (?, ?)", (user_id, spouse))
+            conn.execute("DELETE FROM couples WHERE pair=?", (self._pair(user_id, spouse),))
         return spouse
+
+    # --- 💞 Couple (marriage) state ---
+
+    def couple_of(self, user_id: int):
+        sp = self.spouse_of(user_id)
+        if not sp:
+            return None
+        spouse = sp["spouse_id"]
+        with self._connect() as conn:
+            r = conn.execute(
+                "SELECT pair, a_id, b_id, love, ring, bank, streak, last_together, since, anniv_paid "
+                "FROM couples WHERE pair=?", (self._pair(user_id, spouse),)).fetchone()
+        if not r:
+            return None
+        d = dict(zip(("pair", "a_id", "b_id", "love", "ring", "bank", "streak", "last_together",
+                      "since", "anniv_paid"), r))
+        d["spouse_id"] = spouse
+        return d
+
+    def couple_add_love(self, pair: str, n: int) -> int:
+        with self._connect() as conn:
+            conn.execute("UPDATE couples SET love = love + ? WHERE pair=?", (n, pair))
+            r = conn.execute("SELECT love FROM couples WHERE pair=?", (pair,)).fetchone()
+        return r[0] if r else 0
+
+    def couple_set_streak(self, pair: str, streak: int, day: int) -> None:
+        with self._connect() as conn:
+            conn.execute("UPDATE couples SET streak=?, last_together=? WHERE pair=?", (streak, day, pair))
+
+    def couple_set_ring(self, pair: str, ring: int) -> None:
+        with self._connect() as conn:
+            conn.execute("UPDATE couples SET ring=? WHERE pair=?", (ring, pair))
+
+    def couple_bank_deposit(self, pair: str, user_id: int, amount: int) -> bool:
+        with self._connect() as conn:
+            w = conn.execute("SELECT wallet FROM coins WHERE user_id=?", (user_id,)).fetchone()
+            if not w or w[0] < amount:
+                return False
+            conn.execute("UPDATE coins SET wallet = wallet - ? WHERE user_id=?", (amount, user_id))
+            conn.execute("UPDATE couples SET bank = bank + ? WHERE pair=?", (amount, pair))
+        return True
+
+    def couple_bank_withdraw(self, pair: str, user_id: int, amount: int) -> bool:
+        with self._connect() as conn:
+            c = conn.execute("SELECT bank FROM couples WHERE pair=?", (pair,)).fetchone()
+            if not c or c[0] < amount:
+                return False
+            conn.execute("UPDATE couples SET bank = bank - ? WHERE pair=?", (amount, pair))
+            conn.execute("INSERT INTO coins (user_id, wallet) VALUES (?, ?) "
+                         "ON CONFLICT(user_id) DO UPDATE SET wallet = wallet + excluded.wallet",
+                         (user_id, amount))
+        return True
+
+    def couples_all(self):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT pair, a_id, b_id, since, anniv_paid FROM couples").fetchall()
+        return [dict(zip(("pair", "a_id", "b_id", "since", "anniv_paid"), r)) for r in rows]
+
+    def couple_set_anniv(self, pair: str, milestone: int) -> None:
+        with self._connect() as conn:
+            conn.execute("UPDATE couples SET anniv_paid=? WHERE pair=?", (milestone, pair))
 
     def get_rep(self, user_id: int) -> int:
         v = self.get_setting(f"rep:{user_id}")

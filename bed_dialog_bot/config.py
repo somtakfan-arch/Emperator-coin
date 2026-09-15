@@ -207,8 +207,26 @@ CLAN_LEVEL_STEP = int(os.environ.get("CLAN_LEVEL_STEP", "5000"))     # clan xp p
 CLAN_WORK_BONUS = float(os.environ.get("CLAN_WORK_BONUS", "0.03"))   # +3%/clan level to work
 
 # 💞 Marriage
-MARRY_WORK_BONUS = float(os.environ.get("MARRY_WORK_BONUS", "0.10"))  # +10% work while married
+MARRY_WORK_BONUS = float(os.environ.get("MARRY_WORK_BONUS", "0.10"))  # base +10% work while married
 REP_CD = int(os.environ.get("REP_CD", "86400"))
+# love / relationship level
+LOVE_LEVEL_STEP = int(os.environ.get("LOVE_LEVEL_STEP", "200"))   # love points per level
+LOVE_KISS = int(os.environ.get("LOVE_KISS", "15"))
+LOVE_HUG = int(os.environ.get("LOVE_HUG", "10"))
+LOVE_GIFT = int(os.environ.get("LOVE_GIFT", "30"))
+LOVE_GIFT_COST = int(os.environ.get("LOVE_GIFT_COST", "50"))       # coins per /gift
+MARRY_WORK_PER_LEVEL = float(os.environ.get("MARRY_WORK_PER_LEVEL", "0.02"))   # +2%/level to work
+MARRY_FARM_PER_LEVEL = float(os.environ.get("MARRY_FARM_PER_LEVEL", "0.02"))   # +2%/level to farm
+COUPLE_DAILY_COINS = int(os.environ.get("COUPLE_DAILY_COINS", "80"))  # base couple daily (×level, ×2 if both)
+# anniversaries: days -> (coins, aura)
+ANNIV_MILESTONES = [7, 30, 100, 365]
+# rings: (level, name, emoji, cost_coins, love_mult, work_bonus)
+RINGS = [
+    (1, "Бронзовое", "🥉", 500, 1.10, 0.01),
+    (2, "Серебряное", "🥈", 1500, 1.20, 0.02),
+    (3, "Золотое", "🥇", 4000, 1.35, 0.04),
+    (4, "Бриллиантовое", "💎", 10000, 1.55, 0.07),
+]
 
 # 🎲 Coin games (house edge keeps the faucet in check)
 FLIP_EDGE = float(os.environ.get("FLIP_EDGE", "0.05"))

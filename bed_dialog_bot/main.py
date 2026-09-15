@@ -250,6 +250,42 @@ async def _reminder_loop(application: Application) -> None:
                         pass
         except Exception:
             logger.exception("Aura prompt error")
+        # 💞 Marriage anniversaries: reward couples at day milestones.
+        try:
+            today = int(_time.time()) // 86400
+            last = storage.get_setting("anniv_day")
+            last = int(last) if last and last.isdigit() else 0
+            if today > last:
+                storage.set_setting("anniv_day", str(today))
+                now2 = int(_time.time())
+                for cp in storage.couples_all():
+                    days = (now2 - cp["since"]) // 86400
+                    reached = cp["anniv_paid"]
+                    for m in config.ANNIV_MILESTONES:
+                        if days >= m > reached:
+                            reached = m
+                    if reached > cp["anniv_paid"]:
+                        storage.couple_set_anniv(cp["pair"], reached)
+                        coins = min(reached * 10, 3000)
+                        aura = reached // 2
+                        prem = 1 if reached >= 100 else 0
+                        prem = 3 if reached >= 365 else prem
+                        for u in (cp["a_id"], cp["b_id"]):
+                            storage.add_coins(u, coins)
+                            storage.add_aura(u, aura)
+                            if prem:
+                                storage.grant_premium_days(u, prem)
+                            try:
+                                await application.bot.send_message(
+                                    chat_id=u,
+                                    text=(f"💐 <b>Годовщина {reached} дней в браке!</b>\n"
+                                          f"Награда паре: +{coins} монет, +{aura} ауры"
+                                          + (f", +{prem} дн. премиума" if prem else "") + " 💞"),
+                                    parse_mode="HTML")
+                            except Exception:
+                                pass
+        except Exception:
+            logger.exception("Anniversary error")
         # 🏠 Return expired ID rentals to their owners.
         try:
             for pid in storage.due_rentals(int(_time.time())):
