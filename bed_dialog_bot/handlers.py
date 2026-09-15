@@ -2138,28 +2138,44 @@ def _do_rps(storage: Storage, uid: int, choice: str, bet: int) -> str:
     return f"{emo[choice]} vs {emo[bot_move]} — {res}. 🪙 {storage.get_coins(uid)}"
 
 
+_ROLE_RU = {"leader": "👑 вождь", "officer": "🎖 офицер", "member": "боец"}
+
+
 def _clan_text(storage: Storage, uid: int) -> str:
     c = storage.clan_of(uid)
     if not c:
-        return ("🏰 <b>Кланы</b>\n\nТы не в клане.\n"
-                f"Создать: <code>/clan create Название</code> ({config.CLAN_CREATE_COST} монет)\n"
+        return ("🏰 <b>Кланы</b> — серьёзная гильдия на реальном 💎 BED.\n\n"
+                "Ты не в клане.\n"
+                f"Создать: <code>/clan create Название</code> ({config.CLAN_CREATE_BED} BED)\n"
                 "Вступить: <code>/clan join Название</code> · список: <code>/clan list</code>")
     lvl = _clan_level(c["xp"])
     members = storage.clan_member_count(c["id"])
+    cap = storage.clan_cap(c["id"])
     wk = storage.current_week()
     pts = storage.clan_war_points(c["id"], wk)
+    treasury = storage.clan_treasury(c["id"])
+    staked = storage.clan_war_staked(c["id"], wk)
     lines = [f"{c['emblem']} <b>{html.escape(c['name'])}</b>" + (f" [{html.escape(c['tag'])}]" if c['tag'] else ""),
-             f"🏅 Уровень {lvl} · XP {c['xp']} · 👥 {members}/{config.CLAN_MAX_MEMBERS}",
-             f"🏦 Клан-банк: {c['bank']} монет · ⚔️ очки войны (нед): {pts}",
-             f"🎖 Твоя роль: {'вождь' if c['role']=='leader' else 'боец'} · твой вклад: {c['contributed']}",
-             f"💪 Бонус к /work за клан: +{int(lvl*config.CLAN_WORK_BONUS*100)}%",
-             "\n💰 <code>/clan deposit N</code> — вложить (растит XP и очки войны)",
-             "👥 <code>/clan members</code> · 🚪 <code>/clan leave</code>"]
+             (f"<i>{html.escape(c['motd'])}</i>" if c.get("motd") else ""),
+             f"💎 Казна: <b>{treasury} BED</b> · 🏗 уровень клана {c['level']} · 🏅 престиж {lvl} (XP {c['xp']})",
+             f"👥 {members}/{cap} · {'🔓 открытый' if c['open'] else '🔒 по заявкам'} · "
+             f"⚔️ очки войны: {pts}, ставка: {staked} BED",
+             f"🎖 Твоя роль: {_ROLE_RU.get(c['role'], c['role'])} · твой вклад: {c['contributed']} BED",
+             f"💪 Бонус к /work: +{int(lvl*config.CLAN_WORK_BONUS*100)}%",
+             "\n💎 <code>/clan deposit N</code> — вложить BED в казну (растит престиж и очки)",
+             "👥 <code>/clan members</code> · 📨 <code>/clan requests</code> · 🚪 <code>/clan leave</code>"]
+    if c["role"] in ("leader", "officer"):
+        lines.append("🎖 Офицер: <code>/clan kick @ник</code> · <code>/clan accept @ник</code> / "
+                     "<code>/clan deny @ник</code>")
     if c["role"] == "leader":
-        lines.append("👑 Вождь: <code>/clan withdraw N</code> · <code>/clan kick @ник</code> · "
-                     "<code>/clan rename Имя</code> · <code>/clan emblem 🔥</code> · <code>/clan disband</code>")
-    lines.append("\n⚔️ Раз в неделю клан с наибольшими очками войны получает ULTRA-дни всем бойцам!")
-    return "\n".join(lines)
+        lines.append("👑 Вождь: <code>/clan withdraw N</code> · <code>/clan upgrade</code> · "
+                     "<code>/clan warstake N</code> · <code>/clan promote @ник</code> / "
+                     "<code>/clan demote @ник</code> · <code>/clan open</code>/<code>/clan close</code> · "
+                     "<code>/clan motd текст</code> · <code>/clan rename</code>/<code>tag</code>/<code>emblem</code> · "
+                     "<code>/clan disband</code>")
+    lines.append("\n⚔️ Клан-война: кланы ставят BED в общий котёл, победитель недели забирает весь пул "
+                 "(делёж между бойцами по вкладу).")
+    return "\n".join(x for x in lines if x)
 
 
 async def _clan_command(message, context, storage: Storage) -> None:
@@ -2172,31 +2188,39 @@ async def _clan_command(message, context, storage: Storage) -> None:
         await message.reply_text(_clan_text(storage, uid), parse_mode="HTML")
         return
     if sub in ("create", "создать"):
-        name = (arg or (parts[1] if False else "")).strip()[:24]
+        name = arg.strip()[:24]
         if not name:
             await message.reply_text("🏰 <code>/clan create Название</code>", parse_mode="HTML")
             return
-        cid, err = storage.create_clan(uid, name, "", "🏰", config.CLAN_CREATE_COST)
+        cid, err = storage.create_clan(uid, name, "", "🏰", config.CLAN_CREATE_BED)
         if cid:
-            await message.reply_text(f"🏰 Клан «{html.escape(name)}» создан! (−{config.CLAN_CREATE_COST} монет)\n"
-                                     "Настрой: /clan emblem 🔥 · /clan tag ABC · зови людей: /clan info", parse_mode="HTML")
+            await message.reply_text(f"🏰 Клан «{html.escape(name)}» основан! (−{config.CLAN_CREATE_BED} 💎 BED в казну)\n"
+                                     "Настрой: /clan emblem 🔥 · /clan tag ABC · /clan motd текст · зови людей: /clan info",
+                                     parse_mode="HTML")
         else:
             await message.reply_text({"inclan": "Ты уже в клане.", "name": "Имя занято.",
-                                      "funds": f"Нужно {config.CLAN_CREATE_COST} монет."}.get(err, "Не вышло."))
+                                      "funds": f"Нужно {config.CLAN_CREATE_BED} BED."}.get(err, "Не вышло."))
         return
     if sub in ("join", "вступить"):
-        cid = None
-        if arg.isdigit():
-            cid = int(arg)
-        else:
-            cid = storage.clan_by_name(arg)
+        cid = int(arg) if arg.isdigit() else storage.clan_by_name(arg)
         if not cid:
             await message.reply_text("Клан не найден. Список: /clan list")
             return
-        ok, err = storage.join_clan(uid, cid, config.CLAN_MAX_MEMBERS)
+        ok, err = storage.join_clan(uid, cid)
         if ok:
             c = storage.clan_get(cid)
             await message.reply_text(f"✅ Ты вступил в {c['emblem']} {html.escape(c['name'])}!")
+        elif err == "requested":
+            c = storage.clan_get(cid)
+            await message.reply_text(f"📨 Заявка в {c['emblem']} {html.escape(c['name'])} отправлена — ждём одобрения офицера.")
+            for m in storage.clan_members(cid):
+                if m["role"] in ("leader", "officer"):
+                    try:
+                        sn, su = _display_name(message)
+                        await context.bot.send_message(m["user_id"], f"📨 Заявка в клан от {formatting.format_sender(sn, su)}. "
+                                                        f"Одобрить: /clan accept {su and ('@'+su) or uid}")
+                    except Exception:
+                        pass
         else:
             await message.reply_text({"inclan": "Ты уже в клане (сначала /clan leave).",
                                       "full": "В клане нет мест.", "gone": "Клан исчез."}.get(err, "Не вышло."))
@@ -2206,7 +2230,7 @@ async def _clan_command(message, context, storage: Storage) -> None:
         if not cl:
             await message.reply_text("Кланов пока нет — создай первым: /clan create Имя")
             return
-        body = "\n".join(f"{c['emblem']} <b>{html.escape(c['name'])}</b> — ур.{_clan_level(c['xp'])}, "
+        body = "\n".join(f"{c['emblem']} <b>{html.escape(c['name'])}</b> — престиж {_clan_level(c['xp'])}, "
                          f"👥{c['members']} · вступить: <code>/clan join {c['id']}</code>" for c in cl)
         await message.reply_text("🏰 <b>Кланы</b>\n" + body, parse_mode="HTML")
         return
@@ -2216,13 +2240,56 @@ async def _clan_command(message, context, storage: Storage) -> None:
             await message.reply_text("Ты не в клане.")
             return
         rows = storage.clan_members(c["id"])
-        lines = [f"{c['emblem']} <b>{html.escape(c['name'])}</b> — состав:"]
+        lines = [f"{c['emblem']} <b>{html.escape(c['name'])}</b> — состав ({len(rows)}):"]
         for m in rows[:40]:
             nm, un = storage.user_display(m["user_id"])
             who = ("@" + un) if un else (nm or str(m["user_id"]))
-            crown = "👑" if m["role"] == "leader" else "•"
-            lines.append(f"{crown} {html.escape(str(who))} — вклад {m['contributed']}")
+            tag = {"leader": "👑", "officer": "🎖", "member": "•"}.get(m["role"], "•")
+            lines.append(f"{tag} {html.escape(str(who))} — вклад {m['contributed']} BED")
         await message.reply_text("\n".join(lines), parse_mode="HTML")
+        return
+    if sub in ("requests", "заявки"):
+        c = storage.clan_of(uid)
+        if not c or c["role"] not in ("leader", "officer"):
+            await message.reply_text("Только вождь/офицер видит заявки.")
+            return
+        reqs = storage.clan_requests(c["id"])
+        if not reqs:
+            await message.reply_text("📨 Заявок нет.")
+            return
+        lines = ["📨 <b>Заявки</b> (одобрить: /clan accept @ник · отклонить: /clan deny @ник):"]
+        for r in reqs[:30]:
+            nm, un = storage.user_display(r["user_id"])
+            lines.append(f"• {('@'+un) if un else (nm or r['user_id'])}")
+        await message.reply_text("\n".join(lines), parse_mode="HTML")
+        return
+    if sub in ("accept", "deny", "принять", "отклонить"):
+        target = _resolve_person(storage, arg.split()[0]) if arg else None
+        if not target:
+            await message.reply_text("<code>/clan accept @ник</code> / <code>/clan deny @ник</code>", parse_mode="HTML")
+            return
+        approve = sub in ("accept", "принять")
+        ok, res = storage.clan_request_resolve(uid, target, approve)
+        if ok:
+            await message.reply_text("✅ Заявка одобрена." if res == "approved" else "❌ Заявка отклонена.")
+            if res == "approved":
+                try:
+                    await context.bot.send_message(target, "✅ Твою заявку в клан одобрили! /clan info")
+                except Exception:
+                    pass
+        else:
+            await message.reply_text({"notleader": "Только вождь/офицер.", "norequest": "Нет такой заявки.",
+                                      "full": "Нет мест.", "inclan": "Он уже в клане."}.get(res, "Не вышло."))
+        return
+    if sub in ("promote", "demote", "повысить", "понизить"):
+        target = _resolve_person(storage, arg.split()[0]) if arg else None
+        if not target:
+            await message.reply_text("<code>/clan promote @ник</code> / <code>/clan demote @ник</code>", parse_mode="HTML")
+            return
+        role = "officer" if sub in ("promote", "повысить") else "member"
+        ok, err = storage.clan_set_role(uid, target, role)
+        await message.reply_text((f"🎖 Назначен офицером." if role == "officer" else "Понижен до бойца.") if ok else
+                                 {"notleader": "Только вождь.", "notmember": "Он не в твоём клане."}.get(err, "Не вышло."))
         return
     if sub in ("leave", "выйти"):
         ok, err = storage.leave_clan(uid)
@@ -2231,8 +2298,11 @@ async def _clan_command(message, context, storage: Storage) -> None:
                                   "noclan": "Ты не в клане."}.get(err, "Не вышло."))
         return
     if sub in ("disband", "распустить"):
-        ok, err = storage.disband_clan(uid)
-        await message.reply_text("💥 Клан распущен." if ok else "Только вождь может распустить клан.")
+        ok, refund = storage.disband_clan(uid)
+        if ok:
+            await message.reply_text(f"💥 Клан распущен." + (f" Казна {refund} BED возвращена тебе." if refund else ""))
+        else:
+            await message.reply_text("Только вождь может распустить клан.")
         return
     if sub in ("kick", "кик", "выгнать"):
         target = _resolve_person(storage, arg.split()[0]) if arg else None
@@ -2241,8 +2311,20 @@ async def _clan_command(message, context, storage: Storage) -> None:
             return
         ok, err = storage.kick_member(uid, target)
         await message.reply_text("👢 Готово." if ok else
-                                 {"notleader": "Только вождь.", "notmember": "Он не в твоём клане.",
-                                  "self": "Себя нельзя."}.get(err, "Не вышло."))
+                                 {"notleader": "Только вождь/офицер.", "notmember": "Он не в твоём клане.",
+                                  "self": "Себя нельзя.", "rank": "Нельзя выгнать этого по рангу."}.get(err, "Не вышло."))
+        return
+    if sub in ("open", "открыть"):
+        ok = storage.clan_set_open(uid, True)
+        await message.reply_text("🔓 Клан теперь открытый (вступают сразу)." if ok else "Только вождь.")
+        return
+    if sub in ("close", "закрыть"):
+        ok = storage.clan_set_open(uid, False)
+        await message.reply_text("🔒 Клан теперь по заявкам." if ok else "Только вождь.")
+        return
+    if sub in ("motd", "девиз"):
+        ok, err = storage.rename_clan(uid, motd=arg[:150])
+        await message.reply_text("📢 Девиз обновлён." if ok else "Только вождь.")
         return
     if sub in ("rename", "переименовать"):
         ok, err = storage.rename_clan(uid, name=arg[:24]) if arg else (False, "name")
@@ -2260,23 +2342,45 @@ async def _clan_command(message, context, storage: Storage) -> None:
     if sub in ("deposit", "вложить", "dep"):
         n = int(arg) if arg.isdigit() else 0
         if n <= 0:
-            await message.reply_text("💰 <code>/clan deposit N</code>", parse_mode="HTML")
+            await message.reply_text("💎 <code>/clan deposit N</code> — вложить N BED в казну", parse_mode="HTML")
             return
         ok, res = storage.clan_deposit(uid, n, storage.current_week())
         if ok:
-            storage.add_gxp(uid, n // 20)
-            await message.reply_text(f"💰 Вложено {n} в клан-банк! Растут XP и очки войны.")
+            storage.add_gxp(uid, n)
+            _aura_event(storage, uid, min(n, 20))
+            await message.reply_text(f"💎 Вложено {n} BED в казну клана! Престиж и очки войны растут.")
         else:
-            await message.reply_text({"noclan": "Ты не в клане.", "funds": "Не хватает монет."}.get(res, "Не вышло."))
+            await message.reply_text({"noclan": "Ты не в клане.", "funds": "Не хватает BED."}.get(res, "Не вышло."))
         return
     if sub in ("withdraw", "снять", "wd"):
         n = int(arg) if arg.isdigit() else 0
         ok, err = storage.clan_withdraw(uid, n) if n > 0 else (False, "x")
-        await message.reply_text(f"🏦 Снято {n} из клан-банка." if ok else
-                                 {"notleader": "Только вождь.", "funds": "В клан-банке столько нет."}.get(err, "Не вышло."))
+        await message.reply_text(f"💎 Снято {n} BED из казны." if ok else
+                                 {"notleader": "Только вождь.", "funds": "В казне столько нет."}.get(err, "Не вышло."))
         return
-    await message.reply_text("🏰 Команды клана: create/join/list/members/deposit/withdraw/leave/"
-                             "kick/rename/tag/emblem/disband")
+    if sub in ("upgrade", "улучшить"):
+        ok, res = storage.clan_upgrade(uid, config.CLAN_UPGRADE_COST_BED)
+        if ok:
+            await message.reply_text(f"🏗 Клан улучшен до уровня {res}! Вместимость выросла.")
+        else:
+            if isinstance(res, tuple):
+                await message.reply_text(f"💎 Нужно {res[1]} BED в казне на апгрейд.")
+            else:
+                await message.reply_text("Только вождь.")
+        return
+    if sub in ("warstake", "ставка", "война"):
+        n = int(arg) if arg.isdigit() else 0
+        if n <= 0:
+            await message.reply_text("⚔️ <code>/clan warstake N</code> — поставить N BED из казны в котёл войны недели",
+                                     parse_mode="HTML")
+            return
+        ok, res = storage.clan_warstake(uid, n, storage.current_week())
+        await message.reply_text(f"⚔️ Поставлено {n} BED! Ставка клана в войне: {res} BED. "
+                                 "Победитель недели забирает весь общий котёл." if ok else
+                                 {"notleader": "Только вождь.", "funds": "В казне столько нет."}.get(res, "Не вышло."))
+        return
+    await message.reply_text("🏰 Команды: create/join/list/members/requests/accept/deny/promote/demote/"
+                             "deposit/withdraw/upgrade/warstake/open/close/motd/leave/kick/rename/tag/emblem/disband")
 
 
 _AURA_RANKS = [
@@ -3213,11 +3317,15 @@ def _clan_view(storage: Storage, uid: int):
                 [_cb("⬅️ Назад", "soc:hub", "primary")]]
         return text, InlineKeyboardMarkup(rows)
     rows = [
-        [_cb("💰 +50", "soc:clandep:50", "success"), _cb("💰 +200", "soc:clandep:200", "success"),
-         _cb("💰 +1000", "soc:clandep:1000", "success")],
-        [_cb("👥 Состав", "soc:clanmembers", "primary"), _cb("🚪 Выйти", "soc:clanleave", "danger")],
-        [_cb("🔄", "soc:clan", "primary"), _cb("⬅️ Назад", "soc:hub", "primary")],
+        [_cb("💎 +1", "soc:clandep:1", "success"), _cb("💎 +5", "soc:clandep:5", "success"),
+         _cb("💎 +10", "soc:clandep:10", "success")],
+        [_cb("👥 Состав", "soc:clanmembers", "primary"), _cb("📨 Заявки", "soc:clanreqs", "primary")],
     ]
+    if c["role"] == "leader":
+        rows.append([_cb("🏗 Апгрейд", "soc:clanupg", "primary"),
+                     _cb("⚔️ Ставка войны +5", "soc:clanwar:5", "danger")])
+    rows.append([_cb("🚪 Выйти", "soc:clanleave", "danger"), _cb("🔄", "soc:clan", "primary")])
+    rows.append([_cb("⬅️ Назад", "soc:hub", "primary")])
     return text, InlineKeyboardMarkup(rows)
 
 
@@ -3482,10 +3590,52 @@ async def _social_callback(query, context, storage: Storage) -> None:
         n = int(data[2]) if len(data) > 2 and data[2].isdigit() else 0
         ok, res = storage.clan_deposit(uid, n, storage.current_week()) if n > 0 else (False, "x")
         if ok:
-            storage.add_gxp(uid, n // 20)
-            await query.answer(f"💰 Вложено {n} в клан!", show_alert=True)
+            storage.add_gxp(uid, n)
+            _aura_event(storage, uid, min(n, 20))
+            await query.answer(f"💎 Вложено {n} BED в казну клана!", show_alert=True)
         else:
-            await query.answer({"noclan": "Ты не в клане.", "funds": "Не хватает монет."}.get(res, "Не вышло."),
+            await query.answer({"noclan": "Ты не в клане.", "funds": "Не хватает BED."}.get(res, "Не вышло."),
+                               show_alert=True)
+        await _show(_clan_view(storage, uid))
+        return
+    if op == "clanreqs":
+        c = storage.clan_of(uid)
+        if not c or c["role"] not in ("leader", "officer"):
+            await query.answer("Только вождь/офицер.", show_alert=True)
+            return
+        reqs = storage.clan_requests(c["id"])
+        if not reqs:
+            body = "📨 Заявок нет."
+        else:
+            lines = ["📨 <b>Заявки</b> (одобрить: /clan accept @ник):"]
+            for r in reqs[:30]:
+                nm, un = storage.user_display(r["user_id"])
+                lines.append(f"• {('@'+un) if un else (nm or r['user_id'])}")
+            body = "\n".join(lines)
+        await query.answer()
+        try:
+            await query.edit_message_text(body, parse_mode="HTML",
+                                          reply_markup=InlineKeyboardMarkup([[_cb("⬅️ Назад", "soc:clan", "primary")]]))
+        except Exception:
+            pass
+        return
+    if op == "clanupg":
+        ok, res = storage.clan_upgrade(uid, config.CLAN_UPGRADE_COST_BED)
+        if ok:
+            await query.answer(f"🏗 Клан улучшен до уровня {res}!", show_alert=True)
+        elif isinstance(res, tuple):
+            await query.answer(f"Нужно {res[1]} BED в казне.", show_alert=True)
+        else:
+            await query.answer("Только вождь.", show_alert=True)
+        await _show(_clan_view(storage, uid))
+        return
+    if op == "clanwar":
+        n = int(data[2]) if len(data) > 2 and data[2].isdigit() else 0
+        ok, res = storage.clan_warstake(uid, n, storage.current_week()) if n > 0 else (False, "x")
+        if ok:
+            await query.answer(f"⚔️ Поставлено {n} BED в котёл войны!", show_alert=True)
+        else:
+            await query.answer({"notleader": "Только вождь.", "funds": "В казне столько нет."}.get(res, "Не вышло."),
                                show_alert=True)
         await _show(_clan_view(storage, uid))
         return

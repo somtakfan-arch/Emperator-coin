@@ -354,7 +354,8 @@ async def _reminder_loop(application: Application) -> None:
                         pass
         except Exception:
             logger.exception("Tournament award error")
-        # 🏰 Weekly clan war: reward the top clans of the week that just ended.
+        # 🏰 Weekly clan war: winner takes the real-BED prize pool (staked by
+        # all clans), split among its members by contribution.
         try:
             cur_week = storage.current_week()
             last = storage.get_setting("clanwar_last_week")
@@ -362,22 +363,33 @@ async def _reminder_loop(application: Application) -> None:
             if last is None:
                 storage.set_setting("clanwar_last_week", str(cur_week))
             elif cur_week > last:
-                winners = storage.clan_war_top(week=last, limit=len(config.CLAN_WAR_PRIZES_ULTRA))
                 storage.set_setting("clanwar_last_week", str(cur_week))
-                medals = ["🥇", "🥈", "🥉"]
-                for i, cw in enumerate(winners):
-                    days = config.CLAN_WAR_PRIZES_ULTRA[i]
-                    for m in storage.clan_members(cw["clan_id"]):
-                        storage.grant_ultra_days(m["user_id"], days)
+                res = storage.settle_clan_war(week=last)
+                if res:
+                    share_by = dict(res["shares"])
+                    for muid, amt in res["shares"]:
                         try:
                             await application.bot.send_message(
-                                chat_id=m["user_id"],
-                                text=(f"⚔️ Итоги клан-войны! {medals[i]} {cw['emblem']} <b>{cw['name']}</b> "
-                                      f"занял {i+1} место ({cw['points']} очков) — каждому бойцу "
-                                      f"<b>{days} дн. ULTRA</b>! Новая неделя войны пошла 🏰"),
+                                chat_id=muid,
+                                text=(f"⚔️ <b>Победа в клан-войне!</b> {res['emblem']} {res['name']} "
+                                      f"забрал котёл {res['pot']} 💎 BED — твоя доля <b>{amt} BED</b>! 🏆"),
                                 parse_mode="HTML")
                         except Exception:
                             pass
+                    # notify losing-clan leaders they lost their stake
+                    for cw in storage.clan_war_top(week=last, limit=50):
+                        if cw["clan_id"] == res["winner_clan"]:
+                            continue
+                        ldr = next((m["user_id"] for m in storage.clan_members(cw["clan_id"])
+                                    if m["role"] == "leader"), None)
+                        if ldr and storage.clan_war_staked(cw["clan_id"], last) > 0:
+                            try:
+                                await application.bot.send_message(
+                                    chat_id=ldr,
+                                    text=f"⚔️ Клан-война окончена. {res['emblem']} {res['name']} победил и забрал котёл. "
+                                         "Ставка сгорела — в следующий раз! 🏰")
+                            except Exception:
+                                pass
         except Exception:
             logger.exception("Clan war award error")
         # Price alerts + hourly price history for the chart.

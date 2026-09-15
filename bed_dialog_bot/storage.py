@@ -303,7 +303,10 @@ CREATE TABLE IF NOT EXISTS clans (
     leader_id INTEGER NOT NULL,
     bank INTEGER NOT NULL DEFAULT 0,
     xp INTEGER NOT NULL DEFAULT 0,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    level INTEGER NOT NULL DEFAULT 0,
+    open INTEGER NOT NULL DEFAULT 1,
+    motd TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS clan_members (
@@ -314,10 +317,17 @@ CREATE TABLE IF NOT EXISTS clan_members (
     joined_at INTEGER NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS clan_requests (
+    user_id INTEGER PRIMARY KEY,
+    clan_id INTEGER NOT NULL,
+    at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS clan_war (
     clan_id INTEGER NOT NULL,
     week INTEGER NOT NULL,
     points INTEGER NOT NULL DEFAULT 0,
+    staked INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (clan_id, week)
 );
 
@@ -741,6 +751,17 @@ class Storage:
         meta_cols = {r[1] for r in conn.execute("PRAGMA table_info(id_meta)")}
         if meta_cols and "xp" not in meta_cols:
             conn.execute("ALTER TABLE id_meta ADD COLUMN xp INTEGER NOT NULL DEFAULT 0")
+        clan_cols = {r[1] for r in conn.execute("PRAGMA table_info(clans)")}
+        if clan_cols:
+            if "level" not in clan_cols:
+                conn.execute("ALTER TABLE clans ADD COLUMN level INTEGER NOT NULL DEFAULT 0")
+            if "open" not in clan_cols:
+                conn.execute("ALTER TABLE clans ADD COLUMN open INTEGER NOT NULL DEFAULT 1")
+            if "motd" not in clan_cols:
+                conn.execute("ALTER TABLE clans ADD COLUMN motd TEXT NOT NULL DEFAULT ''")
+        cw_cols = {r[1] for r in conn.execute("PRAGMA table_info(clan_war)")}
+        if cw_cols and "staked" not in cw_cols:
+            conn.execute("ALTER TABLE clan_war ADD COLUMN staked INTEGER NOT NULL DEFAULT 0")
         # Backfill couple rows for marriages made before the couples table existed.
         try:
             existing = {r[0] for r in conn.execute("SELECT pair FROM couples")}
@@ -2636,24 +2657,33 @@ class Storage:
 
     # --- 🏰 Clans ---
 
+    def clan_acc(self, clan_id: int) -> int:
+        from . import config as _cfg
+        return _cfg.CLAN_ACCOUNT_BASE + int(clan_id)
+
+    def clan_treasury(self, clan_id: int) -> int:
+        """Real BED held by the clan (custodial account)."""
+        return self.get_bed(self.clan_acc(clan_id))
+
     def clan_of(self, user_id: int):
         with self._connect() as conn:
             r = conn.execute(
                 "SELECT c.id, c.name, c.tag, c.emblem, c.leader_id, c.bank, c.xp, c.created_at, "
-                "m.role, m.contributed FROM clan_members m JOIN clans c ON m.clan_id=c.id "
-                "WHERE m.user_id=?", (user_id,)).fetchone()
+                "c.level, c.open, c.motd, m.role, m.contributed "
+                "FROM clan_members m JOIN clans c ON m.clan_id=c.id WHERE m.user_id=?", (user_id,)).fetchone()
         if not r:
             return None
         return dict(zip(("id", "name", "tag", "emblem", "leader_id", "bank", "xp", "created_at",
-                         "role", "contributed"), r))
+                         "level", "open", "motd", "role", "contributed"), r))
 
     def clan_get(self, clan_id: int):
         with self._connect() as conn:
-            r = conn.execute("SELECT id, name, tag, emblem, leader_id, bank, xp, created_at "
-                             "FROM clans WHERE id=?", (clan_id,)).fetchone()
+            r = conn.execute("SELECT id, name, tag, emblem, leader_id, bank, xp, created_at, "
+                             "level, open, motd FROM clans WHERE id=?", (clan_id,)).fetchone()
         if not r:
             return None
-        return dict(zip(("id", "name", "tag", "emblem", "leader_id", "bank", "xp", "created_at"), r))
+        return dict(zip(("id", "name", "tag", "emblem", "leader_id", "bank", "xp", "created_at",
+                         "level", "open", "motd"), r))
 
     def clan_by_name(self, name: str):
         with self._connect() as conn:
@@ -2679,35 +2709,103 @@ class Storage:
                 "GROUP BY c.id ORDER BY c.created_at DESC LIMIT ?", (limit,)).fetchall()
         return [dict(zip(("id", "name", "emblem", "xp", "members"), r)) for r in rows]
 
-    def create_clan(self, user_id: int, name: str, tag: str, emblem: str, cost: int):
+    def create_clan(self, user_id: int, name: str, tag: str, emblem: str, cost_bed: int):
+        """Found a clan for a real BED fee (goes to the fresh clan treasury)."""
         with self._connect() as conn:
             if conn.execute("SELECT 1 FROM clan_members WHERE user_id=?", (user_id,)).fetchone():
                 return None, "inclan"
             if conn.execute("SELECT 1 FROM clans WHERE name=? COLLATE NOCASE", (name,)).fetchone():
                 return None, "name"
-            w = conn.execute("SELECT wallet FROM coins WHERE user_id=?", (user_id,)).fetchone()
-            if not w or w[0] < cost:
-                return None, "funds"
-            conn.execute("UPDATE coins SET wallet = wallet - ? WHERE user_id=?", (cost, user_id))
+            if not self.is_test_account(user_id):
+                w = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (user_id,)).fetchone()
+                if not w or w[0] < cost_bed:
+                    return None, "funds"
+                conn.execute("UPDATE bed_balances SET balance = balance - ? WHERE user_id=?", (cost_bed, user_id))
+                self._ledger(conn, user_id, -cost_bed, "clan_create")
             cur = conn.execute(
-                "INSERT INTO clans (name, tag, emblem, leader_id, created_at) VALUES (?, ?, ?, ?, ?)",
-                (name, tag[:5], emblem[:4] or "🏰", user_id, int(time.time())))
+                "INSERT INTO clans (name, tag, emblem, leader_id, bank, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (name, tag[:5], emblem[:4] or "🏰", user_id, cost_bed, int(time.time())))
             cid = cur.lastrowid
             conn.execute("INSERT INTO clan_members (user_id, clan_id, role, joined_at) VALUES (?, ?, 'leader', ?)",
                          (user_id, cid, int(time.time())))
+            # seed the treasury (custodial account) with the founding fee
+            from . import config as _cfg
+            self._credit(conn, _cfg.CLAN_ACCOUNT_BASE + cid, cost_bed)
         return cid, None
 
-    def join_clan(self, user_id: int, clan_id: int, max_members: int):
+    def clan_cap(self, clan_id: int) -> int:
+        from . import config as _cfg
+        c = self.clan_get(clan_id)
+        lvl = c["level"] if c else 0
+        return _cfg.CLAN_MAX_MEMBERS + lvl * _cfg.CLAN_MEMBERS_PER_LEVEL
+
+    def join_clan(self, user_id: int, clan_id: int):
+        """Open clan → instant join. Closed clan → creates a join request."""
         with self._connect() as conn:
             if conn.execute("SELECT 1 FROM clan_members WHERE user_id=?", (user_id,)).fetchone():
                 return False, "inclan"
-            if not conn.execute("SELECT 1 FROM clans WHERE id=?", (clan_id,)).fetchone():
+            c = conn.execute("SELECT open FROM clans WHERE id=?", (clan_id,)).fetchone()
+            if not c:
                 return False, "gone"
             n = conn.execute("SELECT COUNT(*) FROM clan_members WHERE clan_id=?", (clan_id,)).fetchone()[0]
-            if n >= max_members:
+            if n >= self.clan_cap(clan_id):
                 return False, "full"
+            if not c[0]:  # closed → request
+                conn.execute("INSERT INTO clan_requests (user_id, clan_id, at) VALUES (?, ?, ?) "
+                             "ON CONFLICT(user_id) DO UPDATE SET clan_id=excluded.clan_id, at=excluded.at",
+                             (user_id, clan_id, int(time.time())))
+                return False, "requested"
             conn.execute("INSERT INTO clan_members (user_id, clan_id, role, joined_at) VALUES (?, ?, 'member', ?)",
                          (user_id, clan_id, int(time.time())))
+        return True, None
+
+    def clan_requests(self, clan_id: int):
+        with self._connect() as conn:
+            rows = conn.execute("SELECT user_id, at FROM clan_requests WHERE clan_id=? ORDER BY at",
+                                (clan_id,)).fetchall()
+        return [{"user_id": r[0], "at": r[1]} for r in rows]
+
+    def clan_request_resolve(self, officer: int, target: int, approve: bool):
+        with self._connect() as conn:
+            orow = conn.execute("SELECT clan_id, role FROM clan_members WHERE user_id=?", (officer,)).fetchone()
+            if not orow or orow[1] not in ("leader", "officer"):
+                return False, "notleader"
+            cid = orow[0]
+            req = conn.execute("SELECT clan_id FROM clan_requests WHERE user_id=?", (target,)).fetchone()
+            if not req or req[0] != cid:
+                return False, "norequest"
+            conn.execute("DELETE FROM clan_requests WHERE user_id=?", (target,))
+            if not approve:
+                return True, "denied"
+            if conn.execute("SELECT 1 FROM clan_members WHERE user_id=?", (target,)).fetchone():
+                return False, "inclan"
+            n = conn.execute("SELECT COUNT(*) FROM clan_members WHERE clan_id=?", (cid,)).fetchone()[0]
+            if n >= self.clan_cap(cid):
+                return False, "full"
+            conn.execute("INSERT INTO clan_members (user_id, clan_id, role, joined_at) VALUES (?, ?, 'member', ?)",
+                         (target, cid, int(time.time())))
+        return True, "approved"
+
+    def clan_set_open(self, leader: int, is_open: bool):
+        with self._connect() as conn:
+            lr = conn.execute("SELECT clan_id, role FROM clan_members WHERE user_id=?", (leader,)).fetchone()
+            if not lr or lr[1] != "leader":
+                return False
+            conn.execute("UPDATE clans SET open=? WHERE id=?", (1 if is_open else 0, lr[0]))
+        return True
+
+    def clan_set_role(self, leader: int, target: int, role: str):
+        """Leader promotes/demotes a member between 'officer' and 'member'."""
+        with self._connect() as conn:
+            lr = conn.execute("SELECT clan_id, role FROM clan_members WHERE user_id=?", (leader,)).fetchone()
+            if not lr or lr[1] != "leader":
+                return False, "notleader"
+            tr = conn.execute("SELECT clan_id, role FROM clan_members WHERE user_id=?", (target,)).fetchone()
+            if not tr or tr[0] != lr[0] or target == leader:
+                return False, "notmember"
+            if role not in ("officer", "member"):
+                return False, "role"
+            conn.execute("UPDATE clan_members SET role=? WHERE user_id=?", (role, target))
         return True, None
 
     def leave_clan(self, user_id: int):
@@ -2720,18 +2818,42 @@ class Storage:
             conn.execute("DELETE FROM clan_members WHERE user_id=?", (user_id,))
         return True, None
 
-    def kick_member(self, leader: int, target: int):
+    def kick_member(self, actor: int, target: int):
+        """Leader or officer kicks a plain member (not another officer/leader)."""
+        with self._connect() as conn:
+            ar = conn.execute("SELECT clan_id, role FROM clan_members WHERE user_id=?", (actor,)).fetchone()
+            if not ar or ar[1] not in ("leader", "officer"):
+                return False, "notleader"
+            tr = conn.execute("SELECT clan_id, role FROM clan_members WHERE user_id=?", (target,)).fetchone()
+            if not tr or tr[0] != ar[0]:
+                return False, "notmember"
+            if target == actor:
+                return False, "self"
+            if tr[1] != "member" and ar[1] != "leader":
+                return False, "rank"  # only leader can remove officers
+            if tr[1] == "leader":
+                return False, "rank"
+            conn.execute("DELETE FROM clan_members WHERE user_id=?", (target,))
+        return True, None
+
+    def clan_upgrade(self, leader: int, cost_base: int):
+        """Leader spends treasury BED to raise the clan level (member cap +perks)."""
         with self._connect() as conn:
             lr = conn.execute("SELECT clan_id, role FROM clan_members WHERE user_id=?", (leader,)).fetchone()
             if not lr or lr[1] != "leader":
                 return False, "notleader"
-            tr = conn.execute("SELECT clan_id FROM clan_members WHERE user_id=?", (target,)).fetchone()
-            if not tr or tr[0] != lr[0]:
-                return False, "notmember"
-            if target == leader:
-                return False, "self"
-            conn.execute("DELETE FROM clan_members WHERE user_id=?", (target,))
-        return True, None
+            cid = lr[0]
+            c = conn.execute("SELECT level FROM clans WHERE id=?", (cid,)).fetchone()
+            level = c[0]
+            cost = cost_base * (level + 1)
+            acc = self.clan_acc(cid)
+            bal = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (acc,)).fetchone()
+            if not bal or bal[0] < cost:
+                return False, ("funds", cost)
+            conn.execute("UPDATE bed_balances SET balance = balance - ? WHERE user_id=?", (cost, acc))
+            self._ledger(conn, acc, -cost, "clan_upgrade")
+            conn.execute("UPDATE clans SET level = level + 1, bank = bank - ? WHERE id=?", (cost, cid))
+        return True, level + 1
 
     def disband_clan(self, leader: int):
         with self._connect() as conn:
@@ -2739,12 +2861,20 @@ class Storage:
             if not lr or lr[1] != "leader":
                 return False, "notleader"
             cid = lr[0]
+            acc = self.clan_acc(cid)
+            bal = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (acc,)).fetchone()
+            refund = bal[0] if bal else 0
+            if refund > 0:  # return the treasury BED to the leader
+                conn.execute("UPDATE bed_balances SET balance = 0 WHERE user_id=?", (acc,))
+                self._credit(conn, leader, refund)
             conn.execute("DELETE FROM clan_members WHERE clan_id=?", (cid,))
             conn.execute("DELETE FROM clans WHERE id=?", (cid,))
             conn.execute("DELETE FROM clan_war WHERE clan_id=?", (cid,))
-        return True, None
+            conn.execute("DELETE FROM clan_requests WHERE clan_id=?", (cid,))
+        return True, refund
 
-    def rename_clan(self, leader: int, name: str = None, tag: str = None, emblem: str = None):
+    def rename_clan(self, leader: int, name: str = None, tag: str = None, emblem: str = None,
+                    motd: str = None):
         with self._connect() as conn:
             lr = conn.execute("SELECT clan_id, role FROM clan_members WHERE user_id=?", (leader,)).fetchone()
             if not lr or lr[1] != "leader":
@@ -2758,19 +2888,24 @@ class Storage:
                 conn.execute("UPDATE clans SET tag=? WHERE id=?", (tag[:5], lr[0]))
             if emblem is not None:
                 conn.execute("UPDATE clans SET emblem=? WHERE id=?", (emblem[:4] or "🏰", lr[0]))
+            if motd is not None:
+                conn.execute("UPDATE clans SET motd=? WHERE id=?", (motd, lr[0]))
         return True, None
 
     def clan_deposit(self, user_id: int, amount: int, week: int):
-        """Contribute wallet coins to the clan bank; grows clan xp + war points."""
+        """Contribute REAL BED to the clan treasury; grows xp + war points."""
         with self._connect() as conn:
             m = conn.execute("SELECT clan_id FROM clan_members WHERE user_id=?", (user_id,)).fetchone()
             if not m:
                 return False, "noclan"
-            w = conn.execute("SELECT wallet FROM coins WHERE user_id=?", (user_id,)).fetchone()
-            if not w or w[0] < amount:
-                return False, "funds"
             cid = m[0]
-            conn.execute("UPDATE coins SET wallet = wallet - ? WHERE user_id=?", (amount, user_id))
+            if not self.is_test_account(user_id):
+                w = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (user_id,)).fetchone()
+                if not w or w[0] < amount:
+                    return False, "funds"
+                conn.execute("UPDATE bed_balances SET balance = balance - ? WHERE user_id=?", (amount, user_id))
+                self._ledger(conn, user_id, -amount, f"clan_deposit:{cid}")
+            self._credit(conn, self.clan_acc(cid), amount)  # BED held in the clan treasury
             conn.execute("UPDATE clans SET bank = bank + ?, xp = xp + ? WHERE id=?", (amount, amount, cid))
             conn.execute("UPDATE clan_members SET contributed = contributed + ? WHERE user_id=?",
                          (amount, user_id))
@@ -2780,18 +2915,85 @@ class Storage:
         return True, cid
 
     def clan_withdraw(self, leader: int, amount: int):
+        """Leader withdraws REAL BED from the treasury to their own balance."""
         with self._connect() as conn:
             lr = conn.execute("SELECT clan_id, role FROM clan_members WHERE user_id=?", (leader,)).fetchone()
             if not lr or lr[1] != "leader":
                 return False, "notleader"
-            c = conn.execute("SELECT bank FROM clans WHERE id=?", (lr[0],)).fetchone()
-            if not c or c[0] < amount:
+            cid = lr[0]
+            acc = self.clan_acc(cid)
+            bal = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (acc,)).fetchone()
+            if not bal or bal[0] < amount:
                 return False, "funds"
-            conn.execute("UPDATE clans SET bank = bank - ? WHERE id=?", (amount, lr[0]))
-            conn.execute("INSERT INTO coins (user_id, wallet) VALUES (?, ?) "
-                         "ON CONFLICT(user_id) DO UPDATE SET wallet = wallet + excluded.wallet",
-                         (leader, amount))
+            conn.execute("UPDATE bed_balances SET balance = balance - ? WHERE user_id=?", (amount, acc))
+            self._ledger(conn, acc, -amount, "clan_withdraw")
+            self._credit(conn, leader, amount)
+            conn.execute("UPDATE clans SET bank = bank - ? WHERE id=?", (amount, cid))
         return True, None
+
+    def clan_warstake(self, leader: int, amount: int, week: int):
+        """Leader stakes REAL BED from the treasury into the weekly war pot."""
+        from . import config as _cfg
+        with self._connect() as conn:
+            lr = conn.execute("SELECT clan_id, role FROM clan_members WHERE user_id=?", (leader,)).fetchone()
+            if not lr or lr[1] != "leader":
+                return False, "notleader"
+            cid = lr[0]
+            acc = self.clan_acc(cid)
+            bal = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (acc,)).fetchone()
+            if not bal or bal[0] < amount:
+                return False, "funds"
+            conn.execute("UPDATE bed_balances SET balance = balance - ? WHERE user_id=?", (amount, acc))
+            self._ledger(conn, acc, -amount, "clan_warstake")
+            self._credit(conn, _cfg.CLAN_WAR_POT_ID, amount)
+            conn.execute("UPDATE clans SET bank = bank - ? WHERE id=?", (amount, cid))
+            conn.execute("INSERT INTO clan_war (clan_id, week, staked) VALUES (?, ?, ?) "
+                         "ON CONFLICT(clan_id, week) DO UPDATE SET staked = staked + excluded.staked",
+                         (cid, week, amount))
+            tot = conn.execute("SELECT staked FROM clan_war WHERE clan_id=? AND week=?", (cid, week)).fetchone()
+        return True, tot[0]
+
+    def settle_clan_war(self, week: int):
+        """Pay the whole weekly war pot to the winning clan's members (by
+        contribution). Winner = most war points among clans that staked."""
+        from . import config as _cfg
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT clan_id, points, staked FROM clan_war WHERE week=? AND staked > 0", (week,)).fetchall()
+            if not rows:
+                return None
+            pot = sum(r[2] for r in rows)
+            winner = max(rows, key=lambda r: (r[1], r[2]))
+            wcid = winner[0]
+            pot_acc = _cfg.CLAN_WAR_POT_ID
+            pbal = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (pot_acc,)).fetchone()
+            pot = min(pot, pbal[0] if pbal else 0)
+            if pot <= 0:
+                return None
+            members = conn.execute(
+                "SELECT user_id, contributed FROM clan_members WHERE clan_id=? ORDER BY contributed DESC",
+                (wcid,)).fetchall()
+            if not members:
+                return None
+            total_c = sum(m[1] for m in members) or 0
+            shares = []
+            paid = 0
+            for i, (muid, mc) in enumerate(members):
+                if total_c > 0:
+                    amt = pot * mc // total_c
+                else:
+                    amt = pot // len(members)
+                shares.append([muid, amt])
+                paid += amt
+            shares[0][1] += pot - paid  # remainder to top contributor
+            conn.execute("UPDATE bed_balances SET balance = balance - ? WHERE user_id=?", (pot, pot_acc))
+            self._ledger(conn, pot_acc, -pot, "clan_war_payout")
+            for muid, amt in shares:
+                if amt > 0:
+                    self._credit(conn, muid, amt)
+            wc = conn.execute("SELECT name, emblem FROM clans WHERE id=?", (wcid,)).fetchone()
+        return {"winner_clan": wcid, "name": wc[0] if wc else "?", "emblem": wc[1] if wc else "🏰",
+                "pot": pot, "shares": [(u, a) for u, a in shares if a > 0]}
 
     def clan_add_xp(self, clan_id: int, amount: int, week: int):
         with self._connect() as conn:
@@ -2810,6 +3012,11 @@ class Storage:
     def clan_war_points(self, clan_id: int, week: int) -> int:
         with self._connect() as conn:
             r = conn.execute("SELECT points FROM clan_war WHERE clan_id=? AND week=?", (clan_id, week)).fetchone()
+        return r[0] if r else 0
+
+    def clan_war_staked(self, clan_id: int, week: int) -> int:
+        with self._connect() as conn:
+            r = conn.execute("SELECT staked FROM clan_war WHERE clan_id=? AND week=?", (clan_id, week)).fetchone()
         return r[0] if r else 0
 
     # --- 💞 Marriage · ⭐ reputation · 🎚 global XP ---

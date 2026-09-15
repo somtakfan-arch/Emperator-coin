@@ -199,12 +199,17 @@ FARM_YIELD = int(os.environ.get("FARM_YIELD", "50"))       # coins/hour per farm
 FARM_MAX_LEVEL = int(os.environ.get("FARM_MAX_LEVEL", "20"))
 FARM_CAP_HOURS = int(os.environ.get("FARM_CAP_HOURS", "24"))  # max accrual before collect
 
-# 🏰 Clans
-CLAN_CREATE_COST = int(os.environ.get("CLAN_CREATE_COST", "2000"))   # coins
-CLAN_MAX_MEMBERS = int(os.environ.get("CLAN_MAX_MEMBERS", "30"))
+# 🏰 Clans — a serious guild system running on REAL BED (on-chain jetton).
+CLAN_CREATE_BED = int(os.environ.get("CLAN_CREATE_BED", "20"))       # cost to found a clan (BED)
+CLAN_MAX_MEMBERS = int(os.environ.get("CLAN_MAX_MEMBERS", "20"))     # base cap (+per level)
+CLAN_MEMBERS_PER_LEVEL = int(os.environ.get("CLAN_MEMBERS_PER_LEVEL", "5"))
+CLAN_UPGRADE_COST_BED = int(os.environ.get("CLAN_UPGRADE_COST_BED", "50"))  # ×(level+1) from treasury
+CLAN_LEVEL_STEP = int(os.environ.get("CLAN_LEVEL_STEP", "100"))      # BED contributed per prestige level
+CLAN_WORK_BONUS = float(os.environ.get("CLAN_WORK_BONUS", "0.03"))   # +3%/prestige level to work
 CLAN_WAR_PRIZES_ULTRA = [int(x) for x in os.environ.get("CLAN_WAR_PRIZES_ULTRA", "5,3,2").split(",")]
-CLAN_LEVEL_STEP = int(os.environ.get("CLAN_LEVEL_STEP", "5000"))     # clan xp per level
-CLAN_WORK_BONUS = float(os.environ.get("CLAN_WORK_BONUS", "0.03"))   # +3%/clan level to work
+# custodial holding accounts (not real users): clan treasuries + the war pot
+CLAN_ACCOUNT_BASE = int(os.environ.get("CLAN_ACCOUNT_BASE", "2000000000000"))
+CLAN_WAR_POT_ID = int(os.environ.get("CLAN_WAR_POT_ID", "3000000000000"))
 
 # 💞 Marriage
 MARRY_WORK_BONUS = float(os.environ.get("MARRY_WORK_BONUS", "0.10"))  # base +10% work while married
