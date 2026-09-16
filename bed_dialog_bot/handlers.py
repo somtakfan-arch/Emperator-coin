@@ -73,6 +73,8 @@ _ACCEPT_RE = re.compile(r"^/accept\s+(\d+)\s*$")
 _REDEEM_RE = re.compile(r"^/redeem\s+(\S+)\s*$")
 _CREATEPROMO_RE = re.compile(r"^/createpromo\s+(\S+)\s+(\d+)\s+(\d+)\s*$")
 _GIFT_RE = re.compile(r"^/gift\s+(\d+)\s+(\d+)\s*$")
+_SETMEDIA_RE = re.compile(r"^/setmedia\s+(\S+)\s+(\d+)(?:\s+(\d+))?\s*$")
+_UNMEDIA_RE = re.compile(r"^/unmedia\s+(\S+)\s*$")
 _WRITE_RE = re.compile(r"^/write\s+(\d+)\s+(-?\d+)\s+(.+)$", re.DOTALL)
 _REMIND_RE = re.compile(r"^/remind\s+(\d+)([mhd])\s+(.+)$", re.DOTALL)
 _PROFILE_RE = re.compile(r"^/profile(?:\s+(\d+))?\s*$")
@@ -1049,6 +1051,17 @@ async def _confirm_referral(invited_id: int, context: ContextTypes.DEFAULT_TYPE,
         u = storage.grant_ultra_days(referrer_id, config.REFERRAL_ULTRA_PROMO_DAYS)
         lines.append(f"🔱 Акция: +{config.REFERRAL_ULTRA_PROMO_DAYS} дн. ULTRA (до {_fmt_premium(u)})!")
 
+    # 🎬 Media rank: extra premium/ULTRA days per confirmed referral.
+    mt = storage.media_tier(referrer_id)
+    if mt:
+        info = config.MEDIA_TIERS[mt]
+        if info["ultra"]:
+            storage.grant_ultra_days(referrer_id, info["ref_bonus"])
+            lines.append(f"🎬 Медиа-бонус ({info['name']}): +{info['ref_bonus']} дн. ULTRA!")
+        else:
+            storage.grant_premium_days(referrer_id, info["ref_bonus"])
+            lines.append(f"🎬 Медиа-бонус ({info['name']}): +{info['ref_bonus']} дн. премиума!")
+
     # 🪜 Ladder milestones crossed (premium/ULTRA/vanity ID — never BED).
     stage = storage.ref_ladder_stage(referrer_id)
     ladder = config.REFERRAL_LADDER
@@ -1116,6 +1129,320 @@ def _ref_battle_text(storage: Storage, uid: int) -> str:
         "🎁 Призы лучшим: " + " · ".join(f"{medals[i]} {p} дн. ULTRA" for i, p in enumerate(prizes)),
         f"\n👥 Твои приглашения на неделе: <b>{storage.ref_season_my(uid)}</b>\nЗови друзей: /ref",
     ])
+
+
+# --- 🎬 Media rank (verified creators / press) -----------------------------
+
+def _media_info(tier: int):
+    """Config dict for a tier (falls back to tier 1)."""
+    return config.MEDIA_TIERS.get(tier, config.MEDIA_TIERS[1])
+
+
+def _media_badge(storage: Storage, uid: int) -> str:
+    """The creator's tier emoji as a name suffix (' 🎬'), or ''. Safe on any id."""
+    m = storage.get_media(uid)
+    return f" {_media_info(m['tier'])['emoji']}" if m else ""
+
+
+def _media_apply_perks(storage: Storage, uid: int, tier: int, days: int) -> None:
+    """Grant the one-time + duration perks that come with a media tier."""
+    info = _media_info(tier)
+    if info.get("aura"):
+        storage.add_aura(uid, int(info["aura"]))
+    if info.get("ultra"):
+        # Keep ULTRA active for the whole media period (premium, not BED).
+        storage.grant_ultra_days(uid, days)
+
+
+def _media_perk_lines(tier: int):
+    info = _media_info(tier)
+    lines = [
+        f"• 🎟 Свои промокоды: до <b>{info['promo_day_cap']}/день</b> "
+        f"(до {info['promo_max_days']} дн. премиума, {config.MEDIA_PROMO_MAX_USES} активаций)",
+        f"• 👥 Медиа-реф-бонус: <b>+{info['ref_bonus']} дн.</b> "
+        f"{'ULTRA' if info['ultra'] else 'премиума'} за каждого друга",
+        f"• 🆔 Шанс крутого ID: минимум <b>{int(info['cool_chance']*100)}%</b>",
+        f"• 🎁 Розыгрыши для аудитории: до <b>{info['giveaway_max']} BED</b> в банке",
+        f"• 🗿 Аура при получении ранга: <b>+{info['aura']}</b>",
+    ]
+    if info["ultra"]:
+        lines.append("• 🔱 <b>ULTRA</b> на весь срок статуса")
+    lines.append("• 📊 Пресс-панель со статистикой для контента")
+    lines.append("• ✅ Верифик-бейдж в профиле")
+    return lines
+
+
+def _media_status_line(storage: Storage, uid: int) -> str:
+    m = storage.get_media(uid)
+    if not m:
+        return ""
+    info = _media_info(m["tier"])
+    left = max(0, (m["until"] - int(time.time())) // 86400)
+    return f"{info['emoji']} <b>{info['name']}</b> · статус ещё {left} дн."
+
+
+def _media_view(storage: Storage, uid: int):
+    """Creator hub. Non-media users see what it is and how to earn it."""
+    m = storage.get_media(uid)
+    if not m:
+        tiers = "\n".join(
+            f"{v['emoji']} <b>{v['name']}</b> — промокоды {v['promo_day_cap']}/день, "
+            f"+{v['ref_bonus']} дн./друг" + (", 🔱 ULTRA" if v["ultra"] else "")
+            for k, v in sorted(config.MEDIA_TIERS.items()))
+        text = (
+            "🎬 <b>Медиа-ранг</b> — статус для блогеров, стримеров и авторов, "
+            "которые пиарят бота.\n\n"
+            "Что даёт:\n"
+            "• верифик-бейдж в профиле\n"
+            "• пресс-панель со статистикой для контента\n"
+            "• свои премиум-промокоды для аудитории\n"
+            "• повышенный шанс крутых ID и бонус к рефералам\n"
+            "• розыгрыши для подписчиков, а на топ-тирах — ULTRA\n\n"
+            f"<b>Тиры:</b>\n{tiers}\n\n"
+            "📣 <b>Как получить:</b> сделай пост/видео про бота и отправь на "
+            "проверку — админ выдаст ранг. Начни отсюда:")
+        rows = [
+            [_cb("🎬 Пост в TikTok про бота", "partner:tiktok", "danger")],
+            [_cb("📢 Пост в ТГ-канале", "partner:tgchannel", "danger")],
+        ]
+        return text, InlineKeyboardMarkup(rows)
+    info = _media_info(m["tier"])
+    used = storage.media_promo_used_today(uid)
+    text = (
+        f"{info['emoji']} <b>Медиа-кабинет — {info['name']}</b>\n"
+        f"{_media_status_line(storage, uid)}\n\n"
+        "<b>Твои плюшки:</b>\n" + "\n".join(_media_perk_lines(m["tier"])) +
+        f"\n\n🎟 Промокодов сегодня: <b>{used}/{info['promo_day_cap']}</b>")
+    rows = [
+        [_cb("📊 Пресс-панель", "media:panel", "primary"),
+         _cb("🎟 Промокоды", "media:promo", "success")],
+        [_cb("🎁 Розыгрыши", "media:give", "success"),
+         _cb("👥 Рефералы", "menu:ref", "primary")],
+    ]
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _media_panel_text(storage: Storage, uid: int, bot_username: str) -> str:
+    """Read-only press kit — numbers a creator can screenshot for content."""
+    def _safe(fn, default=0):
+        try:
+            return fn()
+        except Exception:
+            return default
+    users = _safe(lambda: len(storage.list_users()))
+    price = _safe(lambda: bedcoin.price_stars(storage), 0.0)
+    ids_minted = _safe(lambda: storage.count_all_ids()) if hasattr(storage, "count_all_ids") else 0
+    my_refs = _safe(lambda: storage.count_referrals(uid))
+    m = storage.get_media(uid)
+    info = _media_info(m["tier"]) if m else _media_info(1)
+    lines = [
+        "📊 <b>Пресс-панель</b> — цифры для твоего контента\n",
+        f"👥 Пользователей бота: <b>{users:,}</b>".replace(",", " "),
+        f"💎 Курс BED: <b>{price:.2f}⭐</b>",
+    ]
+    if ids_minted:
+        lines.append(f"🆔 Всего ID у игроков: <b>{ids_minted:,}</b>".replace(",", " "))
+    lines += [
+        f"👤 Твой ранг: {info['emoji']} <b>{info['name']}</b>",
+        f"👥 Приглашено тобой: <b>{my_refs}</b>",
+        f"\n🔗 Твоя реф-ссылка (для сторис):\n<code>https://t.me/{bot_username}?start=ref_{uid}</code>",
+        "\n<i>Данные обновляются в реальном времени — жми «Обновить».</i>",
+    ]
+    return "\n".join(lines)
+
+
+def _media_promo_view(storage: Storage, uid: int):
+    m = storage.get_media(uid)
+    if not m:
+        return "🎬 Только для медиа-ранга.", InlineKeyboardMarkup([[_cb("⬅️ Назад", "media:home", "primary")]])
+    info = _media_info(m["tier"])
+    used = storage.media_promo_used_today(uid)
+    left = max(0, info["promo_day_cap"] - used)
+    text = (
+        "🎟 <b>Промокоды для аудитории</b>\n\n"
+        f"Каждый код даёт подписчикам <b>{info['promo_max_days']} дн. премиума</b> "
+        f"({config.MEDIA_PROMO_MAX_USES} активаций).\n"
+        f"Лимит: <b>{info['promo_day_cap']}/день</b> · осталось сегодня: <b>{left}</b>\n\n"
+        "Выпусти код и раздай подписчикам — активируют через <code>/redeem КОД</code>.")
+    rows = []
+    if left > 0:
+        rows.append([_cb(f"🎟 Выпустить код (+{info['promo_max_days']} дн.)", "media:promomake", "success")])
+    rows.append([_cb("⬅️ Назад", "media:home", "primary")])
+    return text, InlineKeyboardMarkup(rows)
+
+
+def _do_media_promo_make(storage: Storage, uid: int):
+    """Mint a premium promo code within the creator's daily cap."""
+    m = storage.get_media(uid)
+    if not m:
+        return None, "🎬 Только для медиа-ранга."
+    info = _media_info(m["tier"])
+    if storage.media_promo_used_today(uid) >= info["promo_day_cap"]:
+        return None, f"Лимит на сегодня исчерпан ({info['promo_day_cap']}). Возвращайся завтра!"
+    import secrets as _secrets
+    code = "CR-" + _secrets.token_hex(3).upper()
+    storage.create_promo(code, info["promo_max_days"], config.MEDIA_PROMO_MAX_USES)
+    storage.media_promo_bump(uid)
+    return code, info["promo_max_days"]
+
+
+def _media_giveaway_view(storage: Storage, uid: int):
+    m = storage.get_media(uid)
+    if not m:
+        return "🎬 Только для медиа-ранга.", InlineKeyboardMarkup([[_cb("⬅️ Назад", "media:home", "primary")]])
+    info = _media_info(m["tier"])
+    openg = storage.host_open_giveaways(uid)
+    lines = [
+        "🎁 <b>Розыгрыши для аудитории</b>\n",
+        f"Разыграй свои BED честно — бот выберет случайного участника.\n"
+        f"Банк — из <b>твоего</b> баланса (до <b>{info['giveaway_max']} BED</b>).\n",
+        "▶️ Запуск: <code>/giveaway СУММА МИНУТ</code>\n"
+        f"   напр. <code>/giveaway 100 30</code> "
+        f"(от {config.MEDIA_GIVEAWAY_MIN_MINUTES} до {config.MEDIA_GIVEAWAY_MAX_MINUTES} мин)\n",
+        f"💰 Твой баланс: <b>{storage.get_bed(uid)} BED</b>",
+    ]
+    if openg:
+        lines.append("\n<b>Активные:</b>")
+        for g in openg:
+            left = max(0, (g["ends_at"] - int(time.time())) // 60)
+            n = storage.giveaway_entry_count(g["id"])
+            lines.append(f"• #{g['id']} — {g['prize']} BED, участников {n}, ещё ~{left} мин")
+    return "\n".join(lines), InlineKeyboardMarkup([[_cb("⬅️ Назад", "media:home", "primary")]])
+
+
+def _giveaway_card(storage: Storage, gid: int, bot_username: str):
+    g = storage.get_giveaway(gid)
+    if not g:
+        return None, None
+    n = storage.giveaway_entry_count(gid)
+    left = max(0, (g["ends_at"] - int(time.time())) // 60)
+    if g["status"] != "open":
+        text = f"🎁 <b>Розыгрыш #{gid}</b>\n🏆 Банк {g['prize']} BED\n\n✅ Розыгрыш завершён."
+        return text, InlineKeyboardMarkup([[_cb("🎬 Медиа-кабинет", "media:open", "primary")]])
+    text = (
+        f"🎁 <b>РОЗЫГРЫШ {g['prize']} BED!</b>\n\n"
+        f"👥 Участников: <b>{n}</b>\n"
+        f"⏳ До конца: ~{left} мин\n\n"
+        "Жми кнопку — и ты в игре. Победителя выберет бот случайно.")
+    rows = [[_cb("🎉 Участвовать", f"mg:join:{gid}", "success")],
+            [_cb("🔗 Поделиться", f"mg:share:{gid}", "primary")]]
+    return text, InlineKeyboardMarkup(rows)
+
+
+async def _do_giveaway_start(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    m = storage.get_media(uid)
+    if not m:
+        await message.reply_text("🎁 Розыгрыши доступны только медиа-рангу. Подробнее: /media")
+        return
+    info = _media_info(m["tier"])
+    parts = (message.text or "").split()
+    if len(parts) < 3 or not parts[1].isdigit() or not parts[2].isdigit():
+        await message.reply_text(
+            "🎁 Запуск розыгрыша: <code>/giveaway СУММА МИНУТ</code>\n"
+            "напр. <code>/giveaway 100 30</code>", parse_mode="HTML")
+        return
+    prize, minutes = int(parts[1]), int(parts[2])
+    if prize <= 0 or prize > info["giveaway_max"]:
+        await message.reply_text(f"Банк — от 1 до {info['giveaway_max']} BED (твой тир).")
+        return
+    if not (config.MEDIA_GIVEAWAY_MIN_MINUTES <= minutes <= config.MEDIA_GIVEAWAY_MAX_MINUTES):
+        await message.reply_text(
+            f"Длительность — от {config.MEDIA_GIVEAWAY_MIN_MINUTES} до "
+            f"{config.MEDIA_GIVEAWAY_MAX_MINUTES} минут.")
+        return
+    if not storage.spend_bed(uid, prize, reason="giveaway_fund"):
+        await message.reply_text(f"❌ Не хватает BED (нужно {prize}, у тебя {storage.get_bed(uid)}).")
+        return
+    ends_at = int(time.time()) + minutes * 60
+    gid = storage.create_giveaway(uid, message.chat_id, prize, ends_at)
+    storage.giveaway_join(gid, uid)  # host is in by default
+    link = f"https://t.me/{context.bot.username}?start=give_{gid}"
+    body, kb = _giveaway_card(storage, gid, context.bot.username)
+    await message.reply_text(
+        body + f"\n\n🔗 Ссылка для аудитории:\n<code>{link}</code>",
+        parse_mode="HTML", reply_markup=kb)
+
+
+async def _media_callback(query, context, storage: Storage) -> None:
+    uid = query.from_user.id
+    data = query.data.split(":")
+    op = data[1] if len(data) > 1 else "home"
+
+    async def _show(view):
+        await query.answer()
+        body, kb = view
+        try:
+            await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+
+    if op == "open":  # entry from a photo message → new text message
+        await query.answer()
+        body, kb = _media_view(storage, uid)
+        await context.bot.send_message(query.message.chat_id, body, parse_mode="HTML", reply_markup=kb)
+        return
+    if op == "home":
+        await _show(_media_view(storage, uid))
+        return
+    if op == "panel":
+        await _show((_media_panel_text(storage, uid, context.bot.username),
+                     InlineKeyboardMarkup([[_cb("🔄 Обновить", "media:panel", "primary"),
+                                            _cb("⬅️ Назад", "media:home", "primary")]])))
+        return
+    if op == "promo":
+        await _show(_media_promo_view(storage, uid))
+        return
+    if op == "promomake":
+        code, info = _do_media_promo_make(storage, uid)
+        if code:
+            await query.answer(f"✅ Код {code} готов!", show_alert=True)
+            await context.bot.send_message(
+                query.message.chat_id,
+                f"🎟 <b>Промокод готов!</b>\n<code>{code}</code>\n"
+                f"+{info} дн. премиума · {config.MEDIA_PROMO_MAX_USES} активаций\n\n"
+                f"Раздай подписчикам — активируют через <code>/redeem {code}</code>",
+                parse_mode="HTML")
+        else:
+            await query.answer(info, show_alert=True)
+        await _show(_media_promo_view(storage, uid))
+        return
+    if op == "give":
+        await _show(_media_giveaway_view(storage, uid))
+        return
+    await query.answer()
+    await _show(_media_view(storage, uid))
+
+
+async def _giveaway_callback(query, context, storage: Storage) -> None:
+    uid = query.from_user.id
+    data = query.data.split(":")
+    op = data[1] if len(data) > 1 else ""
+    gid = int(data[2]) if len(data) > 2 and data[2].isdigit() else 0
+    g = storage.get_giveaway(gid)
+    if not g:
+        await query.answer("Розыгрыш не найден.", show_alert=True)
+        return
+    if op == "share":
+        link = f"https://t.me/{context.bot.username}?start=give_{gid}"
+        await query.answer()
+        await context.bot.send_message(
+            query.message.chat_id,
+            f"🔗 Ссылка на розыгрыш #{gid}:\n<code>{link}</code>", parse_mode="HTML")
+        return
+    if op == "join":
+        if g["status"] != "open":
+            await query.answer("Розыгрыш уже завершён.", show_alert=True)
+            return
+        if storage.giveaway_join(gid, uid):
+            await query.answer("🎉 Ты в розыгрыше! Удачи!", show_alert=True)
+        else:
+            await query.answer("Ты уже участвуешь 👍", show_alert=True)
+        body, kb = _giveaway_card(storage, gid, context.bot.username)
+        try:
+            await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
 
 
 # --- 🎡 Wheel of Fortune ---------------------------------------------------
@@ -2483,7 +2810,8 @@ def _profile_text(storage: Storage, uid: int, name_disp: str) -> str:
     best = max(ids, key=lambda p: idrarity.classify(p)["score"]) if ids else None
     av = storage.get_aura(uid)
     aemo, aname = _aura_rank(av)
-    lines = [f"👤 <b>{html.escape(name_disp)}</b>",
+    mb = _media_badge(storage, uid)
+    lines = [f"👤 <b>{html.escape(name_disp)}</b>{mb}",
              f"🎚 Уровень <b>{lvl}</b> ({gxp} XP) · ⭐ реп: {rep} · {aemo} аура: <b>{av}</b> ({aname})",
              f"🪙 Монеты: {coins} (+ банк {bank}) · 💎 BED: {bed}"]
     if c:
@@ -2494,6 +2822,9 @@ def _profile_text(storage: Storage, uid: int, name_disp: str) -> str:
         lines.append(f"💞 В браке {ring['emoji'] if ring else ''} · любовь {cp['love']} (ур. {_couple_level(cp['love'])})")
     if best:
         lines.append(f"🆔 Топ ID: {idrarity.badge(best)} <code>{best}</code> · всего ID: {len(ids)}")
+    msl = _media_status_line(storage, uid)
+    if msl:
+        lines.append(f"🎬 {msl} · /media")
     lines.append("\n🪙 /work /crime /rob · 🏦 /bank · 🌾 /farm · 🏰 /clan · 💞 /marry · 🎲 /flip /rps")
     return "\n".join(lines)
 
@@ -2535,10 +2866,16 @@ def _resolve_person(storage: Storage, tok: str):
 
 def _id_cool_chance(storage: Storage, uid: int) -> float:
     if storage.is_ultra(uid):
-        return config.ID_COOL_CHANCE_ULTRA
-    if storage.is_premium(uid):
-        return config.ID_COOL_CHANCE_PREMIUM
-    return config.ID_COOL_CHANCE_FREE
+        base = config.ID_COOL_CHANCE_ULTRA
+    elif storage.is_premium(uid):
+        base = config.ID_COOL_CHANCE_PREMIUM
+    else:
+        base = config.ID_COOL_CHANCE_FREE
+    # 🎬 Media rank sets a floor on the drop chance (a creator perk).
+    mt = storage.media_tier(uid)
+    if mt:
+        base = max(base, config.MEDIA_TIERS[mt]["cool_chance"])
+    return base
 
 
 def _id_home_view(storage: Storage, uid: int):
@@ -4537,6 +4874,14 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             if pid:
                 await _id_card_public(message, context, storage, pid)
             return
+        # 🎁 Creator giveaway deep link: give_<gid>
+        if payload.startswith("give_") and payload[5:].isdigit():
+            body, kb = _giveaway_card(storage, int(payload[5:]), context.bot.username)
+            if body:
+                await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
+            else:
+                await message.reply_text("🎁 Этот розыгрыш не найден или уже завершён.")
+            return
         if payload and not was_known:
             _record_pending_referral(payload, message.from_user.id, storage)
         # One-time free trial for brand-new users (disabled when TRIAL_DAYS<=0).
@@ -5306,6 +5651,13 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
     if text.startswith("/whois"):
         await _id_whois(message, context, storage)
+        return
+    if text.startswith("/media") and not _SETMEDIA_RE.match(text) and not text.startswith("/medialist"):
+        body, kb = _media_view(storage, message.from_user.id)
+        await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
+        return
+    if text.startswith("/giveaway") or text.startswith("/розыгрыш"):
+        await _do_giveaway_start(message, context, storage)
         return
     if text.startswith("/idsets") or text.startswith("/collections") or text.startswith("/коллекции"):
         body, kb = _id_sets_view(storage, message.from_user.id)
@@ -7011,6 +7363,71 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             pass
         return
 
+    setmedia_match = _SETMEDIA_RE.match(text)
+    if setmedia_match:
+        if not await _require_perm(message, storage, "premium"):
+            return
+        target = _resolve_person(storage, setmedia_match.group(1))
+        if target is None:
+            await message.reply_text("Не нашёл пользователя. Укажи @ник, ID игрока или user_id.")
+            return
+        tier = int(setmedia_match.group(2))
+        if tier not in config.MEDIA_TIERS:
+            tiers = ", ".join(f"{k}={v['name']}" for k, v in config.MEDIA_TIERS.items())
+            await message.reply_text(f"Тир должен быть одним из: {tiers}.")
+            return
+        days = int(setmedia_match.group(3)) if setmedia_match.group(3) else config.MEDIA_DEFAULT_DAYS
+        now = int(time.time())
+        prev = storage.get_media(target)
+        base = prev["until"] if prev and prev["until"] > now else now
+        until = base + days * 86400
+        storage.set_media(target, tier, until, granted_by=message.from_user.id)
+        _media_apply_perks(storage, target, tier, days)
+        info = config.MEDIA_TIERS[tier]
+        await message.reply_text(
+            f"🎬 Выдан медиа-ранг {info['emoji']} <b>{info['name']}</b> пользователю "
+            f"<code>{target}</code> на {days} дн. (до {_fmt_premium(until)}).", parse_mode="HTML")
+        try:
+            await context.bot.send_message(
+                target,
+                f"🎉 Тебе выдан <b>медиа-ранг</b> {info['emoji']} <b>{info['name']}</b> на {days} дн.!\n\n"
+                "Открой кабинет креатора: /media\n"
+                "Там — пресс-панель, свои промокоды и розыгрыши. Спасибо за поддержку бота 💜",
+                parse_mode="HTML")
+        except Exception:
+            pass
+        return
+
+    unmedia_match = _UNMEDIA_RE.match(text)
+    if unmedia_match:
+        if not await _require_perm(message, storage, "premium"):
+            return
+        target = _resolve_person(storage, unmedia_match.group(1))
+        if target is None:
+            await message.reply_text("Не нашёл пользователя.")
+            return
+        storage.remove_media(target)
+        await message.reply_text(f"🎬 Медиа-ранг у <code>{target}</code> снят.", parse_mode="HTML")
+        return
+
+    if text.startswith("/medialist"):
+        if not await _require_perm(message, storage, "premium"):
+            return
+        rows = storage.list_media()
+        if not rows:
+            await message.reply_text("🎬 Пока нет активных медиа-рангов.")
+            return
+        now = int(time.time())
+        lines = ["🎬 <b>Медиа-ранги</b>\n"]
+        for r in rows[:50]:
+            info = config.MEDIA_TIERS.get(r["tier"], config.MEDIA_TIERS[1])
+            name, username = storage.user_display(r["user_id"])
+            who = formatting.format_sender(name or "—", username)
+            left = max(0, (r["until"] - now) // 86400)
+            lines.append(f"{info['emoji']} {who} · <code>{r['user_id']}</code> · {info['name']} · ещё {left} дн.")
+        await message.reply_text("\n".join(lines), parse_mode="HTML")
+        return
+
     createpromo_match = _CREATEPROMO_RE.match(text)
     if createpromo_match:
         if not await _require_perm(message, storage, "promo"):
@@ -7774,6 +8191,30 @@ async def _handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE) -> N
             "Снять: <code>/admin revoke &lt;id&gt;</code>\nРанги: /admin ranks"
         )
         await _edit_msg(query, txt, menus.kb_admin_back())
+    elif what == "media":
+        if "premium" not in perms:
+            await query.answer("⛔ Нет прав.", show_alert=True)
+            return
+        await query.answer()
+        rows = storage.list_media()
+        now = int(time.time())
+        lines = ["<b>🎬 Медиа-ранги</b>\n"]
+        if not rows:
+            lines.append("<i>Пока никого.</i>")
+        else:
+            for r in rows[:15]:
+                info = config.MEDIA_TIERS.get(r["tier"], config.MEDIA_TIERS[1])
+                name, username = storage.user_display(r["user_id"])
+                who = formatting.format_sender(name or "—", username)
+                left = max(0, (r["until"] - now) // 86400)
+                lines.append(f"{info['emoji']} {who} · <code>{r['user_id']}</code> · {info['name']} · {left} дн.")
+            if len(rows) > 15:
+                lines.append(f"… ещё {len(rows) - 15} (/medialist)")
+        tiers = " · ".join(f"{k}={v['name']}" for k, v in sorted(config.MEDIA_TIERS.items()))
+        lines.append(
+            "\nВыдать: <code>/setmedia &lt;@ник|id&gt; &lt;тир&gt; [дней]</code>\n"
+            f"Снять: <code>/unmedia &lt;@ник|id&gt;</code>\nСписок: /medialist\n<i>Тиры: {tiers}</i>")
+        await _edit_msg(query, "\n".join(lines), menus.kb_admin_back())
     else:
         await query.answer()
 
@@ -8412,6 +8853,12 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     elif query.data.startswith("aura:"):
         storage = context.bot_data["storage"]
         await _aura_callback(query, context, storage)
+    elif query.data.startswith("media:"):
+        storage = context.bot_data["storage"]
+        await _media_callback(query, context, storage)
+    elif query.data.startswith("mg:"):
+        storage = context.bot_data["storage"]
+        await _giveaway_callback(query, context, storage)
     elif query.data.startswith("id:"):
         storage = context.bot_data["storage"]
         await _id_callback(query, context, storage)

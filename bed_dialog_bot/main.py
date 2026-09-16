@@ -408,6 +408,52 @@ async def _reminder_loop(application: Application) -> None:
                         pass
         except Exception:
             logger.exception("Price-alert loop error")
+        # 🎁 Creator giveaways: draw a winner when a raffle's timer ends.
+        try:
+            import random as _rnd
+            for gid in storage.due_giveaways(int(_time.time())):
+                g = storage.get_giveaway(gid)
+                if not g:
+                    continue
+                storage.set_giveaway_status(gid, "done")
+                entrants = [u for u in storage.giveaway_entrants(gid) if u != g["host_id"]]
+                if not entrants:
+                    # No participants — refund the host's locked BED.
+                    storage.add_bed(g["host_id"], g["prize"], reason="giveaway_refund")
+                    try:
+                        await application.bot.send_message(
+                            chat_id=g["host_id"],
+                            text=f"🎁 Розыгрыш #{gid}: участников не было — {g['prize']} BED возвращены тебе.")
+                    except Exception:
+                        pass
+                    continue
+                winner = _rnd.choice(entrants)
+                storage.add_bed(winner, g["prize"], reason="giveaway_win")
+                try:
+                    await application.bot.send_message(
+                        chat_id=winner,
+                        text=f"🎉 Ты ПОБЕДИЛ в розыгрыше #{gid}! 🏆 +{g['prize']} BED зачислены!")
+                except Exception:
+                    pass
+                for u in entrants:
+                    if u == winner:
+                        continue
+                    try:
+                        await application.bot.send_message(
+                            chat_id=u,
+                            text=f"🎁 Розыгрыш #{gid} завершён. В этот раз повезло другому — "
+                                 "не расстраивайся, будут ещё!")
+                    except Exception:
+                        pass
+                try:
+                    await application.bot.send_message(
+                        chat_id=g["host_id"],
+                        text=f"🎁 Твой розыгрыш #{gid} завершён! Победитель определён "
+                             f"({len(entrants)} участников). 🏆 {g['prize']} BED ушли счастливчику.")
+                except Exception:
+                    pass
+        except Exception:
+            logger.exception("Giveaway settle error")
         await asyncio.sleep(30)
 
 

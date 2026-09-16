@@ -566,6 +566,33 @@ CREATE TABLE IF NOT EXISTS adlink_tokens (
     used_at INTEGER,
     created_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS media_rank (
+    user_id INTEGER PRIMARY KEY,
+    tier INTEGER NOT NULL DEFAULT 1,
+    until INTEGER NOT NULL DEFAULT 0,
+    granted_at INTEGER NOT NULL DEFAULT 0,
+    granted_by INTEGER NOT NULL DEFAULT 0,
+    note TEXT NOT NULL DEFAULT '',
+    promo_day INTEGER NOT NULL DEFAULT 0,
+    promo_count INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS giveaways (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    host_id INTEGER NOT NULL,
+    chat_id INTEGER NOT NULL,
+    prize INTEGER NOT NULL,
+    ends_at INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS giveaway_entries (
+    gid INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    PRIMARY KEY (gid, user_id)
+);
 """
 
 CAPTURE_RETENTION_SECONDS = 86400
@@ -1818,6 +1845,13 @@ class Storage:
         with self._connect() as conn:
             return conn.execute(
                 "SELECT COUNT(*) FROM player_ids WHERE owner_id=?", (user_id,)).fetchone()[0]
+
+    def count_all_ids(self) -> int:
+        """Total player IDs owned by real users (excludes custodial accounts:
+        the bot's inventory, clan treasuries and the war pot, all >= 1e12)."""
+        with self._connect() as conn:
+            return conn.execute(
+                "SELECT COUNT(*) FROM player_ids WHERE owner_id < 1000000000000").fetchone()[0]
 
     def ids_with_lock(self, user_id: int):
         with self._connect() as conn:
@@ -4101,6 +4135,129 @@ class Storage:
                 "SELECT user_id, rank FROM admin_roles ORDER BY granted_at"
             ).fetchall()
         return [{"user_id": r[0], "rank": r[1]} for r in rows]
+
+    # --- 🎬 Media rank (verified creators/press) ---
+    def set_media(self, user_id: int, tier: int, until: int, granted_by: int = 0,
+                  note: str = "") -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO media_rank (user_id, tier, until, granted_at, granted_by, note) "
+                "VALUES (?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET tier=excluded.tier, until=excluded.until, "
+                "granted_at=excluded.granted_at, granted_by=excluded.granted_by, note=excluded.note",
+                (user_id, tier, until, int(time.time()), granted_by, note or ""))
+
+    def get_media(self, user_id: int):
+        """Active media record dict, or None if absent/expired."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT user_id, tier, until, granted_at, granted_by, note "
+                "FROM media_rank WHERE user_id = ?", (user_id,)).fetchone()
+        if not row or row[2] <= time.time():
+            return None
+        return {"user_id": row[0], "tier": row[1], "until": row[2],
+                "granted_at": row[3], "granted_by": row[4], "note": row[5]}
+
+    def media_tier(self, user_id: int) -> int:
+        m = self.get_media(user_id)
+        return m["tier"] if m else 0
+
+    def is_media(self, user_id: int) -> bool:
+        return self.get_media(user_id) is not None
+
+    def remove_media(self, user_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute("DELETE FROM media_rank WHERE user_id = ?", (user_id,))
+
+    def list_media(self):
+        now = int(time.time())
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT user_id, tier, until, note FROM media_rank WHERE until > ? "
+                "ORDER BY tier DESC, until DESC", (now,)).fetchall()
+        return [{"user_id": r[0], "tier": r[1], "until": r[2], "note": r[3]} for r in rows]
+
+    def media_promo_used_today(self, user_id: int) -> int:
+        """How many promo codes this creator has minted today (UTC day)."""
+        today = int(time.time()) // 86400
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT promo_day, promo_count FROM media_rank WHERE user_id = ?",
+                (user_id,)).fetchone()
+        if not row or row[0] != today:
+            return 0
+        return row[1]
+
+    def media_promo_bump(self, user_id: int) -> None:
+        """Record that this creator minted one promo code (resets per UTC day)."""
+        today = int(time.time()) // 86400
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT promo_day, promo_count FROM media_rank WHERE user_id = ?",
+                (user_id,)).fetchone()
+            count = row[1] + 1 if row and row[0] == today else 1
+            conn.execute(
+                "UPDATE media_rank SET promo_day = ?, promo_count = ? WHERE user_id = ?",
+                (today, count, user_id))
+
+    # --- 🎁 Creator giveaways (self-funded BED raffles) ---
+    def create_giveaway(self, host_id: int, chat_id: int, prize: int, ends_at: int) -> int:
+        with self._connect() as conn:
+            cur = conn.execute(
+                "INSERT INTO giveaways (host_id, chat_id, prize, ends_at, status, created_at) "
+                "VALUES (?, ?, ?, ?, 'open', ?)",
+                (host_id, chat_id, prize, ends_at, int(time.time())))
+            return cur.lastrowid
+
+    def get_giveaway(self, gid: int):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT id, host_id, chat_id, prize, ends_at, status FROM giveaways WHERE id = ?",
+                (gid,)).fetchone()
+        if not row:
+            return None
+        return {"id": row[0], "host_id": row[1], "chat_id": row[2], "prize": row[3],
+                "ends_at": row[4], "status": row[5]}
+
+    def giveaway_join(self, gid: int, user_id: int) -> bool:
+        """True if newly joined; False if already in or giveaway not open."""
+        with self._connect() as conn:
+            row = conn.execute("SELECT status FROM giveaways WHERE id = ?", (gid,)).fetchone()
+            if not row or row[0] != "open":
+                return False
+            cur = conn.execute(
+                "INSERT OR IGNORE INTO giveaway_entries (gid, user_id) VALUES (?, ?)",
+                (gid, user_id))
+            return cur.rowcount > 0
+
+    def giveaway_entrants(self, gid: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT user_id FROM giveaway_entries WHERE gid = ?", (gid,)).fetchall()
+        return [r[0] for r in rows]
+
+    def giveaway_entry_count(self, gid: int) -> int:
+        with self._connect() as conn:
+            return conn.execute(
+                "SELECT COUNT(*) FROM giveaway_entries WHERE gid = ?", (gid,)).fetchone()[0]
+
+    def due_giveaways(self, now: int):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id FROM giveaways WHERE status = 'open' AND ends_at <= ?", (now,)).fetchall()
+        return [r[0] for r in rows]
+
+    def set_giveaway_status(self, gid: int, status: str) -> None:
+        with self._connect() as conn:
+            conn.execute("UPDATE giveaways SET status = ? WHERE id = ?", (status, gid))
+
+    def host_open_giveaways(self, host_id: int):
+        now = int(time.time())
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT id, prize, ends_at FROM giveaways WHERE host_id = ? AND status = 'open' "
+                "AND ends_at > ? ORDER BY ends_at", (host_id, now)).fetchall()
+        return [{"id": r[0], "prize": r[1], "ends_at": r[2]} for r in rows]
 
     def add_troll_item(self, user_id: int, kind: str = "text", text=None, file_id=None) -> None:
         # Store "" rather than NULL: on volumes created before the schema change

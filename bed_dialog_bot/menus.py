@@ -270,6 +270,7 @@ def kb_admin(uid, storage) -> InlineKeyboardMarkup:
         hints.append(_btn("⛔ Модерация", "adm:mod", "danger"))
     if "premium" in p:
         hints.append(_btn("💎 Премиум", "adm:premium", "success"))
+        hints.append(_btn("🎬 Медиа-ранги", "adm:media", "success"))
     if "broadcast" in p:
         hints.append(_btn("📢 Рассылка", "adm:broadcast", "danger"))
     if "promo" in p:
@@ -324,7 +325,8 @@ def kb_main(uid=None, storage=None) -> InlineKeyboardMarkup:
          _btn("🏰 Кланы", "soc:open:clan", "danger")],
         [_btn("👤 Профиль", "soc:open:profile", "primary"),
          _btn("🎲 Игры", "soc:open:games", "primary")],
-        [_btn("🗿 Аура", "aura:open", "danger")],
+        [_btn("🗿 Аура", "aura:open", "danger"),
+         _btn("🎬 Медиа-ранг", "media:open", "success")],
         [_btn("🛍 BED-магазин", "shop:open", "success"),
          _btn("👥 Друзья", "fr:open", "primary")],
         [_btn("🧩 Мои команды", "mycmds:open", "primary"), _btn("🛒 Магазин команд", "mkt:open", "success")],

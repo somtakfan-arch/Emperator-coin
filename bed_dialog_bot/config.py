@@ -251,6 +251,33 @@ AURA_PROMPT_BATCH = int(os.environ.get("AURA_PROMPT_BATCH", "25"))  # daily-prom
 AURA_DUEL_MAX = int(os.environ.get("AURA_DUEL_MAX", "150"))
 AURA_PER_ID_BUY = int(os.environ.get("AURA_PER_ID_BUY", "60"))   # aura per purchased ID (stacks)
 
+# 🎬 Media rank — a verified status for creators/bloggers/press who promote the
+# bot. Granted by an admin (right «premium») via /setmedia. Tiered: higher tier =
+# bigger perks. Perks are cosmetic/premium/coins/ULTRA — NEVER free BED.
+# tier -> settings:
+#   name, emoji            — shown on the badge & profile
+#   promo_day_cap          — premium-day promo codes the creator may mint per day
+#   promo_max_days         — max premium days per minted code
+#   ref_bonus              — extra premium/ULTRA days per confirmed referral
+#   cool_chance            — floor on the "cool ID" drop chance (like premium/ULTRA)
+#   aura                   — one-time aura granted on being awarded the tier
+#   ultra                  — True → ULTRA is kept active for the whole media period
+#   giveaway_max           — max BED a creator may lock into one self-funded raffle
+MEDIA_TIERS = {
+    1: {"name": "Микро-креатор", "emoji": "📱", "promo_day_cap": 1, "promo_max_days": 3,
+        "ref_bonus": 1, "cool_chance": 0.40, "aura": 100, "ultra": False, "giveaway_max": 50},
+    2: {"name": "Креатор", "emoji": "🎬", "promo_day_cap": 3, "promo_max_days": 7,
+        "ref_bonus": 2, "cool_chance": 0.60, "aura": 250, "ultra": False, "giveaway_max": 200},
+    3: {"name": "Медиа-партнёр", "emoji": "📺", "promo_day_cap": 5, "promo_max_days": 14,
+        "ref_bonus": 3, "cool_chance": 0.80, "aura": 500, "ultra": True, "giveaway_max": 1000},
+    4: {"name": "Амбассадор", "emoji": "🌟", "promo_day_cap": 10, "promo_max_days": 30,
+        "ref_bonus": 5, "cool_chance": 0.97, "aura": 1000, "ultra": True, "giveaway_max": 5000},
+}
+MEDIA_DEFAULT_DAYS = int(os.environ.get("MEDIA_DEFAULT_DAYS", "90"))  # status validity per grant (renewable)
+MEDIA_PROMO_MAX_USES = int(os.environ.get("MEDIA_PROMO_MAX_USES", "200"))  # audience size a code can serve
+MEDIA_GIVEAWAY_MIN_MINUTES = int(os.environ.get("MEDIA_GIVEAWAY_MIN_MINUTES", "5"))
+MEDIA_GIVEAWAY_MAX_MINUTES = int(os.environ.get("MEDIA_GIVEAWAY_MAX_MINUTES", "1440"))
+
 # 🧪 Official test accounts: unlimited BED and unlimited ID slots (never spend
 # real balance). Comma-separated telegram user_ids in env.
 TEST_ACCOUNTS = {int(x) for x in os.environ.get("TEST_ACCOUNTS", "8802068360").split(",") if x.strip().lstrip("-").isdigit()}
