@@ -75,6 +75,7 @@ _CREATEPROMO_RE = re.compile(r"^/createpromo\s+(\S+)\s+(\d+)\s+(\d+)\s*$")
 _GIFT_RE = re.compile(r"^/gift\s+(\d+)\s+(\d+)\s*$")
 _SETMEDIA_RE = re.compile(r"^/setmedia\s+(\S+)\s+(\d+)(?:\s+(\d+))?\s*$")
 _UNMEDIA_RE = re.compile(r"^/unmedia\s+(\S+)\s*$")
+_MEDIAPAY_RE = re.compile(r"^/mediapay\s+(\S+)\s+(\d+)(?:\s+(.+))?$", re.DOTALL)
 _WRITE_RE = re.compile(r"^/write\s+(\d+)\s+(-?\d+)\s+(.+)$", re.DOTALL)
 _REMIND_RE = re.compile(r"^/remind\s+(\d+)([mhd])\s+(.+)$", re.DOTALL)
 _PROFILE_RE = re.compile(r"^/profile(?:\s+(\d+))?\s*$")
@@ -1181,6 +1182,44 @@ def _media_status_line(storage: Storage, uid: int) -> str:
     return f"{info['emoji']} <b>{info['name']}</b> · статус ещё {left} дн."
 
 
+def _media_rate_str() -> str:
+    return f"{config.MEDIA_VIEWS_PER_PAYOUT} просмотров = {config.MEDIA_BED_PER_PAYOUT} BED"
+
+
+def _views_to_bed(views: int) -> int:
+    return views * config.MEDIA_BED_PER_PAYOUT // config.MEDIA_VIEWS_PER_PAYOUT
+
+
+def _media_guide_text(bot_username: str, uid: int = None) -> str:
+    ref = f"https://t.me/{bot_username}?start=ref_{uid}" if uid else f"https://t.me/{bot_username}"
+    per_view = config.MEDIA_BED_PER_PAYOUT / config.MEDIA_VIEWS_PER_PAYOUT
+    return (
+        "📘 <b>Инструкция для медиа</b>\n\n"
+        "Добро пожаловать в медиа-команду! Как всё работает:\n\n"
+        "1️⃣ <b>Сделай контент про бота</b>\n"
+        "   • TikTok / Reels / Shorts / видео или пост в ТГ-канале\n"
+        "   • Покажи фишки: сохранение удалёнки, BED, ID, кланы, игры\n"
+        f"   • В описании оставь свою ссылку:\n   <code>{ref}</code>\n\n"
+        "2️⃣ <b>Отправь на проверку</b>\n"
+        "   • <code>/tiktok</code> — TikTok/Reels/Shorts\n"
+        "   • <code>/tgpost</code> — пост в ТГ-канале\n"
+        "   • Приложи скриншот со статистикой просмотров + ссылку\n\n"
+        "3️⃣ <b>Получай BED за просмотры</b> 💸\n"
+        f"   • Ставка: <b>{_media_rate_str()}</b> (~{per_view:.2f} BED за просмотр)\n"
+        "   • Выплата после проверки админом — сразу на баланс\n"
+        "   • Считаются только <b>реальные</b> просмотры (накрутка = бан из программы)\n\n"
+        "🎁 <b>Твои возможности</b> (/media):\n"
+        "   • свои премиум-промокоды для подписчиков\n"
+        "   • пресс-панель со статистикой для контента\n"
+        "   • розыгрыши BED для аудитории (<code>/giveaway</code>)\n"
+        "   • повышенные награды за друзей и крутые ID, ULTRA на топ-тирах\n\n"
+        "📋 <b>Правила:</b>\n"
+        "   • один пост — одна выплата\n"
+        "   • без ботов и накруток\n"
+        "   • контент живой и про бота\n\n"
+        "Команды: /media · /giveaway · /ref")
+
+
 def _media_view(storage: Storage, uid: int):
     """Creator hub. Non-media users see what it is and how to earn it."""
     m = storage.get_media(uid)
@@ -1192,6 +1231,7 @@ def _media_view(storage: Storage, uid: int):
         text = (
             "🎬 <b>Медиа-ранг</b> — статус для блогеров, стримеров и авторов, "
             "которые пиарят бота.\n\n"
+            f"💸 <b>Платим BED за просмотры: {_media_rate_str()}!</b>\n\n"
             "Что даёт:\n"
             "• верифик-бейдж в профиле\n"
             "• пресс-панель со статистикой для контента\n"
@@ -1208,16 +1248,20 @@ def _media_view(storage: Storage, uid: int):
         return text, InlineKeyboardMarkup(rows)
     info = _media_info(m["tier"])
     used = storage.media_promo_used_today(uid)
+    tviews, tbed = storage.media_earned(uid)
     text = (
         f"{info['emoji']} <b>Медиа-кабинет — {info['name']}</b>\n"
         f"{_media_status_line(storage, uid)}\n\n"
+        f"💸 <b>Оплата за просмотры:</b> {_media_rate_str()}\n"
+        f"   Заработано: <b>{tbed} BED</b> за {tviews} просмотров\n\n"
         "<b>Твои плюшки:</b>\n" + "\n".join(_media_perk_lines(m["tier"])) +
         f"\n\n🎟 Промокодов сегодня: <b>{used}/{info['promo_day_cap']}</b>")
     rows = [
-        [_cb("📊 Пресс-панель", "media:panel", "primary"),
-         _cb("🎟 Промокоды", "media:promo", "success")],
-        [_cb("🎁 Розыгрыши", "media:give", "success"),
-         _cb("👥 Рефералы", "menu:ref", "primary")],
+        [_cb("📘 Инструкция", "media:guide", "primary"),
+         _cb("📊 Пресс-панель", "media:panel", "primary")],
+        [_cb("🎟 Промокоды", "media:promo", "success"),
+         _cb("🎁 Розыгрыши", "media:give", "success")],
+        [_cb("📤 Отправить пост на проверку", "partner:tiktok", "danger")],
     ]
     return text, InlineKeyboardMarkup(rows)
 
@@ -1384,6 +1428,10 @@ async def _media_callback(query, context, storage: Storage) -> None:
         return
     if op == "home":
         await _show(_media_view(storage, uid))
+        return
+    if op == "guide":
+        await _show((_media_guide_text(context.bot.username, uid),
+                     InlineKeyboardMarkup([[_cb("⬅️ Назад", "media:home", "primary")]])))
         return
     if op == "panel":
         await _show((_media_panel_text(storage, uid, context.bot.username),
@@ -5652,7 +5700,12 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if text.startswith("/whois"):
         await _id_whois(message, context, storage)
         return
-    if text.startswith("/media") and not _SETMEDIA_RE.match(text) and not text.startswith("/medialist"):
+    if text.startswith("/mediaguide") or text.startswith("/mediarules"):
+        await message.reply_text(
+            _media_guide_text(context.bot.username, message.from_user.id), parse_mode="HTML")
+        return
+    if (text.startswith("/media") and not _SETMEDIA_RE.match(text)
+            and not text.startswith("/medialist") and not _MEDIAPAY_RE.match(text)):
         body, kb = _media_view(storage, message.from_user.id)
         await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
         return
@@ -7391,8 +7444,49 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             await context.bot.send_message(
                 target,
                 f"🎉 Тебе выдан <b>медиа-ранг</b> {info['emoji']} <b>{info['name']}</b> на {days} дн.!\n\n"
-                "Открой кабинет креатора: /media\n"
+                f"💸 Платим BED за просмотры: <b>{_media_rate_str()}</b>\n"
+                "Кабинет креатора: /media · инструкция: /mediaguide\n"
                 "Там — пресс-панель, свои промокоды и розыгрыши. Спасибо за поддержку бота 💜",
+                parse_mode="HTML")
+            try:
+                await context.bot.send_message(
+                    target, _media_guide_text(context.bot.username, target), parse_mode="HTML")
+            except Exception:
+                pass
+        except Exception:
+            pass
+        return
+
+    mediapay_match = _MEDIAPAY_RE.match(text)
+    if mediapay_match:
+        if not await _require_perm(message, storage, "premium"):
+            return
+        target = _resolve_person(storage, mediapay_match.group(1))
+        if target is None:
+            await message.reply_text("Не нашёл автора. Укажи @ник, ID игрока или user_id.")
+            return
+        views = int(mediapay_match.group(2))
+        note = (mediapay_match.group(3) or "").strip()
+        bed = _views_to_bed(views)
+        if bed <= 0:
+            await message.reply_text(
+                f"Мало просмотров для выплаты (ставка: {_media_rate_str()}). "
+                f"Нужно минимум {config.MEDIA_VIEWS_PER_PAYOUT // config.MEDIA_BED_PER_PAYOUT} просмотров на 1 BED.")
+            return
+        new_bal = storage.add_bed(target, bed, reason="media_views")
+        storage.add_media_payout(target, views, bed, paid_by=message.from_user.id, note=note)
+        tviews, tbed = storage.media_earned(target)
+        mnote = f"\n📝 {html.escape(note)}" if note else ""
+        await message.reply_text(
+            f"💸 Выплачено <b>{bed} BED</b> за {views} просмотров пользователю "
+            f"<code>{target}</code>.\nВсего заработано: {tbed} BED / {tviews} просмотров.{mnote}",
+            parse_mode="HTML")
+        try:
+            await context.bot.send_message(
+                target,
+                f"💸 <b>Выплата за просмотры!</b>\n"
+                f"+{bed} BED за {views} просмотров (ставка {_media_rate_str()}).\n"
+                f"💰 Баланс: {new_bal} BED. Спасибо за контент про бота 💜{mnote}",
                 parse_mode="HTML")
         except Exception:
             pass
@@ -8213,7 +8307,10 @@ async def _handle_admin_callback(query, context: ContextTypes.DEFAULT_TYPE) -> N
         tiers = " · ".join(f"{k}={v['name']}" for k, v in sorted(config.MEDIA_TIERS.items()))
         lines.append(
             "\nВыдать: <code>/setmedia &lt;@ник|id&gt; &lt;тир&gt; [дней]</code>\n"
-            f"Снять: <code>/unmedia &lt;@ник|id&gt;</code>\nСписок: /medialist\n<i>Тиры: {tiers}</i>")
+            f"Снять: <code>/unmedia &lt;@ник|id&gt;</code>\nСписок: /medialist\n"
+            f"💸 Выплата за просмотры ({_media_rate_str()}):\n"
+            "<code>/mediapay &lt;@ник|id&gt; &lt;просмотров&gt; [заметка]</code>\n"
+            f"<i>Тиры: {tiers}</i>")
         await _edit_msg(query, "\n".join(lines), menus.kb_admin_back())
     else:
         await query.answer()

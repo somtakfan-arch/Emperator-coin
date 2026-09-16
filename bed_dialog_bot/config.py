@@ -273,6 +273,12 @@ MEDIA_TIERS = {
     4: {"name": "Амбассадор", "emoji": "🌟", "promo_day_cap": 10, "promo_max_days": 30,
         "ref_bonus": 5, "cool_chance": 0.97, "aura": 1000, "ultra": True, "giveaway_max": 5000},
 }
+# 💸 Media payouts — REAL BED paid to creators for verified views. Admin-approved
+# only (the admin checks the actual view count), so there is no self-serve faucet.
+# Rate: MEDIA_BED_PER_PAYOUT BED per MEDIA_VIEWS_PER_PAYOUT views
+# (default 125 BED / 500 views = 0.25 BED per view), paid proportionally.
+MEDIA_VIEWS_PER_PAYOUT = int(os.environ.get("MEDIA_VIEWS_PER_PAYOUT", "500"))
+MEDIA_BED_PER_PAYOUT = int(os.environ.get("MEDIA_BED_PER_PAYOUT", "125"))
 MEDIA_DEFAULT_DAYS = int(os.environ.get("MEDIA_DEFAULT_DAYS", "90"))  # status validity per grant (renewable)
 MEDIA_PROMO_MAX_USES = int(os.environ.get("MEDIA_PROMO_MAX_USES", "200"))  # audience size a code can serve
 MEDIA_GIVEAWAY_MIN_MINUTES = int(os.environ.get("MEDIA_GIVEAWAY_MIN_MINUTES", "5"))

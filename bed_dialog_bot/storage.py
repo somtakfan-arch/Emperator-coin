@@ -593,6 +593,16 @@ CREATE TABLE IF NOT EXISTS giveaway_entries (
     user_id INTEGER NOT NULL,
     PRIMARY KEY (gid, user_id)
 );
+
+CREATE TABLE IF NOT EXISTS media_payouts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    views INTEGER NOT NULL,
+    bed INTEGER NOT NULL,
+    paid_by INTEGER NOT NULL DEFAULT 0,
+    note TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL
+);
 """
 
 CAPTURE_RETENTION_SECONDS = 86400
@@ -4250,6 +4260,23 @@ class Storage:
     def set_giveaway_status(self, gid: int, status: str) -> None:
         with self._connect() as conn:
             conn.execute("UPDATE giveaways SET status = ? WHERE id = ?", (status, gid))
+
+    # --- 💸 Media view payouts ---
+    def add_media_payout(self, user_id: int, views: int, bed: int,
+                         paid_by: int = 0, note: str = "") -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO media_payouts (user_id, views, bed, paid_by, note, created_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (user_id, views, bed, paid_by, note or "", int(time.time())))
+
+    def media_earned(self, user_id: int):
+        """(total_views, total_bed) ever paid to this creator for views."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COALESCE(SUM(views),0), COALESCE(SUM(bed),0) "
+                "FROM media_payouts WHERE user_id = ?", (user_id,)).fetchone()
+        return (row[0], row[1]) if row else (0, 0)
 
     def host_open_giveaways(self, host_id: int):
         now = int(time.time())
