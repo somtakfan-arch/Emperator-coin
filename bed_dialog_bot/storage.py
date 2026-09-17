@@ -603,6 +603,20 @@ CREATE TABLE IF NOT EXISTS media_payouts (
     note TEXT NOT NULL DEFAULT '',
     created_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS bed_promos (
+    code TEXT PRIMARY KEY,
+    amount INTEGER NOT NULL,
+    uses_left INTEGER NOT NULL,
+    creator_id INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS bed_promo_redemptions (
+    code TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    PRIMARY KEY (code, user_id)
+);
 """
 
 CAPTURE_RETENTION_SECONDS = 86400
@@ -3912,6 +3926,61 @@ class Storage:
                 "INSERT INTO bed_balances (user_id, balance) VALUES (?,?) "
                 "ON CONFLICT(user_id) DO UPDATE SET balance=balance+excluded.balance", (user_id, amount))
             self._ledger(conn, user_id, amount, "code_in")
+        return amount
+
+    def create_bed_promo(self, code: str, amount: int, uses: int, creator_id: int) -> bool:
+        """Multi-use BED promo, SELF-FUNDED: escrow amount*uses from the creator
+        upfront (zero-sum, no treasury faucet). False if code exists or short."""
+        code = code.upper()
+        total = amount * uses
+        with self._connect() as conn:
+            exists = conn.execute("SELECT 1 FROM bed_promos WHERE code=?", (code,)).fetchone()
+            if exists:
+                return False
+            row = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (creator_id,)).fetchone()
+            if not row or row[0] < total:
+                return False
+            conn.execute("UPDATE bed_balances SET balance=balance-? WHERE user_id=?", (total, creator_id))
+            self._ledger(conn, creator_id, -total, "bedpromo")
+            conn.execute(
+                "INSERT INTO bed_promos (code, amount, uses_left, creator_id, created_at) "
+                "VALUES (?,?,?,?,?)", (code, amount, uses, creator_id, int(time.time())))
+        return True
+
+    def get_bed_promo(self, code: str):
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT code, amount, uses_left, creator_id FROM bed_promos WHERE code=?",
+                (code.upper(),)).fetchone()
+        if not row:
+            return None
+        return {"code": row[0], "amount": row[1], "uses_left": row[2], "creator_id": row[3]}
+
+    def redeem_bed_promo(self, code: str, user_id: int):
+        """Redeem a BED promo. Returns amount credited, or a string error code:
+        'none' (bad/exhausted), 'self' (creator's own), 'used' (already redeemed)."""
+        code = code.upper()
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT amount, uses_left, creator_id FROM bed_promos WHERE code=?", (code,)).fetchone()
+            if not row:
+                return "none"
+            if row[1] <= 0:
+                return "empty"
+            amount, uses_left, creator_id = row
+            if user_id == creator_id:
+                return "self"
+            already = conn.execute(
+                "SELECT 1 FROM bed_promo_redemptions WHERE code=? AND user_id=?",
+                (code, user_id)).fetchone()
+            if already:
+                return "used"
+            conn.execute("INSERT INTO bed_promo_redemptions (code, user_id) VALUES (?,?)", (code, user_id))
+            conn.execute("UPDATE bed_promos SET uses_left=uses_left-1 WHERE code=?", (code,))
+            conn.execute(
+                "INSERT INTO bed_balances (user_id, balance) VALUES (?,?) "
+                "ON CONFLICT(user_id) DO UPDATE SET balance=balance+excluded.balance", (user_id, amount))
+            self._ledger(conn, user_id, amount, "bedpromo_in")
         return amount
 
     def transfer_bed(self, sender_id: int, recipient_id: int, amount: int) -> bool:

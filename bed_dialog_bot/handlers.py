@@ -76,6 +76,7 @@ _GIFT_RE = re.compile(r"^/gift\s+(\d+)\s+(\d+)\s*$")
 _SETMEDIA_RE = re.compile(r"^/setmedia\s+(\S+)\s+(\d+)(?:\s+(\d+))?\s*$")
 _UNMEDIA_RE = re.compile(r"^/unmedia\s+(\S+)\s*$")
 _MEDIAPAY_RE = re.compile(r"^/mediapay\s+(\S+)\s+(\d+)(?:\s+(.+))?$", re.DOTALL)
+_BEDPROMO_RE = re.compile(r"^/bedpromo\s+(\d+)\s+(\d+)\s*$")
 _WRITE_RE = re.compile(r"^/write\s+(\d+)\s+(-?\d+)\s+(.+)$", re.DOTALL)
 _REMIND_RE = re.compile(r"^/remind\s+(\d+)([mhd])\s+(.+)$", re.DOTALL)
 _PROFILE_RE = re.compile(r"^/profile(?:\s+(\d+))?\s*$")
@@ -1210,6 +1211,7 @@ def _media_guide_text(bot_username: str, uid: int = None) -> str:
         "   • Считаются только <b>реальные</b> просмотры (накрутка = бан из программы)\n\n"
         "🎁 <b>Твои возможности</b> (/media):\n"
         "   • свои премиум-промокоды для подписчиков\n"
+        "   • BED-промокоды для аудитории (<code>/bedpromo</code>, из своего баланса)\n"
         "   • пресс-панель со статистикой для контента\n"
         "   • розыгрыши BED для аудитории (<code>/giveaway</code>)\n"
         "   • повышенные награды за друзей и крутые ID, ULTRA на топ-тирах\n\n"
@@ -1304,13 +1306,17 @@ def _media_promo_view(storage: Storage, uid: int):
     left = max(0, info["promo_day_cap"] - used)
     text = (
         "🎟 <b>Промокоды для аудитории</b>\n\n"
-        f"Каждый код даёт подписчикам <b>{info['promo_max_days']} дн. премиума</b> "
+        f"🎁 <b>Премиум-код:</b> {info['promo_max_days']} дн. премиума "
         f"({config.MEDIA_PROMO_MAX_USES} активаций).\n"
-        f"Лимит: <b>{info['promo_day_cap']}/день</b> · осталось сегодня: <b>{left}</b>\n\n"
-        "Выпусти код и раздай подписчикам — активируют через <code>/redeem КОД</code>.")
+        f"   Лимит: <b>{info['promo_day_cap']}/день</b> · осталось сегодня: <b>{left}</b>\n\n"
+        f"💎 <b>BED-код:</b> раздай СВОИ BED подписчикам.\n"
+        f"   <code>/bedpromo СУММА КОЛ-ВО</code> (напр. <code>/bedpromo 5 100</code>)\n"
+        f"   Списывается с твоего баланса ({storage.get_bed(uid)} BED).\n\n"
+        "Активируют оба через <code>/redeem КОД</code>.")
     rows = []
     if left > 0:
-        rows.append([_cb(f"🎟 Выпустить код (+{info['promo_max_days']} дн.)", "media:promomake", "success")])
+        rows.append([_cb(f"🎟 Премиум-код (+{info['promo_max_days']} дн.)", "media:promomake", "success")])
+    rows.append([_cb("💎 Как выпустить BED-код", "media:bedpromo", "primary")])
     rows.append([_cb("⬅️ Назад", "media:home", "primary")])
     return text, InlineKeyboardMarkup(rows)
 
@@ -1328,6 +1334,34 @@ def _do_media_promo_make(storage: Storage, uid: int):
     storage.create_promo(code, info["promo_max_days"], config.MEDIA_PROMO_MAX_USES)
     storage.media_promo_bump(uid)
     return code, info["promo_max_days"]
+
+
+async def _do_bedpromo_make(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    if not storage.is_media(uid):
+        await message.reply_text("🎬 BED-промокоды — только для медиа-ранга. Подробнее: /media")
+        return
+    m = _BEDPROMO_RE.match(message.text or "")
+    amount, uses = int(m.group(1)), int(m.group(2))
+    if amount < 1 or uses < 1:
+        await message.reply_text("Сумма и кол-во должны быть больше 0.")
+        return
+    if uses > config.MEDIA_PROMO_MAX_USES:
+        await message.reply_text(f"Максимум активаций на код — {config.MEDIA_PROMO_MAX_USES}.")
+        return
+    total = amount * uses
+    import secrets as _secrets
+    code = "BEDR-" + _secrets.token_hex(3).upper()
+    if not storage.create_bed_promo(code, amount, uses, uid):
+        await message.reply_text(
+            f"❌ Не хватает BED: нужно {total} ({amount}×{uses}), у тебя {storage.get_bed(uid)}.\n"
+            "BED-промокод финансируется из твоего баланса.")
+        return
+    await message.reply_text(
+        f"💎 <b>BED-промокод готов!</b>\n<code>{code}</code>\n"
+        f"По {amount} BED · {uses} активаций (заморожено {total} BED с твоего баланса).\n\n"
+        f"Раздай подписчикам — активируют через <code>/redeem {code}</code>\n"
+        f"💰 Остаток: {storage.get_bed(uid)} BED", parse_mode="HTML")
 
 
 def _media_giveaway_view(storage: Storage, uid: int):
@@ -1454,6 +1488,17 @@ async def _media_callback(query, context, storage: Storage) -> None:
         else:
             await query.answer(info, show_alert=True)
         await _show(_media_promo_view(storage, uid))
+        return
+    if op == "bedpromo":
+        await _show((
+            "💎 <b>BED-промокод для аудитории</b>\n\n"
+            "Раздай свои BED подписчикам одним кодом:\n"
+            "<code>/bedpromo СУММА КОЛ-ВО</code>\n"
+            "напр. <code>/bedpromo 5 100</code> — 100 кодов по 5 BED.\n\n"
+            f"💰 Сумма замораживается с твоего баланса ({storage.get_bed(uid)} BED) сразу при создании — "
+            "это твои BED, не из казны.\n"
+            "Подписчики активируют через <code>/redeem КОД</code>.",
+            InlineKeyboardMarkup([[_cb("⬅️ Назад", "media:promo", "primary")]])))
         return
     if op == "give":
         await _show(_media_giveaway_view(storage, uid))
@@ -5016,6 +5061,23 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
                     f"Купить: /menu → 🪙 Кошелёк, или /buy &lt;кол-во&gt;.",
                     parse_mode="HTML")
                 return
+            # 🎬 Creator BED promo code (grants BED, self-funded by the creator).
+            bp = storage.redeem_bed_promo(arg, uid)
+            if isinstance(bp, int):
+                await message.reply_text(
+                    f"🎉 <b>Промокод активирован: +{bp} BED!</b>\n💰 Баланс: {storage.get_bed(uid)} BED.",
+                    parse_mode="HTML")
+                return
+            if bp == "self":
+                await message.reply_text("😅 Свой же BED-промокод активировать нельзя.")
+                return
+            if bp == "used":
+                await message.reply_text("♻️ Этот BED-промокод ты уже активировал.")
+                return
+            if bp == "empty":
+                await message.reply_text("😔 Этот BED-промокод уже разобрали — активаций не осталось.")
+                return
+            # bp == "none" → not a BED promo; fall through to premium/other codes.
             # Premium promo code (grants days).
             days = storage.redeem_promo(arg, uid)
             if days is not None:
@@ -5713,6 +5775,22 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
     if text.startswith("/giveaway") or text.startswith("/розыгрыш"):
         await _do_giveaway_start(message, context, storage)
+        return
+    bedpromo_match = _BEDPROMO_RE.match(text)
+    if bedpromo_match:
+        await _do_bedpromo_make(message, context, storage)
+        return
+    if text.startswith("/bedpromo"):
+        uid = message.from_user.id
+        if not storage.is_media(uid):
+            await message.reply_text("🎬 BED-промокоды — только для медиа-ранга. Подробнее: /media")
+            return
+        await message.reply_text(
+            "💎 <b>BED-промокод для аудитории</b>\n"
+            "Создай код, который раздаёт твои BED подписчикам:\n"
+            "<code>/bedpromo СУММА КОЛ-ВО</code>\n"
+            "напр. <code>/bedpromo 5 100</code> — 100 кодов по 5 BED (спишется 500 BED с тебя).\n\n"
+            f"💰 Твой баланс: {storage.get_bed(uid)} BED", parse_mode="HTML")
         return
     if text.startswith("/idsets") or text.startswith("/collections") or text.startswith("/коллекции"):
         body, kb = _id_sets_view(storage, message.from_user.id)
