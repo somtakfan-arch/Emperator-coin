@@ -369,7 +369,8 @@ CREATE TABLE IF NOT EXISTS id_meta (
     transfers INTEGER NOT NULL DEFAULT 0,
     engraving TEXT,
     first_at INTEGER NOT NULL DEFAULT 0,
-    xp INTEGER NOT NULL DEFAULT 0
+    xp INTEGER NOT NULL DEFAULT 0,
+    gilded INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS id_wishlist (
@@ -617,6 +618,19 @@ CREATE TABLE IF NOT EXISTS bed_promo_redemptions (
     user_id INTEGER NOT NULL,
     PRIMARY KEY (code, user_id)
 );
+
+CREATE TABLE IF NOT EXISTS bed_burns (
+    user_id INTEGER PRIMARY KEY,
+    total INTEGER NOT NULL DEFAULT 0,
+    updated INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS spotlight (
+    slot INTEGER PRIMARY KEY,
+    holder_id INTEGER NOT NULL DEFAULT 0,
+    bid INTEGER NOT NULL DEFAULT 0,
+    day INTEGER NOT NULL DEFAULT 0
+);
 """
 
 CAPTURE_RETENTION_SECONDS = 86400
@@ -754,6 +768,9 @@ class Storage:
         if ref_cols and "confirmed" not in ref_cols:
             # Existing referrals were credited on /start — keep them confirmed.
             conn.execute("ALTER TABLE referrals ADD COLUMN confirmed INTEGER NOT NULL DEFAULT 1")
+        meta_cols = {row[1] for row in conn.execute("PRAGMA table_info(id_meta)")}
+        if meta_cols and "gilded" not in meta_cols:
+            conn.execute("ALTER TABLE id_meta ADD COLUMN gilded INTEGER NOT NULL DEFAULT 0")
         troll_cols = {row[1] for row in conn.execute("PRAGMA table_info(troll_texts)")}
         if troll_cols and "kind" not in troll_cols:
             conn.execute("ALTER TABLE troll_texts ADD COLUMN kind TEXT NOT NULL DEFAULT 'text'")
@@ -1972,11 +1989,29 @@ class Storage:
     def id_meta_get(self, pid) -> dict:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT transfers, engraving, first_at, xp FROM id_meta WHERE pid=?",
+                "SELECT transfers, engraving, first_at, xp, gilded FROM id_meta WHERE pid=?",
                 (str(pid),)).fetchone()
         if not row:
-            return {"transfers": 0, "engraving": None, "first_at": 0, "xp": 0}
-        return {"transfers": row[0], "engraving": row[1], "first_at": row[2], "xp": row[3]}
+            return {"transfers": 0, "engraving": None, "first_at": 0, "xp": 0, "gilded": 0}
+        return {"transfers": row[0], "engraving": row[1], "first_at": row[2],
+                "xp": row[3], "gilded": row[4]}
+
+    def id_gild(self, pid, owner_id: int) -> bool:
+        """Owner-only: permanently gild an ID (cosmetic ✨). False if not owner
+        or already gilded."""
+        pid = str(pid)
+        with self._connect() as conn:
+            if self.id_owner(pid) != owner_id:
+                return False
+            # Ensure a meta row exists WITHOUT bumping the transfer counter.
+            conn.execute(
+                "INSERT OR IGNORE INTO id_meta (pid, transfers, first_at) VALUES (?, 0, ?)",
+                (pid, int(time.time())))
+            row = conn.execute("SELECT gilded FROM id_meta WHERE pid=?", (pid,)).fetchone()
+            if row and row[0]:
+                return False
+            conn.execute("UPDATE id_meta SET gilded=1 WHERE pid=?", (pid,))
+        return True
 
     def set_engraving(self, pid, owner_id: int, text) -> bool:
         """Owner-only: engrave (or clear, with empty text) a short public note
@@ -3982,6 +4017,81 @@ class Storage:
                 "ON CONFLICT(user_id) DO UPDATE SET balance=balance+excluded.balance", (user_id, amount))
             self._ledger(conn, user_id, amount, "bedpromo_in")
         return amount
+
+    # --- 🔥 Burn board (spend BED into the void for prestige) ---
+    def burn_bed(self, user_id: int, amount: int) -> bool:
+        """Burn `amount` BED (removed from circulation) and credit the burn board.
+        False if the balance is short."""
+        if amount <= 0:
+            return False
+        if not self.spend_bed(user_id, amount, reason="burn"):
+            return False
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT INTO bed_burns (user_id, total, updated) VALUES (?, ?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET total=total+excluded.total, updated=excluded.updated",
+                (user_id, amount, int(time.time())))
+        return True
+
+    def burn_total(self, user_id: int) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT total FROM bed_burns WHERE user_id=?", (user_id,)).fetchone()
+        return row[0] if row else 0
+
+    def burn_top(self, limit: int = 10):
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT user_id, total FROM bed_burns WHERE total > 0 ORDER BY total DESC LIMIT ?",
+                (limit,)).fetchall()
+        return [{"user_id": r[0], "total": r[1]} for r in rows]
+
+    def burn_grand_total(self) -> int:
+        with self._connect() as conn:
+            row = conn.execute("SELECT COALESCE(SUM(total),0) FROM bed_burns").fetchone()
+        return row[0] if row else 0
+
+    # --- 🌟 Creator of the Day (spotlight auction, BED) ---
+    def spotlight_get(self, today: int):
+        """Current spotlight holder for `today`, or None if none/stale."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT holder_id, bid, day FROM spotlight WHERE slot=1").fetchone()
+        if not row or row[2] != today or not row[0]:
+            return None
+        return {"holder_id": row[0], "bid": row[1], "day": row[2]}
+
+    def spotlight_bid(self, user_id: int, bid: int, today: int):
+        """Outbid the current spotlight. Escrow model: the new bid is spent, the
+        previous SAME-DAY holder is refunded. Returns (ok, reason, prev_holder,
+        prev_bid). reason: 'ok' | 'low' | 'short'."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT holder_id, bid, day FROM spotlight WHERE slot=1").fetchone()
+            cur_holder, cur_bid, cur_day = (row[0], row[1], row[2]) if row else (0, 0, 0)
+            same_day = row and cur_day == today and cur_holder
+            floor = cur_bid if same_day else 0
+            if bid <= floor:
+                return (False, "low", cur_holder if same_day else 0, floor)
+            # charge the new bidder
+            bal = conn.execute("SELECT balance FROM bed_balances WHERE user_id=?", (user_id,)).fetchone()
+            is_test = self.is_test_account(user_id)
+            if not is_test and (not bal or bal[0] < bid):
+                return (False, "short", 0, 0)
+            if not is_test:
+                conn.execute("UPDATE bed_balances SET balance=balance-? WHERE user_id=?", (bid, user_id))
+                self._ledger(conn, user_id, -bid, "spotlight")
+            # refund the previous same-day holder
+            if same_day and cur_holder and cur_holder != user_id:
+                conn.execute(
+                    "INSERT INTO bed_balances (user_id, balance) VALUES (?, ?) "
+                    "ON CONFLICT(user_id) DO UPDATE SET balance=balance+excluded.balance",
+                    (cur_holder, cur_bid))
+                self._ledger(conn, cur_holder, cur_bid, "spotlight_refund")
+            conn.execute(
+                "INSERT INTO spotlight (slot, holder_id, bid, day) VALUES (1, ?, ?, ?) "
+                "ON CONFLICT(slot) DO UPDATE SET holder_id=excluded.holder_id, bid=excluded.bid, day=excluded.day",
+                (user_id, bid, today))
+        return (True, "ok", (cur_holder if same_day else 0), floor)
 
     def transfer_bed(self, sender_id: int, recipient_id: int, amount: int) -> bool:
         """Atomically move `amount` BED from sender to recipient. False if short.

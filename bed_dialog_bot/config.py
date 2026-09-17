@@ -284,6 +284,28 @@ MEDIA_PROMO_MAX_USES = int(os.environ.get("MEDIA_PROMO_MAX_USES", "200"))  # aud
 MEDIA_GIVEAWAY_MIN_MINUTES = int(os.environ.get("MEDIA_GIVEAWAY_MIN_MINUTES", "5"))
 MEDIA_GIVEAWAY_MAX_MINUTES = int(os.environ.get("MEDIA_GIVEAWAY_MAX_MINUTES", "1440"))
 
+# 🏆 BED sinks (prestige / vanity) — everything here SPENDS real BED. spend_bed
+# removes it from circulation (a true burn), which also reduces the on-chain
+# liability. No pay-to-win: these are status, cosmetics and vanity only.
+# 🔥 Burn board titles: (min_burned, title).
+BURN_TITLES = [
+    (100, "🔥 Транжира"),
+    (1_000, "🔥 Мот"),
+    (10_000, "🔥 Пироман"),
+    (100_000, "🔥 Инсинератор"),
+    (1_000_000, "🔥 Испепелитель"),
+]
+BURN_QUICK = [100, 1_000, 10_000]           # one-tap burn buttons
+VANITY_TEXT_PRICE = int(os.environ.get("VANITY_TEXT_PRICE", "5000"))  # custom letter/word ID
+VANITY_NUM_MULT = int(os.environ.get("VANITY_NUM_MULT", "5"))         # numeric vanity = appraise × this
+VANITY_MIN_PRICE = int(os.environ.get("VANITY_MIN_PRICE", "500"))
+TITLE_PRICE = int(os.environ.get("TITLE_PRICE", "2000"))    # permanent custom profile title
+TITLE_MAX_LEN = int(os.environ.get("TITLE_MAX_LEN", "24"))
+GILD_PRICE = int(os.environ.get("GILD_PRICE", "3000"))      # gold an ID (cosmetic ✨)
+CREATOR_DAY_MIN_BID = int(os.environ.get("CREATOR_DAY_MIN_BID", "100"))  # spotlight auction floor
+MEDIA_GOLD_PRICE = int(os.environ.get("MEDIA_GOLD_PRICE", "10000"))      # gold verified badge 🌟
+SPONSOR_BROADCAST_FEE = int(os.environ.get("SPONSOR_BROADCAST_FEE", "2000"))  # broadcast a giveaway to all
+
 # 🧪 Official test accounts: unlimited BED and unlimited ID slots (never spend
 # real balance). Comma-separated telegram user_ids in env.
 TEST_ACCOUNTS = {int(x) for x in os.environ.get("TEST_ACCOUNTS", "8802068360").split(",") if x.strip().lstrip("-").isdigit()}

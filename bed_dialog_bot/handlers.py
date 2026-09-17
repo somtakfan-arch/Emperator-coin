@@ -1141,9 +1141,13 @@ def _media_info(tier: int):
 
 
 def _media_badge(storage: Storage, uid: int) -> str:
-    """The creator's tier emoji as a name suffix (' 🎬'), or ''. Safe on any id."""
+    """The creator's tier emoji as a name suffix (' 🎬'), or ''. Safe on any id.
+    Gold-verified creators get a 🌟 too."""
     m = storage.get_media(uid)
-    return f" {_media_info(m['tier'])['emoji']}" if m else ""
+    if not m:
+        return ""
+    gold = "🌟" if storage.get_setting(f"mediagold:{uid}") == "1" else ""
+    return f" {_media_info(m['tier'])['emoji']}{gold}"
 
 
 def _media_apply_perks(storage: Storage, uid: int, tier: int, days: int) -> None:
@@ -1536,6 +1540,368 @@ async def _giveaway_callback(query, context, storage: Storage) -> None:
             await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
         except Exception:
             pass
+
+
+# --- 🏆 Prestige BED sinks (burn / vanity ID / title / gild / spotlight) ----
+
+def _custom_title(storage: Storage, uid: int) -> str:
+    return storage.get_setting(f"title:{uid}") or ""
+
+
+def _has_media_gold(storage: Storage, uid: int) -> bool:
+    return storage.get_setting(f"mediagold:{uid}") == "1"
+
+
+def _burn_rank(total: int) -> str:
+    name = ""
+    for mn, t in config.BURN_TITLES:
+        if total >= mn:
+            name = t
+    return name
+
+
+def _vanity_price(pid: str) -> int:
+    if any(c.isalpha() for c in pid):
+        return config.VANITY_TEXT_PRICE
+    return max(config.VANITY_MIN_PRICE, idrarity.appraise(pid, config.ID_BUY_COST) * config.VANITY_NUM_MULT)
+
+
+async def _do_buy_vanity(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    parts = (message.text or "").split()
+    tok = parts[1] if len(parts) >= 2 else ""
+    pid = _norm_pid(tok)
+    if pid is None:
+        await message.reply_text(
+            "🆔 <b>Именной ID</b> — выбери ЛЮБОЙ свободный ID (число или слово):\n"
+            "<code>/buyid НОМЕР_ИЛИ_СЛОВО</code>\n"
+            f"напр. <code>/buyid 777</code> или <code>/buyid {html.escape(message.from_user.first_name.lower()[:8] or 'king')}</code>\n\n"
+            f"💬 Слово/имя (буквы) — <b>{config.VANITY_TEXT_PRICE} BED</b>.\n"
+            f"🔢 Число — по редкости (мин. {config.VANITY_MIN_PRICE} BED).\n"
+            f"💰 Баланс: {storage.get_bed(uid)} BED", parse_mode="HTML")
+        return
+    if storage.id_owner(pid) is not None:
+        await message.reply_text(f"❌ ID <code>{html.escape(pid)}</code> уже занят. Выбери другой.", parse_mode="HTML")
+        return
+    if not storage.is_test_account(uid) and storage.count_ids(uid) >= _id_limit(storage, uid):
+        await message.reply_text(
+            "📦 Нет свободных слотов под ID. Докупи: <code>/id slots N</code>.", parse_mode="HTML")
+        return
+    price = _vanity_price(pid)
+    if not storage.spend_bed(uid, price, reason="vanity_id"):
+        await message.reply_text(
+            f"❌ Не хватает BED: нужно {price}, у тебя {storage.get_bed(uid)}.")
+        return
+    got = storage.grant_id(uid, config.ID_MAX_VALUE, pid=pid)
+    if not got:
+        storage.add_bed(uid, price, reason="vanity_refund")  # race: someone took it
+        await message.reply_text("❌ Не удалось — ID только что заняли. BED возвращены.")
+        return
+    storage.add_aura(uid, config.AURA_PER_ID_BUY)
+    cls = idrarity.classify(pid)
+    await message.reply_text(
+        f"✅ <b>Твой именной ID: {cls['emoji']} {html.escape(pid)}!</b>\n"
+        f"Оплачено {price} BED · +{config.AURA_PER_ID_BUY} ауры.\n"
+        f"💰 Баланс: {storage.get_bed(uid)} BED · открыть: /id", parse_mode="HTML")
+
+
+async def _do_burn(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    parts = (message.text or "").split()
+    if len(parts) < 2 or not parts[1].isdigit() or int(parts[1]) <= 0:
+        body, kb = _burn_view(storage, uid)
+        await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
+        return
+    amount = int(parts[1])
+    if not storage.burn_bed(uid, amount):
+        await message.reply_text(f"❌ Не хватает BED: у тебя {storage.get_bed(uid)}.")
+        return
+    total = storage.burn_total(uid)
+    rank = _burn_rank(total)
+    await message.reply_text(
+        f"🔥 <b>Сожжено {amount} BED!</b>\n"
+        f"Всего сожжено тобой: <b>{total} BED</b>" + (f" · ранг: {rank}" if rank else "") +
+        f"\n💰 Баланс: {storage.get_bed(uid)} BED · топ: /burnboard", parse_mode="HTML")
+
+
+def _burn_view(storage: Storage, uid: int):
+    total = storage.burn_total(uid)
+    rank = _burn_rank(total)
+    lines = [
+        "🔥 <b>Сжигание BED</b>",
+        "Сожги BED навсегда — это флекс и место в топе берннеров. "
+        "BED исчезает из оборота (дефляция).\n",
+        f"🔥 Ты сжёг: <b>{total} BED</b>" + (f" · ранг: <b>{rank}</b>" if rank else ""),
+        f"💰 Баланс: {storage.get_bed(uid)} BED",
+        "\n<i>Команда:</i> <code>/burn СУММА</code>",
+    ]
+    quick = [_cb(f"🔥 {a}", f"pr:burn:{a}", "danger") for a in config.BURN_QUICK]
+    rows = [quick, [_cb("🏆 Топ берннеров", "pr:burnboard", "primary"),
+                    _cb("⬅️ Назад", "pr:home", "primary")]]
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+def _burnboard_text(storage: Storage, uid: int) -> str:
+    top = storage.burn_top(10)
+    medals = ["🥇", "🥈", "🥉"] + ["🔥"] * 7
+    lines = ["🏆 <b>Топ сжигателей BED</b>\n"]
+    if not top:
+        lines.append("<i>Пока никто не сжигал. Будь первым: /burn</i>")
+    else:
+        for i, r in enumerate(top):
+            name, username = storage.user_display(r["user_id"])
+            who = formatting.format_sender(name or "аноним", username)
+            lines.append(f"{medals[i]} {who} — <b>{r['total']}</b> BED")
+    lines.append(f"\n🔥 Всего сожжено в игре: <b>{storage.burn_grand_total()}</b> BED")
+    lines.append(f"🔥 Ты сжёг: <b>{storage.burn_total(uid)}</b> BED")
+    return "\n".join(lines)
+
+
+async def _do_settitle(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    parts = (message.text or "").split(maxsplit=1)
+    title = parts[1].strip() if len(parts) > 1 else ""
+    if not title:
+        await message.reply_text(
+            f"🏅 <b>Кастом-титул</b> в профиле за {config.TITLE_PRICE} BED (навсегда).\n"
+            f"<code>/settitle твой титул</code> (до {config.TITLE_MAX_LEN} симв.)\n"
+            "Убрать бесплатно: <code>/deltitle</code>", parse_mode="HTML")
+        return
+    title = re.sub(r"[<>]", "", title)[:config.TITLE_MAX_LEN]
+    if storage.get_setting(f"title:{uid}"):
+        storage.set_setting(f"title:{uid}", title)
+        await message.reply_text(f"🏅 Титул обновлён: «{html.escape(title)}» (бесплатно).")
+        return
+    if not storage.spend_bed(uid, config.TITLE_PRICE, reason="title"):
+        await message.reply_text(f"❌ Не хватает BED: нужно {config.TITLE_PRICE}, у тебя {storage.get_bed(uid)}.")
+        return
+    storage.set_setting(f"title:{uid}", title)
+    await message.reply_text(
+        f"🏅 <b>Титул установлен:</b> «{html.escape(title)}»\n"
+        f"💰 Баланс: {storage.get_bed(uid)} BED", parse_mode="HTML")
+
+
+async def _do_gild(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    parts = (message.text or "").split()
+    pid = _norm_pid(parts[1]) if len(parts) >= 2 else None
+    if pid is None:
+        await message.reply_text(
+            f"✨ <b>Золочение ID</b> за {config.GILD_PRICE} BED — золотой значок на карточке.\n"
+            "<code>/gild ID</code>", parse_mode="HTML")
+        return
+    if storage.id_owner(pid) != uid:
+        await message.reply_text("Это не твой ID (золотить можно только свои).")
+        return
+    if storage.id_meta_get(pid).get("gilded"):
+        await message.reply_text("✨ Этот ID уже позолочён.")
+        return
+    if not storage.spend_bed(uid, config.GILD_PRICE, reason="gild"):
+        await message.reply_text(f"❌ Не хватает BED: нужно {config.GILD_PRICE}, у тебя {storage.get_bed(uid)}.")
+        return
+    storage.id_gild(pid, uid)
+    await message.reply_text(
+        f"✨ <b>ID {html.escape(pid)} позолочён!</b> Теперь он сияет в /whois.\n"
+        f"💰 Баланс: {storage.get_bed(uid)} BED", parse_mode="HTML")
+
+
+async def _do_goldverify(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    if not storage.is_media(uid):
+        await message.reply_text("🌟 Золотой верифик — только для медиа-ранга. /media")
+        return
+    if _has_media_gold(storage, uid):
+        await message.reply_text("🌟 У тебя уже золотой верифик.")
+        return
+    if not storage.spend_bed(uid, config.MEDIA_GOLD_PRICE, reason="mediagold"):
+        await message.reply_text(f"❌ Не хватает BED: нужно {config.MEDIA_GOLD_PRICE}, у тебя {storage.get_bed(uid)}.")
+        return
+    storage.set_setting(f"mediagold:{uid}", "1")
+    await message.reply_text(
+        f"🌟 <b>Золотой верифик активирован!</b> Твой бейдж теперь золотой.\n"
+        f"💰 Баланс: {storage.get_bed(uid)} BED", parse_mode="HTML")
+
+
+def _spotlight_line(storage: Storage) -> str:
+    today = int(time.time()) // 86400
+    sp = storage.spotlight_get(today)
+    if not sp:
+        return ""
+    name, username = storage.user_display(sp["holder_id"])
+    who = formatting.format_sender(name or "—", username)
+    return f"🌟 Креатор дня: <b>{who}</b> (ставка {sp['bid']} BED)"
+
+
+async def _do_creatorday(message, context, storage: Storage) -> None:
+    uid = message.from_user.id
+    if not storage.is_media(uid):
+        await message.reply_text("🌟 «Креатор дня» — только для медиа-ранга. /media")
+        return
+    today = int(time.time()) // 86400
+    parts = (message.text or "").split()
+    if len(parts) < 2 or not parts[1].isdigit():
+        sp = storage.spotlight_get(today)
+        cur = f"\nСейчас: ставка {sp['bid']} BED." if sp else ""
+        await message.reply_text(
+            f"🌟 <b>Креатор дня</b> — висишь в шапке бота сутки.\n"
+            f"Ставь BED, перебивай других: <code>/creatorday СТАВКА</code> "
+            f"(мин. {config.CREATOR_DAY_MIN_BID}).\n"
+            "Перебитому ставка возвращается." + cur, parse_mode="HTML")
+        return
+    bid = int(parts[1])
+    if bid < config.CREATOR_DAY_MIN_BID:
+        await message.reply_text(f"Минимальная ставка — {config.CREATOR_DAY_MIN_BID} BED.")
+        return
+    ok, reason, prev_holder, floor = storage.spotlight_bid(uid, bid, today)
+    if not ok and reason == "low":
+        await message.reply_text(f"Мало: текущая ставка {floor} BED. Ставь больше.")
+        return
+    if not ok and reason == "short":
+        await message.reply_text(f"❌ Не хватает BED: нужно {bid}, у тебя {storage.get_bed(uid)}.")
+        return
+    await message.reply_text(
+        f"🌟 <b>Ты — Креатор дня!</b> Ставка {bid} BED.\n"
+        f"💰 Баланс: {storage.get_bed(uid)} BED", parse_mode="HTML")
+    if prev_holder and prev_holder != uid:
+        try:
+            await context.bot.send_message(
+                prev_holder, f"🌟 Тебя перебили в «Креатор дня» — ставка {floor} BED возвращена. "
+                             "Перебей обратно: /creatorday")
+        except Exception:
+            pass
+
+
+async def _do_sponsor_giveaway(message, context, storage: Storage) -> None:
+    """A giveaway (self-funded) that is ALSO broadcast to every user, for a BED fee."""
+    uid = message.from_user.id
+    if not storage.is_media(uid):
+        await message.reply_text("📣 Спонсорский розыгрыш — только для медиа-ранга. /media")
+        return
+    today = int(time.time()) // 86400
+    if storage.get_setting(f"sponsorday:{uid}") == str(today):
+        await message.reply_text("📣 Спонсорский розыгрыш можно запускать раз в сутки.")
+        return
+    parts = (message.text or "").split()
+    if len(parts) < 3 or not parts[1].isdigit() or not parts[2].isdigit():
+        await message.reply_text(
+            f"📣 <b>Спонсорский розыгрыш на всю базу</b>\n"
+            f"<code>/sponsorgiveaway СУММА МИНУТ</code>\n"
+            f"Банк — из твоего баланса + сбор за рассылку {config.SPONSOR_BROADCAST_FEE} BED.\n"
+            f"💰 Баланс: {storage.get_bed(uid)} BED", parse_mode="HTML")
+        return
+    info = _media_info(storage.media_tier(uid))
+    prize, minutes = int(parts[1]), int(parts[2])
+    if prize <= 0 or prize > info["giveaway_max"]:
+        await message.reply_text(f"Банк — от 1 до {info['giveaway_max']} BED (твой тир).")
+        return
+    if not (config.MEDIA_GIVEAWAY_MIN_MINUTES <= minutes <= config.MEDIA_GIVEAWAY_MAX_MINUTES):
+        await message.reply_text(
+            f"Длительность — {config.MEDIA_GIVEAWAY_MIN_MINUTES}–{config.MEDIA_GIVEAWAY_MAX_MINUTES} мин.")
+        return
+    need = prize + config.SPONSOR_BROADCAST_FEE
+    if not storage.spend_bed(uid, need, reason="sponsor_giveaway"):
+        await message.reply_text(
+            f"❌ Не хватает BED: нужно {need} (банк {prize} + рассылка "
+            f"{config.SPONSOR_BROADCAST_FEE}), у тебя {storage.get_bed(uid)}.")
+        return
+    storage.set_setting(f"sponsorday:{uid}", str(today))
+    ends_at = int(time.time()) + minutes * 60
+    gid = storage.create_giveaway(uid, message.chat_id, prize, ends_at)
+    storage.giveaway_join(gid, uid)
+    link = f"https://t.me/{context.bot.username}?start=give_{gid}"
+    await message.reply_text(
+        f"📣 Спонсорский розыгрыш #{gid} на {prize} BED запущен и разослан по базе!\n"
+        f"🔗 <code>{link}</code>\n💰 Баланс: {storage.get_bed(uid)} BED", parse_mode="HTML")
+    # Broadcast to all users (throttled, best-effort).
+    hoster, huser = _display_name(message)
+    who = formatting.format_sender(hoster, huser)
+    body, kb = _giveaway_card(storage, gid, context.bot.username)
+    sent = 0
+    for u in storage.list_users():
+        tuid = u["user_id"]
+        if tuid == uid:
+            continue
+        try:
+            await context.bot.send_message(
+                tuid, f"📣 <b>{who}</b> разыгрывает <b>{prize} BED</b>!\n\n" + body,
+                parse_mode="HTML", reply_markup=kb)
+            sent += 1
+            if sent % 20 == 0:
+                await asyncio.sleep(1)
+        except Exception:
+            pass
+
+
+def _prestige_view(storage: Storage, uid: int):
+    title = _custom_title(storage, uid)
+    spot = _spotlight_line(storage)
+    lines = [
+        "🏆 <b>Престиж и флекс за BED</b>\n",
+        *([spot] if spot else []),
+        "Трать BED на статус и косметику (BED сгорает — это дефляция):",
+        f"\n🔥 <b>Сжечь BED</b> — топ берннеров: <code>/burn СУММА</code>",
+        f"🆔 <b>Именной ID</b> (число/слово): <code>/buyid ID</code> "
+        f"(слово — {config.VANITY_TEXT_PRICE} BED)",
+        f"🏅 <b>Кастом-титул</b> ({config.TITLE_PRICE} BED): <code>/settitle текст</code>",
+        f"✨ <b>Золочение ID</b> ({config.GILD_PRICE} BED): <code>/gild ID</code>",
+    ]
+    if storage.is_media(uid):
+        lines += [
+            "\n<b>Для медиа:</b>",
+            f"🌟 Золотой верифик ({config.MEDIA_GOLD_PRICE} BED): <code>/goldverify</code>",
+            f"🌟 Креатор дня (аукцион): <code>/creatorday СТАВКА</code>",
+            f"📣 Спонсор-розыгрыш на всех: <code>/sponsorgiveaway СУММА МИН</code>",
+        ]
+    if title:
+        lines.append(f"\n🏅 Твой титул: «{html.escape(title)}»")
+    lines.append(f"\n💰 Баланс: {storage.get_bed(uid)} BED")
+    rows = [
+        [_cb("🔥 Сжечь BED", "pr:burn", "danger"), _cb("🏆 Топ берннеров", "pr:burnboard", "primary")],
+    ]
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+async def _prestige_callback(query, context, storage: Storage) -> None:
+    uid = query.from_user.id
+    data = query.data.split(":")
+    op = data[1] if len(data) > 1 else "home"
+
+    async def _show(view):
+        await query.answer()
+        body, kb = view
+        try:
+            await query.edit_message_text(body, parse_mode="HTML", reply_markup=kb)
+        except Exception:
+            pass
+
+    if op == "open":
+        await query.answer()
+        body, kb = _prestige_view(storage, uid)
+        await context.bot.send_message(query.message.chat_id, body, parse_mode="HTML", reply_markup=kb)
+        return
+    if op == "home":
+        await _show(_prestige_view(storage, uid))
+        return
+    if op == "burn" and len(data) == 2:
+        await _show(_burn_view(storage, uid))
+        return
+    if op == "burn" and len(data) >= 3 and data[2].isdigit():
+        amount = int(data[2])
+        if storage.burn_bed(uid, amount):
+            total = storage.burn_total(uid)
+            rank = _burn_rank(total)
+            await query.answer(f"🔥 Сожжено {amount} BED!" + (f" Ранг: {rank}" if rank else ""), show_alert=True)
+        else:
+            await query.answer("Не хватает BED.", show_alert=True)
+        await _show(_burn_view(storage, uid))
+        return
+    if op == "burnboard":
+        await _show((_burnboard_text(storage, uid),
+                     InlineKeyboardMarkup([[_cb("🔥 Сжечь ещё", "pr:burn", "danger"),
+                                            _cb("⬅️ Назад", "pr:home", "primary")]])))
+        return
+    await query.answer()
+    await _show(_prestige_view(storage, uid))
 
 
 # --- 🎡 Wheel of Fortune ---------------------------------------------------
@@ -2906,7 +3272,10 @@ def _profile_text(storage: Storage, uid: int, name_disp: str) -> str:
     av = storage.get_aura(uid)
     aemo, aname = _aura_rank(av)
     mb = _media_badge(storage, uid)
+    ct = _custom_title(storage, uid)
+    title_line = f"🏅 <i>«{html.escape(ct)}»</i>\n" if ct else ""
     lines = [f"👤 <b>{html.escape(name_disp)}</b>{mb}",
+             *([title_line.rstrip("\n")] if title_line else []),
              f"🎚 Уровень <b>{lvl}</b> ({gxp} XP) · ⭐ реп: {rep} · {aemo} аура: <b>{av}</b> ({aname})",
              f"🪙 Монеты: {coins} (+ банк {bank}) · 💎 BED: {bed}"]
     if c:
@@ -2920,6 +3289,10 @@ def _profile_text(storage: Storage, uid: int, name_disp: str) -> str:
     msl = _media_status_line(storage, uid)
     if msl:
         lines.append(f"🎬 {msl} · /media")
+    burned = storage.burn_total(uid)
+    if burned:
+        br = _burn_rank(burned)
+        lines.append(f"🔥 Сожжено BED: <b>{burned}</b>" + (f" · {br}" if br else ""))
     lines.append("\n🪙 /work /crime /rob · 🏦 /bank · 🌾 /farm · 🏰 /clan · 💞 /marry · 🎲 /flip /rps")
     return "\n".join(lines)
 
@@ -3524,8 +3897,9 @@ async def _id_whois(message, context, storage: Storage) -> None:
     meta = storage.id_meta_get(pid)
     # Anonymous card: rarity + appraisal + provenance. Never reveals WHO owns it.
     stars = "★" * min(5, 1 + cls["score"] // 20)
+    gild = " ✨<b>ЗОЛОТО</b>✨" if meta.get("gilded") else ""
     lines = [
-        f"🆔 <b>{html.escape(str(pid))}</b>  {cls['emoji']}",
+        f"🆔 <b>{html.escape(str(pid))}</b>  {cls['emoji']}{gild}",
         f"{cls['emoji']} Редкость: <b>{cls['name']}</b> {stars}",
         f"💎 Оценка: <b>~{val} BED</b>",
     ]
@@ -3562,8 +3936,9 @@ async def _id_card_public(message, context, storage: Storage, pid: str) -> None:
     cls = idrarity.classify(pid)
     meta = storage.id_meta_get(pid)
     lvl = _id_level(meta.get("xp", 0))
-    lines = [f"🪪 <b>Карточка ID {html.escape(str(pid))}</b> {cls['emoji']}",
-             f"{cls['emoji']} {cls['name']} · 💎 ~{idrarity.appraise(pid, config.ID_BUY_COST)} BED",
+    gild = " ✨" if meta.get("gilded") else ""
+    lines = [f"🪪 <b>Карточка ID {html.escape(str(pid))}</b> {cls['emoji']}{gild}",
+             f"{cls['emoji']} {cls['name']}{' · ✨ЗОЛОТО' if meta.get('gilded') else ''} · 💎 ~{idrarity.appraise(pid, config.ID_BUY_COST)} BED",
              f"🔁 переходов: {meta['transfers']}" + (f" · ⭐ ур. {lvl}" if lvl else "")]
     if meta.get("engraving"):
         lines.append(f"✍️ <i>«{html.escape(meta['engraving'])}»</i>")
@@ -5605,7 +5980,12 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     if text.startswith("/buyid"):
-        await _id_buy(message, context, storage)
+        parts = text.split()
+        # /buyid <specific id/word> → vanity purchase; bare /buyid → random buy.
+        if len(parts) >= 2 and _norm_pid(parts[1]):
+            await _do_buy_vanity(message, context, storage)
+        else:
+            await _id_buy(message, context, storage)
         return
     if text.startswith("/sellall") or text.startswith("/продатьвсе"):
         uid = message.from_user.id
@@ -5773,8 +6153,42 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         body, kb = _media_view(storage, message.from_user.id)
         await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
         return
+    if text.startswith("/sponsorgiveaway"):
+        await _do_sponsor_giveaway(message, context, storage)
+        return
     if text.startswith("/giveaway") or text.startswith("/розыгрыш"):
         await _do_giveaway_start(message, context, storage)
+        return
+    if text.startswith("/prestige") or text.startswith("/престиж") or text.startswith("/flex"):
+        body, kb = _prestige_view(storage, message.from_user.id)
+        await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
+        return
+    if text.startswith("/burnboard") or text.startswith("/burntop"):
+        await message.reply_text(
+            _burnboard_text(storage, message.from_user.id), parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[_cb("🔥 Сжечь BED", "pr:burn", "danger")]]))
+        return
+    if text.startswith("/burn") or text.startswith("/сжечь"):
+        await _do_burn(message, context, storage)
+        return
+    if text.startswith("/vanity") or text.startswith("/именной"):
+        await _do_buy_vanity(message, context, storage)
+        return
+    if text.startswith("/settitle") or text.startswith("/титул"):
+        await _do_settitle(message, context, storage)
+        return
+    if text.startswith("/deltitle"):
+        storage.set_setting(f"title:{message.from_user.id}", "")
+        await message.reply_text("🏅 Титул убран.")
+        return
+    if text.startswith("/gild") or text.startswith("/золото"):
+        await _do_gild(message, context, storage)
+        return
+    if text.startswith("/goldverify"):
+        await _do_goldverify(message, context, storage)
+        return
+    if text.startswith("/creatorday") or text.startswith("/креатордня"):
+        await _do_creatorday(message, context, storage)
         return
     bedpromo_match = _BEDPROMO_RE.match(text)
     if bedpromo_match:
@@ -9036,6 +9450,9 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
     elif query.data.startswith("mg:"):
         storage = context.bot_data["storage"]
         await _giveaway_callback(query, context, storage)
+    elif query.data.startswith("pr:"):
+        storage = context.bot_data["storage"]
+        await _prestige_callback(query, context, storage)
     elif query.data.startswith("id:"):
         storage = context.bot_data["storage"]
         await _id_callback(query, context, storage)
