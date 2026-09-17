@@ -76,9 +76,15 @@ def roll_crash() -> float:
 # --- 💣 Mines --------------------------------------------------------------
 import os as _os
 MINES_TILES = 25
-# House edge on mines. Bumped hard (was 0.05) — cashout multipliers are lower,
-# so players must reveal more tiles to profit and bust far more often.
-MINES_EDGE = float(_os.environ.get("MINES_EDGE", "0.35"))
+# House edge on mines. Bumped hard (was 0.05 → 0.35 → 0.40).
+MINES_EDGE = float(_os.environ.get("MINES_EDGE", "0.40"))
+# MEGA anti-loot caps: even with a −40% EV, an UNCAPPED multiplier let a lucky
+# board-clear on a big bet pay out a fortune in a few minutes (BED = real Stars).
+# Hard-cap the multiplier, the per-game bet and the absolute payout so no single
+# run can ever loot more than MINES_MAX_WIN.
+MINES_MAX_MULT = float(_os.environ.get("MINES_MAX_MULT", "10.0"))  # multiplier ceiling
+MINES_MAX_BET = int(_os.environ.get("MINES_MAX_BET", "50"))        # per-game bet cap (BED)
+MINES_MAX_WIN = int(_os.environ.get("MINES_MAX_WIN", "500"))       # absolute payout cap (BED)
 
 
 def mines_new(bombs: int):
@@ -88,12 +94,17 @@ def mines_new(bombs: int):
 
 
 def mines_multiplier(picks: int, bombs: int) -> float:
-    """Fair multiplier after `picks` safe reveals, times (1-edge)."""
+    """Fair multiplier after `picks` safe reveals, times (1-edge), hard-capped."""
     m = 1.0
     safe = MINES_TILES - bombs
     for i in range(picks):
         m *= (MINES_TILES - i) / (safe - i)
-    return m * (1 - MINES_EDGE)
+    return min(m * (1 - MINES_EDGE), MINES_MAX_MULT)
+
+
+def mines_prize(bet: int, picks: int, bombs: int) -> int:
+    """Payout for cashing out, capped at MINES_MAX_WIN (anti-loot)."""
+    return min(int(bet * mines_multiplier(picks, bombs)), MINES_MAX_WIN)
 
 
 # --- 🃏 Blackjack ----------------------------------------------------------

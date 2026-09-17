@@ -1964,7 +1964,7 @@ async def _play_crash(message, context, storage: Storage) -> None:
 def _mines_view(state, reveal_all=False, dead=False):
     picks = len(state["revealed"])
     mult = casino.mines_multiplier(picks, state["bombs"])
-    cash = int(state["bet"] * mult)
+    cash = casino.mines_prize(state["bet"], picks, state["bombs"])
     rows = []
     for r in range(5):
         row = []
@@ -1997,8 +1997,9 @@ async def _start_mines(message, context, storage: Storage) -> None:
             f"💰 Баланс: {storage.get_bed(uid)} BED.", parse_mode="HTML")
         return
     bet = int(parts[1])
-    if bet < config.CASINO_MIN_BET or bet > config.CASINO_MAX_BET:
-        await message.reply_text(f"Ставка от {config.CASINO_MIN_BET} до {config.CASINO_MAX_BET} BED.")
+    mines_max = min(config.CASINO_MAX_BET, casino.MINES_MAX_BET)
+    if bet < config.CASINO_MIN_BET or bet > mines_max:
+        await message.reply_text(f"Ставка от {config.CASINO_MIN_BET} до {mines_max} BED.")
         return
     bombs = 3
     if len(parts) >= 3 and parts[2].isdigit():
@@ -2039,7 +2040,7 @@ async def _mines_callback(query, context, storage: Storage) -> None:
             await query.answer("Открой хотя бы одну клетку.")
             return
         mult = casino.mines_multiplier(picks, state["bombs"])
-        prize = int(state["bet"] * mult)
+        prize = casino.mines_prize(state["bet"], picks, state["bombs"])
         new_bal = storage.add_bed(uid, prize, reason="mines_win")
         context.bot_data["casino"].pop(uid, None)
         await query.answer("💰 Забрал!")
@@ -2069,8 +2070,9 @@ async def _mines_callback(query, context, storage: Storage) -> None:
     state["revealed"].add(idx)
     await query.answer("💎")
     if len(state["revealed"]) >= 25 - state["bombs"]:
-        mult = casino.mines_multiplier(len(state["revealed"]), state["bombs"])
-        prize = int(state["bet"] * mult)
+        picks_all = len(state["revealed"])
+        mult = casino.mines_multiplier(picks_all, state["bombs"])
+        prize = casino.mines_prize(state["bet"], picks_all, state["bombs"])
         new_bal = storage.add_bed(uid, prize, reason="mines_win")
         context.bot_data["casino"].pop(uid, None)
         _, kb = _mines_view(state, reveal_all=True)
