@@ -1,0 +1,22 @@
+name: BedNoTridents
+version: '${project.version}'
+main: ru.bedsmp.notridents.BedNoTridents
+api-version: '1.21'
+authors: [Emperatorrr]
+description: Убирает трезубцы и их чары со всего сервера BedSMP.
+website: https://discord.gg/D5JEqtup
+
+commands:
+  notridents:
+    description: Управление плагином BedNoTridents
+    usage: /notridents <scan|stats|reload|toggle>
+    aliases: [bnt, notrident, notrez]
+    permission: bednotridents.admin
+
+permissions:
+  bednotridents.admin:
+    description: Доступ к команде /notridents
+    default: op
+  bednotridents.bypass:
+    description: Исключение из очистки (работает только если включено в config.yml)
+    default: false
