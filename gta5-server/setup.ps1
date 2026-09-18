@@ -231,7 +231,7 @@ try {
 }
 
 if (-not $SkipGarage) {
-    Write-Step 'Phone garage'
+    Write-Step 'Phone garage and shops'
     try {
         $repoZipFile = Join-Path $TmpDir 'repo.zip'
         Get-File -Url $RepoZip -OutFile $repoZipFile
@@ -239,14 +239,18 @@ if (-not $SkipGarage) {
         if (Test-Path -LiteralPath $repoTmp) { Remove-Item -LiteralPath $repoTmp -Recurse -Force }
         Expand-Archive -LiteralPath $repoZipFile -DestinationPath $repoTmp -Force
 
-        $garageSrc = Get-ChildItem -LiteralPath $repoTmp -Recurse -Directory -Filter 'phone_garage' |
-            Select-Object -First 1
-        if (-not $garageSrc) { throw 'phone_garage not found in the repo archive' }
-
-        $garageDest = Join-Path $ResDir 'phone_garage'
-        if (Test-Path -LiteralPath $garageDest) { Remove-Item -LiteralPath $garageDest -Recurse -Force }
-        Move-Item -LiteralPath $garageSrc.FullName -Destination $garageDest -Force
-        Write-Ok 'phone_garage installed'
+        foreach ($resource in @('phone_garage', 'ls_shops')) {
+            $src = Get-ChildItem -LiteralPath $repoTmp -Recurse -Directory -Filter $resource |
+                Select-Object -First 1
+            if (-not $src) {
+                Write-Warn "$resource not found in the repo archive"
+                continue
+            }
+            $dest = Join-Path $ResDir $resource
+            if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
+            Move-Item -LiteralPath $src.FullName -Destination $dest -Force
+            Write-Ok "$resource installed"
+        }
     } catch {
         Write-Warn "phone garage install failed: $($_.Exception.Message)"
     }
@@ -332,9 +336,11 @@ add_ace builtin.everyone "vMenu.Everything" allow
 #add_principal identifier.fivem:1234567 group.admin
 #add_ace group.admin command allow
 
-## --- phone garage -------------------------------------------------
+## --- phone garage and shops ---------------------------------------
 # F1 opens the phone. /park stores the called car, /parkhere records a spot.
+# Shops are marked on the map; walk into a marker and press E.
 ensure phone_garage
+ensure ls_shops
 
 # Who may hand out money with /givemoney:
 #add_ace group.admin garage.admin allow
@@ -369,7 +375,7 @@ Write-Host @"
  1. Start the server:   $batPath
  2. In FiveM press F8 and type:   connect 127.0.0.1
  3. Friends connect to your Radmin VPN / external IP on port 30120.
- 4. In game press M for vMenu, F1 for the phone garage.
+ 4. In game press M for vMenu, F1 for the phone garage, E at a shop.
 
  Added more car packs? Drop them in $CarsDir and run:
      .\setup.ps1 -SyncCarsOnly

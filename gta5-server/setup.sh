@@ -162,18 +162,20 @@ else
 fi
 
 if [[ "$SKIP_GARAGE" != "1" ]]; then
-    step 'Phone garage'
+    step 'Phone garage and shops'
     if curl -fL --progress-bar "$REPO_ZIP" -o "$TMP_DIR/repo.zip"; then
         rm -rf "$TMP_DIR/repo" && mkdir -p "$TMP_DIR/repo"
         unzip -qo "$TMP_DIR/repo.zip" -d "$TMP_DIR/repo"
-        garage_src="$(find "$TMP_DIR/repo" -type d -name phone_garage | head -n 1)"
-        if [[ -n "$garage_src" ]]; then
-            rm -rf "$RES_DIR/phone_garage"
-            mv "$garage_src" "$RES_DIR/phone_garage"
-            ok 'phone_garage installed'
-        else
-            warn 'phone_garage not found in the repo archive'
-        fi
+        for resource in phone_garage ls_shops; do
+            src="$(find "$TMP_DIR/repo" -type d -name "$resource" | head -n 1)"
+            if [[ -n "$src" ]]; then
+                rm -rf "${RES_DIR:?}/$resource"
+                mv "$src" "$RES_DIR/$resource"
+                ok "$resource installed"
+            else
+                warn "$resource not found in the repo archive"
+            fi
+        done
     else
         warn 'phone garage download failed'
     fi
@@ -247,9 +249,11 @@ add_ace builtin.everyone "vMenu.Everything" allow
 #add_principal identifier.fivem:1234567 group.admin
 #add_ace group.admin command allow
 
-## --- phone garage -------------------------------------------------
+## --- phone garage and shops ---------------------------------------
 # F1 opens the phone. /park stores the called car, /parkhere records a spot.
+# Shops are marked on the map; walk into a marker and press E.
 ensure phone_garage
+ensure ls_shops
 
 # Who may hand out money with /givemoney:
 #add_ace group.admin garage.admin allow

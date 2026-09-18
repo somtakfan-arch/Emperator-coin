@@ -194,6 +194,38 @@ RegisterNetEvent('phone_garage:addSpot', function(spot)
     notify(src, ('Парковка записана: %s'):format(label), 'success')
 end)
 
+-- --- exports ---------------------------------------------------------------
+-- The wallet lives here, so other resources (ls_shops) go through these.
+
+exports('getMoney', function(src)
+    local rec = recordOf(src)
+    return rec.money
+end)
+
+exports('addMoney', function(src, amount)
+    amount = math.floor(tonumber(amount) or 0)
+    if amount <= 0 then return false end
+    local rec = recordOf(src)
+    rec.money = rec.money + amount
+    dirty = true
+    save()
+    sync(src)
+    return true
+end)
+
+-- Returns false and changes nothing when the player cannot afford it.
+exports('removeMoney', function(src, amount)
+    amount = math.floor(tonumber(amount) or 0)
+    if amount <= 0 then return false end
+    local rec = recordOf(src)
+    if rec.money < amount then return false end
+    rec.money = rec.money - amount
+    dirty = true
+    save()
+    sync(src)
+    return true
+end)
+
 -- --- commands --------------------------------------------------------------
 
 RegisterCommand('money', function(src)

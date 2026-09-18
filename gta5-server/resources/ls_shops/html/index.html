@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ls_shops</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Style editor: clothing store / barbershop -->
+<div id="style" class="panel hidden">
+  <header class="head">
+    <h1 id="style-title">Магазин одежды</h1>
+    <span class="wallet" id="style-money">$0</span>
+  </header>
+
+  <div class="rows" id="style-rows"></div>
+
+  <div class="turn">
+    <button class="ghost" data-rotate="-1">↺ Повернуть</button>
+    <button class="ghost" data-rotate="1">Повернуть ↻</button>
+  </div>
+
+  <footer class="foot">
+    <div class="total">
+      <span id="style-changed">Ничего не изменено</span>
+      <b id="style-total">$0</b>
+    </div>
+    <div class="foot-actions">
+      <button class="btn" id="style-cancel">Отмена</button>
+      <button class="btn primary" id="style-confirm">Купить</button>
+    </div>
+  </footer>
+</div>
+
+<!-- Simple buy list: Ammu-Nation / 24-7 -->
+<div id="list" class="panel center hidden">
+  <header class="head">
+    <h1 id="list-title">Магазин</h1>
+    <span class="wallet" id="list-money">$0</span>
+  </header>
+  <div class="rows" id="list-rows"></div>
+  <footer class="foot">
+    <button class="btn" id="list-close">Закрыть</button>
+  </footer>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

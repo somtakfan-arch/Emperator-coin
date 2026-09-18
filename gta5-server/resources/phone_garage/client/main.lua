@@ -117,6 +117,32 @@ local function despawnActive()
     activeVehicle, activePlate = nil, nil
 end
 
+-- --- parking blips ---------------------------------------------------------
+
+local parkingBlips = {}
+
+local function clearParkingBlips()
+    for _, blip in ipairs(parkingBlips) do
+        if DoesBlipExist(blip) then RemoveBlip(blip) end
+    end
+    parkingBlips = {}
+end
+
+local function rebuildParkingBlips()
+    clearParkingBlips()
+    for _, spot in ipairs(allSpots()) do
+        local blip = AddBlipForCoord(spot.x + 0.0, spot.y + 0.0, spot.z + 0.0)
+        SetBlipSprite(blip, 50)          -- garage
+        SetBlipColour(blip, 3)           -- blue
+        SetBlipScale(blip, 0.7)
+        SetBlipAsShortRange(blip, true)
+        BeginTextCommandSetBlipName('STRING')
+        AddTextComponentSubstringPlayerName('Парковка: ' .. (spot.label or 'без названия'))
+        EndTextCommandSetBlipName(blip)
+        parkingBlips[#parkingBlips + 1] = blip
+    end
+end
+
 -- --- spawning --------------------------------------------------------------
 
 local function deliver(car)
@@ -247,6 +273,7 @@ RegisterNetEvent('phone_garage:sync', function(data)
     State.cars = data.cars or {}
     State.spots = data.spots or {}
     pushState()
+    rebuildParkingBlips()
 end)
 
 RegisterNetEvent('phone_garage:notify', function(text)
@@ -264,6 +291,13 @@ RegisterNetEvent('phone_garage:despawn', function(plate)
     end
 end)
 
+-- --- exports ---------------------------------------------------------------
+-- ls_shops reads the balance from here to show it in its own UI.
+
+exports('getMoney', function()
+    return State.money
+end)
+
 -- --- boot ------------------------------------------------------------------
 
 CreateThread(function()
@@ -276,5 +310,6 @@ AddEventHandler('onResourceStop', function(name)
     if name == GetCurrentResourceName() then
         SetNuiFocus(false, false)
         despawnActive()
+        clearParkingBlips()
     end
 end)
