@@ -243,7 +243,7 @@ if [[ "$SKIP_GARAGE" != "1" ]]; then
     if curl -fL --progress-bar "$REPO_ZIP" -o "$TMP_DIR/repo.zip"; then
         rm -rf "$TMP_DIR/repo" && mkdir -p "$TMP_DIR/repo"
         unzip -qo "$TMP_DIR/repo.zip" -d "$TMP_DIR/repo"
-        for resource in phone_garage ls_character ls_inventory ls_shops; do
+        for resource in phone_garage ls_character ls_inventory ls_shops ls_rp; do
             src="$(find "$TMP_DIR/repo" -type d -name "$resource" | head -n 1)"
             if [[ -n "$src" ]]; then
                 rm -rf "${RES_DIR:?}/$resource"
@@ -376,6 +376,7 @@ ensure phone_garage
 ensure ls_character
 ensure ls_inventory
 ensure ls_shops
+ensure ls_rp
 
 # Who may hand out money with /givemoney:
 #add_ace group.admin garage.admin allow

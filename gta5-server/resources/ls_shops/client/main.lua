@@ -370,6 +370,19 @@ CreateThread(function()
     end
 end)
 
+-- ls_rp also listens on E, so it asks whether a shop prompt is showing first.
+exports('isBusy', function()
+    if uiOpen then return true end
+
+    local coords = GetEntityCoords(PlayerPedId())
+    for _, shop in ipairs(shops) do
+        if #(coords - vector3(shop.x + 0.0, shop.y + 0.0, shop.z + 0.0)) < Config.Interact then
+            return true
+        end
+    end
+    return false
+end)
+
 -- --- NUI callbacks ---------------------------------------------------------
 
 RegisterNUICallback('styleChange', function(data, cb)

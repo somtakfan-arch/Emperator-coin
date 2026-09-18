@@ -360,6 +360,23 @@ exports('giveItem', function(src, itemId, count)
     return true
 end)
 
+-- Takes one unit out of a slot and reports what it was, so the caller can put
+-- it somewhere else. Returns nil when the slot is empty.
+exports('takeSlot', function(src, slot)
+    slot = tonumber(slot)
+    if not slot then return nil end
+
+    local inv = invOf(src)
+    local entry = inv.slots[slot]
+    if not entry then return nil end
+
+    local itemId = entry.item
+    removeSlot(inv, slot, 1)
+    save()
+    sync(src)
+    return itemId
+end)
+
 exports('hasBackpack', function(src)
     return invOf(src).backpack == true
 end)

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ls_rp</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Interaction menu -->
+<div id="menu" class="panel hidden">
+  <header class="head">
+    <h1 id="menu-title">Взаимодействие</h1>
+    <span class="sub" id="menu-sub"></span>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab on" data-tab="docs">Документы</button>
+    <button class="tab" data-tab="give">Передать</button>
+    <button class="tab" data-tab="emotes">Жесты</button>
+  </nav>
+
+  <div class="body">
+    <section class="tabview" id="tab-docs"></section>
+
+    <section class="tabview hidden" id="tab-give">
+      <div class="block">
+        <div class="block-title">Деньги</div>
+        <div class="money-row">
+          <input id="amount" type="number" min="1" step="100" placeholder="Сумма">
+          <button class="btn primary" id="give-money">Передать</button>
+        </div>
+      </div>
+      <div class="block">
+        <div class="block-title">Предмет из инвентаря</div>
+        <div id="items"></div>
+      </div>
+    </section>
+
+    <section class="tabview hidden" id="tab-emotes"></section>
+  </div>
+
+  <footer class="foot">
+    <button class="btn" id="close">Закрыть</button>
+  </footer>
+</div>
+
+<!-- Document viewer -->
+<div id="viewer" class="hidden">
+  <div class="doc">
+    <div class="doc-head">
+      <span class="doc-kind" id="doc-kind">Паспорт</span>
+      <span class="doc-from" id="doc-from"></span>
+    </div>
+    <div class="doc-body" id="doc-body"></div>
+    <button class="btn" id="doc-close">Закрыть</button>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

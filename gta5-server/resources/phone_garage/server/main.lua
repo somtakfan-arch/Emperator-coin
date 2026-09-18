@@ -226,6 +226,31 @@ exports('removeMoney', function(src, amount)
     return true
 end)
 
+exports('getCars', function(src)
+    local rec = recordOf(src)
+    return rec.cars
+end)
+
+-- Handing over a vehicle registration hands over the car with it.
+exports('transferCar', function(fromSrc, toSrc, plate)
+    local from = recordOf(fromSrc)
+    local to = recordOf(toSrc)
+
+    for index, car in ipairs(from.cars) do
+        if car.plate == plate then
+            table.remove(from.cars, index)
+            to.cars[#to.cars + 1] = car
+            dirty = true
+            save()
+            sync(fromSrc)
+            sync(toSrc)
+            TriggerClientEvent('phone_garage:despawn', fromSrc, plate)
+            return true
+        end
+    end
+    return false
+end)
+
 -- --- commands --------------------------------------------------------------
 
 RegisterCommand('money', function(src)
