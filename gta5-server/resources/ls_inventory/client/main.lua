@@ -14,7 +14,18 @@ local function money()
     return (ok and tonumber(value)) or 0
 end
 
+-- ls_police blocks the inventory while a player is restrained. The call is
+-- guarded so the inventory still works with ls_police stopped.
+local function blocked()
+    local ok, isBlocked = pcall(function() return exports.ls_police:isBlocked() end)
+    return ok and isBlocked == true
+end
+
 local function setOpen(value)
+    if value and blocked() then
+        notify('~r~В наручниках это недоступно')
+        return
+    end
     open = value
     SetNuiFocus(value, value)
     if value then

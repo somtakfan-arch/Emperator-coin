@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ls_police</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="panel" class="hidden">
+  <header class="head">
+    <div>
+      <h1>МВД</h1>
+      <span class="sub" id="head-sub">Не на службе</span>
+    </div>
+    <span class="badge" id="target-badge"></span>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab on" data-tab="act">Действия</button>
+    <button class="tab" data-tab="law">Розыск</button>
+    <button class="tab" data-tab="fine">Штраф</button>
+    <button class="tab" data-tab="props">Объекты</button>
+    <button class="tab" data-tab="mdt">Планшет</button>
+  </nav>
+
+  <div class="body">
+    <section class="view" id="view-act"></section>
+
+    <section class="view hidden" id="view-law">
+      <div class="block">
+        <div class="block-title">Объявить в розыск</div>
+        <label class="field"><span>Уровень 1–5</span>
+          <input id="wanted-level" type="number" min="1" max="5" value="1"></label>
+        <label class="field"><span>Причина</span>
+          <input id="wanted-reason" type="text" maxlength="150" placeholder="Вооружённое ограбление"></label>
+        <button class="btn primary" id="do-wanted">Объявить</button>
+      </div>
+      <div class="block">
+        <div class="block-title">Арест</div>
+        <label class="field"><span>Срок, минут</span>
+          <input id="jail-minutes" type="number" min="1" max="120" value="10"></label>
+        <label class="field"><span>Причина</span>
+          <input id="jail-reason" type="text" maxlength="150" placeholder="Сопротивление при задержании"></label>
+        <button class="btn primary" id="do-arrest">Отправить в тюрьму</button>
+      </div>
+      <div class="block">
+        <div class="block-title">Список разыскиваемых</div>
+        <button class="btn" id="load-wanted">Обновить</button>
+        <div id="wanted-list"></div>
+      </div>
+    </section>
+
+    <section class="view hidden" id="view-fine">
+      <div class="block">
+        <div class="block-title">Готовые суммы</div>
+        <div id="fine-presets"></div>
+      </div>
+      <div class="block">
+        <div class="block-title">Свой штраф</div>
+        <label class="field"><span>Сумма</span>
+          <input id="fine-amount" type="number" min="100" step="100" value="2500"></label>
+        <label class="field"><span>Причина</span>
+          <input id="fine-reason" type="text" maxlength="150" placeholder="Причина"></label>
+        <button class="btn primary" id="do-fine">Выписать</button>
+      </div>
+    </section>
+
+    <section class="view hidden" id="view-props">
+      <div id="prop-list"></div>
+      <button class="btn danger" id="prop-remove">Убрать ближайший</button>
+      <div class="block">
+        <div class="block-title">Штрафстоянка</div>
+        <label class="field"><span>Причина эвакуации</span>
+          <input id="impound-reason" type="text" maxlength="150" placeholder="Брошен на проезжей части"></label>
+        <button class="btn danger" id="do-impound">Эвакуировать ближайшее авто</button>
+      </div>
+    </section>
+
+    <section class="view hidden" id="view-mdt">
+      <div class="search-row">
+        <input id="mdt-query" type="text" maxlength="64" placeholder="Имя Фамилия или статик">
+        <button class="btn primary" id="mdt-go">Найти</button>
+      </div>
+      <div id="mdt-results"></div>
+    </section>
+  </div>
+
+  <footer class="foot">
+    <button class="btn" id="btn-duty">Кто на службе</button>
+    <button class="btn" id="btn-close">Закрыть</button>
+  </footer>
+</div>
+
+<!-- Search / documents overlay -->
+<div id="overlay" class="hidden">
+  <div class="sheet">
+    <header class="sheet-head">
+      <h2 id="sheet-title">Обыск</h2>
+      <button class="x" id="sheet-close">✕</button>
+    </header>
+    <div class="sheet-body" id="sheet-body"></div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

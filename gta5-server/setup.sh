@@ -19,6 +19,10 @@ MAXCLIENTS="${MAXCLIENTS:-16}"
 SKIP_CARS="${SKIP_CARS:-0}"
 SKIP_GARAGE="${SKIP_GARAGE:-0}"
 SKIP_WEAPONS="${SKIP_WEAPONS:-0}"
+SKIP_DB="${SKIP_DB:-0}"
+DB_NAME="${DB_NAME:-fivem}"
+DB_USER="${DB_USER:-fivem}"
+DB_PASS="${DB_PASS:-}"
 REPO_BRANCH="${REPO_BRANCH:-claude/gta5-rp-server-setup-fvdafy}"
 SERVICE_USER="${SERVICE_USER:-fivem}"
 
@@ -26,6 +30,14 @@ VERSIONS_API='https://changelogs-live.fivem.net/api/changelog/versions/linux/ser
 FALLBACK_ARTIFACT='https://runtime.fivem.net/artifacts/fivem/build_proot_linux/master/16742-c3ff6a20e0e2b24d10e0a05ee3e6dbc1cbf2e5a1/fx.tar.xz'
 SERVER_DATA_ZIP='https://github.com/citizenfx/cfx-server-data/archive/refs/heads/master.zip'
 VMENU_API='https://api.github.com/repos/TomGrobbe/vMenu/releases/latest'
+OXMYSQL_API='https://api.github.com/repos/overextended/oxmysql/releases/latest'
+PMA_VOICE_ZIP='https://github.com/AvarianKnight/pma-voice/archive/refs/heads/master.zip'
+
+# Proximity ranges for pma-voice, in metres. The middle one is the default
+# speaking distance and is what "15 m" means in practice.
+VOICE_WHISPER=3.0
+VOICE_NORMAL=15.0
+VOICE_SHOUT=30.0
 CAR_PACK_ZIP='https://github.com/Rymex47/free-modpack/archive/refs/heads/main.zip'
 REPO_ZIP="https://github.com/somtakfan-arch/Emperator-coin/archive/refs/heads/${REPO_BRANCH}.zip"
 
@@ -197,6 +209,40 @@ id -u "$SERVICE_USER" >/dev/null 2>&1 || useradd -r -m -d "$ROOT" -s /usr/sbin/n
 mkdir -p "$SERVER_DIR" "$DATA_DIR" "$TMP_DIR"
 ok 'folders and service user ready'
 
+if [[ "$SKIP_DB" != "1" ]]; then
+    step 'MariaDB'
+    if ! command -v mysqld >/dev/null 2>&1 && ! command -v mariadbd >/dev/null 2>&1; then
+        apt-get install -y -qq mariadb-server >/dev/null
+        ok 'mariadb-server installed'
+    else
+        ok 'mariadb already present'
+    fi
+
+    systemctl enable --now mariadb >/dev/null 2>&1 || systemctl enable --now mysql >/dev/null 2>&1 || true
+
+    if [[ -z "$DB_PASS" ]]; then
+        DB_PASS="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24)"
+        ok 'generated a database password'
+    fi
+
+    # Root over the unix socket: no root password needed on a fresh install.
+    if mysql -u root <<SQL 2>/dev/null
+CREATE DATABASE IF NOT EXISTS \`$DB_NAME\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';
+ALTER USER '$DB_USER'@'localhost' IDENTIFIED BY '$DB_PASS';
+GRANT ALL PRIVILEGES ON \`$DB_NAME\`.* TO '$DB_USER'@'localhost';
+FLUSH PRIVILEGES;
+SQL
+    then
+        ok "database $DB_NAME and user $DB_USER ready"
+    else
+        die 'could not reach MariaDB as root - set a root password and rerun with SKIP_DB=1, then create the database by hand'
+    fi
+
+    # The schema ships with the repo; it is fetched with the resources below.
+    ok 'schema will be applied once the repo is downloaded'
+fi
+
 step 'FXServer artifact'
 artifact_url="$(curl -fsSL --max-time 20 "$VERSIONS_API" 2>/dev/null \
     | jq -r '.recommended_download // .optional_download // .latest_download // empty' || true)"
@@ -238,12 +284,94 @@ else
     warn 'vMenu install failed - grab it from https://github.com/TomGrobbe/vMenu/releases'
 fi
 
+step 'oxmysql'
+if ox_url="$(curl -fsSL --max-time 20 -H 'User-Agent: fivem-setup-script' "$OXMYSQL_API" \
+        | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url' | head -n 1)" \
+   && [[ -n "$ox_url" ]]; then
+    curl -fL --progress-bar "$ox_url" -o "$TMP_DIR/oxmysql.zip"
+    rm -rf "$TMP_DIR/ox" && mkdir -p "$TMP_DIR/ox"
+    unzip -qo "$TMP_DIR/oxmysql.zip" -d "$TMP_DIR/ox"
+    ox_src="$(dirname "$(find "$TMP_DIR/ox" -type f -name fxmanifest.lua | head -n 1)")"
+    if [[ -n "$ox_src" && -d "$ox_src" ]]; then
+        rm -rf "$RES_DIR/oxmysql"
+        mv "$ox_src" "$RES_DIR/oxmysql"
+        ok 'oxmysql installed'
+    else
+        warn 'no fxmanifest.lua inside the oxmysql archive'
+    fi
+else
+    warn 'oxmysql download failed - the server will not start without it'
+fi
+
+step 'pma-voice'
+if curl -fL --progress-bar "$PMA_VOICE_ZIP" -o "$TMP_DIR/pma.zip"; then
+    rm -rf "$TMP_DIR/pma" && mkdir -p "$TMP_DIR/pma"
+    unzip -qo "$TMP_DIR/pma.zip" -d "$TMP_DIR/pma"
+    pma_src="$(dirname "$(find "$TMP_DIR/pma" -type f -name fxmanifest.lua | head -n 1)")"
+    if [[ -n "$pma_src" && -d "$pma_src" ]]; then
+        rm -rf "$RES_DIR/pma-voice"
+        mv "$pma_src" "$RES_DIR/pma-voice"
+        ok 'pma-voice installed'
+
+        # Proximity ranges live in a Lua table in its shared config. Rewrite the
+        # three distances rather than the labels, and say so if the shape moved.
+        voice_cfg="$RES_DIR/pma-voice/configuration.lua"
+        [[ -f "$voice_cfg" ]] || voice_cfg="$(find "$RES_DIR/pma-voice" -name '*config*.lua' | head -n 1)"
+
+        if [[ -n "$voice_cfg" && -f "$voice_cfg" ]] && grep -q 'voiceModes' "$voice_cfg"; then
+            python3 - "$voice_cfg" "$VOICE_WHISPER" "$VOICE_NORMAL" "$VOICE_SHOUT" <<'PYEOF'
+import io, re, sys
+path, whisper, normal, shout = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+text = io.open(path, encoding='utf-8').read()
+block = re.search(r'voiceModes\s*=\s*\{.*?\n\s*\}', text, re.S)
+if not block:
+    sys.exit(3)
+replacement = (
+    "voiceModes = {\n"
+    "\t{%s, 'Шёпот'},\n"
+    "\t{%s, 'Обычный'},\n"
+    "\t{%s, 'Крик'},\n"
+    "}" % (whisper, normal, shout)
+)
+io.open(path, 'w', encoding='utf-8').write(text[:block.start()] + replacement + text[block.end():])
+PYEOF
+            case $? in
+                0) ok "proximity set to ${VOICE_NORMAL} m (whisper ${VOICE_WHISPER}, shout ${VOICE_SHOUT})" ;;
+                3) warn 'pma-voice config changed shape - set voiceModes by hand' ;;
+                *) warn 'could not rewrite the pma-voice config' ;;
+            esac
+        else
+            warn 'pma-voice config not found - set the proximity range by hand'
+        fi
+    else
+        warn 'no fxmanifest.lua inside the pma-voice archive'
+    fi
+else
+    warn 'pma-voice download failed'
+fi
+
 if [[ "$SKIP_GARAGE" != "1" ]]; then
     step 'Phone garage and shops'
     if curl -fL --progress-bar "$REPO_ZIP" -o "$TMP_DIR/repo.zip"; then
         rm -rf "$TMP_DIR/repo" && mkdir -p "$TMP_DIR/repo"
         unzip -qo "$TMP_DIR/repo.zip" -d "$TMP_DIR/repo"
-        for resource in phone_garage ls_character ls_inventory ls_shops ls_rp; do
+        # The schema ships in the same archive.
+        schema_src="$(find "$TMP_DIR/repo" -type f -name '001_schema.sql' | head -n 1)"
+        if [[ -n "$schema_src" ]]; then
+            mkdir -p "$ROOT/sql"
+            cp "$schema_src" "$ROOT/sql/001_schema.sql"
+            if [[ "$SKIP_DB" != "1" ]]; then
+                if mysql -u root "$DB_NAME" < "$ROOT/sql/001_schema.sql" 2>/dev/null; then
+                    ok 'schema applied'
+                else
+                    warn "schema not applied - run: mysql -u root $DB_NAME < $ROOT/sql/001_schema.sql"
+                fi
+            fi
+        else
+            warn '001_schema.sql not found in the repo archive'
+        fi
+
+        for resource in phone_garage ls_character ls_inventory ls_shops ls_rp ls_police; do
             src="$(find "$TMP_DIR/repo" -type d -name "$resource" | head -n 1)"
             if [[ -n "$src" ]]; then
                 rm -rf "${RES_DIR:?}/$resource"
@@ -347,8 +475,23 @@ sv_maxclients $MAXCLIENTS
 sv_scriptHookAllowed 0
 sets locale "ru-RU"
 
+## --- database -----------------------------------------------------------
+set mysql_connection_string "mysql://$DB_USER:$DB_PASS@localhost/$DB_NAME?charset=utf8mb4"
+
+## --- voice --------------------------------------------------------------
+# Proximity is set in resources/pma-voice; these only pick the defaults.
+setr voice_defaultVoiceMode 2
+setr voice_enableProximityCycle true
+setr voice_enableRadios true
+setr voice_defaultRadioVolume 60
+
 # Uncomment and bump if newer DLC vehicles refuse to spawn.
 #set sv_enforceGameBuild 3407
+
+## --- infrastructure -----------------------------------------------
+# oxmysql must start before anything that touches the database.
+ensure oxmysql
+ensure pma-voice
 
 ## --- base resources -----------------------------------------------
 ensure mapmanager
@@ -377,6 +520,11 @@ ensure ls_character
 ensure ls_inventory
 ensure ls_shops
 ensure ls_rp
+ensure ls_police
+
+# Police ranks are handed out in game with /police hire; this ace only guards
+# the admin-side commands.
+#add_ace group.admin police.admin allow
 
 # Who may hand out money with /givemoney:
 #add_ace group.admin garage.admin allow
@@ -423,6 +571,10 @@ cat <<DONE
 
 =====================================================================
  Ready.
+
+ Database: $DB_NAME / user $DB_USER
+ Password: $DB_PASS
+           (also written into server.cfg)
 
  Start:    systemctl enable --now fivem
  Logs:     journalctl -u fivem -f

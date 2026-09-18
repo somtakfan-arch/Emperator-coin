@@ -38,6 +38,14 @@ Config.Items = {
     ENERGY = { label = 'Энергетик', type = 'food', heal = 40,  stack = 10, price = 350 },
     MEDKIT = { label = 'Аптечка',   type = 'food', heal = 100, stack = 5,  price = 2500 },
 
+    -- Полицейское снаряжение. Цены нулевые: это не продаётся в магазине,
+    -- а выдаётся при заступлении на службу.
+    HANDCUFFS = { label = 'Наручники',       type = 'misc', stack = 3, price = 0 },
+    CUFF_KEY  = { label = 'Ключ от наручников', type = 'misc', stack = 1, price = 0 },
+
+    WEAPON_STUNGUN    = { label = 'Тазер',    type = 'weapon', stack = 1, price = 0 },
+    WEAPON_NIGHTSTICK = { label = 'Дубинка',  type = 'weapon', stack = 1, price = 0 },
+
     -- Оружие (ванильное)
     WEAPON_PISTOL        = { label = 'Пистолет',             type = 'weapon', stack = 1, price = 4500 },
     WEAPON_COMBATPISTOL  = { label = 'Боевой пистолет',      type = 'weapon', stack = 1, price = 9500 },

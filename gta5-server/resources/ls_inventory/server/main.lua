@@ -377,6 +377,52 @@ exports('takeSlot', function(src, slot)
     return itemId
 end)
 
+-- Takes `count` of a named item wherever it sits. Used for things the holder
+-- must actually be carrying, like handcuffs or a key.
+exports('takeItem', function(src, itemId, count)
+    count = tonumber(count) or 1
+    if type(itemId) ~= 'string' or count <= 0 then return false end
+
+    local inv = invOf(src)
+    local held = 0
+    for _, entry in pairs(inv.slots) do
+        if entry.item == itemId then held = held + entry.count end
+    end
+    if held < count then return false end
+
+    local remaining = count
+    for slot = 1, capacity(inv) do
+        if remaining <= 0 then break end
+        local entry = inv.slots[slot]
+        if entry and entry.item == itemId then
+            local take = math.min(entry.count, remaining)
+            removeSlot(inv, slot, take)
+            remaining = remaining - take
+        end
+    end
+
+    save()
+    sync(src)
+    return true
+end)
+
+-- A read-only view of someone's inventory, for the police search screen.
+exports('getInventory', function(src)
+    local inv = invOf(src)
+    local slots = {}
+    for slot, entry in pairs(inv.slots) do
+        local def = items[entry.item]
+        slots[#slots + 1] = {
+            slot = slot,
+            item = entry.item,
+            count = entry.count,
+            label = def and def.label or entry.item,
+            kind = def and def.type or 'misc',
+        }
+    end
+    return { slots = slots, capacity = capacity(inv), backpack = inv.backpack }
+end)
+
 exports('hasBackpack', function(src)
     return invOf(src).backpack == true
 end)
