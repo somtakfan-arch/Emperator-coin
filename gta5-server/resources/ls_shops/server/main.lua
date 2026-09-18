@@ -3,11 +3,15 @@
 
 local RES = GetCurrentResourceName()
 local LOOKS_FILE = 'looks.json'
+local OUTFITS_FILE = 'outfits.json'
 local SHOPS_FILE = 'custom_shops.json'
 
 local looks = {}        -- [identifier] = { components = {...}, props = {...}, hair = {...}, overlays = {...} }
+local outfits = {}      -- [identifier] = { { id = 'o3', name = 'Работа', look = {...} } }
 local customShops = {}
 local dirty = false
+
+local MAX_OUTFITS = 20
 
 local ammuByItem, storeByItem = {}, {}
 for _, entry in ipairs(Config.AmmuCatalog) do ammuByItem[entry.item] = entry end
@@ -26,6 +30,7 @@ end
 
 local function save()
     SaveResourceFile(RES, LOOKS_FILE, json.encode(looks), -1)
+    SaveResourceFile(RES, OUTFITS_FILE, json.encode(outfits), -1)
     SaveResourceFile(RES, SHOPS_FILE, json.encode(customShops), -1)
     dirty = false
 end
@@ -59,6 +64,7 @@ end
 AddEventHandler('onResourceStart', function(name)
     if name ~= RES then return end
     looks = readJson(LOOKS_FILE, {})
+    outfits = readJson(OUTFITS_FILE, {})
     customShops = readJson(SHOPS_FILE, {})
     local n = 0
     for _ in pairs(looks) do n = n + 1 end
@@ -78,12 +84,17 @@ end)
 
 -- --- sync ------------------------------------------------------------------
 
-RegisterNetEvent('ls_shops:requestSync', function()
-    local src = source
+local function pushSync(src)
+    local id = identifierOf(src)
     TriggerClientEvent('ls_shops:sync', src, {
-        look = looks[identifierOf(src)],
+        look = looks[id],
+        outfits = outfits[id] or {},
         shops = customShops,
     })
+end
+
+RegisterNetEvent('ls_shops:requestSync', function()
+    pushSync(source)
 end)
 
 -- The client sends the look it ended up with; it is cosmetic only, so it is
@@ -101,6 +112,81 @@ RegisterNetEvent('ls_shops:saveLook', function(look)
     }
     dirty = true
     save()
+end)
+
+-- --- wardrobe --------------------------------------------------------------
+
+local function looksValid(look)
+    return type(look) == 'table'
+        and type(look.components) == 'table'
+        and type(look.props) == 'table'
+end
+
+RegisterNetEvent('ls_shops:saveOutfit', function(name, look)
+    local src = source
+    if not looksValid(look) then return end
+
+    local id = identifierOf(src)
+    outfits[id] = outfits[id] or {}
+
+    if #outfits[id] >= MAX_OUTFITS then
+        notify(src, ('~r~Гардероб полон (максимум %d)'):format(MAX_OUTFITS))
+        return
+    end
+
+    name = type(name) == 'string' and name:gsub('^%s+', ''):gsub('%s+$', ''):sub(1, 24) or ''
+    if name == '' then name = 'Образ ' .. tostring(#outfits[id] + 1) end
+
+    outfits[id][#outfits[id] + 1] = {
+        id = tostring(math.random(100000, 999999)) .. tostring(#outfits[id]),
+        name = name,
+        look = {
+            components = look.components,
+            props = look.props,
+            hair = type(look.hair) == 'table' and look.hair or nil,
+            overlays = type(look.overlays) == 'table' and look.overlays or nil,
+        },
+    }
+    dirty = true
+    save()
+    pushSync(src)
+    notify(src, ('~g~Образ сохранён: %s'):format(name))
+end)
+
+RegisterNetEvent('ls_shops:deleteOutfit', function(outfitId)
+    local src = source
+    if type(outfitId) ~= 'string' then return end
+
+    local id = identifierOf(src)
+    for index, outfit in ipairs(outfits[id] or {}) do
+        if outfit.id == outfitId then
+            table.remove(outfits[id], index)
+            dirty = true
+            save()
+            pushSync(src)
+            notify(src, '~g~Образ удалён')
+            return
+        end
+    end
+end)
+
+-- Wearing an outfit is free, but it becomes the look that gets restored on join.
+RegisterNetEvent('ls_shops:wearOutfit', function(outfitId)
+    local src = source
+    if type(outfitId) ~= 'string' then return end
+
+    local id = identifierOf(src)
+    for _, outfit in ipairs(outfits[id] or {}) do
+        if outfit.id == outfitId then
+            looks[id] = outfit.look
+            dirty = true
+            save()
+            TriggerClientEvent('ls_shops:applyOutfit', src, outfit.look)
+            notify(src, ('~g~Надето: %s'):format(outfit.name))
+            return
+        end
+    end
+    notify(src, '~r~Образ не найден')
 end)
 
 -- --- purchases -------------------------------------------------------------
@@ -183,11 +269,7 @@ RegisterNetEvent('ls_shops:addShop', function(shop)
     save()
 
     for _, id in ipairs(GetPlayers()) do
-        local pid = tonumber(id)
-        TriggerClientEvent('ls_shops:sync', pid, {
-            look = looks[identifierOf(pid)],
-            shops = customShops,
-        })
+        pushSync(tonumber(id))
     end
     notify(src, '~g~Точка записана')
 end)

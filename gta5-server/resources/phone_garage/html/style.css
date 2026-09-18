@@ -89,7 +89,7 @@ body {
 .apps {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 14px;
   padding: 8px 24px;
 }
 
@@ -129,6 +129,11 @@ body {
 .icon-shop {
   background-color: #2b4030;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%233ddc84' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 8h16l-1 12H5z'/><path d='M9 8V6a3 3 0 0 1 6 0v2'/></svg>");
+}
+
+.icon-wardrobe {
+  background-color: #3a2f4d;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23b08cff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M12 3v9'/><path d='M12 5l-6 3v13h12V8z'/><path d='M12 5l6 3'/></svg>");
 }
 
 .app-name { font-size: 14px; font-weight: 500; }
@@ -232,6 +237,30 @@ button.btn.primary { background: #17405f; border-color: #1f5a86; color: #cfe7ff;
 button.btn.primary:hover:not(:disabled) { background: #1c4f75; }
 button.btn.danger { color: var(--bad); }
 button.btn:disabled { opacity: .4; cursor: not-allowed; }
+
+.saver {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 8px;
+  padding: 14px 18px 4px;
+}
+
+.saver input {
+  flex: 1;
+  min-width: 0;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.saver input:focus { border-color: var(--accent); }
+.saver input::placeholder { color: var(--muted); }
+.saver .btn { flex: 0 0 auto; }
 
 .chips {
   flex: 0 0 auto;

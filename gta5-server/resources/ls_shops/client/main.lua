@@ -3,6 +3,7 @@
 local shops = {}          -- config + custom, merged
 local blips = {}
 local savedLook = nil
+local outfits = {}
 local uiOpen = false
 
 -- Style editor state
@@ -425,6 +426,9 @@ end)
 
 RegisterNetEvent('ls_shops:sync', function(data)
     savedLook = normalizeLook(data and data.look)
+    outfits = (data and data.outfits) or {}
+    -- The phone renders the wardrobe, so nudge it whenever the list changes.
+    TriggerEvent('phone_garage:refreshOutfits')
 
     shops = {}
     for _, shop in ipairs(Config.Shops) do shops[#shops + 1] = shop end
@@ -438,6 +442,11 @@ end)
 
 RegisterNetEvent('ls_shops:notify', function(text)
     notify(text)
+end)
+
+RegisterNetEvent('ls_shops:applyOutfit', function(look)
+    savedLook = normalizeLook(look)
+    if savedLook then applyLook(PlayerPedId(), savedLook) end
 end)
 
 RegisterNetEvent('ls_shops:styleResult', function(paid)
@@ -470,6 +479,31 @@ RegisterNetEvent('ls_shops:consume', function(effect)
     if effect.armour then
         SetPedArmour(ped, math.min(100, GetPedArmour(ped) + effect.armour))
     end
+end)
+
+-- --- exports ---------------------------------------------------------------
+-- The wardrobe app lives in the phone (phone_garage), but the outfits belong
+-- here, so the phone reaches them through these.
+
+exports('getOutfits', function()
+    local list = {}
+    for _, outfit in ipairs(outfits) do
+        list[#list + 1] = { id = outfit.id, name = outfit.name }
+    end
+    return list
+end)
+
+exports('wearOutfit', function(outfitId)
+    TriggerServerEvent('ls_shops:wearOutfit', outfitId)
+end)
+
+exports('deleteOutfit', function(outfitId)
+    TriggerServerEvent('ls_shops:deleteOutfit', outfitId)
+end)
+
+-- Snapshots whatever the player is wearing right now.
+exports('saveCurrentOutfit', function(name)
+    TriggerServerEvent('ls_shops:saveOutfit', name, captureLook(PlayerPedId()))
 end)
 
 -- --- commands --------------------------------------------------------------

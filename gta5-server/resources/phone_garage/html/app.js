@@ -5,7 +5,10 @@
     ? GetParentResourceName()
     : 'phone_garage';
 
-  const state = { money: 0, cars: [], catalog: [], active: null, filter: 'Все' };
+  const state = {
+    money: 0, cars: [], catalog: [], active: null, filter: 'Все',
+    outfits: [], wardrobe: false,
+  };
 
   const $ = (id) => document.getElementById(id);
   const phone = $('phone');
@@ -19,10 +22,31 @@
 
   const money = (n) => '$' + Number(n || 0).toLocaleString('ru-RU');
 
+  // A blocking confirm() is unreliable inside the game's browser, so the button
+  // arms itself instead and disarms again after a few seconds.
+  function armConfirm(btn, label, action) {
+    let armed = false;
+    let timer = null;
+
+    btn.addEventListener('click', () => {
+      if (armed) {
+        clearTimeout(timer);
+        action();
+        return;
+      }
+      armed = true;
+      btn.textContent = 'Точно?';
+      timer = setTimeout(() => {
+        armed = false;
+        btn.textContent = label;
+      }, 3000);
+    });
+  }
+
   // --- navigation ---------------------------------------------------------
 
   function show(view) {
-    ['home', 'garage', 'shop'].forEach((name) => {
+    ['home', 'garage', 'shop', 'wardrobe'].forEach((name) => {
       $(`view-${name}`).classList.toggle('hidden', name !== view);
     });
   }
@@ -75,22 +99,69 @@
       card.querySelector('.card-sub b').textContent = car.plate;
 
       card.querySelectorAll('button[data-act]').forEach((btn) => {
-        btn.addEventListener('click', () => {
-          const act = btn.dataset.act;
-          if (act === 'sell') {
-            if (!confirm(`Продать ${car.label}?`)) return;
-            post('sell', { plate: car.plate });
-          } else if (act === 'call') {
-            post('call', { plate: car.plate });
-          } else {
-            post('store');
-          }
-        });
+        const act = btn.dataset.act;
+        if (act === 'sell') {
+          armConfirm(btn, 'Продать', () => post('sell', { plate: car.plate }));
+        } else if (act === 'call') {
+          btn.addEventListener('click', () => post('call', { plate: car.plate }));
+        } else {
+          btn.addEventListener('click', () => post('store'));
+        }
       });
 
       list.appendChild(card);
     });
   }
+
+  function renderWardrobe() {
+    const list = $('wardrobe-list');
+    list.innerHTML = '';
+
+    if (!state.wardrobe) {
+      list.innerHTML =
+        '<p class="empty">Гардероб недоступен.<br>Ресурс ls_shops не запущен.</p>';
+      return;
+    }
+
+    if (!state.outfits.length) {
+      list.innerHTML =
+        '<p class="empty">Сохранённых образов нет.<br>' +
+        'Переоденься и нажми «Сохранить текущий».</p>';
+      return;
+    }
+
+    state.outfits.forEach((outfit) => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <div class="card-top"><span class="card-title"></span></div>
+        <div class="card-actions">
+          <button class="btn primary" data-act="wear">Надеть</button>
+          <button class="btn danger" data-act="drop">Удалить</button>
+        </div>`;
+
+      card.querySelector('.card-title').textContent = outfit.name;
+      card.querySelector('[data-act="wear"]').addEventListener('click', () => {
+        post('wardrobeWear', { id: outfit.id });
+      });
+      armConfirm(card.querySelector('[data-act="drop"]'), 'Удалить', () => {
+        post('wardrobeDelete', { id: outfit.id });
+      });
+
+      list.appendChild(card);
+    });
+  }
+
+  $('outfit-save').addEventListener('click', () => {
+    const field = $('outfit-name');
+    post('wardrobeSave', { name: field.value });
+    field.value = '';
+  });
+
+  $('outfit-name').addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') $('outfit-save').click();
+    ev.stopPropagation();
+  });
 
   function renderChips() {
     const classes = ['Все', ...new Set(state.catalog.map((c) => c.class))];
@@ -153,7 +224,9 @@
     $('balance').textContent = money(state.money);
     $('home-balance').textContent = money(state.money);
     $('garage-count').textContent = state.cars.length;
+    $('wardrobe-count').textContent = state.outfits.length;
     renderGarage();
+    renderWardrobe();
     renderChips();
     renderShop();
   }
@@ -182,6 +255,8 @@
       state.cars = data.cars || [];
       state.catalog = data.catalog || [];
       state.active = data.active || null;
+      state.outfits = data.outfits || [];
+      state.wardrobe = data.wardrobe === true;
       render();
     }
   });

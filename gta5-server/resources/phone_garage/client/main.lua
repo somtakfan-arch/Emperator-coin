@@ -13,13 +13,24 @@ local function notify(text)
     DrawNotification(false, true)
 end
 
+-- The wardrobe app is rendered here but owned by ls_shops, so the call is
+-- guarded: with ls_shops stopped the phone still works, minus that app.
+local function outfits()
+    local ok, list = pcall(function() return exports.ls_shops:getOutfits() end)
+    if ok and type(list) == 'table' then return list, true end
+    return {}, false
+end
+
 local function pushState()
+    local list, available = outfits()
     SendNUIMessage({
         action = 'state',
         money = State.money,
         cars = State.cars,
         catalog = Config.Catalog,
         active = activePlate,
+        outfits = list,
+        wardrobe = available,
     })
 end
 
@@ -266,6 +277,27 @@ RegisterNUICallback('store', function(_, cb)
     cb('ok')
 end)
 
+RegisterNUICallback('wardrobeWear', function(data, cb)
+    if data and data.id then
+        pcall(function() exports.ls_shops:wearOutfit(data.id) end)
+    end
+    cb('ok')
+end)
+
+RegisterNUICallback('wardrobeDelete', function(data, cb)
+    if data and data.id then
+        pcall(function() exports.ls_shops:deleteOutfit(data.id) end)
+    end
+    cb('ok')
+end)
+
+RegisterNUICallback('wardrobeSave', function(data, cb)
+    pcall(function()
+        exports.ls_shops:saveCurrentOutfit(data and data.name or '')
+    end)
+    cb('ok')
+end)
+
 -- --- server events ---------------------------------------------------------
 
 RegisterNetEvent('phone_garage:sync', function(data)
@@ -278,6 +310,11 @@ end)
 
 RegisterNetEvent('phone_garage:notify', function(text)
     notify(text)
+end)
+
+-- Fired by ls_shops when the wardrobe changed.
+AddEventHandler('phone_garage:refreshOutfits', function()
+    pushState()
 end)
 
 RegisterNetEvent('phone_garage:callApproved', function(car)
