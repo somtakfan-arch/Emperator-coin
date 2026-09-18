@@ -113,6 +113,8 @@
     });
   }
 
+  $('do-revive').addEventListener('click', () => post('revive'));
+
   $('give-money').addEventListener('click', () => {
     const amount = Math.floor(Number($('amount').value) || 0);
     if (amount > 0) post('giveMoney', { amount });
@@ -215,6 +217,8 @@
       $('tab-emotes').classList.add('hidden');
       $('tab-docs').classList.remove('hidden');
       selectTab('docs');
+
+      $('revive-block').classList.toggle('hidden', data.canRevive !== true);
 
       renderDocs(data.documents || []);
       renderItems(data.items || []);

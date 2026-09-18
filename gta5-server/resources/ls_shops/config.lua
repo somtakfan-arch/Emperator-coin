@@ -119,6 +119,6 @@ Config.BarberSlots = {
 -- without touching this file.
 -- ---------------------------------------------------------------------------
 Config.Sells = {
-    ammu  = { weapon = true, armour = true },
-    store = { food = true },
+    ammu  = { weapon = true, armour = true, mask = true },
+    store = { food = true, painkiller = true, mask = true, defib = true },
 }

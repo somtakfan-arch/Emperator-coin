@@ -38,6 +38,21 @@ Config.Items = {
     ENERGY = { label = 'Энергетик', type = 'food', heal = 40,  stack = 10, price = 350 },
     MEDKIT = { label = 'Аптечка',   type = 'food', heal = 100, stack = 5,  price = 2500 },
 
+    -- Медицина
+    DEFIBRILLATOR = { label = 'Дефибриллятор', type = 'defib', stack = 3, price = 18000 },
+
+    PAINKILLER_WEAK   = { label = 'Анальгин', type = 'painkiller', stack = 10, price = 900 },
+    PAINKILLER_MED    = { label = 'Кетанов',  type = 'painkiller', stack = 10, price = 3200 },
+    PAINKILLER_STRONG = { label = 'Морфин',   type = 'painkiller', stack = 5,  price = 9500 },
+
+    -- Маски. Надеваются и снимаются, не расходуются.
+    MASK_BALACLAVA = { label = 'Балаклава',   type = 'mask', stack = 1, price = 4500 },
+    MASK_SKULL     = { label = 'Маска-череп', type = 'mask', stack = 1, price = 6000 },
+    MASK_HOCKEY    = { label = 'Хоккейная маска', type = 'mask', stack = 1, price = 5200 },
+    MASK_GASMASK   = { label = 'Противогаз',  type = 'mask', stack = 1, price = 11000 },
+    MASK_BANDANA   = { label = 'Бандана',     type = 'mask', stack = 1, price = 1800 },
+    MASK_MEDICAL   = { label = 'Медицинская маска', type = 'mask', stack = 1, price = 400 },
+
     -- Полицейское снаряжение. Цены нулевые: это не продаётся в магазине,
     -- а выдаётся при заступлении на службу.
     HANDCUFFS = { label = 'Наручники',       type = 'misc', stack = 3, price = 0 },

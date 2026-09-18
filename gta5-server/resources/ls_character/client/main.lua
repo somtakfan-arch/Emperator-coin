@@ -265,8 +265,11 @@ CreateThread(function()
                             local entry = roster[tostring(GetPlayerServerId(playerId))]
                             if entry then
                                 wait = 0
-                                drawTag(coords.x, coords.y, coords.z + 1.05,
-                                    ('%s  ~b~#%d'):format(entry.name, entry.static))
+                                -- Under a mask only the static shows.
+                                local label = entry.masked
+                                    and ('~b~#%d'):format(entry.static)
+                                    or ('%s  ~b~#%d'):format(entry.name, entry.static)
+                                drawTag(coords.x, coords.y, coords.z + 1.05, label)
                             end
                         end
                     end

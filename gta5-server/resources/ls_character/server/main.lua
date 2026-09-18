@@ -6,7 +6,8 @@ local DATA_FILE = 'characters.json'
 
 local characters = {}   -- [identifier] = { gender, first, last, static, appearance }
 local nextStatic = Config.FirstStatic
-local roster = {}       -- [serverId] = { name, static }
+local roster = {}       -- [serverId] = { name, static, masked }
+local masked = {}       -- [serverId] = label of the mask being worn
 local dirty = false
 
 local function readJson(file, fallback)
@@ -46,9 +47,30 @@ local function pushRoster()
 end
 
 local function enterRoster(src, char)
-    roster[tostring(src)] = { name = fullName(char), static = char.static }
+    roster[tostring(src)] = {
+        name = fullName(char),
+        static = char.static,
+        masked = masked[tostring(src)] ~= nil,
+    }
     pushRoster()
 end
+
+-- A masked player is shown by static only. The name still exists server-side:
+-- the police MDT and the logs are not fooled by a balaclava.
+exports('setMasked', function(src, on, label)
+    local key = tostring(src)
+    masked[key] = on and (label ~= '' and label or 'маска') or nil
+
+    if roster[key] then
+        roster[key].masked = on == true
+        pushRoster()
+    end
+    return true
+end)
+
+exports('isMasked', function(src)
+    return masked[tostring(src)] ~= nil
+end)
 
 -- --- validation ------------------------------------------------------------
 
@@ -129,6 +151,7 @@ AddEventHandler('onResourceStop', function(name)
 end)
 
 AddEventHandler('playerDropped', function()
+    masked[tostring(source)] = nil
     roster[tostring(source)] = nil
     pushRoster()
     if dirty then save() end

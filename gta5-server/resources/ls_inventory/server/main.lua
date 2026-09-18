@@ -249,14 +249,42 @@ RegisterNetEvent('ls_inventory:use', function(slot)
         return
     end
 
+    -- Some types belong to ls_medical. It decides whether the unit is spent -
+    -- a mask is worn rather than used up, and a refused action must not eat it.
+    local function external(exportName)
+        local ok, consumed = pcall(function()
+            return exports.ls_medical[exportName](exports.ls_medical, src, entry.item)
+        end)
+        if not ok then
+            notify(src, 'Эта механика сейчас недоступна')
+            return false
+        end
+        return consumed == true
+    end
+
+    local consume
     if def.type == 'weapon' then
         TriggerClientEvent('ls_inventory:equip', src, entry.item, Config.WeaponAmmo)
+        consume = true
     elseif def.type == 'armour' then
         TriggerClientEvent('ls_inventory:armour', src, def.value or 50)
+        consume = true
     elseif def.type == 'food' then
         TriggerClientEvent('ls_inventory:heal', src, def.heal or 25)
+        consume = true
+    elseif def.type == 'painkiller' then
+        consume = external('usePainkiller')
+    elseif def.type == 'defib' then
+        consume = external('useDefib')
+    elseif def.type == 'mask' then
+        consume = external('useMask')
     else
         notify(src, 'Этот предмет ни на что не влияет')
+        return
+    end
+
+    if not consume then
+        sync(src)
         return
     end
 

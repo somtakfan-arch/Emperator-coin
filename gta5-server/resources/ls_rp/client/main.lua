@@ -105,6 +105,11 @@ local function openMenu(playerId)
         end
     end
 
+    -- ls_medical knows who is on the floor; the revive button only shows then.
+    local okDown, targetDown = pcall(function()
+        return exports.ls_medical:isDownPlayer(target)
+    end)
+
     SendNUIMessage({
         action = 'open',
         target = target,
@@ -112,6 +117,7 @@ local function openMenu(playerId)
         emotes = Config.Emotes,
         documents = docRows(),
         items = items,
+        canRevive = okDown and targetDown == true,
     })
 end
 
@@ -225,6 +231,14 @@ end)
 RegisterNUICallback('giveItem', function(data, cb)
     if target and data and data.slot then
         TriggerServerEvent('ls_rp:giveItem', target, data.slot)
+    end
+    closeMenu()
+    cb('ok')
+end)
+
+RegisterNUICallback('revive', function(_, cb)
+    if target then
+        TriggerServerEvent('ls_medical:reviveOther', target)
     end
     closeMenu()
     cb('ok')
