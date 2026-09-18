@@ -17,6 +17,8 @@ LICENSE_KEY="${LICENSE_KEY:-}"
 HOSTNAME_="${HOSTNAME_:-Emperator crew}"
 MAXCLIENTS="${MAXCLIENTS:-16}"
 SKIP_CARS="${SKIP_CARS:-0}"
+SKIP_GARAGE="${SKIP_GARAGE:-0}"
+REPO_BRANCH="${REPO_BRANCH:-claude/gta5-rp-server-setup-fvdafy}"
 SERVICE_USER="${SERVICE_USER:-fivem}"
 
 VERSIONS_API='https://changelogs-live.fivem.net/api/changelog/versions/linux/server'
@@ -24,6 +26,7 @@ FALLBACK_ARTIFACT='https://runtime.fivem.net/artifacts/fivem/build_proot_linux/m
 SERVER_DATA_ZIP='https://github.com/citizenfx/cfx-server-data/archive/refs/heads/master.zip'
 VMENU_API='https://api.github.com/repos/TomGrobbe/vMenu/releases/latest'
 CAR_PACK_ZIP='https://github.com/Rymex47/free-modpack/archive/refs/heads/main.zip'
+REPO_ZIP="https://github.com/somtakfan-arch/Emperator-coin/archive/refs/heads/${REPO_BRANCH}.zip"
 
 SERVER_DIR="$ROOT/server"
 DATA_DIR="$ROOT/server-data"
@@ -158,6 +161,24 @@ else
     warn 'vMenu install failed - grab it from https://github.com/TomGrobbe/vMenu/releases'
 fi
 
+if [[ "$SKIP_GARAGE" != "1" ]]; then
+    step 'Phone garage'
+    if curl -fL --progress-bar "$REPO_ZIP" -o "$TMP_DIR/repo.zip"; then
+        rm -rf "$TMP_DIR/repo" && mkdir -p "$TMP_DIR/repo"
+        unzip -qo "$TMP_DIR/repo.zip" -d "$TMP_DIR/repo"
+        garage_src="$(find "$TMP_DIR/repo" -type d -name phone_garage | head -n 1)"
+        if [[ -n "$garage_src" ]]; then
+            rm -rf "$RES_DIR/phone_garage"
+            mv "$garage_src" "$RES_DIR/phone_garage"
+            ok 'phone_garage installed'
+        else
+            warn 'phone_garage not found in the repo archive'
+        fi
+    else
+        warn 'phone garage download failed'
+    fi
+fi
+
 if [[ "$SKIP_CARS" != "1" ]]; then
     step 'Car pack'
     if curl -fL --progress-bar "$CAR_PACK_ZIP" -o "$TMP_DIR/cars.zip"; then
@@ -225,6 +246,13 @@ add_ace builtin.everyone "vMenu.Everything" allow
 # Make yourself an admin (find your identifier in the server console on join):
 #add_principal identifier.fivem:1234567 group.admin
 #add_ace group.admin command allow
+
+## --- phone garage -------------------------------------------------
+# F1 opens the phone. /park stores the called car, /parkhere records a spot.
+ensure phone_garage
+
+# Who may hand out money with /givemoney:
+#add_ace group.admin garage.admin allow
 
 ## --- add-on cars --------------------------------------------------
 $car_ensure

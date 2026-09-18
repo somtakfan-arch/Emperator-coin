@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>phone_garage</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="phone" class="hidden">
+  <div class="bezel">
+    <div class="screen">
+
+      <div class="statusbar">
+        <span id="clock">12:00</span>
+        <span class="balance" id="balance">$0</span>
+      </div>
+
+      <!-- Home -->
+      <section class="view" id="view-home">
+        <div class="wallpaper">
+          <div class="wallpaper-money" id="home-balance">$0</div>
+          <div class="wallpaper-sub">на счету</div>
+        </div>
+        <div class="apps">
+          <button class="app" data-open="garage">
+            <span class="app-icon icon-garage"></span>
+            <span class="app-name">Гараж</span>
+            <span class="app-badge" id="garage-count">0</span>
+          </button>
+          <button class="app" data-open="shop">
+            <span class="app-icon icon-shop"></span>
+            <span class="app-name">Автосалон</span>
+          </button>
+        </div>
+        <p class="hint">ESC — закрыть · /park — убрать машину · /parkhere — записать парковку</p>
+      </section>
+
+      <!-- Garage -->
+      <section class="view hidden" id="view-garage">
+        <header class="appbar">
+          <button class="back" data-open="home">‹</button>
+          <h1>Гараж</h1>
+        </header>
+        <div class="scroll" id="garage-list"></div>
+      </section>
+
+      <!-- Dealership -->
+      <section class="view hidden" id="view-shop">
+        <header class="appbar">
+          <button class="back" data-open="home">‹</button>
+          <h1>Автосалон</h1>
+        </header>
+        <div class="chips" id="shop-chips"></div>
+        <div class="scroll" id="shop-list"></div>
+      </section>
+
+    </div>
+  </div>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

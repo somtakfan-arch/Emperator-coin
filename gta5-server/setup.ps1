@@ -16,7 +16,9 @@ param(
     [string] $Hostname    = "Emperator crew",
     [int]    $MaxClients  = 16,
     [switch] $SkipCars,
-    [switch] $SyncCarsOnly
+    [switch] $SkipGarage,
+    [switch] $SyncCarsOnly,
+    [string] $RepoBranch = 'claude/gta5-rp-server-setup-fvdafy'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -29,6 +31,7 @@ $ServerDataZip    = 'https://github.com/citizenfx/cfx-server-data/archive/refs/h
 $VMenuApi         = 'https://api.github.com/repos/TomGrobbe/vMenu/releases/latest'
 $CarPackZip       = 'https://github.com/Rymex47/free-modpack/archive/refs/heads/main.zip'
 $SevenZipStandalone = 'https://www.7-zip.org/a/7zr.exe'
+$RepoZip            = "https://github.com/somtakfan-arch/Emperator-coin/archive/refs/heads/${RepoBranch}.zip"
 
 $ServerDir = Join-Path $Root 'server'
 $DataDir   = Join-Path $Root 'server-data'
@@ -227,6 +230,28 @@ try {
     Write-Warn 'Grab it by hand from https://github.com/TomGrobbe/vMenu/releases'
 }
 
+if (-not $SkipGarage) {
+    Write-Step 'Phone garage'
+    try {
+        $repoZipFile = Join-Path $TmpDir 'repo.zip'
+        Get-File -Url $RepoZip -OutFile $repoZipFile
+        $repoTmp = Join-Path $TmpDir 'repo'
+        if (Test-Path -LiteralPath $repoTmp) { Remove-Item -LiteralPath $repoTmp -Recurse -Force }
+        Expand-Archive -LiteralPath $repoZipFile -DestinationPath $repoTmp -Force
+
+        $garageSrc = Get-ChildItem -LiteralPath $repoTmp -Recurse -Directory -Filter 'phone_garage' |
+            Select-Object -First 1
+        if (-not $garageSrc) { throw 'phone_garage not found in the repo archive' }
+
+        $garageDest = Join-Path $ResDir 'phone_garage'
+        if (Test-Path -LiteralPath $garageDest) { Remove-Item -LiteralPath $garageDest -Recurse -Force }
+        Move-Item -LiteralPath $garageSrc.FullName -Destination $garageDest -Force
+        Write-Ok 'phone_garage installed'
+    } catch {
+        Write-Warn "phone garage install failed: $($_.Exception.Message)"
+    }
+}
+
 if (-not $SkipCars) {
     Write-Step 'Car pack'
     try {
@@ -307,6 +332,13 @@ add_ace builtin.everyone "vMenu.Everything" allow
 #add_principal identifier.fivem:1234567 group.admin
 #add_ace group.admin command allow
 
+## --- phone garage -------------------------------------------------
+# F1 opens the phone. /park stores the called car, /parkhere records a spot.
+ensure phone_garage
+
+# Who may hand out money with /givemoney:
+#add_ace group.admin garage.admin allow
+
 ## --- add-on cars --------------------------------------------------
 $carEnsure
 "@
@@ -337,7 +369,7 @@ Write-Host @"
  1. Start the server:   $batPath
  2. In FiveM press F8 and type:   connect 127.0.0.1
  3. Friends connect to your Radmin VPN / external IP on port 30120.
- 4. In game press M -> Vehicle Spawner -> Addon Vehicles.
+ 4. In game press M for vMenu, F1 for the phone garage.
 
  Added more car packs? Drop them in $CarsDir and run:
      .\setup.ps1 -SyncCarsOnly
