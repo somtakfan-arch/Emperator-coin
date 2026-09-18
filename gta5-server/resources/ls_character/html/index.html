@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ls_character</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="creator" class="hidden">
+  <div class="panel">
+    <header class="head">
+      <h1>Создание персонажа</h1>
+      <span class="sub">Это можно сделать только один раз</span>
+    </header>
+
+    <nav class="tabs">
+      <button class="tab on" data-tab="gender">Пол</button>
+      <button class="tab" data-tab="look">Внешность</button>
+      <button class="tab" data-tab="face">Черты лица</button>
+      <button class="tab" data-tab="name">Имя</button>
+    </nav>
+
+    <div class="body">
+      <section class="tabview" id="tab-gender">
+        <div class="genders">
+          <button class="gender on" data-gender="male">
+            <span class="gender-icon male"></span>
+            <span>Мужской</span>
+          </button>
+          <button class="gender" data-gender="female">
+            <span class="gender-icon female"></span>
+            <span>Женский</span>
+          </button>
+        </div>
+        <p class="note">
+          Пол задаёт модель персонажа. Поменять потом будет нельзя, так что выбирай сейчас.
+        </p>
+      </section>
+
+      <section class="tabview hidden" id="tab-look"></section>
+      <section class="tabview hidden" id="tab-face"></section>
+
+      <section class="tabview hidden" id="tab-name">
+        <label class="field">
+          <span>Имя</span>
+          <input id="first" type="text" maxlength="16" placeholder="Иван" autocomplete="off">
+        </label>
+        <label class="field">
+          <span>Фамилия</span>
+          <input id="last" type="text" maxlength="16" placeholder="Петров" autocomplete="off">
+        </label>
+        <p class="note" id="name-rule">Только буквы, от 2 до 16 символов.</p>
+        <p class="preview">Ник в игре: <b id="name-preview">—</b></p>
+        <p class="error hidden" id="error"></p>
+      </section>
+    </div>
+
+    <div class="turn">
+      <button class="ghost" data-rotate="-1">↺ Повернуть</button>
+      <button class="ghost" data-rotate="1">Повернуть ↻</button>
+    </div>
+
+    <footer class="foot">
+      <button class="btn primary" id="submit">Создать персонажа</button>
+    </footer>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

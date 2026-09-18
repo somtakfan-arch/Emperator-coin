@@ -523,6 +523,13 @@ AddEventHandler('playerSpawned', function()
     if savedLook then applyLook(PlayerPedId(), savedLook) end
 end)
 
+-- ls_character swaps the ped model, which resets every component. It tells us
+-- once the new ped is ready so the clothes can go straight back on.
+AddEventHandler('ls_character:applied', function()
+    Wait(200)
+    if savedLook then applyLook(PlayerPedId(), savedLook) end
+end)
+
 AddEventHandler('onResourceStop', function(name)
     if name == GetCurrentResourceName() then
         clearBlips()

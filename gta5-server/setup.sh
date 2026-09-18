@@ -243,7 +243,7 @@ if [[ "$SKIP_GARAGE" != "1" ]]; then
     if curl -fL --progress-bar "$REPO_ZIP" -o "$TMP_DIR/repo.zip"; then
         rm -rf "$TMP_DIR/repo" && mkdir -p "$TMP_DIR/repo"
         unzip -qo "$TMP_DIR/repo.zip" -d "$TMP_DIR/repo"
-        for resource in phone_garage ls_inventory ls_shops; do
+        for resource in phone_garage ls_character ls_inventory ls_shops; do
             src="$(find "$TMP_DIR/repo" -type d -name "$resource" | head -n 1)"
             if [[ -n "$src" ]]; then
                 rm -rf "${RES_DIR:?}/$resource"
@@ -373,6 +373,7 @@ add_ace builtin.everyone "vMenu.Everything" allow
 # F1 opens the phone. /park stores the called car, /parkhere records a spot.
 # Shops are marked on the map; walk into a marker and press E.
 ensure phone_garage
+ensure ls_character
 ensure ls_inventory
 ensure ls_shops
 

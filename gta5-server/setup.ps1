@@ -311,7 +311,7 @@ if (-not $SkipGarage) {
         if (Test-Path -LiteralPath $repoTmp) { Remove-Item -LiteralPath $repoTmp -Recurse -Force }
         Expand-Archive -LiteralPath $repoZipFile -DestinationPath $repoTmp -Force
 
-        foreach ($resource in @('phone_garage', 'ls_inventory', 'ls_shops')) {
+        foreach ($resource in @('phone_garage', 'ls_character', 'ls_inventory', 'ls_shops')) {
             $src = Get-ChildItem -LiteralPath $repoTmp -Recurse -Directory -Filter $resource |
                 Select-Object -First 1
             if (-not $src) {
@@ -469,6 +469,7 @@ add_ace builtin.everyone "vMenu.Everything" allow
 # F1 opens the phone. /park stores the called car, /parkhere records a spot.
 # Shops are marked on the map; walk into a marker and press E.
 ensure phone_garage
+ensure ls_character
 ensure ls_inventory
 ensure ls_shops
 
