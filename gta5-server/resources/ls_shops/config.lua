@@ -112,28 +112,13 @@ Config.BarberSlots = {
 }
 
 -- ---------------------------------------------------------------------------
--- Catalogs for the shops that just sell things.
+-- What each shop is allowed to sell.
+--
+-- The stock itself - labels, prices, and every add-on weapon the installer
+-- found - comes from ls_inventory, so a new gun pack shows up in Ammu-Nation
+-- without touching this file.
 -- ---------------------------------------------------------------------------
-Config.AmmuCatalog = {
-    { item = 'WEAPON_PISTOL',       label = 'Пистолет',            price = 4500 },
-    { item = 'WEAPON_COMBATPISTOL', label = 'Боевой пистолет',     price = 9500 },
-    { item = 'WEAPON_MICROSMG',     label = 'Micro SMG',           price = 18000 },
-    { item = 'WEAPON_SMG',          label = 'SMG',                 price = 24000 },
-    { item = 'WEAPON_PUMPSHOTGUN',  label = 'Помповый дробовик',   price = 22000 },
-    { item = 'WEAPON_CARBINERIFLE', label = 'Карабин',             price = 48000 },
-    { item = 'WEAPON_ASSAULTRIFLE', label = 'Штурмовая винтовка',  price = 42000 },
-    { item = 'WEAPON_SNIPERRIFLE',  label = 'Снайперская винтовка',price = 65000 },
-    { item = 'WEAPON_KNIFE',        label = 'Нож',                 price = 1200 },
-    { item = 'WEAPON_BAT',          label = 'Бита',                price = 800 },
-    { item = 'WEAPON_GRENADE',      label = 'Граната',             price = 12000 },
-    { item = 'ARMOUR',              label = 'Бронежилет',          price = 7500 },
-}
-
-Config.StoreCatalog = {
-    { item = 'SNACK',    label = 'Чипсы',           price = 150,  heal = 25 },
-    { item = 'BURGER',   label = 'Бургер',          price = 400,  heal = 60 },
-    { item = 'WATER',    label = 'Вода',            price = 100,  heal = 15 },
-    { item = 'ENERGY',   label = 'Энергетик',       price = 350,  heal = 40 },
-    { item = 'MEDKIT',   label = 'Аптечка',         price = 2500, heal = 100 },
-    { item = 'ARMOUR',   label = 'Лёгкая броня',    price = 3500, armour = 50 },
+Config.Sells = {
+    ammu  = { weapon = true, armour = true },
+    store = { food = true },
 }

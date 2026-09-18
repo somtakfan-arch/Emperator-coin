@@ -6,7 +6,7 @@
     Usage (PowerShell, no admin rights needed):
         .\setup.ps1
         .\setup.ps1 -Root "D:\FXServer" -Hostname "Emperator crew" -MaxClients 16
-        .\setup.ps1 -SyncCarsOnly          # re-scan car packs after adding new ones
+        .\setup.ps1 -SyncPacksOnly          # re-scan car packs after adding new ones
 #>
 
 [CmdletBinding()]
@@ -17,7 +17,9 @@ param(
     [int]    $MaxClients  = 16,
     [switch] $SkipCars,
     [switch] $SkipGarage,
-    [switch] $SyncCarsOnly,
+    [switch] $SkipWeapons,
+    [Alias('SyncCarsOnly')]
+    [switch] $SyncPacksOnly,
     [string] $RepoBranch = 'claude/gta5-rp-server-setup-fvdafy'
 )
 
@@ -33,11 +35,19 @@ $CarPackZip       = 'https://github.com/Rymex47/free-modpack/archive/refs/heads/
 $SevenZipStandalone = 'https://www.7-zip.org/a/7zr.exe'
 $RepoZip            = "https://github.com/somtakfan-arch/Emperator-coin/archive/refs/heads/${RepoBranch}.zip"
 
+# Free add-on gun packs. Each is tried on main, then master.
+$WeaponPacks = @(
+    'Branqueador/GGC-Weapons',
+    'YaBoiiNuggets/bl-weapons',
+    'NoobySloth/Custom-Weapons'
+)
+
 $ServerDir = Join-Path $Root 'server'
 $DataDir   = Join-Path $Root 'server-data'
 $TmpDir    = Join-Path $Root 'tmp'
 $ResDir    = Join-Path $DataDir 'resources'
-$CarsDir   = Join-Path $ResDir '[cars]'
+$CarsDir    = Join-Path $ResDir '[cars]'
+$WeaponsDir = Join-Path $ResDir '[weapons]'
 
 function Write-Step { param([string]$Text) Write-Host "`n==> $Text" -ForegroundColor Cyan }
 function Write-Ok   { param([string]$Text) Write-Host "    OK  $Text" -ForegroundColor Green }
@@ -98,18 +108,20 @@ function Find-ResourceFolders {
         Sort-Object -Property FullName -Unique
 }
 
-# Car packs ship in every layout imaginable. Flatten them so that every resource
-# sits directly in resources\[cars]\<name> - that is the only depth FiveM scans.
-function Invoke-CarSync {
-    if (-not (Test-Path -LiteralPath $CarsDir)) {
-        [void][System.IO.Directory]::CreateDirectory($CarsDir)
+# Packs ship in every layout imaginable. Flatten them so that every resource
+# sits directly in <dir>\<name> - that is the only depth FiveM scans.
+function Invoke-Flatten {
+    param([string]$Path)
+
+    if (-not (Test-Path -LiteralPath $Path)) {
+        [void][System.IO.Directory]::CreateDirectory($Path)
     }
 
-    $resources = @(Find-ResourceFolders -Path $CarsDir)
-    foreach ($res in $resources) {
+    $root = (Get-Item -LiteralPath $Path).FullName
+    foreach ($res in @(Find-ResourceFolders -Path $Path)) {
         $parent = $res.Parent
-        if ($null -ne $parent -and $parent.FullName -ne (Get-Item -LiteralPath $CarsDir).FullName) {
-            $target = Join-Path $CarsDir $res.Name
+        if ($null -ne $parent -and $parent.FullName -ne $root) {
+            $target = Join-Path $Path $res.Name
             if (-not (Test-Path -LiteralPath $target)) {
                 Move-Item -LiteralPath $res.FullName -Destination $target -Force
             }
@@ -118,12 +130,15 @@ function Invoke-CarSync {
 
     # Drop whatever empty scaffolding the packs left behind.
     for ($i = 0; $i -lt 6; $i++) {
-        Get-ChildItem -LiteralPath $CarsDir -Recurse -Directory -Force |
+        Get-ChildItem -LiteralPath $Path -Recurse -Directory -Force |
             Sort-Object { $_.FullName.Length } -Descending |
             Where-Object { -not (Get-ChildItem -LiteralPath $_.FullName -Force) } |
             ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
     }
+}
 
+function Invoke-CarSync {
+    Invoke-Flatten -Path $CarsDir
     $resources = @(Find-ResourceFolders -Path $CarsDir)
     Write-Ok "car resources found: $($resources.Count)"
 
@@ -166,9 +181,66 @@ function Invoke-CarSync {
 
 # --------------------------------------------------------------------------
 
-if ($SyncCarsOnly) {
+function Invoke-WeaponSync {
+    Invoke-Flatten -Path $WeaponsDir
+    $resources = @(Find-ResourceFolders -Path $WeaponsDir)
+    Write-Ok "weapon resources found: $($resources.Count)"
+
+    # Weapon ids live in weapons.meta as <Name>WEAPON_FOO</Name>. Two packs
+    # shipping the same id would fight over it, so collisions are reported.
+    $root = (Get-Item -LiteralPath $WeaponsDir).FullName
+    $owners = @{}
+
+    Get-ChildItem -LiteralPath $WeaponsDir -Recurse -File -Force |
+        Where-Object { $_.Name -like '*weapon*.meta' } |
+        ForEach-Object {
+            $relative = $_.FullName.Substring($root.Length).TrimStart('\')
+            $owner = ($relative -split '\\')[0]
+            $text = Get-Content -LiteralPath $_.FullName -Raw -ErrorAction SilentlyContinue
+            if ($text) {
+                foreach ($m in [regex]::Matches($text, '<Name>(WEAPON_[A-Z0-9_]+)</Name>')) {
+                    $id = $m.Groups[1].Value
+                    if (-not $owners.ContainsKey($id)) { $owners[$id] = @() }
+                    if ($owners[$id] -notcontains $owner) { $owners[$id] += $owner }
+                }
+            }
+        }
+
+    $names = @($owners.Keys | Sort-Object)
+    $dupes = @($owners.Keys | Where-Object { $owners[$_].Count -gt 1 } | Sort-Object)
+
+    if ($dupes.Count -gt 0) {
+        Write-Warn 'the same weapon id is defined by more than one pack:'
+        foreach ($id in $dupes) {
+            Write-Host ("        {0} -> {1}" -f $id, ($owners[$id] -join ', ')) -ForegroundColor Yellow
+        }
+        Write-Warn 'delete one of the packs or the server will pick whichever loads last'
+    }
+
+    Write-Ok "add-on weapons found: $($names.Count)"
+
+    # ls_inventory reads this and registers each one as a buyable item.
+    $shopsDir = Join-Path $ResDir 'ls_shops'
+    if (Test-Path -LiteralPath $shopsDir) {
+        $entries = ($names | ForEach-Object { '  { "name": "' + $_ + '" }' }) -join ",`r`n"
+        $json = "[`r`n$entries`r`n]"
+        $json | Set-Content -LiteralPath (Join-Path $shopsDir 'addon_weapons.json') -Encoding UTF8
+        Write-Ok 'add-on weapon catalog written'
+    } else {
+        Write-Warn 'ls_shops is not installed, add-on weapon catalog skipped'
+    }
+
+    if ($names.Count -gt 0) {
+        $names | Set-Content -LiteralPath (Join-Path $Root 'weapon-names.txt') -Encoding UTF8
+        Write-Ok "weapon name list: $(Join-Path $Root 'weapon-names.txt')"
+    }
+}
+
+if ($SyncPacksOnly) {
     Write-Step 'Re-scanning car packs'
     Invoke-CarSync
+    Write-Step 'Re-scanning weapon packs'
+    Invoke-WeaponSync
     Write-Host "`nDone. Restart the server to pick the changes up.`n" -ForegroundColor Green
     return
 }
@@ -239,7 +311,7 @@ if (-not $SkipGarage) {
         if (Test-Path -LiteralPath $repoTmp) { Remove-Item -LiteralPath $repoTmp -Recurse -Force }
         Expand-Archive -LiteralPath $repoZipFile -DestinationPath $repoTmp -Force
 
-        foreach ($resource in @('phone_garage', 'ls_shops')) {
+        foreach ($resource in @('phone_garage', 'ls_inventory', 'ls_shops')) {
             $src = Get-ChildItem -LiteralPath $repoTmp -Recurse -Directory -Filter $resource |
                 Select-Object -First 1
             if (-not $src) {
@@ -279,8 +351,57 @@ if (-not $SkipCars) {
     }
 }
 
+if (-not $SkipWeapons) {
+    Write-Step 'Weapon packs'
+    [void][System.IO.Directory]::CreateDirectory($WeaponsDir)
+
+    foreach ($pack in $WeaponPacks) {
+        $packName = $pack.Split('/')[-1]
+        $zipPath = Join-Path $TmpDir "$packName.zip"
+        $got = $false
+
+        foreach ($branch in @('main', 'master')) {
+            try {
+                Get-File -Url "https://github.com/$pack/archive/refs/heads/$branch.zip" -OutFile $zipPath
+                $got = $true
+                break
+            } catch {
+                continue
+            }
+        }
+
+        if (-not $got) {
+            Write-Warn "$pack could not be downloaded"
+            continue
+        }
+
+        $packTmp = Join-Path $TmpDir 'wp'
+        if (Test-Path -LiteralPath $packTmp) { Remove-Item -LiteralPath $packTmp -Recurse -Force }
+        Expand-Archive -LiteralPath $zipPath -DestinationPath $packTmp -Force
+        $inner = Get-ChildItem -LiteralPath $packTmp -Directory | Select-Object -First 1
+
+        # A pack is usually one resource; move it in under the repo's name.
+        if (Test-Path -LiteralPath (Join-Path $inner.FullName 'fxmanifest.lua')) {
+            $dest = Join-Path $WeaponsDir $packName
+            if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Recurse -Force }
+            Move-Item -LiteralPath $inner.FullName -Destination $dest -Force
+        } else {
+            Get-ChildItem -LiteralPath $inner.FullName -Force | ForEach-Object {
+                $dest = Join-Path $WeaponsDir $_.Name
+                if (-not (Test-Path -LiteralPath $dest)) {
+                    Move-Item -LiteralPath $_.FullName -Destination $dest -Force
+                }
+            }
+        }
+        Write-Ok $pack
+    }
+}
+
 Write-Step 'Wiring up cars'
 Invoke-CarSync
+
+Write-Step 'Wiring up weapons'
+Invoke-WeaponSync
 
 Write-Step 'server.cfg'
 if ([string]::IsNullOrWhiteSpace($LicenseKey)) {
@@ -297,7 +418,15 @@ foreach ($res in @(Find-ResourceFolders -Path $CarsDir)) {
     $carEnsure += "ensure $($res.Name)`r`n"
 }
 if ([string]::IsNullOrWhiteSpace($carEnsure)) {
-    $carEnsure = "# no car resources yet - drop packs into resources\[cars] and rerun with -SyncCarsOnly`r`n"
+    $carEnsure = "# no car resources yet - drop packs into resources\[cars] and rerun with -SyncPacksOnly`r`n"
+}
+
+$weaponEnsure = ''
+foreach ($res in @(Find-ResourceFolders -Path $WeaponsDir)) {
+    $weaponEnsure += "ensure $($res.Name)`r`n"
+}
+if ([string]::IsNullOrWhiteSpace($weaponEnsure)) {
+    $weaponEnsure = "# no weapon resources yet - drop packs into resources\[weapons] and rerun with -SyncPacksOnly`r`n"
 }
 
 $cfg = @"
@@ -340,6 +469,7 @@ add_ace builtin.everyone "vMenu.Everything" allow
 # F1 opens the phone. /park stores the called car, /parkhere records a spot.
 # Shops are marked on the map; walk into a marker and press E.
 ensure phone_garage
+ensure ls_inventory
 ensure ls_shops
 
 # Who may hand out money with /givemoney:
@@ -347,6 +477,8 @@ ensure ls_shops
 
 ## --- add-on cars --------------------------------------------------
 $carEnsure
+## --- add-on weapons -----------------------------------------------
+$weaponEnsure
 "@
 
 $cfgPath = Join-Path $DataDir 'server.cfg'
@@ -375,10 +507,10 @@ Write-Host @"
  1. Start the server:   $batPath
  2. In FiveM press F8 and type:   connect 127.0.0.1
  3. Friends connect to your Radmin VPN / external IP on port 30120.
- 4. In game press M for vMenu, F1 for the phone garage, E at a shop.
+ 4. M = vMenu, F1 = phone, I = inventory, E at a shop marker.
 
- Added more car packs? Drop them in $CarsDir and run:
-     .\setup.ps1 -SyncCarsOnly
+ Added more car or weapon packs? Drop them in and run:
+     .\setup.ps1 -SyncPacksOnly
 =====================================================================
 
 "@ -ForegroundColor Green

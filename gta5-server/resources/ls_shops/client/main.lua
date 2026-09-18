@@ -291,18 +291,28 @@ end
 -- --- buy menus -------------------------------------------------------------
 
 local function openList(kind)
-    local catalog = (kind == 'ammu') and Config.AmmuCatalog or Config.StoreCatalog
-    local items = {}
-    for _, entry in ipairs(catalog) do
-        items[#items + 1] = {
-            item = entry.item,
-            label = entry.label,
-            price = entry.price,
-            note = entry.heal and ('+' .. entry.heal .. ' HP')
-                or (entry.armour and ('+' .. entry.armour .. ' брони'))
-                or nil,
-        }
+    local allowed = Config.Sells[kind]
+    if not allowed then return end
+
+    local ok, stock = pcall(function() return exports.ls_inventory:listItems() end)
+    if not ok or type(stock) ~= 'table' then
+        notify('~r~Магазин недоступен: ls_inventory не запущен')
+        return
     end
+
+    local items = {}
+    for _, entry in ipairs(stock) do
+        if allowed[entry.kind] and (tonumber(entry.price) or 0) > 0 then
+            items[#items + 1] = {
+                item = entry.item,
+                label = entry.label,
+                price = entry.price,
+                note = entry.addon and 'мод' or nil,
+            }
+        end
+    end
+
+    table.sort(items, function(a, b) return a.price < b.price end)
 
     uiOpen = true
     SetNuiFocus(true, true)
@@ -407,12 +417,8 @@ RegisterNUICallback('styleCancel', function(_, cb)
 end)
 
 RegisterNUICallback('listBuy', function(data, cb)
-    if data and data.item then
-        if data.kind == 'ammu' then
-            TriggerServerEvent('ls_shops:buyWeapon', data.item)
-        else
-            TriggerServerEvent('ls_shops:buyItem', data.item)
-        end
+    if data and data.item and data.kind then
+        TriggerServerEvent('ls_shops:purchase', data.kind, data.item)
     end
     cb('ok')
 end)
@@ -428,7 +434,7 @@ RegisterNetEvent('ls_shops:sync', function(data)
     savedLook = normalizeLook(data and data.look)
     outfits = (data and data.outfits) or {}
     -- The phone renders the wardrobe, so nudge it whenever the list changes.
-    TriggerEvent('phone_garage:refreshOutfits')
+    TriggerEvent('phone_garage:refresh')
 
     shops = {}
     for _, shop in ipairs(Config.Shops) do shops[#shops + 1] = shop end
@@ -459,25 +465,6 @@ RegisterNetEvent('ls_shops:styleResult', function(paid)
     else
         -- Charge failed: keep the editor open so nothing is silently lost.
         SendNUIMessage({ action = 'styleDenied' })
-    end
-end)
-
-RegisterNetEvent('ls_shops:giveWeapon', function(item)
-    local ped = PlayerPedId()
-    if item == 'ARMOUR' then
-        SetPedArmour(ped, 100)
-    else
-        GiveWeaponToPed(ped, GetHashKey(item), 250, false, false)
-    end
-end)
-
-RegisterNetEvent('ls_shops:consume', function(effect)
-    local ped = PlayerPedId()
-    if effect.heal then
-        SetEntityHealth(ped, math.min(GetEntityMaxHealth(ped), GetEntityHealth(ped) + effect.heal))
-    end
-    if effect.armour then
-        SetPedArmour(ped, math.min(100, GetPedArmour(ped) + effect.armour))
     end
 end)
 

@@ -1,0 +1,196 @@
+:root {
+  --bg: rgba(11, 13, 18, .95);
+  --panel: #171b24;
+  --slot: #1b202b;
+  --slot-hover: #242b3a;
+  --line: #2b3243;
+  --text: #e8ecf4;
+  --muted: #8a93a6;
+  --accent: #4ea3ff;
+  --good: #3ddc84;
+  --bad: #ff5c62;
+  --extra: #b08cff;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Segoe UI', 'Inter', system-ui, sans-serif;
+  background: transparent;
+  color: var(--text);
+  height: 100vh;
+  overflow: hidden;
+  user-select: none;
+}
+
+.hidden { display: none !important; }
+
+#wrap {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.panel {
+  width: 620px;
+  max-height: 92vh;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, .65);
+  display: flex;
+  flex-direction: column;
+}
+
+.head {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.head h1 { font-size: 18px; font-weight: 600; }
+.sub { font-size: 12px; color: var(--muted); }
+.wallet { color: var(--good); font-weight: 600; font-size: 14px; }
+
+/* --- grid --- */
+.grid {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 6px;
+  padding: 14px 20px;
+}
+
+.grid::-webkit-scrollbar { width: 6px; }
+.grid::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+
+.slot {
+  position: relative;
+  aspect-ratio: 1;
+  background: var(--slot);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  padding: 4px;
+  cursor: pointer;
+  transition: background .1s, border-color .1s;
+}
+
+.slot:hover { background: var(--slot-hover); }
+.slot.empty { cursor: default; opacity: .55; }
+.slot.empty:hover { background: var(--slot); }
+.slot.picked { border-color: var(--accent); background: var(--slot-hover); }
+.slot.extra { border-style: dashed; border-color: #3c3350; }
+.slot.dragover { border-color: var(--good); }
+
+.slot-name {
+  font-size: 9.5px;
+  line-height: 1.15;
+  text-align: center;
+  color: var(--text);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.slot-count {
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+}
+
+.slot-kind {
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  flex: 0 0 auto;
+}
+
+.kind-weapon { background: #4a2630; }
+.kind-armour { background: #1f3f57; }
+.kind-food   { background: #27452f; }
+.kind-misc   { background: #333a4a; }
+
+.divider {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 2px;
+  font-size: 11px;
+  color: var(--extra);
+}
+
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #3c3350;
+}
+
+/* --- backpack card --- */
+.backpack {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin: 0 20px 4px;
+  padding: 12px 14px;
+  background: #221d30;
+  border: 1px dashed #3c3350;
+  border-radius: 12px;
+  font-size: 13px;
+}
+
+.backpack .btn { flex: 0 0 auto; padding: 8px 18px; }
+
+/* --- footer --- */
+.foot {
+  flex: 0 0 auto;
+  padding: 14px 20px 16px;
+  border-top: 1px solid var(--line);
+}
+
+.detail {
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: var(--muted);
+  min-height: 19px;
+}
+
+.detail b { color: var(--text); }
+
+.actions { display: flex; gap: 10px; }
+
+.btn {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #212736;
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.btn:hover:not(:disabled) { background: #2b3243; }
+.btn.primary { background: #17405f; border-color: #1f5a86; color: #cfe7ff; }
+.btn.primary:hover:not(:disabled) { background: #1c4f75; }
+.btn.danger { color: var(--bad); }
+.btn:disabled { opacity: .4; cursor: not-allowed; }

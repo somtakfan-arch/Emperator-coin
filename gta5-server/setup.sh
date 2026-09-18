@@ -8,7 +8,7 @@
 #     bash setup.sh
 #     ROOT=/srv/fivem HOSTNAME_="Emperator crew" MAXCLIENTS=16 bash setup.sh
 #     SKIP_CARS=1 bash setup.sh        # vanilla only
-#     bash setup.sh --sync-cars        # re-scan car packs after adding new ones
+#     bash setup.sh --sync-packs        # re-scan car packs after adding new ones
 
 set -euo pipefail
 
@@ -18,6 +18,7 @@ HOSTNAME_="${HOSTNAME_:-Emperator crew}"
 MAXCLIENTS="${MAXCLIENTS:-16}"
 SKIP_CARS="${SKIP_CARS:-0}"
 SKIP_GARAGE="${SKIP_GARAGE:-0}"
+SKIP_WEAPONS="${SKIP_WEAPONS:-0}"
 REPO_BRANCH="${REPO_BRANCH:-claude/gta5-rp-server-setup-fvdafy}"
 SERVICE_USER="${SERVICE_USER:-fivem}"
 
@@ -28,11 +29,19 @@ VMENU_API='https://api.github.com/repos/TomGrobbe/vMenu/releases/latest'
 CAR_PACK_ZIP='https://github.com/Rymex47/free-modpack/archive/refs/heads/main.zip'
 REPO_ZIP="https://github.com/somtakfan-arch/Emperator-coin/archive/refs/heads/${REPO_BRANCH}.zip"
 
+# Free add-on gun packs. Each is tried on main, then master.
+WEAPON_PACKS=(
+    'Branqueador/GGC-Weapons'
+    'YaBoiiNuggets/bl-weapons'
+    'NoobySloth/Custom-Weapons'
+)
+
 SERVER_DIR="$ROOT/server"
 DATA_DIR="$ROOT/server-data"
 TMP_DIR="$ROOT/tmp"
 RES_DIR="$DATA_DIR/resources"
 CARS_DIR="$RES_DIR/[cars]"
+WEAPONS_DIR="$RES_DIR/[weapons]"
 
 step() { printf '\n\033[36m==> %s\033[0m\n' "$1"; }
 ok()   { printf '\033[32m    OK  %s\033[0m\n' "$1"; }
@@ -41,26 +50,36 @@ die()  { printf '\033[31m    ERROR: %s\033[0m\n' "$1" >&2; exit 1; }
 
 [[ $EUID -eq 0 ]] || die "run as root (sudo bash setup.sh)"
 
-# Car packs ship in every layout imaginable. Flatten them so that every resource
-# sits directly in resources/[cars]/<name> - the only depth FiveM scans.
-sync_cars() {
-    mkdir -p "$CARS_DIR"
+# Packs ship in every layout imaginable. Flatten them so that every resource
+# sits directly in <dir>/<name> - the only depth FiveM scans.
+flatten_into() {
+    local dir="$1"
+    mkdir -p "$dir"
 
     while IFS= read -r manifest; do
+        local res_dir parent target
         res_dir="$(dirname "$manifest")"
         parent="$(dirname "$res_dir")"
-        if [[ "$parent" != "$CARS_DIR" ]]; then
-            target="$CARS_DIR/$(basename "$res_dir")"
+        if [[ "$parent" != "$dir" ]]; then
+            target="$dir/$(basename "$res_dir")"
             [[ -e "$target" ]] || mv "$res_dir" "$target"
         fi
-    done < <(find "$CARS_DIR" -type f \( -name fxmanifest.lua -o -name __resource.lua \) | sort -r)
+    done < <(find "$dir" -type f \( -name fxmanifest.lua -o -name __resource.lua \) | sort -r)
 
-    # Drop whatever empty scaffolding the packs left behind.
-    find "$CARS_DIR" -mindepth 1 -type d -empty -delete 2>/dev/null || true
+    find "$dir" -mindepth 1 -type d -empty -delete 2>/dev/null || true
+}
+
+# Every resource sitting directly in <dir>, one per line.
+list_resources() {
+    find "$1" -mindepth 2 -maxdepth 2 -type f \
+        \( -name fxmanifest.lua -o -name __resource.lua \) 2>/dev/null | sort
+}
+
+sync_cars() {
+    flatten_into "$CARS_DIR"
 
     local count
-    count="$(find "$CARS_DIR" -mindepth 2 -maxdepth 2 -type f \
-        \( -name fxmanifest.lua -o -name __resource.lua \) | wc -l)"
+    count="$(list_resources "$CARS_DIR" | wc -l)"
     ok "car resources found: $count"
 
     # Spawn names live in the vehicles*.meta files as <modelName>foo</modelName>.
@@ -101,9 +120,67 @@ sync_cars() {
     fi
 }
 
-if [[ "${1:-}" == "--sync-cars" ]]; then
+sync_weapons() {
+    flatten_into "$WEAPONS_DIR"
+
+    local count
+    count="$(list_resources "$WEAPONS_DIR" | wc -l)"
+    ok "weapon resources found: $count"
+
+    # Weapon ids live in weapons.meta as <Name>WEAPON_FOO</Name>. Two packs
+    # shipping the same id would fight over it, so collisions are reported.
+    local pairs
+    pairs="$(find "$WEAPONS_DIR" -type f -name '*weapon*.meta' 2>/dev/null | while read -r meta; do
+        # The resource name is the first path segment under [weapons], not the
+        # folder the .meta happens to sit in.
+        local rel owner
+        rel="${meta#"$WEAPONS_DIR"/}"
+        owner="${rel%%/*}"
+        grep -hoE '<Name>WEAPON_[A-Z0-9_]+</Name>' "$meta" 2>/dev/null \
+            | sed -E 's#</?Name>##g' \
+            | while read -r name; do printf '%s\t%s\n' "$name" "$owner"; done
+    done | sort -u || true)"
+
+    local names
+    names="$(printf '%s\n' "$pairs" | cut -f1 | grep -v '^$' | sort -u || true)"
+
+    local dupes
+    dupes="$(printf '%s\n' "$pairs" | cut -f1 | grep -v '^$' | sort | uniq -d || true)"
+    if [[ -n "$dupes" ]]; then
+        warn 'the same weapon id is defined by more than one pack:'
+        printf '%s\n' "$dupes" | sed 's/^/        /'
+        warn 'delete one of the packs or the server will pick whichever loads last'
+    fi
+
+    local n=0
+    [[ -n "$names" ]] && n="$(printf '%s\n' "$names" | wc -l)"
+    ok "add-on weapons found: $n"
+
+    # ls_inventory reads this and registers each one as a buyable item.
+    local out="$RES_DIR/ls_shops/addon_weapons.json"
+    if [[ -d "$RES_DIR/ls_shops" ]]; then
+        {
+            echo '['
+            printf '%s\n' "$names" | grep -v '^$' \
+                | sed 's/^/  { "name": "/; s/$/" },/' | sed '$ s/,$//'
+            echo ']'
+        } > "$out"
+        ok "add-on weapon catalog: $out"
+    else
+        warn 'ls_shops is not installed, add-on weapon catalog skipped'
+    fi
+
+    if [[ -n "$names" ]]; then
+        printf '%s\n' "$names" > "$ROOT/weapon-names.txt"
+        ok "weapon name list: $ROOT/weapon-names.txt"
+    fi
+}
+
+if [[ "${1:-}" == "--sync-cars" || "${1:-}" == "--sync-packs" ]]; then
     step 'Re-scanning car packs'
     sync_cars
+    step 'Re-scanning weapon packs'
+    sync_weapons
     chown -R "$SERVICE_USER":"$SERVICE_USER" "$DATA_DIR" 2>/dev/null || true
     printf '\n\033[32mDone. systemctl restart fivem\033[0m\n\n'
     exit 0
@@ -166,7 +243,7 @@ if [[ "$SKIP_GARAGE" != "1" ]]; then
     if curl -fL --progress-bar "$REPO_ZIP" -o "$TMP_DIR/repo.zip"; then
         rm -rf "$TMP_DIR/repo" && mkdir -p "$TMP_DIR/repo"
         unzip -qo "$TMP_DIR/repo.zip" -d "$TMP_DIR/repo"
-        for resource in phone_garage ls_shops; do
+        for resource in phone_garage ls_inventory ls_shops; do
             src="$(find "$TMP_DIR/repo" -type d -name "$resource" | head -n 1)"
             if [[ -n "$src" ]]; then
                 rm -rf "${RES_DIR:?}/$resource"
@@ -194,8 +271,45 @@ if [[ "$SKIP_CARS" != "1" ]]; then
     fi
 fi
 
+if [[ "$SKIP_WEAPONS" != "1" ]]; then
+    step 'Weapon packs'
+    mkdir -p "$WEAPONS_DIR"
+    for pack in "${WEAPON_PACKS[@]}"; do
+        pack_name="${pack##*/}"
+        got=0
+        for branch in main master; do
+            if curl -fsL "https://github.com/${pack}/archive/refs/heads/${branch}.zip" \
+                    -o "$TMP_DIR/${pack_name}.zip" 2>/dev/null; then
+                got=1
+                break
+            fi
+        done
+
+        if [[ "$got" != "1" ]]; then
+            warn "$pack could not be downloaded"
+            continue
+        fi
+
+        rm -rf "$TMP_DIR/wp" && mkdir -p "$TMP_DIR/wp"
+        unzip -qo "$TMP_DIR/${pack_name}.zip" -d "$TMP_DIR/wp"
+        inner="$(find "$TMP_DIR/wp" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+
+        # A pack is usually one resource; move it in under the repo's name.
+        if [[ -f "$inner/fxmanifest.lua" || -f "$inner/__resource.lua" ]]; then
+            rm -rf "${WEAPONS_DIR:?}/$pack_name"
+            mv "$inner" "$WEAPONS_DIR/$pack_name"
+        else
+            cp -rn "$inner"/. "$WEAPONS_DIR"/ 2>/dev/null || true
+        fi
+        ok "$pack"
+    done
+fi
+
 step 'Wiring up cars'
 sync_cars
+
+step 'Wiring up weapons'
+sync_weapons
 
 step 'server.cfg'
 if [[ -z "$LICENSE_KEY" ]]; then
@@ -210,8 +324,14 @@ fi
 car_ensure=""
 while IFS= read -r manifest; do
     car_ensure+="ensure $(basename "$(dirname "$manifest")")"$'\n'
-done < <(find "$CARS_DIR" -mindepth 2 -maxdepth 2 -type f -name fxmanifest.lua | sort)
-[[ -n "$car_ensure" ]] || car_ensure="# no car resources yet - drop packs into resources/[cars] and rerun with --sync-cars"$'\n'
+done < <(list_resources "$CARS_DIR")
+[[ -n "$car_ensure" ]] || car_ensure="# no car resources yet - drop packs into resources/[cars] and rerun with --sync-packs"$'\n'
+
+weapon_ensure=""
+while IFS= read -r manifest; do
+    weapon_ensure+="ensure $(basename "$(dirname "$manifest")")"$'\n'
+done < <(list_resources "$WEAPONS_DIR")
+[[ -n "$weapon_ensure" ]] || weapon_ensure="# no weapon resources yet - drop packs into resources/[weapons] and rerun with --sync-packs"$'\n'
 
 cat > "$DATA_DIR/server.cfg" <<CFG
 ## ------------------------------------------------------------------
@@ -253,6 +373,7 @@ add_ace builtin.everyone "vMenu.Everything" allow
 # F1 opens the phone. /park stores the called car, /parkhere records a spot.
 # Shops are marked on the map; walk into a marker and press E.
 ensure phone_garage
+ensure ls_inventory
 ensure ls_shops
 
 # Who may hand out money with /givemoney:
@@ -260,6 +381,8 @@ ensure ls_shops
 
 ## --- add-on cars --------------------------------------------------
 $car_ensure
+## --- add-on weapons -----------------------------------------------
+$weapon_ensure
 CFG
 ok "written: $DATA_DIR/server.cfg"
 
@@ -307,8 +430,8 @@ cat <<DONE
 
  Make sure TCP+UDP 30120 is open in the provider's firewall too.
 
- Added more car packs? Drop them in $CARS_DIR and run:
-     bash setup.sh --sync-cars
+ Added more car or weapon packs? Drop them in and run:
+     bash setup.sh --sync-packs
 =====================================================================
 
 DONE

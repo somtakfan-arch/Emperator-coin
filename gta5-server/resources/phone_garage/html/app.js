@@ -8,6 +8,7 @@
   const state = {
     money: 0, cars: [], catalog: [], active: null, filter: 'Все',
     outfits: [], wardrobe: false,
+    backpack: { owned: false, slots: 18, price: 0, available: false },
   };
 
   const $ = (id) => document.getElementById(id);
@@ -113,7 +114,27 @@
     });
   }
 
+  function renderBackpack() {
+    const card = $('pack-card');
+    const pack = state.backpack || {};
+
+    if (!pack.available || pack.owned) {
+      card.classList.add('hidden');
+      return;
+    }
+
+    card.classList.remove('hidden');
+    $('pack-note').textContent =
+      `+${pack.slots} слотов в инвентаре · ${money(pack.price)}`;
+
+    const buy = $('pack-buy');
+    buy.disabled = state.money < pack.price;
+    buy.textContent = state.money < pack.price ? 'Не хватает' : 'Купить';
+  }
+
   function renderWardrobe() {
+    renderBackpack();
+
     const list = $('wardrobe-list');
     list.innerHTML = '';
 
@@ -151,6 +172,8 @@
       list.appendChild(card);
     });
   }
+
+  $('pack-buy').addEventListener('click', () => post('buyBackpack'));
 
   $('outfit-save').addEventListener('click', () => {
     const field = $('outfit-name');
@@ -257,6 +280,7 @@
       state.active = data.active || null;
       state.outfits = data.outfits || [];
       state.wardrobe = data.wardrobe === true;
+      state.backpack = data.backpack || state.backpack;
       render();
     }
   });

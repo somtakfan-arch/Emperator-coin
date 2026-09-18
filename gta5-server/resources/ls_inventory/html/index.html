@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>ls_inventory</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="wrap" class="hidden">
+  <div class="panel">
+    <header class="head">
+      <div>
+        <h1>Инвентарь</h1>
+        <span class="sub" id="capacity">0 / 54</span>
+      </div>
+      <span class="wallet" id="money">$0</span>
+    </header>
+
+    <div class="grid" id="grid"></div>
+
+    <div class="backpack hidden" id="backpack-card">
+      <div>
+        <b>Рюкзак</b>
+        <span class="sub" id="backpack-note">+18 слотов</span>
+      </div>
+      <button class="btn primary" id="backpack-buy">Купить</button>
+    </div>
+
+    <footer class="foot">
+      <div class="detail" id="detail">Выбери слот</div>
+      <div class="actions">
+        <button class="btn primary" id="use" disabled>Применить</button>
+        <button class="btn danger" id="drop" disabled>Выбросить</button>
+        <button class="btn" id="close">Закрыть</button>
+      </div>
+    </footer>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>

@@ -2,12 +2,11 @@ fx_version 'cerulean'
 game 'gta5'
 lua54 'yes'
 
-name 'ls_shops'
-description 'Clothing stores, barbershops, Ammu-Nation and 24/7 - with blips and a style editor'
+name 'ls_inventory'
+description 'Grid inventory: 54 slots, +18 with a backpack. Everything bought lands here first.'
 version '1.0.0'
 
-dependency 'phone_garage'    -- the wallet lives there
-dependency 'ls_inventory'    -- purchases land in the inventory, not in your hands
+dependency 'phone_garage'   -- the wallet lives there
 
 ui_page 'html/index.html'
 

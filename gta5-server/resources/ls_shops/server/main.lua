@@ -13,10 +13,6 @@ local dirty = false
 
 local MAX_OUTFITS = 20
 
-local ammuByItem, storeByItem = {}, {}
-for _, entry in ipairs(Config.AmmuCatalog) do ammuByItem[entry.item] = entry end
-for _, entry in ipairs(Config.StoreCatalog) do storeByItem[entry.item] = entry end
-
 local function readJson(file, fallback)
     local raw = LoadResourceFile(RES, file)
     if not raw or raw == '' then return fallback end
@@ -211,40 +207,55 @@ RegisterNetEvent('ls_shops:payStyle', function(kind, slots)
     end
 end)
 
-RegisterNetEvent('ls_shops:buyWeapon', function(item)
+-- Buying puts the item in the inventory - nothing is equipped or eaten here.
+-- Order matters: check the shop sells it, check it fits, charge, hand it over.
+RegisterNetEvent('ls_shops:purchase', function(shopKind, item)
     local src = source
-    if type(item) ~= 'string' then return end
+    if type(item) ~= 'string' or type(shopKind) ~= 'string' then return end
 
-    local entry = ammuByItem[item]
-    if not entry then
-        notify(src, '~r~Такого товара нет')
+    local allowed = Config.Sells[shopKind]
+    if not allowed then
+        notify(src, '~r~Здесь это не продаётся')
         return
     end
-    if not charge(src, entry.price) then
+
+    local ok, def = pcall(function()
+        return exports.ls_inventory:getItemDef(item)
+    end)
+    if not ok then
+        print('[ls_shops] ls_inventory is not running - nothing can be sold')
+        notify(src, '~r~Магазин недоступен')
+        return
+    end
+    if type(def) ~= 'table' or not allowed[def.type] then
+        notify(src, '~r~Здесь это не продаётся')
+        return
+    end
+
+    local price = math.floor(tonumber(def.price) or 0)
+    if price <= 0 then
+        notify(src, '~r~У товара нет цены')
+        return
+    end
+
+    if exports.ls_inventory:canCarry(src, item, 1) ~= true then
+        notify(src, '~r~В инвентаре нет места')
+        return
+    end
+
+    if not charge(src, price) then
         notify(src, '~r~Не хватает денег')
         return
     end
 
-    TriggerClientEvent('ls_shops:giveWeapon', src, entry.item)
-    notify(src, ('~g~Куплено: %s'):format(entry.label))
-end)
-
-RegisterNetEvent('ls_shops:buyItem', function(item)
-    local src = source
-    if type(item) ~= 'string' then return end
-
-    local entry = storeByItem[item]
-    if not entry then
-        notify(src, '~r~Такого товара нет')
-        return
-    end
-    if not charge(src, entry.price) then
-        notify(src, '~r~Не хватает денег')
+    if exports.ls_inventory:giveItem(src, item, 1) ~= true then
+        -- Should not happen after canCarry, but never keep the money if it does.
+        exports.phone_garage:addMoney(src, price)
+        notify(src, '~r~Не поместилось, деньги возвращены')
         return
     end
 
-    TriggerClientEvent('ls_shops:consume', src, { heal = entry.heal, armour = entry.armour })
-    notify(src, ('~g~Куплено: %s'):format(entry.label))
+    notify(src, ('~g~Куплено: %s — в инвентаре'):format(def.label or item))
 end)
 
 -- --- /shophere -------------------------------------------------------------

@@ -21,6 +21,20 @@ local function outfits()
     return {}, false
 end
 
+-- Same story for the backpack: ls_inventory owns it, the phone just sells it.
+local function backpack()
+    local ok, inv = pcall(function() return exports.ls_inventory:getState() end)
+    if ok and type(inv) == 'table' then
+        return {
+            owned = inv.backpack == true,
+            slots = inv.backpackSlots or 18,
+            price = inv.backpackPrice or 0,
+            available = true,
+        }
+    end
+    return { owned = false, slots = 18, price = 0, available = false }
+end
+
 local function pushState()
     local list, available = outfits()
     SendNUIMessage({
@@ -31,6 +45,7 @@ local function pushState()
         active = activePlate,
         outfits = list,
         wardrobe = available,
+        backpack = backpack(),
     })
 end
 
@@ -291,6 +306,11 @@ RegisterNUICallback('wardrobeDelete', function(data, cb)
     cb('ok')
 end)
 
+RegisterNUICallback('buyBackpack', function(_, cb)
+    pcall(function() exports.ls_inventory:buyBackpack() end)
+    cb('ok')
+end)
+
 RegisterNUICallback('wardrobeSave', function(data, cb)
     pcall(function()
         exports.ls_shops:saveCurrentOutfit(data and data.name or '')
@@ -312,8 +332,8 @@ RegisterNetEvent('phone_garage:notify', function(text)
     notify(text)
 end)
 
--- Fired by ls_shops when the wardrobe changed.
-AddEventHandler('phone_garage:refreshOutfits', function()
+-- Fired by ls_shops and ls_inventory when something the phone shows changed.
+AddEventHandler('phone_garage:refresh', function()
     pushState()
 end)
 
