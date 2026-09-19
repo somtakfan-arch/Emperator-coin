@@ -789,6 +789,7 @@ end
 
 RegisterNetEvent('ls_crime:claimTurf', function(key)
     local src = source
+    if not Config.Turf.enabled then return end
     if throttled(src) then return end
     if type(key) ~= 'string' then return end
 
@@ -841,6 +842,7 @@ end)
 
 -- Доход капает владельцу, даже когда он не в игре: забрать можно на рынке.
 CreateThread(function()
+    if not Config.Turf.enabled then return end
     while true do
         Wait(Config.Turf.payoutEvery * 1000)
         local paid = false

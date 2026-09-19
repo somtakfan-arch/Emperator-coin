@@ -383,6 +383,8 @@ CreateThread(function()
 end)
 
 CreateThread(function()
+    if not Config.Turf.enabled then return end
+
     local holding, heldFor = nil, 0
 
     while true do

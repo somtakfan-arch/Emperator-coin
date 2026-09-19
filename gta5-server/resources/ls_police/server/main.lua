@@ -681,6 +681,10 @@ local function raiseWanted(src, kind)
     local rule = Config.Wanted.auto[kind]
     if not rule then return false end
 
+    -- В зоне карантина розыска нет вообще: там и есть беспредел.
+    local okZone, inside = pcall(function() return exports.ls_city:inQuarantine(src) end)
+    if okZone and inside == true then return false end
+
     local key = ('%d:%s'):format(src, kind)
     local now = os.time()
     if autoUntil[key] and autoUntil[key] > now then return end
