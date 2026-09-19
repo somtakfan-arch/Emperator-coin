@@ -290,29 +290,15 @@ end
 
 -- --- buy menus -------------------------------------------------------------
 
+-- The catalog lives on the server (ls_inventory's listItems is a server
+-- export, and a client cannot call one), so ask for it and open when it lands.
 local function openList(kind)
-    local allowed = Config.Sells[kind]
-    if not allowed then return end
+    if not Config.Sells[kind] then return end
+    TriggerServerEvent('ls_shops:requestStock', kind)
+end
 
-    local ok, stock = pcall(function() return exports.ls_inventory:listItems() end)
-    if not ok or type(stock) ~= 'table' then
-        notify('~r~Магазин недоступен: ls_inventory не запущен')
-        return
-    end
-
-    local items = {}
-    for _, entry in ipairs(stock) do
-        if allowed[entry.kind] and (tonumber(entry.price) or 0) > 0 then
-            items[#items + 1] = {
-                item = entry.item,
-                label = entry.label,
-                price = entry.price,
-                note = entry.addon and 'мод' or nil,
-            }
-        end
-    end
-
-    table.sort(items, function(a, b) return a.price < b.price end)
+RegisterNetEvent('ls_shops:stock', function(kind, items)
+    if not Config.Types[kind] then return end
 
     uiOpen = true
     SetNuiFocus(true, true)
@@ -321,10 +307,10 @@ local function openList(kind)
         view = 'list',
         title = Config.Types[kind].label,
         kind = kind,
-        items = items,
+        items = items or {},
         money = money(),
     })
-end
+end)
 
 local function closeList()
     uiOpen = false

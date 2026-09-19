@@ -207,6 +207,37 @@ RegisterNetEvent('ls_shops:payStyle', function(kind, slots)
     end
 end)
 
+-- Ammu-Nation and 24/7 stock comes from ls_inventory, which only exposes it
+-- server-side, so the shop menu is filled from here.
+RegisterNetEvent('ls_shops:requestStock', function(kind)
+    local src = source
+    if type(kind) ~= 'string' then return end
+
+    local allowed = Config.Sells[kind]
+    if not allowed then return end
+
+    local ok, stock = pcall(function() return exports.ls_inventory:listItems() end)
+    if not ok or type(stock) ~= 'table' then
+        notify(src, '~r~Магазин недоступен: ls_inventory не отвечает')
+        return
+    end
+
+    local items = {}
+    for _, entry in ipairs(stock) do
+        if allowed[entry.kind] and (tonumber(entry.price) or 0) > 0 then
+            items[#items + 1] = {
+                item = entry.item,
+                label = entry.label,
+                price = entry.price,
+                note = entry.addon and 'мод' or nil,
+            }
+        end
+    end
+    table.sort(items, function(a, b) return a.price < b.price end)
+
+    TriggerClientEvent('ls_shops:stock', src, kind, items)
+end)
+
 -- Buying puts the item in the inventory - nothing is equipped or eaten here.
 -- Order matters: check the shop sells it, check it fits, charge, hand it over.
 RegisterNetEvent('ls_shops:purchase', function(shopKind, item)
