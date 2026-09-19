@@ -68,6 +68,13 @@ AddEventHandler('onResourceStart', function(name)
     print(('[ls_tuning] loaded %d builds'):format(n))
 end)
 
+-- Выход игрока - момент, когда его данные обязаны оказаться на диске.
+-- Одного таймера на минуту мало: купил что-то, вышел через полминуты, и
+-- покупки нет. Рестарт сервера теряет ровно так же.
+AddEventHandler('playerDropped', function()
+    if dirty then save() end
+end)
+
 AddEventHandler('onResourceStop', function(name)
     if name == RES then save() end
 end)

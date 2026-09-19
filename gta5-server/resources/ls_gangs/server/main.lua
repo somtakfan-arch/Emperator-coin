@@ -9,6 +9,7 @@ local RES = GetCurrentResourceName()
 
 local slots = {}        -- [id] = { gang, label, x, y, z, state, until, officer }
 local surrendered = {}  -- [id] = true, как только клиент доложил о сдаче
+local cuffedDown = {}   -- [id] = true, на лежащем уже наручники
 local escortOf = {}     -- [serverId полицейского] = id слота
 local lastCall = {}     -- [serverId] = GetGameTimer() последнего запроса
 
@@ -50,6 +51,7 @@ local function publicSlots()
         out[#out + 1] = {
             id = id, gang = slot.gang, label = slot.label,
             x = slot.x, y = slot.y, z = slot.z, state = slot.state,
+            cuffed = cuffedDown[id] == true,
         }
     end
     return out
@@ -61,6 +63,7 @@ local function broadcast(id)
     TriggerClientEvent('ls_gangs:slot', -1, {
         id = id, gang = slot.gang, label = slot.label,
         x = slot.x, y = slot.y, z = slot.z, state = slot.state,
+        cuffed = cuffedDown[id] == true,
     })
 end
 
@@ -71,6 +74,7 @@ local function retire(id, seconds)
     slot.state = 'gone'
     slot.returns = os.time() + seconds
     surrendered[id] = nil
+    cuffedDown[id] = nil
     broadcast(id)
 end
 
@@ -154,6 +158,9 @@ CreateThread(function()
                 slot.state = 'alive'
                 slot.returns = nil
                 broadcast(id)
+            elseif slot.state == 'down' and slot.downUntil and slot.downUntil <= now then
+                -- Телом никто не занялся: убираем и ставим на респавн.
+                retire(id, Config.RespawnDead)
             end
         end
     end
@@ -173,11 +180,88 @@ RegisterNetEvent('ls_gangs:surrendered', function(id)
     surrendered[slot.id] = true
 end)
 
+-- Убитый не исчезает: тело ложится и ждёт, пока им кто-нибудь займётся.
 RegisterNetEvent('ls_gangs:killed', function(id)
     local src = source
     local slot = near(src, id, 'alive', WITNESS_RANGE)
     if not slot then return end     -- уже убран, или доклад не от свидетеля
-    retire(slot.id, Config.RespawnDead)
+
+    slot.state = 'down'
+    slot.downUntil = os.time() + Config.DownSeconds
+    surrendered[slot.id] = nil
+    broadcast(slot.id)
+end)
+
+-- --- лежащий: наручники и подъём ---------------------------------------------
+
+-- Общее для обоих шагов: мент на смене, рядом, тело ещё лежит.
+local function downedGate(src, id)
+    if not onDuty(src) then
+        notify(src, GangLocale.notPolice)
+        return nil
+    end
+
+    local slot = slots[tonumber(id) or -1]
+    if not slot or slot.state ~= 'down' then return nil end
+
+    local coords = coordsOf(src)
+    if not coords or #(coords - vector3(slot.x, slot.y, slot.z)) > ARREST_RANGE then
+        notify(src, GangLocale.tooFar)
+        return nil
+    end
+    return slot
+end
+
+RegisterNetEvent('ls_gangs:cuffDown', function(id)
+    local src = source
+    if throttled(src) then return end
+
+    local slot = downedGate(src, id)
+    if not slot or cuffedDown[slot.id] then return end
+
+    local ok, taken = pcall(function()
+        return exports.ls_inventory:takeItem(src, Config.CuffItem, 1)
+    end)
+    if not ok or taken ~= true then
+        notify(src, GangLocale.needCuffs)
+        return
+    end
+
+    cuffedDown[slot.id] = true
+    broadcast(slot.id)
+    notify(src, GangLocale.cuffedDown)
+end)
+
+RegisterNetEvent('ls_gangs:reviveDown', function(id)
+    local src = source
+    if throttled(src) then return end
+
+    local slot = downedGate(src, id)
+    if not slot then return end
+
+    -- Порядок именно такой: сначала наручники, потом подъём. Поднятый без
+    -- наручников просто убежал бы.
+    if not cuffedDown[slot.id] then
+        notify(src, GangLocale.needCuffs)
+        return
+    end
+
+    local ok, taken = pcall(function()
+        return exports.ls_inventory:takeItem(src, Config.DefibItem, 1)
+    end)
+    if not ok or taken ~= true then
+        notify(src, GangLocale.needDefib)
+        return
+    end
+
+    slot.state = 'alive'
+    slot.downUntil = nil
+    -- Поднятый сразу считается сдавшимся: он в наручниках, драться ему нечем.
+    surrendered[slot.id] = true
+
+    TriggerClientEvent('ls_gangs:revived', -1, slot.id)
+    broadcast(slot.id)
+    notify(src, GangLocale.revivedDown)
 end)
 
 -- --- задержание -------------------------------------------------------------

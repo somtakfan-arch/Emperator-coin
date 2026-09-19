@@ -86,6 +86,13 @@ Locale = {
     -- инструменты
     taserCooldown     = 'Тазер перезаряжается: %d с',
     taserHit          = 'Тебя оглушили',
+
+    garagePrompt      = '~b~[H]~w~ Служебный транспорт',
+    garageTitle       = 'Служебный транспорт',
+    garageHint        = '~b~W/S~w~ — выбор, ~b~Enter~w~ — взять, ~b~Esc~w~ — закрыть',
+    garageNoModel     = '~r~Эта машина не установлена на сервере',
+    garageBlocked     = '~r~Тут негде её поставить',
+    garageTaken       = '~g~%s подана',
     propPlaced        = 'Установлено: %s',
     propRemoved       = 'Убрано',
     propLimit         = 'Достигнут лимит объектов (%d)',

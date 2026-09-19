@@ -245,6 +245,18 @@ end
 local function restore(src)
     local identifier = identifierOf(src)
 
+    -- Смена переживает выход. Снаряжение при этом НЕ выдаётся заново:
+    -- иначе релог превращается в бесконечный источник наручников.
+    local officer = dbSingle(
+        'SELECT rank, callsign, on_duty FROM police_officers WHERE identifier = ?', { identifier })
+    if officer and tonumber(officer.on_duty) == 1 then
+        local rank = math.min(tonumber(officer.rank) or 1, Config.MaxRank)
+        onDuty[src] = { rank = rank, callsign = officer.callsign or '', station = nil }
+        TriggerClientEvent('ls_police:uniform', src, true, Config.Uniform)
+        notify(src, Locale.onDuty:format(Config.Ranks[rank].label))
+        pushDuty()
+    end
+
     local cuff = dbSingle('SELECT kind, by_name FROM police_cuffs WHERE identifier = ?', { identifier })
     if cuff then
         cuffed[src] = { kind = cuff.kind, by = cuff.by_name }
@@ -297,6 +309,7 @@ RegisterNetEvent('ls_police:toggleDuty', function()
 
     if onDuty[src] then
         onDuty[src] = nil
+        dbExec('UPDATE police_officers SET on_duty = 0 WHERE identifier = ?', { identifierOf(src) })
         notify(src, Locale.offDuty)
         logAction('Снятие со службы', src, nil, '')
         pushState(src)
@@ -320,6 +333,7 @@ RegisterNetEvent('ls_police:toggleDuty', function()
 
     local rank = math.min(tonumber(record.rank) or 1, Config.MaxRank)
     onDuty[src] = { rank = rank, callsign = record.callsign or '', station = station }
+    dbExec('UPDATE police_officers SET on_duty = 1 WHERE identifier = ?', { identifierOf(src) })
 
     notify(src, Locale.onDuty:format(Config.Ranks[rank].label))
     logAction('Заступил на службу', src, nil, Config.Ranks[rank].label)

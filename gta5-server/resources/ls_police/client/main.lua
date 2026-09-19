@@ -799,3 +799,126 @@ AddEventHandler('onResourceStop', function(name)
         if DoesEntityExist(object) then DeleteObject(object) end
     end
 end)
+
+-- --- служебный гараж ---------------------------------------------------------
+--
+-- Список рисуется нативами, а не через NUI: у меню МВД своё окно и своя
+-- логика фокуса, и подмешивать туда гараж - лишний способ его заклинить.
+
+local garageOpen = false
+local garagePick = 1
+
+local function drawGarage()
+    local cars = Config.Garage.cars
+    local rows = math.min(#cars, 12)
+    local top = 0.30
+
+    DrawRect(0.5, top + rows * 0.0175 - 0.012, 0.30, rows * 0.035 + 0.075, 0, 0, 0, 190)
+
+    SetTextFont(4)
+    SetTextScale(0.42, 0.42)
+    SetTextCentre(true)
+    SetTextOutline()
+    BeginTextCommandDisplayText('STRING')
+    AddTextComponentSubstringPlayerName(Locale.garageTitle)
+    EndTextCommandDisplayText(0.5, top - 0.045)
+
+    for index = 1, rows do
+        local picked = index == garagePick
+        SetTextFont(4)
+        SetTextScale(0.35, 0.35)
+        SetTextCentre(true)
+        if picked then SetTextColour(120, 190, 255, 255) end
+        SetTextOutline()
+        BeginTextCommandDisplayText('STRING')
+        AddTextComponentSubstringPlayerName(
+            (picked and '> ' or '   ') .. cars[index].label)
+        EndTextCommandDisplayText(0.5, top + (index - 1) * 0.035)
+    end
+
+    SetTextFont(4)
+    SetTextScale(0.3, 0.3)
+    SetTextCentre(true)
+    SetTextOutline()
+    BeginTextCommandDisplayText('STRING')
+    AddTextComponentSubstringPlayerName(Locale.garageHint)
+    EndTextCommandDisplayText(0.5, top + rows * 0.035 + 0.008)
+end
+
+local function takeCar(entry)
+    local hash = GetHashKey(entry.model)
+    if not IsModelInCdimage(hash) or not IsModelAVehicle(hash) then
+        notify(Locale.garageNoModel)
+        return
+    end
+
+    RequestModel(hash)
+    local deadline = GetGameTimer() + 10000
+    while not HasModelLoaded(hash) and GetGameTimer() < deadline do Wait(20) end
+    if not HasModelLoaded(hash) then
+        notify(Locale.garageNoModel)
+        return
+    end
+
+    local ped = PlayerPedId()
+    local at = GetOffsetFromEntityInWorldCoords(ped, 0.0, Config.Garage.spawnAhead, 0.0)
+    local vehicle = CreateVehicle(hash, at.x, at.y, at.z, GetEntityHeading(ped) + 90.0, true, false)
+    SetModelAsNoLongerNeeded(hash)
+
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then
+        notify(Locale.garageBlocked)
+        return
+    end
+
+    SetVehicleOnGroundProperly(vehicle)
+    SetVehicleNumberPlateText(vehicle, 'LSPD')
+    SetVehicleHasBeenOwnedByPlayer(vehicle, true)
+    SetEntityAsMissionEntity(vehicle, true, true)
+    TaskWarpPedIntoVehicle(ped, vehicle, -1)
+
+    notify(Locale.garageTaken:format(entry.label))
+end
+
+CreateThread(function()
+    while true do
+        local wait = 500
+
+        if garageOpen then
+            wait = 0
+            drawGarage()
+
+            -- Управление машиной и стрельба на время выбора не нужны.
+            DisableControlAction(0, 71, true)
+            DisableControlAction(0, 72, true)
+
+            local cars = Config.Garage.cars
+            if IsControlJustReleased(0, 172) then           -- вверх
+                garagePick = garagePick > 1 and garagePick - 1 or #cars
+            elseif IsControlJustReleased(0, 173) then       -- вниз
+                garagePick = garagePick < #cars and garagePick + 1 or 1
+            elseif IsControlJustReleased(0, 176) then       -- Enter
+                garageOpen = false
+                takeCar(cars[garagePick])
+            elseif IsControlJustReleased(0, 177) then       -- Esc / Backspace
+                garageOpen = false
+            end
+
+        elseif State.onDuty and not uiOpen then
+            local coords = GetEntityCoords(PlayerPedId())
+            for _, station in ipairs(Config.Stations) do
+                local dist = #(coords - vector3(station.x, station.y, station.z))
+                if dist < Config.Garage.radius then
+                    wait = 0
+                    drawText3D(station.x, station.y, station.z + 1.4, Locale.garagePrompt)
+                    if IsControlJustReleased(0, 74) then    -- H
+                        garageOpen = true
+                        garagePick = 1
+                    end
+                    break
+                end
+            end
+        end
+
+        Wait(wait)
+    end
+end)

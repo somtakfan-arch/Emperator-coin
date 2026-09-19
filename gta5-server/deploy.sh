@@ -245,14 +245,14 @@ else
 fi
 
 # Брендовые ставит setup.sh: у него для этого точечный клон по папкам.
-branded="$(find "$CARS_DIR" -maxdepth 1 -type d -name 'rc_*' 2>/dev/null | wc -l || true)"
-if [[ "$branded" -ge 11 ]]; then
-    ok "брендовых машин: $branded"
+branded="$(find "$CARS_DIR" -maxdepth 1 -type d \( -name 'rc_*' -o -name 'pc_*' \) 2>/dev/null | wc -l || true)"
+if [[ "$branded" -ge 18 ]]; then
+    ok "брендовых и полицейских машин: $branded"
 elif [[ "$MODE" == "check" ]]; then
-    bad "брендовых машин: $branded из 11"
+    bad "брендовых и полицейских машин: $branded из 18"
     note_problem
 else
-    warn "брендовых $branded из 11, доставляю"
+    warn "брендовых и полицейских $branded из 18, доставляю"
     if fetch "${SETUP_URL}?v=$(date +%s)" "$TMP/setup.sh"; then
         ROOT="$ROOT" SERVICE_USER="$SERVICE_USER" bash "$TMP/setup.sh" --real-cars 2>&1 \
             | sed 's/^/        /'
@@ -323,14 +323,15 @@ if [[ "$MODE" != "check" ]]; then
         fi
     done
 
-    # Схема БД - на случай, если появились новые таблицы.
-    schema="$(find "$TMP/repo" -type f -name '001_schema.sql' | head -n 1)"
-    if [[ -n "$schema" ]] && command -v mysql >/dev/null 2>&1; then
-        if mysql -u root fivem < "$schema" 2>/dev/null; then
-            ok 'схема БД применена'
-        else
-            warn 'схему применить не вышло (не страшно, если таблицы уже есть)'
-        fi
+    # Все миграции по порядку имён: 001 создаёт, 002+ дополняют. Применять
+    # только первую - значит не досчитаться колонок, которые добавили позже.
+    sql_dir="$(dirname "$(find "$TMP/repo" -type f -name '001_schema.sql' | head -n 1)")"
+    if [[ -n "$sql_dir" && -d "$sql_dir" ]] && command -v mysql >/dev/null 2>&1; then
+        applied=0
+        while IFS= read -r migration; do
+            mysql -u root "$DB_NAME" < "$migration" 2>/dev/null && applied=$((applied + 1))
+        done < <(find "$sql_dir" -maxdepth 1 -name '*.sql' | sort)
+        ok "миграций применено: $applied"
     fi
 
     step 'Проверяю server.cfg'

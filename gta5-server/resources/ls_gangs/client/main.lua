@@ -139,7 +139,8 @@ end)
 
 RegisterNetEvent('ls_gangs:slot', function(slot)
     slots[slot.id] = slot
-    if slot.state ~= 'alive' then
+    -- 'down' - это лежащее тело, его убирать нельзя: над ним ещё работают.
+    if slot.state ~= 'alive' and slot.state ~= 'down' then
         if slot.id == escortSlot then
             -- Сервер уже закрыл слот (сдали или потеряли) - убираем куклу.
             if escortPed and DoesEntityExist(escortPed) then DeleteEntity(escortPed) end
@@ -162,7 +163,10 @@ CreateThread(function()
 
         for id, slot in pairs(slots) do
             local distance = #(me - vector3(slot.x, slot.y, slot.z))
-            if slot.state == 'alive' and distance <= Config.StreamDistance then
+            if slot.state == 'down' then
+                -- Тело уже стоит у того, кто его положил. Остальным его
+                -- создавать не надо: оно не переживёт чужой стриминг.
+            elseif slot.state == 'alive' and distance <= Config.StreamDistance then
                 if not peds[id] or not DoesEntityExist(peds[id]) then
                     spawnGangster(id, slot)
                 end
@@ -205,6 +209,26 @@ CreateThread(function()
     end
 end)
 
+RegisterNetEvent('ls_gangs:revived', function(id)
+    local ped = peds[id]
+    if not ped or not DoesEntityExist(ped) then return end
+
+    -- Именно ResurrectPed: NetworkResurrectLocalPlayer поднял бы самого
+    -- игрока, да ещё и на месте трупа.
+    ResurrectPed(ped)
+    SetEntityHealth(ped, 150)
+    ClearPedTasksImmediately(ped)
+
+    -- Поднятый стоит в наручниках: не дерётся, не убегает, ждёт конвоя.
+    SetPedCombatAttributes(ped, 46, false)
+    SetBlockingOfNonTemporaryEvents(ped, true)
+    TaskHandsUp(ped, -1, 0, -1, true)
+    SetPedKeepTask(ped, true)
+
+    gaveUp[id] = true
+    killed[id] = nil
+end)
+
 -- --- взаимодействие ---------------------------------------------------------
 
 local function isOnDuty()
@@ -240,16 +264,33 @@ CreateThread(function()
 
         elseif isOnDuty() then
             for id, ped in pairs(peds) do
-                if DoesEntityExist(ped) and gaveUp[id] and not IsPedDeadOrDying(ped, true) then
+                if DoesEntityExist(ped) then
                     local coords = GetEntityCoords(ped)
                     if #(me - coords) <= Config.ArrestDistance then
-                        wait = 0
-                        drawText3D(coords.x, coords.y, coords.z + 1.05, GangLocale.arrestPrompt)
-                        if IsControlJustReleased(0, 38) then   -- E
-                            TriggerServerEvent('ls_gangs:arrest', id)
-                            Wait(600)
+                        local slot = slots[id]
+                        local prompt, event
+
+                        if slot and slot.state == 'down' then
+                            -- Сначала наручники, потом дефибриллятор. Поднятый
+                            -- без наручников просто убежал бы.
+                            if slot.cuffed then
+                                prompt, event = GangLocale.revivePrompt, 'ls_gangs:reviveDown'
+                            else
+                                prompt, event = GangLocale.cuffPrompt, 'ls_gangs:cuffDown'
+                            end
+                        elseif gaveUp[id] and not IsPedDeadOrDying(ped, true) then
+                            prompt, event = GangLocale.arrestPrompt, 'ls_gangs:arrest'
                         end
-                        break
+
+                        if prompt then
+                            wait = 0
+                            drawText3D(coords.x, coords.y, coords.z + 1.05, prompt)
+                            if IsControlJustReleased(0, 38) then   -- E
+                                TriggerServerEvent(event, id)
+                                Wait(600)
+                            end
+                            break
+                        end
                     end
                 end
             end

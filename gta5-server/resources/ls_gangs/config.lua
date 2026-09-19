@@ -12,6 +12,13 @@ Config.SurrenderHealth = 120
 -- На каком расстоянии работает [E].
 Config.ArrestDistance = 2.5
 
+-- Убитый гангстер не исчезает сразу. Пока тело лежит, мент успевает надеть
+-- на него наручники и поднять дефибриллятором - и повести в участок уже
+-- живым. Не успел за это время - тело убирается, слот уходит на респавн.
+Config.DownSeconds = 180
+Config.CuffItem = 'HANDCUFFS'
+Config.DefibItem = 'DEFIBRILLATOR'
+
 -- Сколько секунд слот пустует после смерти или задержания.
 Config.RespawnDead = 300
 Config.RespawnArrested = 420

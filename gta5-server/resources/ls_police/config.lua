@@ -34,6 +34,37 @@ Config.Stations = {
     { label = 'Paleto Bay',    x = -448.6, y = 6012.7,  z = 31.7 },
 }
 
+-- ---------------------------------------------------------------------------
+-- Служебный транспорт.
+--
+-- Машины ставит setup.sh вместе с остальными аддонами (папки pc_* в
+-- resources/[cars]). Если какой-то пак не встал, его строчка просто не
+-- заведётся - список от этого не ломается.
+--
+-- Гараж стоит рядом с участком: подошёл, [H], выбрал стрелками, Enter.
+Config.Garage = {
+    key = 'H',
+    -- Насколько в стороне от участка открывается гараж.
+    radius = 12.0,
+    -- Куда ставится машина, смещением от игрока.
+    spawnAhead = 5.0,
+    cars = {
+        { model = 'lp770cop',    label = 'Lamborghini Aventador' },
+        { model = '911turboleo', label = 'Porsche 911 Turbo' },
+        { model = 'hellcat',     label = 'Dodge Charger Hellcat' },
+        { model = '2015polstang', label = 'Ford Mustang' },
+        { model = '18charger',   label = 'Dodge Charger 2018' },
+        { model = 'Explorer',    label = 'Ford Explorer' },
+        { model = '1200RT',      label = 'BMW R1200RT (мотоцикл)' },
+        -- Ванильные: есть всегда, даже если аддоны не докачались.
+        { model = 'police',      label = 'Патрульная' },
+        { model = 'police2',     label = 'Патрульная, вторая' },
+        { model = 'policeb',     label = 'Полицейский байк' },
+        { model = 'fbi2',        label = 'Служебный внедорожник' },
+        { model = 'riot',        label = 'Автозак' },
+    },
+}
+
 Config.StationBlip = { sprite = 60, colour = 29, scale = 0.9 }
 Config.StationRadius = 2.5
 

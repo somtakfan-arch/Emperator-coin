@@ -64,6 +64,16 @@ REAL_CARS=(
     'GamingPanthers/FiveM-Vehicles|main|[cars]/[civ]/[yca]/gtr|rc_nissan_gtr'
     'GamingPanthers/FiveM-Vehicles|main|[cars]/[civ]/[azam]/amg21|rc_mercedes_amggt'
     'GamingPanthers/FiveM-Vehicles|main|[cars]/[civ]/[other]/supra19|rc_toyota_supra'
+
+    # Полицейские. Ставятся тем же способом; в автосалон не попадают -
+    # каталог телефона это отдельный список.
+    'KlovnenDEV/Fivem|main|server-data/resources/[Nethush-standalone]/[Police]/[PVehicles]/nethush-lp770cop|pc_lambo'
+    'KlovnenDEV/Fivem|main|server-data/resources/[Nethush-standalone]/[Police]/[PVehicles]/nethush-911turboleo|pc_porsche'
+    'KlovnenDEV/Fivem|main|server-data/resources/[Nethush-standalone]/[Police]/[PVehicles]/nethush-hellcat|pc_hellcat'
+    'KlovnenDEV/Fivem|main|server-data/resources/[Nethush-standalone]/[Police]/[PVehicles]/nethush-2015polstang|pc_mustang'
+    'KlovnenDEV/Fivem|main|server-data/resources/[Nethush-standalone]/[Police]/[PVehicles]/nethush-18charger|pc_charger'
+    'KlovnenDEV/Fivem|main|server-data/resources/[Nethush-standalone]/[Police]/[PVehicles]/nethush-explorer|pc_explorer'
+    'KlovnenDEV/Fivem|main|server-data/resources/[Nethush-standalone]/[Police]/[PVehicles]/nethush-1200RT|pc_bike'
 )
 
 # Free add-on gun packs. Each is tried on main, then master.
@@ -604,19 +614,27 @@ if [[ "$SKIP_GARAGE" != "1" ]]; then
         rm -rf "$TMP_DIR/repo" && mkdir -p "$TMP_DIR/repo"
         unzip -qo "$TMP_DIR/repo.zip" -d "$TMP_DIR/repo"
         # The schema ships in the same archive.
-        schema_src="$(find "$TMP_DIR/repo" -type f -name '001_schema.sql' | head -n 1)"
-        if [[ -n "$schema_src" ]]; then
+        # Every .sql in the repo, in name order: 001 creates, 002+ migrate.
+        # Applying only the first one leaves later columns missing, and the
+        # queries that need them fail silently.
+        sql_dir="$(dirname "$(find "$TMP_DIR/repo" -type f -name '001_schema.sql' | head -n 1)")"
+        if [[ -n "$sql_dir" && -d "$sql_dir" ]]; then
             mkdir -p "$ROOT/sql"
-            cp "$schema_src" "$ROOT/sql/001_schema.sql"
+            cp "$sql_dir"/*.sql "$ROOT/sql"/ 2>/dev/null || true
+
             if [[ "$SKIP_DB" != "1" ]]; then
-                if mysql -u root "$DB_NAME" < "$ROOT/sql/001_schema.sql" 2>/dev/null; then
-                    ok 'schema applied'
-                else
-                    warn "schema not applied - run: mysql -u root $DB_NAME < $ROOT/sql/001_schema.sql"
-                fi
+                applied=0
+                while IFS= read -r migration; do
+                    if mysql -u root "$DB_NAME" < "$migration" 2>/dev/null; then
+                        applied=$((applied + 1))
+                    else
+                        warn "не применилось: $(basename "$migration")"
+                    fi
+                done < <(find "$ROOT/sql" -maxdepth 1 -name '*.sql' | sort)
+                ok "миграций применено: $applied"
             fi
         else
-            warn '001_schema.sql not found in the repo archive'
+            warn 'sql files not found in the repo archive'
         fi
 
         for resource in phone_garage ls_character ls_inventory ls_shops ls_medical ls_tuning ls_rp ls_police ls_gangs ls_crime ls_property; do

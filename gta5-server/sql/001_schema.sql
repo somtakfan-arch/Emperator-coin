@@ -126,8 +126,9 @@ CREATE TABLE IF NOT EXISTS documents (
 -- POLICE (ls_police)
 -- ===========================================================================
 
--- Who is on the force and at what rank. Duty itself is runtime state and is
--- deliberately NOT stored: a server restart takes everyone off duty.
+-- Who is on the force and at what rank. on_duty is added by 002 so a shift
+-- survives a relog: losing it on every restart just means a trip to the
+-- station to press G again.
 CREATE TABLE IF NOT EXISTS police_officers (
     identifier VARCHAR(64)  NOT NULL,
     rank       SMALLINT UNSIGNED NOT NULL DEFAULT 1,
