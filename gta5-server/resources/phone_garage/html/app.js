@@ -23,6 +23,16 @@
 
   const money = (n) => '$' + Number(n || 0).toLocaleString('ru-RU');
 
+  // Номер хранится восемью символами, как требует игра (A123BC77).
+  // Показываем регион отдельно: A123BC 77.
+  const plate = (value) => {
+    const raw = String(value || '');
+    return /^[A-Z]\d{3}[A-Z]{2}\d{2}$/.test(raw)
+      ? `${raw.slice(0, 6)} ${raw.slice(6)}`
+      : raw;
+  };
+
+
   // A blocking confirm() is unreliable inside the game's browser, so the button
   // arms itself instead and disarms again after a few seconds.
   function armConfirm(btn, label, action) {
@@ -97,7 +107,7 @@
 
       // Labels and plates come from the server, so set them as text, not HTML.
       card.querySelector('.card-title').textContent = car.label || car.model;
-      card.querySelector('.card-sub b').textContent = car.plate;
+      card.querySelector('.card-sub b').textContent = plate(car.plate);
 
       card.querySelectorAll('button[data-act]').forEach((btn) => {
         const act = btn.dataset.act;

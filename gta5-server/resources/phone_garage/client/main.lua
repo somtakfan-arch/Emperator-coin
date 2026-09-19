@@ -194,6 +194,7 @@ local function deliver(car)
 
     SetVehicleOnGroundProperly(veh)
     SetVehicleNumberPlateText(veh, car.plate)
+    SetVehicleNumberPlateTextIndex(veh, Config.Plates.style or 0)
     SetVehicleHasBeenOwnedByPlayer(veh, true)
     SetVehicleDirtLevel(veh, 0.0)
     SetVehicleNeedsToBeHotwired(veh, false)

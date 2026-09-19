@@ -6,6 +6,16 @@
     : 'ls_rp';
 
   const $ = (id) => document.getElementById(id);
+
+  // Номер хранится восемью символами, как требует игра (A123BC77).
+  // Показываем регион отдельно: A123BC 77.
+  const plate = (value) => {
+    const raw = String(value || '');
+    return /^[A-Z]\d{3}[A-Z]{2}\d{2}$/.test(raw)
+      ? `${raw.slice(0, 6)} ${raw.slice(6)}`
+      : raw;
+  };
+
   const menu = $('menu');
   const viewer = $('viewer');
 
@@ -161,7 +171,7 @@
     vehicle: [
       ['Транспорт', (d) => d.label],
       ['Модель', (d) => d.model],
-      ['Гос. номер', (d) => d.plate],
+      ['Гос. номер', (d) => plate(d.plate)],
       ['Владелец', (d) => d.owner],
       ['Идентификатор', (d) => '#' + d.static],
       ['Дата выдачи', (d) => d.issued],

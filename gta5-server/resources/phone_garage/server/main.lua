@@ -50,14 +50,43 @@ local function recordOf(src)
     return players[id], id
 end
 
-local function makePlate()
-    local chars = 'ABCDEFGHJKLMNPRSTUVWXYZ'
-    local plate = ''
-    for _ = 1, 3 do
-        local i = math.random(#chars)
-        plate = plate .. chars:sub(i, i)
+-- Every plate in use, across every player. The СТС, the impound lot and the
+-- police lookup all key off the plate, so two cars sharing one would quietly
+-- break all three.
+local function plateTaken(plate)
+    for _, record in pairs(players) do
+        for _, car in ipairs(record.cars or {}) do
+            if car.plate == plate then return true end
+        end
     end
-    return plate .. ' ' .. tostring(math.random(100, 999))
+    return false
+end
+
+local function randomPlate()
+    local letters = Config.Plates.letters
+    local pick = function()
+        local index = math.random(#letters)
+        return letters:sub(index, index)
+    end
+
+    return ('%s%03d%s%s%s'):format(
+        pick(),
+        math.random(0, 999),
+        pick(), pick(),
+        Config.Plates.regions[math.random(#Config.Plates.regions)])
+end
+
+local function makePlate()
+    for _ = 1, 50 do
+        local plate = randomPlate()
+        if not plateTaken(plate) then return plate end
+    end
+
+    -- 12 letters x 1000 x 12 x 12 x regions is a big space; landing here means
+    -- something is wrong, so fall back to something guaranteed unique.
+    local fallback = ('X%03d%s'):format(math.random(0, 999), tostring(os.time()):sub(-4))
+    print('[phone_garage] plate space exhausted, issued fallback ' .. fallback)
+    return fallback
 end
 
 local function sync(src)
