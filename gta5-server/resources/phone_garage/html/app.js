@@ -57,7 +57,7 @@
   // --- navigation ---------------------------------------------------------
 
   function show(view) {
-    ['home', 'garage', 'shop', 'wardrobe'].forEach((name) => {
+    ['home', 'garage', 'shop', 'wardrobe', 'family', 'estate', 'auction'].forEach((name) => {
       $(`view-${name}`).classList.toggle('hidden', name !== view);
     });
   }
@@ -102,6 +102,7 @@
           <button class="btn primary" data-act="${isActive ? 'store' : 'call'}">
             ${isActive ? 'Убрать в гараж' : 'Вызвать'}
           </button>
+          <button class="btn" data-act="auction">На аукцион</button>
           <button class="btn danger" data-act="sell">Продать</button>
         </div>`;
 
@@ -115,6 +116,15 @@
           armConfirm(btn, 'Продать', () => post('sell', { plate: car.plate }));
         } else if (act === 'call') {
           btn.addEventListener('click', () => post('call', { plate: car.plate }));
+        } else if (act === 'auction') {
+          btn.addEventListener('click', () => {
+            const price = prompt('Стартовая цена');
+            if (price) {
+              post('auctionList', {
+                kind: 'car', ref: car.plate, price: Number(price), minutes: 60
+              });
+            }
+          });
         } else {
           btn.addEventListener('click', () => post('store'));
         }
@@ -295,3 +305,221 @@
     }
   });
 })();
+
+  // --- семья, недвижимость, аукцион ---------------------------------------
+  // Данные приходят из ls_property одним куском; телефон только рисует.
+
+  let estate = { family: {}, properties: [], auctions: [], slots: 2, money: 0 };
+  let estateFilter = 'sale';
+  let auctionFilter = 'all';
+
+  function cash(value) {
+    return '$' + Number(value || 0).toLocaleString('ru-RU');
+  }
+
+  function card(html) {
+    const el = document.createElement('div');
+    el.className = 'p-card';
+    el.innerHTML = html;
+    return el;
+  }
+
+  function renderFamily() {
+    const box = $('family-body');
+    box.innerHTML = '';
+    const f = estate.family || {};
+
+    if (f.invite) {
+      const el = card(`
+        <div class="p-title">Приглашение</div>
+        <div class="p-sub">${f.invite.by} зовёт в «${f.invite.family}»</div>
+        <div class="p-actions" style="margin-top:10px">
+          <button class="btn primary" data-act="accept">Вступить</button>
+          <button class="btn" data-act="decline">Отказаться</button>
+        </div>`);
+      el.querySelector('[data-act="accept"]').onclick = () => post('familyAnswer', { accept: true });
+      el.querySelector('[data-act="decline"]').onclick = () => post('familyAnswer', { accept: false });
+      box.appendChild(el);
+    }
+
+    if (!f.name) {
+      const el = card(`
+        <div class="p-title">Своя семья</div>
+        <div class="p-sub">Создание стоит ${cash(estate.createPrice || 150000)}</div>
+        <div style="margin-top:10px">
+          <input class="p-field" id="fam-name" maxlength="24" placeholder="Название">
+          <input class="p-field" id="fam-tag" maxlength="5" placeholder="Тег, до 5 символов">
+          <button class="btn primary" style="width:100%" data-act="create">Создать</button>
+        </div>`);
+      el.querySelector('[data-act="create"]').onclick = () => post('familyCreate', {
+        name: $('fam-name').value, tag: $('fam-tag').value
+      });
+      box.appendChild(el);
+      $('family-badge').classList.toggle('hidden', !f.invite);
+      return;
+    }
+
+    $('family-badge').classList.add('hidden');
+
+    const head = card(`
+      <div class="p-title">${f.name} ${f.tag ? `<span class="p-tag">${f.tag}</span>` : ''}</div>
+      <div class="p-sub">Участников: ${(f.members || []).length}</div>`);
+    box.appendChild(head);
+
+    const list = card('<div class="p-title">Состав</div>');
+    (f.members || []).forEach((member) => {
+      const row = document.createElement('div');
+      row.className = 'p-row';
+      row.innerHTML = `
+        <span class="p-dot ${member.online ? 'on' : ''}"></span>
+        <span class="grow">${member.name}</span>
+        ${member.rank === 'leader' ? '<span class="p-tag fam">глава</span>' : ''}
+        ${f.leader && member.rank !== 'leader' ? '<button class="btn">Выгнать</button>' : ''}`;
+      const kick = row.querySelector('button');
+      if (kick) kick.onclick = () => post('familyKick', { name: member.name });
+      list.appendChild(row);
+    });
+    box.appendChild(list);
+
+    const actions = card(`
+      <div class="p-actions">
+        ${f.leader
+          ? '<button class="btn" data-act="disband">Распустить</button>'
+          : '<button class="btn" data-act="leave">Выйти</button>'}
+      </div>
+      <div class="p-sub" style="margin-top:8px">
+        Приглашать — подойди к игроку и нажми E.
+      </div>`);
+    const disband = actions.querySelector('[data-act="disband"]');
+    if (disband) disband.onclick = () => post('familyDisband');
+    const leave = actions.querySelector('[data-act="leave"]');
+    if (leave) leave.onclick = () => post('familyLeave');
+    box.appendChild(actions);
+  }
+
+  function renderEstate() {
+    const chips = $('estate-chips');
+    chips.innerHTML = '';
+    [['sale', 'Продаётся'], ['mine', 'Моё']].forEach(([key, label]) => {
+      const chip = document.createElement('button');
+      chip.className = 'chip' + (estateFilter === key ? ' active' : '');
+      chip.textContent = label;
+      chip.onclick = () => { estateFilter = key; renderEstate(); };
+      chips.appendChild(chip);
+    });
+
+    const box = $('estate-list');
+    box.innerHTML = '';
+
+    box.appendChild(card(`
+      <div class="p-title">Мест в гараже: ${estate.slots}</div>
+      <div class="p-sub">База 2, офис +5, дом +1…2</div>`));
+
+    (estate.properties || [])
+      .filter((row) => (estateFilter === 'mine' ? row.mine : !row.owner))
+      .forEach((row) => {
+        const el = card(`
+          <div class="p-row" style="border:0;padding:0">
+            <span class="grow">
+              <div class="p-title">${row.label}</div>
+              <div class="p-sub">
+                ${row.kind === 'office' ? 'Офис' : 'Дом'} ·
+                +${row.slots} мест · склад ${row.storage}
+                ${row.family ? ' · <span class="p-tag fam">семейный</span>' : ''}
+              </div>
+            </span>
+            <span class="p-price">${row.mine ? '' : cash(row.price)}</span>
+          </div>
+          <div class="p-actions" style="margin-top:10px"></div>`);
+
+        const actions = el.querySelector('.p-actions');
+        const add = (label, primary, fn) => {
+          const btn = document.createElement('button');
+          btn.className = 'btn' + (primary ? ' primary' : '');
+          btn.textContent = label;
+          btn.onclick = fn;
+          actions.appendChild(btn);
+        };
+
+        if (row.mine) {
+          add('Продать государству', false, () => post('estateSell', { key: row.key }));
+          if (row.kind === 'office') {
+            add(row.family ? 'Убрать из семьи' : 'Сделать семейным', false,
+              () => post('estateFamily', { key: row.key, on: !row.family }));
+          }
+          add('На аукцион', true, () => {
+            const price = prompt('Стартовая цена');
+            if (price) post('auctionList', { kind: 'property', ref: row.key, price: Number(price), minutes: 60 });
+          });
+        } else {
+          add('Купить', true, () => post('estateBuy', { key: row.key }));
+        }
+        box.appendChild(el);
+      });
+  }
+
+  function renderAuction() {
+    const chips = $('auction-chips');
+    chips.innerHTML = '';
+    [['all', 'Все лоты'], ['mine', 'Мои']].forEach(([key, label]) => {
+      const chip = document.createElement('button');
+      chip.className = 'chip' + (auctionFilter === key ? ' active' : '');
+      chip.textContent = label;
+      chip.onclick = () => { auctionFilter = key; renderAuction(); };
+      chips.appendChild(chip);
+    });
+
+    const box = $('auction-list');
+    box.innerHTML = '';
+
+    const rows = (estate.auctions || []).filter((lot) => auctionFilter !== 'mine' || lot.mine);
+    if (!rows.length) {
+      box.appendChild(card('<div class="p-sub">Пока пусто. Выставить лот можно из Гаража или Недвижимости.</div>'));
+      return;
+    }
+
+    rows.forEach((lot) => {
+      const mins = Math.ceil(lot.left / 60);
+      const el = card(`
+        <div class="p-row" style="border:0;padding:0">
+          <span class="grow">
+            <div class="p-title">${lot.label}</div>
+            <div class="p-sub">
+              ${lot.kind === 'car' ? 'Машина' : 'Недвижимость'} ·
+              ${mins > 0 ? `осталось ${mins} мин` : 'закрывается'}
+              ${lot.bidder ? ` · ставка: ${lot.bidder}` : ' · ставок нет'}
+              ${lot.leading ? ' · <span class="p-tag mine">ты ведёшь</span>' : ''}
+            </div>
+          </span>
+          <span class="p-price">${cash(lot.price)}</span>
+        </div>
+        <div class="p-actions" style="margin-top:10px"></div>`);
+
+      const actions = el.querySelector('.p-actions');
+      if (!lot.mine) {
+        const btn = document.createElement('button');
+        btn.className = 'btn primary';
+        btn.textContent = 'Перебить';
+        btn.onclick = () => post('auctionBid', { id: lot.id });
+        actions.appendChild(btn);
+      } else {
+        actions.innerHTML = '<div class="p-sub">Твой лот</div>';
+      }
+      box.appendChild(el);
+    });
+  }
+
+  function renderEstateAll() {
+    $('auction-count').textContent = String((estate.auctions || []).length);
+    renderFamily();
+    renderEstate();
+    renderAuction();
+  }
+
+  window.addEventListener('message', (ev) => {
+    const data = ev.data || {};
+    if (data.action === 'property') {
+      estate = Object.assign(estate, data.data || {});
+      renderEstateAll();
+    }
+  });

@@ -378,3 +378,59 @@ AddEventHandler('onResourceStop', function(name)
         clearParkingBlips()
     end
 end)
+
+-- --- приложения ls_property --------------------------------------------------
+-- Телефон рисует семью, недвижимость и аукцион, но ничего про них не знает:
+-- данные приходят из ls_property, а нажатия уходят туда же.
+
+AddEventHandler('phone_garage:propertyData', function(data)
+    SendNUIMessage({ action = 'property', data = data })
+end)
+
+local function relay(callback, event, build)
+    RegisterNUICallback(callback, function(data, cb)
+        data = data or {}
+        if build then
+            TriggerServerEvent(event, table.unpack(build(data)))
+        else
+            TriggerServerEvent(event)
+        end
+        cb('ok')
+    end)
+end
+
+relay('familyCreate', 'ls_property:createFamily', function(d)
+    return { tostring(d.name or ''), tostring(d.tag or '') }
+end)
+
+relay('familyAnswer', 'ls_property:answerInvite', function(d)
+    return { d.accept == true }
+end)
+
+relay('familyKick', 'ls_property:kick', function(d)
+    return { tostring(d.name or '') }
+end)
+
+relay('familyLeave', 'ls_property:leaveFamily')
+relay('familyDisband', 'ls_property:disband')
+
+relay('estateBuy', 'ls_property:buy', function(d)
+    return { tostring(d.key or '') }
+end)
+
+relay('estateSell', 'ls_property:sellBack', function(d)
+    return { tostring(d.key or '') }
+end)
+
+relay('estateFamily', 'ls_property:setFamily', function(d)
+    return { tostring(d.key or ''), d.on == true }
+end)
+
+relay('auctionList', 'ls_property:listLot', function(d)
+    return { tostring(d.kind or ''), tostring(d.ref or ''),
+             tonumber(d.price) or 0, tonumber(d.minutes) or 60 }
+end)
+
+relay('auctionBid', 'ls_property:bid', function(d)
+    return { tostring(d.id or '') }
+end)

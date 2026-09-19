@@ -12,6 +12,14 @@ local function notify(text)
     DrawNotification(false, true)
 end
 
+-- Есть ли смысл показывать кнопку "Пригласить в семью".
+-- Экспорт клиентский: серверный из клиента не вызывается, это уже ломало
+-- магазин раньше.
+local function canInvite()
+    local ok, may = pcall(function() return exports.ls_property:canInvite() end)
+    return ok and may == true
+end
+
 local function drawText3D(x, y, z, text)
     SetTextScale(0.35, 0.35)
     SetTextFont(4)
@@ -118,6 +126,9 @@ local function openMenu(playerId)
         documents = docRows(),
         items = items,
         canRevive = okDown and targetDown == true,
+        -- Звать в семью может только тот, кто в ней есть и не рядовой.
+        -- Право окончательно проверяет ls_property, тут только кнопка.
+        canInvite = canInvite(),
     })
 end
 
@@ -233,6 +244,12 @@ RegisterNUICallback('giveItem', function(data, cb)
         TriggerServerEvent('ls_rp:giveItem', target, data.slot)
     end
     closeMenu()
+    cb('ok')
+end)
+
+RegisterNUICallback('familyInvite', function(_, cb)
+    closeMenu()
+    if target then TriggerServerEvent('ls_property:invite', target) end
     cb('ok')
 end)
 

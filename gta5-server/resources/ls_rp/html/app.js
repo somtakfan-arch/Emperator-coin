@@ -125,6 +125,8 @@
 
   $('do-revive').addEventListener('click', () => post('revive'));
 
+  $('do-invite').addEventListener('click', () => post('familyInvite'));
+
   $('give-money').addEventListener('click', () => {
     const amount = Math.floor(Number($('amount').value) || 0);
     if (amount > 0) post('giveMoney', { amount });
@@ -229,6 +231,8 @@
       selectTab('docs');
 
       $('revive-block').classList.toggle('hidden', data.canRevive !== true);
+      // Кнопка есть только у того, кто может звать: глава или офицер семьи.
+      $('family-block').classList.toggle('hidden', data.canInvite !== true);
 
       renderDocs(data.documents || []);
       renderItems(data.items || []);

@@ -4,9 +4,13 @@
 local RES = GetCurrentResourceName()
 local PLAYERS_FILE = 'players.json'
 local SPOTS_FILE = 'parking_spots.json'
+local DETACHED_FILE = 'detached_cars.json'
 
 local players = {}      -- [identifier] = { money = number, cars = { {model, label, plate, price} } }
 local customSpots = {}  -- recorded with /parkhere
+-- Машины, снятые с владельца на время торгов. Ничьи, но не потерянные:
+-- переживают рестарт, иначе выставленный лот обнулил бы машину.
+local detachedCars = {} -- [plate] = запись машины
 local dirty = false
 
 -- Catalog lookup so a client cannot invent a model or a price.
@@ -29,6 +33,7 @@ end
 local function save()
     SaveResourceFile(RES, PLAYERS_FILE, json.encode(players), -1)
     SaveResourceFile(RES, SPOTS_FILE, json.encode(customSpots), -1)
+    SaveResourceFile(RES, DETACHED_FILE, json.encode(detachedCars), -1)
     dirty = false
 end
 
@@ -109,6 +114,7 @@ AddEventHandler('onResourceStart', function(name)
     math.randomseed(os.time())
     players = readJson(PLAYERS_FILE, {})
     customSpots = readJson(SPOTS_FILE, {})
+    detachedCars = readJson(DETACHED_FILE, {})
     local profiles = 0
     for _ in pairs(players) do profiles = profiles + 1 end
     print(('[phone_garage] loaded %d profiles, %d custom parking spots'):format(profiles, #customSpots))
@@ -148,6 +154,16 @@ RegisterNetEvent('phone_garage:buy', function(model)
     local rec = recordOf(src)
     if rec.money < car.price then
         notify(src, 'Не хватает денег', 'error')
+        return
+    end
+
+    -- Мест в гараже столько, сколько даёт недвижимость. Без ls_property
+    -- ограничения нет: ресурс необязательный, и без него салон работает
+    -- как раньше.
+    local okSlots, slots = pcall(function() return exports.ls_property:garageSlots(src) end)
+    if okSlots and type(slots) == 'number' and #rec.cars >= slots then
+        notify(src, ('Мест в гараже: %d из %d. Нужен дом или офис')
+            :format(#rec.cars, slots), 'error')
         return
     end
 
@@ -312,3 +328,41 @@ RegisterCommand('givemoney', function(src, args)
     sync(target)
     notify(target, ('Начислено $%d'):format(math.floor(amount)), 'success')
 end, false)
+
+-- --- аукцион -----------------------------------------------------------------
+-- Пока машина на торгах, она не должна числиться ни за кем: иначе её можно
+-- продать второй раз или вызвать из гаража прямо с аукциона.
+
+exports('detachCar', function(src, plate)
+    if type(plate) ~= 'string' then return nil end
+    local rec = recordOf(src)
+
+    for i, car in ipairs(rec.cars) do
+        if car.plate == plate then
+            local taken = table.remove(rec.cars, i)
+            detachedCars[plate] = taken
+            dirty = true
+            save()
+            sync(src)
+            return taken
+        end
+    end
+    return nil
+end)
+
+-- Машина возвращается владельцу или уходит победителю торгов. Номер и
+-- тюнинг сохраняются: ls_tuning привязан именно к номеру.
+exports('restoreCar', function(src, plate)
+    if type(plate) ~= 'string' then return false end
+
+    local car = detachedCars[plate]
+    if not car then return false end
+    detachedCars[plate] = nil
+
+    local rec = recordOf(src)
+    rec.cars[#rec.cars + 1] = car
+    dirty = true
+    save()
+    sync(src)
+    return true
+end)

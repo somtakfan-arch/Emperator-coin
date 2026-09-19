@@ -1,0 +1,48 @@
+-- Весь текст, который видит игрок.
+PropLocale = {
+    -- семья
+    familyExists    = '~r~Такое название уже занято',
+    familyBadName   = '~r~Название: от %d до %d символов',
+    familyHave      = '~r~Ты уже в семье',
+    familyCreated   = '~g~Семья «%s» создана',
+    familyNoMoney   = '~r~Не хватает денег: нужно $%s',
+    familyNotIn     = '~r~Ты не в семье',
+    familyNotLeader = '~r~Так может только глава',
+    familyFull      = '~r~В семье больше нет мест',
+    familyInvited   = '~g~Приглашение отправлено: %s',
+    familyGotInvite = '~b~%s зовёт в семью «%s». Телефон — Семья',
+    familyJoined    = '~g~Ты вступил в семью «%s»',
+    familyLeft      = '~y~Ты вышел из семьи',
+    familyKicked    = '~r~Тебя исключили из семьи',
+    familyNoInvite  = '~r~Приглашение протухло',
+    familyTargetIn  = '~r~Он уже в семье',
+    familyDisbanded = '~y~Семья распущена',
+    familyLeaderOut = '~r~Глава не может просто выйти — распусти или передай',
+
+    -- недвижимость
+    propTaken       = '~r~Уже продано',
+    propNoMoney     = '~r~Не хватает денег: нужно $%s',
+    propBought      = '~g~Куплено: %s',
+    propSold        = '~g~Продано: %s за $%s',
+    propNotOwner    = '~r~Это не твоё',
+    propLocked      = '~r~Закрыто',
+    propFamilySet   = '~g~«%s» теперь семейный — заходить может вся семья',
+    propFamilyOff   = '~y~«%s» снова только твой',
+    propHouseFamily = '~r~Семейным можно сделать только офис',
+    propStorageFull = '~r~На складе нет места',
+    propNothing     = '~r~Пусто',
+
+    -- аукцион
+    aucMinPrice     = '~r~Меньше $%s не выставляют',
+    aucLimit        = '~r~Больше %d лотов сразу не выставить',
+    aucListed       = '~g~Выставлено: %s, старт $%s',
+    aucGone         = '~r~Лот закрыт',
+    aucOwn          = '~r~Свой же лот не перебить',
+    aucLowBid       = '~r~Минимальная ставка: $%s',
+    aucBid          = '~g~Ставка $%s принята',
+    aucOutbid       = '~y~Твою ставку на «%s» перебили, деньги вернулись',
+    aucWon          = '~g~Лот «%s» твой за $%s',
+    aucSoldOut      = '~g~«%s» продан за $%s, на счёт зашло $%s',
+    aucNoBids       = '~y~«%s» не продался, вернулся тебе',
+    aucNotYours     = '~r~Это не твоё',
+}

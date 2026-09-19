@@ -359,3 +359,79 @@ AddEventHandler('onResourceStop', function(name)
         if DoesBlipExist(blip) then RemoveBlip(blip) end
     end
 end)
+
+-- --- как машины едут ---------------------------------------------------------
+--
+-- Прибавки живут на самой машине, а не в хендлинге, и слетают вместе с ней.
+-- Поэтому накладываем при каждой посадке, а не один раз.
+
+local boosted = {}      -- [машина] = true, чтобы не давить одно и то же каждый кадр
+
+local function applyDrive(vehicle)
+    if not Config.Drive or not Config.Drive.enabled then return end
+    if not DoesEntityExist(vehicle) then return end
+
+    local class = GetVehicleClass(vehicle)
+    if Config.Drive.skipClasses[class] then return end
+
+    local power = Config.Drive.power or 0.0
+    local topSpeed = Config.Drive.topSpeed or 0.0
+    local torque = Config.Drive.torque or 1.0
+
+    local bonus = Config.Drive.classBonus[class]
+    if bonus then
+        power = power + (bonus.power or 0.0)
+        topSpeed = topSpeed + (bonus.topSpeed or 0.0)
+        torque = torque + (bonus.torque or 0.0)
+    end
+
+    -- Проценты прибавки, а не множители: 0 оставил бы машину как есть.
+    if power > 0.0 then SetVehicleEnginePowerMultiplier(vehicle, power) end
+    if torque ~= 1.0 then SetVehicleEngineTorqueMultiplier(vehicle, torque) end
+    if topSpeed > 0.0 then ModifyVehicleTopSpeed(vehicle, topSpeed) end
+
+    boosted[vehicle] = true
+end
+
+CreateThread(function()
+    while true do
+        Wait(1000)
+        local ped = PlayerPedId()
+        local vehicle = GetVehiclePedIsIn(ped, false)
+
+        if vehicle ~= 0 and not boosted[vehicle] then
+            applyDrive(vehicle)
+        end
+
+        -- Машины уезжают и удаляются; таблица не должна расти вечно.
+        for handle in pairs(boosted) do
+            if not DoesEntityExist(handle) then boosted[handle] = nil end
+        end
+    end
+end)
+
+-- Подобрать цифры проще живьём, чем перезапуском ресурса.
+-- /drive 80 1.8 30  -> мощность +80%, момент 1.8, максималка +30%
+RegisterCommand('drive', function(_, args)
+    local vehicle = GetVehiclePedIsIn(PlayerPedId(), false)
+    if vehicle == 0 then
+        notify('~r~Сядь в машину')
+        return
+    end
+
+    local power = tonumber(args[1])
+    local torque = tonumber(args[2])
+    local top = tonumber(args[3])
+    if not power then
+        notify('~y~/drive <мощность %> <момент> <максималка %>')
+        return
+    end
+
+    if power > 0.0 then SetVehicleEnginePowerMultiplier(vehicle, power) end
+    if torque then SetVehicleEngineTorqueMultiplier(vehicle, torque) end
+    if top and top > 0.0 then ModifyVehicleTopSpeed(vehicle, top) end
+    boosted[vehicle] = true
+
+    notify(('~g~Мощность +%d%%, момент %.1f, максималка +%d%%')
+        :format(math.floor(power), torque or 1.0, math.floor(top or 0)))
+end, false)
