@@ -40,6 +40,21 @@ Config.RestrictParkHere = false
 -- setup.ps1 / setup.sh wrote into spawn-names.txt.
 -- ---------------------------------------------------------------------------
 Config.Catalog = {
+    -- ===== Реальные марки =====
+    -- Аддоны из resources/[cars]/rc_*. Если пак не установлен, машина просто
+    -- не заспавнится - каталог от этого не ломается.
+    { model = 'bdivo',     label = 'Bugatti Divo',           class = 'Реальные марки', price = 5900000 },
+    { model = 'chiron',    label = 'Bugatti Chiron',         class = 'Реальные марки', price = 5200000 },
+    { model = 'bugatti',   label = 'Bugatti Veyron',         class = 'Реальные марки', price = 3400000 },
+    { model = 'jesko',     label = 'Koenigsegg Jesko',       class = 'Реальные марки', price = 6400000 },
+    { model = 'hurper',    label = 'Lamborghini Huracan Performante', class = 'Реальные марки', price = 2900000 },
+    { model = 'tecnica',   label = 'Lamborghini Huracan Tecnica',     class = 'Реальные марки', price = 3100000 },
+    { model = 'pgt322',    label = 'Porsche 911 GT3 RS',     class = 'Реальные марки', price = 2600000 },
+    { model = 'agt12',     label = 'Aston Martin Vantage GT12',       class = 'Реальные марки', price = 2350000 },
+    { model = 'amg21',     label = 'Mercedes-AMG GT',        class = 'Реальные марки', price = 1750000 },
+    { model = 'gtr',       label = 'Nissan GT-R',            class = 'Реальные марки', price = 1250000 },
+    { model = 'supra19',   label = 'Toyota Supra 2019',      class = 'Реальные марки', price = 980000 },
+
     -- ===== Самые быстрые =====
     -- Разгон и максималка выше всего в игре. Цены как в GTA Online.
     { model = 'pariah',    label = 'Ocelot Pariah',          class = 'Самые быстрые', price = 1420000 },

@@ -9,6 +9,7 @@
 #     ROOT=/srv/fivem HOSTNAME_="Emperator crew" MAXCLIENTS=16 bash setup.sh
 #     SKIP_CARS=1 bash setup.sh        # vanilla only
 #     bash setup.sh --sync-packs        # re-scan car packs after adding new ones
+#     bash setup.sh --real-cars         # (re)install the branded cars only
 
 # pipefail is deliberately NOT set. This script is full of `find ... | head -n 1`
 # pipelines; head closes the pipe after the first line, the producer takes a
@@ -22,6 +23,7 @@ MAXCLIENTS="${MAXCLIENTS:-16}"
 SKIP_CARS="${SKIP_CARS:-0}"
 SKIP_GARAGE="${SKIP_GARAGE:-0}"
 SKIP_WEAPONS="${SKIP_WEAPONS:-0}"
+SKIP_REAL_CARS="${SKIP_REAL_CARS:-0}"
 SKIP_DB="${SKIP_DB:-0}"
 DB_NAME="${DB_NAME:-fivem}"
 DB_USER="${DB_USER:-fivem}"
@@ -43,6 +45,26 @@ VOICE_NORMAL=15.0
 VOICE_SHOUT=30.0
 CAR_PACK_ZIP='https://github.com/Rymex47/free-modpack/archive/refs/heads/main.zip'
 REPO_ZIP="https://github.com/somtakfan-arch/Emperator-coin/archive/refs/heads/${REPO_BRANCH}.zip"
+
+# Branded real-life cars, hand-picked - a Divo and ten more of the fastest
+# things with a real badge on the nose. Each entry is
+#     repo | branch | folder inside the repo | resource name
+# The source repos are multi-gigabyte whole-server dumps, so they are pulled
+# with a blobless partial clone and only these folders are ever checked out;
+# that costs a few seconds and ~260 MB rather than the whole repo.
+REAL_CARS=(
+    'bscal/rd2lrp|master|[Cars]/Bugatti_Divo|rc_bugatti_divo'
+    'bscal/rd2lrp|master|[Cars]/Bugatti_Chiron|rc_bugatti_chiron'
+    'bscal/rd2lrp|master|[Cars]/Bugatti_Veyron|rc_bugatti_veyron'
+    'GamingPanthers/FiveM-Vehicles|main|[cars]/[civ]/[abolf]/jesko|rc_koenigsegg_jesko'
+    'GamingPanthers/FiveM-Vehicles|main|[cars]/[civ]/[Dennissaurus]/hurper|rc_lamborghini_performante'
+    'GamingPanthers/FiveM-Vehicles|main|[cars]/[civ]/[Huangh]/tecnica|rc_lamborghini_tecnica'
+    'GamingPanthers/FiveM-Vehicles|main|[cars]/[civ]/[abolf]/pgt322|rc_porsche_gt3rs'
+    'GamingPanthers/FiveM-Vehicles|main|[cars]/[civ]/[abolf]/agt12|rc_aston_gt12'
+    'GamingPanthers/FiveM-Vehicles|main|[cars]/[civ]/[yca]/gtr|rc_nissan_gtr'
+    'GamingPanthers/FiveM-Vehicles|main|[cars]/[civ]/[azam]/amg21|rc_mercedes_amggt'
+    'GamingPanthers/FiveM-Vehicles|main|[cars]/[civ]/[other]/supra19|rc_toyota_supra'
+)
 
 # Free add-on gun packs. Each is tried on main, then master.
 WEAPON_PACKS=(
@@ -106,6 +128,110 @@ flatten_into() {
 list_resources() {
     find "$1" -mindepth 2 -maxdepth 2 -type f \
         \( -name fxmanifest.lua -o -name __resource.lua \) 2>/dev/null | sort
+}
+
+# Add-on cars ship with every manifest dialect there has ever been, and one
+# that forgets a .meta file loads as an invisible wreck - or takes the server
+# down with it, which is exactly how the gun packs died. So rather than trust
+# what shipped, describe the folder from what is actually in it.
+rewrite_car_manifest() {
+    # `local a=1 b="$a"` does not work: bash creates every name first and only
+    # then assigns, so $a is an unset local and set -u kills the script.
+    local dir="$1"
+    local out="$dir/fxmanifest.lua"
+    local rel kind
+    local -a metas=()
+
+    while IFS= read -r meta; do
+        metas+=("${meta#"$dir"/}")
+    done < <(find "$dir" -type f -name '*.meta' | sort)
+
+    [[ ${#metas[@]} -gt 0 ]] || return 1
+
+    {
+        echo "fx_version 'cerulean'"
+        echo "game 'gta5'"
+        echo
+        echo 'files {'
+        for rel in "${metas[@]}"; do printf "    '%s',\n" "$rel"; done
+        echo '}'
+        echo
+        for rel in "${metas[@]}"; do
+            case "$(basename "$rel")" in
+                vehicles.meta)       kind='VEHICLE_METADATA_FILE' ;;
+                carvariations.meta)  kind='VEHICLE_VARIATION_FILE' ;;
+                carcols.meta)        kind='CARCOLS_FILE' ;;
+                handling.meta)       kind='HANDLING_FILE' ;;
+                vehiclelayouts.meta) kind='VEHICLE_LAYOUTS_FILE' ;;
+                dlctext.meta)        kind='DLC_TEXT_FILE' ;;
+                contentunlocks.meta) kind='CONTENT_UNLOCKING_META_FILE' ;;
+                *)                   continue ;;
+            esac
+            printf "data_file '%s' '%s'\n" "$kind" "$rel"
+        done
+        # Some packs ship their dashboard name as a client script. Keep it.
+        [[ -f "$dir/vehicle_names.lua" ]] && echo "client_script 'vehicle_names.lua'"
+        true
+    } > "$out"
+
+    rm -f "$dir/__resource.lua"
+}
+
+install_real_cars() {
+    mkdir -p "$CARS_DIR" "$TMP_DIR/realcars"
+
+    local entry repo branch path name slug clone dest size added=0
+    for entry in "${REAL_CARS[@]}"; do
+        repo="${entry%%|*}"
+        branch="$(cut -d'|' -f2 <<<"$entry")"
+        path="$(cut -d'|' -f3 <<<"$entry")"
+        name="${entry##*|}"
+        dest="$CARS_DIR/$name"
+
+        if [[ -f "$dest/fxmanifest.lua" ]]; then
+            ok "$name (already there)"
+            added=$((added + 1))
+            continue
+        fi
+
+        slug="${repo//\//_}"
+        clone="$TMP_DIR/realcars/$slug"
+        if [[ ! -d "$clone/.git" ]]; then
+            rm -rf "$clone"
+            printf '        cloning %s\n' "$repo"
+            # --filter=blob:none downloads the tree only; the checkout below
+            # then pulls the blobs for one car and nothing else.
+            if ! git -c gc.auto=0 clone --quiet --depth 1 --filter=blob:none \
+                    --no-checkout --branch "$branch" \
+                    "https://github.com/$repo.git" "$clone"; then
+                warn "$repo is unreachable, its cars are skipped"
+                rm -rf "$clone"
+                continue
+            fi
+        fi
+
+        # gc.auto=0: these clones are throwaway, and a background repack in
+        # the middle of the run just burns the box's RAM.
+        if ! git -C "$clone" -c gc.auto=0 checkout --quiet HEAD -- "$path"; then
+            warn "$path is not in $repo, skipped"
+            continue
+        fi
+
+        rm -rf "$dest"
+        mv "$clone/$path" "$dest"
+
+        if rewrite_car_manifest "$dest"; then
+            size="$(du -sh "$dest" | cut -f1)"
+            ok "$name ($size)"
+            added=$((added + 1))
+        else
+            warn "$name carries no .meta file, dropped"
+            rm -rf "$dest"
+        fi
+    done
+
+    rm -rf "$TMP_DIR/realcars"
+    ok "branded cars installed: $added of ${#REAL_CARS[@]}"
 }
 
 sync_cars() {
@@ -209,11 +335,49 @@ sync_weapons() {
     fi
 }
 
+# A full install rewrites server.cfg from scratch. The sync flags only ever
+# add cars, so top the existing file up instead - rewriting it would throw
+# away the license key that is already in there.
+top_up_car_ensures() {
+    local cfg="$DATA_DIR/server.cfg" manifest name missing=""
+    [[ -f "$cfg" ]] || return 0
+
+    while IFS= read -r manifest; do
+        name="$(basename "$(dirname "$manifest")")"
+        grep -qE "^[[:space:]]*ensure[[:space:]]+${name}[[:space:]]*$" "$cfg" \
+            || missing+="ensure $name"$'\n'
+    done < <(list_resources "$CARS_DIR")
+
+    if [[ -n "$missing" ]]; then
+        printf '\n## --- cars added later --------------------------------------------\n%s' \
+            "$missing" >> "$cfg"
+        ok "server.cfg: $(printf '%s' "$missing" | grep -c .) new car(s) enabled"
+    else
+        ok 'server.cfg already lists every car'
+    fi
+}
+
+if [[ "${1:-}" == "--real-cars" ]]; then
+    command -v git >/dev/null 2>&1 || {
+        export DEBIAN_FRONTEND=noninteractive
+        apt-get update -qq && apt-get install -y -qq git >/dev/null
+    }
+    step 'Branded cars'
+    install_real_cars
+    step 'Wiring up cars'
+    sync_cars
+    top_up_car_ensures
+    chown -R "$SERVICE_USER":"$SERVICE_USER" "$DATA_DIR" 2>/dev/null || true
+    printf '\n\033[32mDone. systemctl restart fivem\033[0m\n\n'
+    exit 0
+fi
+
 if [[ "${1:-}" == "--sync-cars" || "${1:-}" == "--sync-packs" ]]; then
     step 'Re-scanning car packs'
     sync_cars
     step 'Re-scanning weapon packs'
     sync_weapons
+    top_up_car_ensures
     chown -R "$SERVICE_USER":"$SERVICE_USER" "$DATA_DIR" 2>/dev/null || true
     printf '\n\033[32mDone. systemctl restart fivem\033[0m\n\n'
     exit 0
@@ -222,8 +386,8 @@ fi
 step 'Dependencies'
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq curl xz-utils unzip jq ca-certificates screen >/dev/null
-ok 'curl, xz-utils, unzip, jq, screen'
+apt-get install -y -qq curl xz-utils unzip jq ca-certificates screen git >/dev/null
+ok 'curl, xz-utils, unzip, jq, screen, git'
 
 step "Preparing $ROOT"
 id -u "$SERVICE_USER" >/dev/null 2>&1 || useradd -r -m -d "$ROOT" -s /usr/sbin/nologin "$SERVICE_USER"
@@ -517,6 +681,11 @@ if [[ "$SKIP_WEAPONS" != "1" ]]; then
     done
 fi
 
+if [[ "$SKIP_REAL_CARS" != "1" ]]; then
+    step 'Branded cars'
+    install_real_cars
+fi
+
 step 'Wiring up cars'
 sync_cars
 
@@ -680,6 +849,9 @@ cat <<DONE
 
  Added more car or weapon packs? Drop them in and run:
      bash setup.sh --sync-packs
+
+ Branded cars (Divo, Chiron, Jesko, ...) on a server that already runs:
+     bash setup.sh --real-cars
 =====================================================================
 
 DONE

@@ -172,9 +172,34 @@ systemctl enable --now fivem
 ```bash
 ROOT=/srv/fivem HOSTNAME_="Emperator crew" MAXCLIENTS=16 bash setup.sh
 SKIP_CARS=1 bash setup.sh          # без пака машин
+SKIP_REAL_CARS=1 bash setup.sh     # без брендовых машин (Divo и ко)
 bash setup.sh --sync-packs         # пересканировать машины и стволы
+bash setup.sh --real-cars          # доставить брендовые машины на живой сервер
 SKIP_WEAPONS=1 bash setup.sh       # без ган-паков
 ```
+
+### Брендовые машины
+
+Кроме бесплатного пака ставятся 11 машин с настоящими шильдиками — список
+в `REAL_CARS` в `setup.sh`. Каждая тянется точечно: blobless-клон репозитория
+плюс `git checkout` одной папки, так что качается ~260 МБ, а не весь дамп
+чужого сервера на несколько гигабайт. Манифест каждой машины скрипт
+**перезаписывает сам** по тому, какие `.meta` реально лежат в папке — паки
+приходят с манифестами всех поколений, и забытый `data_file` роняет сервер.
+
+| Машина | Спавн-имя |
+|---|---|
+| Bugatti Divo | `bdivo` |
+| Bugatti Chiron | `chiron` |
+| Bugatti Veyron | `bugatti` |
+| Koenigsegg Jesko | `jesko` |
+| Lamborghini Huracan Performante | `hurper` |
+| Lamborghini Huracan Tecnica | `tecnica` |
+| Porsche 911 GT3 RS | `pgt322` |
+| Aston Martin Vantage GT12 | `agt12` |
+| Mercedes-AMG GT | `amg21` |
+| Nissan GT-R | `gtr` |
+| Toyota Supra 2019 | `supra19` |
 
 Управление:
 
