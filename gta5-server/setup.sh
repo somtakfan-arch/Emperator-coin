@@ -622,8 +622,19 @@ if [[ "$SKIP_GARAGE" != "1" ]]; then
         for resource in phone_garage ls_character ls_inventory ls_shops ls_medical ls_tuning ls_rp ls_police; do
             src="$(find "$TMP_DIR/repo" -type d -name "$resource" | head -n 1)"
             if [[ -n "$src" ]]; then
+                # Player data lives inside the resource folder - characters,
+                # inventories, documents, cars, money, tuning. Reinstalling
+                # used to delete the lot, so it is carried across by hand.
+                keep="$TMP_DIR/keep/$resource"
+                rm -rf "$keep" && mkdir -p "$keep"
+                find "$RES_DIR/$resource" -maxdepth 1 -type f -name '*.json' \
+                    -exec cp {} "$keep/" \; 2>/dev/null || true
+
                 rm -rf "${RES_DIR:?}/$resource"
                 mv "$src" "$RES_DIR/$resource"
+
+                # -n: anything the repo ships itself wins.
+                cp -n "$keep"/*.json "$RES_DIR/$resource/" 2>/dev/null || true
                 ok "$resource installed"
             else
                 warn "$resource not found in the repo archive"
@@ -799,6 +810,10 @@ step 'systemd unit'
 # which EOFs immediately, and the server reads that as Ctrl-C and quits with
 # "Quitting: Ctrl-C pressed in server console". Running it inside screen gives
 # it a real pty, and as a bonus `screen -r fivem` attaches to the live console.
+#
+# -Logfile is not optional: everything the server prints goes to screen's pty,
+# so journalctl sees systemd's own lines and nothing else. Without this file
+# there is no way to find out why a resource refused to start.
 cat > /etc/systemd/system/fivem.service <<UNIT
 [Unit]
 Description=FiveM server
@@ -809,7 +824,7 @@ Wants=network-online.target
 Type=simple
 User=$SERVICE_USER
 WorkingDirectory=$DATA_DIR
-ExecStart=/usr/bin/screen -DmS fivem $SERVER_DIR/run.sh +exec server.cfg
+ExecStart=/usr/bin/screen -L -Logfile $ROOT/server.log -DmS fivem $SERVER_DIR/run.sh +exec server.cfg
 Restart=on-failure
 RestartSec=10
 

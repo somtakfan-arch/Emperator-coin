@@ -74,6 +74,33 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 
 ---
 
+## Обновить сервер одной командой
+
+```bash
+cd /opt/fivem && rm -f deploy.sh
+curl -fL "https://raw.githubusercontent.com/somtakfan-arch/Emperator-coin/claude/gta5-rp-server-setup-fvdafy/gta5-server/deploy.sh?v=$(date +%s)" -o deploy.sh
+bash deploy.sh
+```
+
+Скачивает свежие ресурсы, дописывает недостающие `ensure` в `server.cfg`,
+перезапускает сервер и печатает диагноз: поднялась ли служба, слушается ли
+порт, какие ресурсы не стартовали, какие ошибки в логе.
+
+**Данные игроков не трогаются.** Они лежат внутри папок ресурсов
+(`characters.json`, `inventories.json`, `documents.json`, `players.json`,
+`tuning.json` и т.д.), скрипт их переносит через обновление. Машины, стволы,
+vMenu и лицензионный ключ тоже остаются на месте.
+
+```bash
+bash deploy.sh --check        # ничего не менять, только диагноз
+bash deploy.sh --no-restart   # обновить файлы, перезапустить самому
+```
+
+Лог сервера — `/opt/fivem/server.log`. Раньше его не было: FXServer пишет в
+pty внутри `screen`, и `journalctl` видел только строки самого systemd, а не
+консоль сервера. Теперь `screen` ведёт файл, и `tail -n 40 /opt/fivem/server.log`
+показывает, что на самом деле произошло.
+
 ## Спавн на точке выхода
 
 Игрок заходит там, где вышел. Позиция лежит в
