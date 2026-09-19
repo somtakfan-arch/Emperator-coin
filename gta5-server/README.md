@@ -74,6 +74,32 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 
 ---
 
+## Переезд на другой сервер
+
+```bash
+cd /opt/fivem && rm -f backup.sh
+curl -fL "https://raw.githubusercontent.com/somtakfan-arch/Emperator-coin/claude/gta5-rp-server-setup-fvdafy/gta5-server/backup.sh?v=$(date +%s)" -o backup.sh
+bash backup.sh
+```
+
+Собирает в один архив то, чего нельзя скачать заново: данные всех игроков
+(персонажи, деньги, машины, инвентари, документы, недвижимость, семьи,
+районы, заведения), дамп базы и **лицензионный ключ** из `server.cfg`.
+
+Сам FXServer, машины и ресурсы в архив не идут — их ставит `setup.sh` за
+пару минут, тащить через интернет дважды незачем. Архив получается
+килобайты, а не гигабайты.
+
+На новом сервере:
+
+```bash
+bash setup.sh                                    # поставить всё
+bash backup.sh restore fivem-backup-*.tar.gz     # вернуть данные
+systemctl restart fivem
+```
+
+Ключ переносится автоматически, так что заново его вбивать не надо.
+
 ## Обновить сервер одной командой
 
 ```bash
