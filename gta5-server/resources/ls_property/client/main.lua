@@ -75,41 +75,38 @@ RegisterNetEvent('ls_property:storage', function(data)
 end)
 
 -- --- дверь -------------------------------------------------------------------
+-- Нажатие E ловит ls_interact; тут только предложение.
+
+local doorKey = nil
 
 CreateThread(function()
     while not NetworkIsPlayerActive(PlayerId()) do Wait(200) end
     Wait(2500)
     TriggerServerEvent('ls_property:ready')
+end)
 
-    while true do
-        local wait = 500
-        local me = GetEntityCoords(PlayerPedId())
+AddEventHandler('ls_interact:collect', function()
+    local me = GetEntityCoords(PlayerPedId())
+    doorKey = nil
 
-        for _, row in ipairs(phone.properties or {}) do
-            local d = #(me - vector3(row.x, row.y, row.z))
-            if d <= 25.0 then
-                if d <= Config.Interact then
-                    wait = 0
-                    local text
-                    if row.mine or row.family then
-                        text = ('~b~[E]~w~ %s — склад'):format(row.label)
-                    elseif row.owner then
-                        text = ('~y~%s — занято'):format(row.label)
-                    else
-                        text = ('~g~%s~w~ — продаётся, телефон → Недвижимость'):format(row.label)
-                    end
-                    drawText3D(row.x, row.y, row.z + 0.9, text)
-
-                    if (row.mine or row.family) and IsControlJustReleased(0, 38) then
-                        TriggerServerEvent('ls_property:openStorage', row.key)
-                        Wait(500)
-                    end
-                end
-                break
+    for _, row in ipairs(phone.properties or {}) do
+        if #(me - vector3(row.x, row.y, row.z)) <= Config.Interact then
+            if row.mine or row.family then
+                doorKey = row.key
+                TriggerEvent('ls_interact:offer', {
+                    id = 'ls_property:storage',
+                    label = ('Склад — %s'):format(row.label),
+                    order = 15,
+                })
             end
+            break
         end
+    end
+end)
 
-        Wait(wait)
+AddEventHandler('ls_interact:run', function(id)
+    if id == 'ls_property:storage' and doorKey then
+        TriggerServerEvent('ls_property:openStorage', doorKey)
     end
 end)
 

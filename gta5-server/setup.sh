@@ -637,7 +637,7 @@ if [[ "$SKIP_GARAGE" != "1" ]]; then
             warn 'sql files not found in the repo archive'
         fi
 
-        for resource in phone_garage ls_character ls_inventory ls_shops ls_medical ls_tuning ls_rp ls_police ls_gangs ls_crime ls_property; do
+        for resource in phone_garage ls_character ls_inventory ls_shops ls_medical ls_tuning ls_rp ls_police ls_gangs ls_crime ls_property ls_interact; do
             src="$(find "$TMP_DIR/repo" -type d -name "$resource" | head -n 1)"
             if [[ -n "$src" ]]; then
                 # Player data lives inside the resource folder - characters,
@@ -821,6 +821,9 @@ ensure ls_gangs
 ensure ls_crime
 # Семьи, недвижимость и аукцион. Телефон берёт данные отсюда.
 ensure ls_property
+# Одно меню на всё взаимодействие. Стартует последним: остальные к нему
+# подключаются, а не наоборот.
+ensure ls_interact
 
 # Police ranks are handed out in game with /police hire; this ace only guards
 # the admin-side commands.

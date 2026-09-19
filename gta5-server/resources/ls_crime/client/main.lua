@@ -14,17 +14,6 @@ local function notify(text)
     DrawNotification(false, true)
 end
 
-local function drawText3D(x, y, z, text)
-    SetDrawOrigin(x, y, z, 0)
-    SetTextFont(4)
-    SetTextScale(0.35, 0.35)
-    SetTextCentre(true)
-    SetTextOutline()
-    BeginTextCommandDisplayText('STRING')
-    AddTextComponentSubstringPlayerName(text)
-    EndTextCommandDisplayText(0.0, 0.0)
-    ClearDrawOrigin()
-end
 
 local function here()
     return GetEntityCoords(PlayerPedId())
@@ -246,25 +235,8 @@ CreateThread(function()
     end
 end)
 
--- --- банкоматы ---------------------------------------------------------------
-
-local atmHashes = {}
-for _, model in ipairs(Config.Atm.models) do
-    atmHashes[#atmHashes + 1] = GetHashKey(model)
-end
-
-local function closestAtm(coords)
-    for _, hash in ipairs(atmHashes) do
-        local object = GetClosestObjectOfType(coords.x, coords.y, coords.z,
-            Config.Interact + 0.6, hash, false, false, false)
-        if object ~= 0 and DoesEntityExist(object) then
-            return object
-        end
-    end
-    return nil
-end
-
--- --- главный цикл взаимодействия --------------------------------------------
+-- --- что можно сделать здесь ------------------------------------------------
+-- Нажатие E ловит ls_interact; тут только список предложений.
 
 local function nearestOf(points, me, radius)
     local bestIndex, bestDist
@@ -277,132 +249,125 @@ local function nearestOf(points, me, radius)
     return bestIndex
 end
 
+local atmHashes = {}
+for _, model in ipairs(Config.Atm.models) do
+    atmHashes[#atmHashes + 1] = GetHashKey(model)
+end
+
+local function closestAtm(coords)
+    for _, hash in ipairs(atmHashes) do
+        local object = GetClosestObjectOfType(coords.x, coords.y, coords.z,
+            Config.Interact + 0.6, hash, false, false, false)
+        if object ~= 0 and DoesEntityExist(object) then return object end
+    end
+    return nil
+end
+
+-- Сюда кладётся то, что выбрано в меню, чтобы :run не искал заново.
+local pending = {}
+
 CreateThread(function()
     while not NetworkIsPlayerActive(PlayerId()) do Wait(200) end
     Wait(2500)
     TriggerServerEvent('ls_crime:ready')
+end)
 
-    while true do
-        local wait = 400
-        if not running and not IsEntityDead(PlayerPedId()) then
-            local me = here()
-            local acted = false
+AddEventHandler('ls_interact:collect', function()
+    if running or IsEntityDead(PlayerPedId()) then return end
 
-            -- дела по точкам
-            for key, job in pairs(Config.Jobs) do
-                local index = nearestOf(job.points, me)
-                if index then
-                    wait = 0
-                    acted = true
-                    local point = job.points[index]
-                    drawText3D(point.x, point.y, point.z + 0.9,
-                        CrimeLocale.prompt:format(job.label))
-                    if IsControlJustReleased(0, 38) then
-                        TriggerServerEvent('ls_crime:startJob', key, index)
-                        Wait(500)
-                    end
-                    break
-                end
-            end
+    local me = GetEntityCoords(PlayerPedId())
+    pending = {}
 
-            -- барыги
-            if not acted then
-                local index = nearestOf(Config.Dealers.points, me)
-                if index and (state.dealers[index] or state.dealers[tostring(index)]) then
-                    wait = 0
-                    acted = true
-                    local point = Config.Dealers.points[index]
-                    drawText3D(point.x, point.y, point.z + 0.9, CrimeLocale.promptSell)
-                    if IsControlJustReleased(0, 38) then
-                        TriggerServerEvent('ls_crime:sell', index)
-                        Wait(500)
-                    end
-                end
-            end
+    local function offer(id, label, order)
+        TriggerEvent('ls_interact:offer', { id = id, label = label, order = order or 40 })
+    end
 
-            -- чёрный рынок
-            if not acted then
-                local market = Config.BlackMarket.points[state.market]
-                if market and #(me - vector3(market.x, market.y, market.z)) <= Config.Interact then
-                    wait = 0
-                    acted = true
-                    drawText3D(market.x, market.y, market.z + 0.9, CrimeLocale.promptMarket)
-                    if IsControlJustReleased(0, 38) then
-                        TriggerServerEvent('ls_crime:openMarket')
-                        Wait(500)
-                    end
-                end
-            end
-
-            -- разбор: нужен транспорт под игроком
-            if not acted then
-                local index = nearestOf(Config.ChopShop.points, me, 8.0)
-                if index then
-                    wait = 0
-                    acted = true
-                    local point = Config.ChopShop.points[index]
-                    local vehicle = GetVehiclePedIsIn(PlayerPedId(), false)
-                    drawText3D(point.x, point.y, point.z + 0.9,
-                        vehicle ~= 0 and CrimeLocale.promptChop or '~y~Загони машину сюда')
-                    if vehicle ~= 0 and IsControlJustReleased(0, 38) then
-                        TriggerServerEvent('ls_crime:chop', index,
-                            GetVehicleNumberPlateText(vehicle), GetVehicleClass(vehicle))
-                        Wait(700)
-                    end
-                end
-            end
-
-            -- инкассаторы
-            if not acted and state.van and state.van.point then
-                local spot = Config.Van.points[state.van.point]
-                if spot and #(me - vector3(spot.x, spot.y, spot.z)) <= 5.0 then
-                    wait = 0
-                    acted = true
-                    drawText3D(spot.x, spot.y, spot.z + 1.2, '~b~[E]~w~ Вскрыть инкассаторов')
-                    if IsControlJustReleased(0, 38) then
-                        TriggerServerEvent('ls_crime:startVan')
-                        Wait(500)
-                    end
-                end
-            end
-
-            -- кусты
-            if not acted then
-                for _, plant in ipairs(state.plants) do
-                    if #(me - vector3(plant.x, plant.y, plant.z)) <= 2.0 then
-                        wait = 0
-                        acted = true
-                        local left = (plant.ripeAt or 0) - os.time()
-                        drawText3D(plant.x, plant.y, plant.z + 0.8,
-                            left > 0
-                                and ('~y~Созреет через %d мин'):format(math.ceil(left / 60))
-                                or CrimeLocale.promptHarvest)
-                        if left <= 0 and IsControlJustReleased(0, 38) then
-                            TriggerServerEvent('ls_crime:harvest', plant.id)
-                            Wait(500)
-                        end
-                        break
-                    end
-                end
-            end
-
-            -- банкоматы
-            if not acted then
-                local atm = closestAtm(me)
-                if atm then
-                    local coords = GetEntityCoords(atm)
-                    wait = 0
-                    acted = true
-                    drawText3D(coords.x, coords.y, coords.z + 0.9, CrimeLocale.promptAtm)
-                    if IsControlJustReleased(0, 38) then
-                        TriggerServerEvent('ls_crime:startAtm',
-                            { x = coords.x, y = coords.y, z = coords.z })
-                        Wait(500)
-                    end
-                end
-            end
+    -- дела по точкам
+    for key, job in pairs(Config.Jobs) do
+        local index = nearestOf(job.points, me)
+        if index then
+            pending['job:' .. key] = index
+            offer('ls_crime:job:' .. key, job.label, 20)
         end
-        Wait(wait)
+    end
+
+    -- барыги
+    local dealer = nearestOf(Config.Dealers.points, me)
+    if dealer and (state.dealers[dealer] or state.dealers[tostring(dealer)]) then
+        pending.dealer = dealer
+        offer('ls_crime:sell', 'Сбыть товар', 22)
+    end
+
+    -- чёрный рынок
+    local market = Config.BlackMarket.points[state.market]
+    if market and #(me - vector3(market.x, market.y, market.z)) <= Config.Interact then
+        offer('ls_crime:market', Config.BlackMarket.label, 24)
+    end
+
+    -- разбор: нужна машина под игроком
+    local chop = nearestOf(Config.ChopShop.points, me, 8.0)
+    if chop and GetVehiclePedIsIn(PlayerPedId(), false) ~= 0 then
+        pending.chop = chop
+        offer('ls_crime:chop', 'Разобрать машину', 26)
+    end
+
+    -- инкассаторы
+    if state.van and state.van.point then
+        local spot = Config.Van.points[state.van.point]
+        if spot and #(me - vector3(spot.x, spot.y, spot.z)) <= 5.0 then
+            offer('ls_crime:van', 'Вскрыть инкассаторов', 18)
+        end
+    end
+
+    -- кусты
+    for _, plant in ipairs(state.plants) do
+        if #(me - vector3(plant.x, plant.y, plant.z)) <= 2.0 then
+            local left = (plant.ripeAt or 0) - os.time()
+            if left <= 0 then
+                pending.plant = plant.id
+                offer('ls_crime:harvest', 'Собрать урожай', 28)
+            else
+                offer('ls_crime:wait', ('Созреет через %d мин'):format(math.ceil(left / 60)), 28)
+            end
+            break
+        end
+    end
+
+    -- банкоматы
+    local atm = closestAtm(me)
+    if atm then
+        local coords = GetEntityCoords(atm)
+        pending.atm = { x = coords.x, y = coords.y, z = coords.z }
+        offer('ls_crime:atm', 'Вскрыть банкомат', 30)
+    end
+end)
+
+AddEventHandler('ls_interact:run', function(id)
+    if type(id) ~= 'string' or id:sub(1, 9) ~= 'ls_crime:' then return end
+
+    local jobKey = id:match('^ls_crime:job:(.+)$')
+    if jobKey then
+        local index = pending['job:' .. jobKey]
+        if index then TriggerServerEvent('ls_crime:startJob', jobKey, index) end
+        return
+    end
+
+    if id == 'ls_crime:sell' and pending.dealer then
+        TriggerServerEvent('ls_crime:sell', pending.dealer)
+    elseif id == 'ls_crime:market' then
+        TriggerServerEvent('ls_crime:openMarket')
+    elseif id == 'ls_crime:chop' and pending.chop then
+        local vehicle = GetVehiclePedIsIn(PlayerPedId(), false)
+        if vehicle ~= 0 then
+            TriggerServerEvent('ls_crime:chop', pending.chop,
+                GetVehicleNumberPlateText(vehicle), GetVehicleClass(vehicle))
+        end
+    elseif id == 'ls_crime:van' then
+        TriggerServerEvent('ls_crime:startVan')
+    elseif id == 'ls_crime:harvest' and pending.plant then
+        TriggerServerEvent('ls_crime:harvest', pending.plant)
+    elseif id == 'ls_crime:atm' and pending.atm then
+        TriggerServerEvent('ls_crime:startAtm', pending.atm)
     end
 end)
 

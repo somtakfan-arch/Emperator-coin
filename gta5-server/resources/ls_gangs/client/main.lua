@@ -230,91 +230,86 @@ RegisterNetEvent('ls_gangs:revived', function(id)
 end)
 
 -- --- взаимодействие ---------------------------------------------------------
+-- Само нажатие E ловит ls_interact. Здесь только "что я могу предложить".
 
 local function isOnDuty()
     local ok, duty = pcall(function() return exports.ls_police:isOnDuty() end)
     return ok and duty == true
 end
 
-CreateThread(function()
-    while true do
-        local wait = 500
-        local me = GetEntityCoords(PlayerPedId())
+AddEventHandler('ls_interact:collect', function()
+    local me = GetEntityCoords(PlayerPedId())
 
-        if escortSlot then
-            -- Довёл до участка?
-            for _, station in ipairs(Config.Stations) do
-                if #(me - vector3(station.x, station.y, station.z)) <= Config.StationRadius then
-                    wait = 0
-                    drawText3D(me.x, me.y, me.z + 1.1, GangLocale.deliverPrompt)
-                    if IsControlJustReleased(0, 38) then
-                        TriggerServerEvent('ls_gangs:deliver')
-                        Wait(600)
-                    end
-                    break
+    if escortSlot then
+        for index, station in ipairs(Config.Stations) do
+            if #(me - vector3(station.x, station.y, station.z)) <= Config.StationRadius then
+                TriggerEvent('ls_interact:offer', {
+                    id = 'ls_gangs:deliver',
+                    label = ('Сдать задержанного — %s'):format(station.label),
+                    order = 5,
+                })
+                break
+            end
+        end
+        return
+    end
+
+    if not isOnDuty() then return end
+
+    for id, ped in pairs(peds) do
+        if DoesEntityExist(ped) and #(me - GetEntityCoords(ped)) <= Config.ArrestDistance then
+            local slot = slots[id]
+            local label, event
+
+            if slot and slot.state == 'down' then
+                -- Сначала наручники, потом дефибриллятор. Поднятый без
+                -- наручников просто убежал бы.
+                if slot.cuffed then
+                    label, event = 'Поднять дефибриллятором', 'reviveDown'
+                else
+                    label, event = 'Надеть наручники', 'cuffDown'
                 end
+            elseif gaveUp[id] and not IsPedDeadOrDying(ped, true) then
+                label, event = 'Задержать', 'arrest'
             end
 
-            -- Потерял по дороге: пед исчез или отстал безнадёжно.
+            if label then
+                TriggerEvent('ls_interact:offer', {
+                    id = ('ls_gangs:%s:%s'):format(event, id),
+                    label = ('%s — %s'):format(label, slot and slot.label or 'гангстер'),
+                    order = 10,
+                })
+            end
+        end
+    end
+end)
+
+AddEventHandler('ls_interact:run', function(id)
+    if type(id) ~= 'string' or id:sub(1, 9) ~= 'ls_gangs:' then return end
+
+    if id == 'ls_gangs:deliver' then
+        TriggerServerEvent('ls_gangs:deliver')
+        return
+    end
+
+    local action, slotId = id:match('^ls_gangs:(%a+):(%d+)$')
+    if not action then return end
+    TriggerServerEvent('ls_gangs:' .. action, tonumber(slotId))
+end)
+
+-- Конвой рвётся сам, без всякого меню.
+CreateThread(function()
+    while true do
+        Wait(1000)
+        if escortSlot then
+            local me = GetEntityCoords(PlayerPedId())
             if not escortPed or not DoesEntityExist(escortPed)
                 or IsPedDeadOrDying(escortPed, true)
                 or #(me - GetEntityCoords(escortPed)) > 60.0 then
                 dropEscort(true)
             end
-
-        elseif isOnDuty() then
-            for id, ped in pairs(peds) do
-                if DoesEntityExist(ped) then
-                    local coords = GetEntityCoords(ped)
-                    if #(me - coords) <= Config.ArrestDistance then
-                        local slot = slots[id]
-                        local prompt, event
-
-                        if slot and slot.state == 'down' then
-                            -- Сначала наручники, потом дефибриллятор. Поднятый
-                            -- без наручников просто убежал бы.
-                            if slot.cuffed then
-                                prompt, event = GangLocale.revivePrompt, 'ls_gangs:reviveDown'
-                            else
-                                prompt, event = GangLocale.cuffPrompt, 'ls_gangs:cuffDown'
-                            end
-                        elseif gaveUp[id] and not IsPedDeadOrDying(ped, true) then
-                            prompt, event = GangLocale.arrestPrompt, 'ls_gangs:arrest'
-                        end
-
-                        if prompt then
-                            wait = 0
-                            drawText3D(coords.x, coords.y, coords.z + 1.05, prompt)
-                            if IsControlJustReleased(0, 38) then   -- E
-                                TriggerServerEvent(event, id)
-                                Wait(600)
-                            end
-                            break
-                        end
-                    end
-                end
-            end
         end
-
-        Wait(wait)
     end
-end)
-
--- Сервер подтвердил задержание: пед перестаёт быть частью слота и просто
--- идёт за ментом.
-RegisterNetEvent('ls_gangs:escortStart', function(id)
-    local ped = peds[id]
-    if not ped or not DoesEntityExist(ped) then return end
-
-    peds[id] = nil          -- despawn его больше не тронет
-    escortPed, escortSlot = ped, id
-
-    ClearPedTasksImmediately(ped)
-    SetPedRelationshipGroupHash(ped, GetHashKey('CIVMALE'))
-    SetPedCombatAttributes(ped, 46, false)
-    SetBlockingOfNonTemporaryEvents(ped, true)
-    TaskFollowToOffsetOfEntity(ped, PlayerPedId(), 0.0, -1.2, 0.0, 2.0, -1, 1.0, true)
-    SetPedKeepTask(ped, true)
 end)
 
 -- --- метки районов ----------------------------------------------------------

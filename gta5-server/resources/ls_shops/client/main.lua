@@ -23,6 +23,9 @@ local function money()
     return (ok and tonumber(value)) or 0
 end
 
+-- Магазин, у которого игрок стоит прямо сейчас.
+local nearShop = nil
+
 local function drawText3D(x, y, z, text)
     SetTextScale(0.35, 0.35)
     SetTextFont(4)
@@ -333,6 +336,10 @@ CreateThread(function()
             local ped = PlayerPedId()
             local coords = GetEntityCoords(ped)
 
+            -- Сбрасываем каждый проход: иначе отошёл от магазина, а он
+            -- остался предлагаться в меню.
+            nearShop = nil
+
             for _, shop in ipairs(shops) do
                 local dist = #(coords - vector3(shop.x + 0.0, shop.y + 0.0, shop.z + 0.0))
                 if dist < Config.MarkerRange then
@@ -343,17 +350,9 @@ CreateThread(function()
                         60, 160, 255, 90, false, true, 2, false, nil, nil, false)
 
                     if dist < Config.Interact then
-                        drawText3D(shop.x + 0.0, shop.y + 0.0, shop.z + 0.3,
-                            ('~b~[E]~w~ %s'):format(kind.label))
-                        if IsControlJustReleased(0, Config.OpenControl) then
-                            if shop.type == 'clothing' then
-                                openEditor('clothing')
-                            elseif shop.type == 'barber' then
-                                openEditor('barber')
-                            else
-                                openList(shop.type)
-                            end
-                        end
+                        -- Подсказку и само нажатие держит ls_interact:
+                        -- маркер тут остаётся, чтобы магазин было видно.
+                        nearShop = shop
                     end
                 end
             end
@@ -559,3 +558,29 @@ RegisterCommand('fixarms', function()
         ('Торс и руки: ~b~%d~w~ из %d. Не подошло - введи ещё раз.'):format(next, count - 1))
     DrawNotification(false, true)
 end, false)
+
+-- --- взаимодействие ----------------------------------------------------------
+-- Одно меню на всё: E ловит ls_interact и спрашивает, что мы предлагаем.
+
+AddEventHandler('ls_interact:collect', function()
+    if not nearShop then return end
+
+    local kind = Config.Types[nearShop.type]
+    TriggerEvent('ls_interact:offer', {
+        id = 'ls_shops:open',
+        label = kind and kind.label or 'Магазин',
+        order = 12,
+    })
+end)
+
+AddEventHandler('ls_interact:run', function(id)
+    if id ~= 'ls_shops:open' or not nearShop then return end
+
+    if nearShop.type == 'clothing' then
+        openEditor('clothing')
+    elseif nearShop.type == 'barber' then
+        openEditor('barber')
+    else
+        openList(nearShop.type)
+    end
+end)

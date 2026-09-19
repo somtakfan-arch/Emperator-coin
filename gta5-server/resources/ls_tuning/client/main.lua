@@ -5,6 +5,9 @@ local shopBlips = {}
 local current = nil    -- { vehicle, plate, original, draft }
 local pending = nil    -- { plate, vehicle } waiting for its saved build
 
+-- Тюнинг-мастерская, у которой игрок стоит прямо сейчас.
+local nearTuning = nil
+
 local function notify(text)
     SetNotificationTextEntry('STRING')
     AddTextComponentSubstringPlayerName(text)
@@ -230,6 +233,7 @@ CreateThread(function()
         local wait = 700
         local ped = PlayerPedId()
         local coords = GetEntityCoords(ped)
+        nearTuning = nil
 
         for _, shop in ipairs(Config.Shops) do
             local dist = #(coords - vector3(shop.x, shop.y, shop.z))
@@ -239,13 +243,12 @@ CreateThread(function()
                     3.0, 3.0, 0.6, 120, 90, 255, 80, false, true, 2, false, nil, nil, false)
 
                 if dist < Config.ShopRadius and not uiOpen then
+                    -- Подсказку и нажатие держит ls_interact. Напоминание
+                    -- "сядь за руль" оставляем: без него непонятно, почему
+                    -- в меню ничего нет.
+                    nearTuning = shop
                     local vehicle = GetVehiclePedIsIn(ped, false)
-                    if vehicle ~= 0 and GetPedInVehicleSeat(vehicle, -1) == ped then
-                        drawText3D(shop.x, shop.y, shop.z + 0.6, '~p~[E]~w~ Тюнинг')
-                        if IsControlJustReleased(0, 38) then
-                            openShop(vehicle)
-                        end
-                    else
+                    if vehicle == 0 or GetPedInVehicleSeat(vehicle, -1) ~= ped then
                         drawText3D(shop.x, shop.y, shop.z + 0.6, TuneLocale.notInCar)
                     end
                 end
@@ -435,3 +438,25 @@ RegisterCommand('drive', function(_, args)
     notify(('~g~Мощность +%d%%, момент %.1f, максималка +%d%%')
         :format(math.floor(power), torque or 1.0, math.floor(top or 0)))
 end, false)
+
+-- --- взаимодействие ----------------------------------------------------------
+
+AddEventHandler('ls_interact:collect', function()
+    if uiOpen or not nearTuning then return end
+
+    local ped = PlayerPedId()
+    local vehicle = GetVehiclePedIsIn(ped, false)
+    if vehicle == 0 or GetPedInVehicleSeat(vehicle, -1) ~= ped then return end
+
+    TriggerEvent('ls_interact:offer', {
+        id = 'ls_tuning:open',
+        label = 'Тюнинг',
+        order = 14,
+    })
+end)
+
+AddEventHandler('ls_interact:run', function(id)
+    if id ~= 'ls_tuning:open' then return end
+    local vehicle = GetVehiclePedIsIn(PlayerPedId(), false)
+    if vehicle ~= 0 then openShop(vehicle) end
+end)

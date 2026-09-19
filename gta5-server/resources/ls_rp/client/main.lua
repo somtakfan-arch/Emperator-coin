@@ -139,26 +139,46 @@ local function closeMenu()
     SendNUIMessage({ action = 'close' })
 end
 
--- --- prompt loop -----------------------------------------------------------
+-- --- взаимодействие ---------------------------------------------------------
+-- Нажатие E ловит ls_interact и спрашивает всех, что они предлагают.
 
-CreateThread(function()
-    while true do
-        local wait = 400
-        if not menuOpen and not shopBusy() then
-            local playerId, dist = nearestPlayer()
-            if playerId and dist and dist < Config.InteractDistance then
-                wait = 0
-                local coords = GetEntityCoords(GetPlayerPed(playerId))
-                drawText3D(coords.x, coords.y, coords.z + 0.75, '~b~[E]~w~ Взаимодействие')
+local offerTarget = nil
+local offerClinic = nil
 
-                if IsControlJustReleased(0, Config.InteractControl) then
-                    openMenu(playerId)
-                end
-            elseif playerId then
-                wait = 200
-            end
+AddEventHandler('ls_interact:collect', function()
+    if menuOpen or shopBusy() then return end
+
+    offerTarget, offerClinic = nil, nil
+
+    local playerId, dist = nearestPlayer()
+    if playerId and dist and dist < Config.InteractDistance then
+        offerTarget = playerId
+        TriggerEvent('ls_interact:offer', {
+            id = 'ls_rp:player',
+            label = ('Взаимодействие — %s'):format(GetPlayerName(playerId)),
+            order = 8,
+        })
+    end
+
+    local coords = GetEntityCoords(PlayerPedId())
+    for index, clinic in ipairs(Config.Clinics) do
+        if #(coords - vector3(clinic.x, clinic.y, clinic.z)) < 2.0 then
+            offerClinic = index
+            TriggerEvent('ls_interact:offer', {
+                id = 'ls_rp:medcard',
+                label = ('Купить медсправку — $%d'):format(Config.MedCardPrice),
+                order = 16,
+            })
+            break
         end
-        Wait(wait)
+    end
+end)
+
+AddEventHandler('ls_interact:run', function(id)
+    if id == 'ls_rp:player' and offerTarget then
+        openMenu(offerTarget)
+    elseif id == 'ls_rp:medcard' and offerClinic then
+        TriggerServerEvent('ls_rp:buyMedCard')
     end
 end)
 
@@ -189,13 +209,8 @@ CreateThread(function()
                         0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.2, 1.2, 0.5,
                         80, 200, 140, 90, false, true, 2, false, nil, nil, false)
 
-                    if dist < 2.0 then
-                        drawText3D(clinic.x, clinic.y, clinic.z + 0.3,
-                            ('~b~[G]~w~ Медсправка — $%d'):format(Config.MedCardPrice))
-                        if IsControlJustReleased(0, 47) then    -- G
-                            TriggerServerEvent('ls_rp:buyMedCard')
-                        end
-                    end
+                    -- Подсказку и нажатие держит ls_interact; маркер
+                    -- остаётся, чтобы клинику было видно издалека.
                 end
             end
         end

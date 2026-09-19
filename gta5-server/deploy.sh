@@ -26,7 +26,7 @@ CFG="$DATA_DIR/server.cfg"
 LOG="$ROOT/server.log"
 TMP="$ROOT/tmp/deploy"
 
-RESOURCES=(phone_garage ls_character ls_inventory ls_shops ls_medical ls_tuning ls_rp ls_police ls_gangs ls_crime ls_property)
+RESOURCES=(phone_garage ls_character ls_inventory ls_shops ls_medical ls_tuning ls_rp ls_police ls_gangs ls_crime ls_property ls_interact)
 
 SERVER_DIR="$ROOT/server"
 CARS_DIR="$RES_DIR/[cars]"
