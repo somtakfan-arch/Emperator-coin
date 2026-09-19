@@ -406,7 +406,10 @@ Invoke-WeaponSync
 Write-Step 'server.cfg'
 if ([string]::IsNullOrWhiteSpace($LicenseKey)) {
     Write-Host '    Paste the key from https://keymaster.fivem.net (server type: Development).'
-    $LicenseKey = (Read-Host '    License key').Trim()
+    # AsSecureString keeps the key out of the console and the screenshot.
+    $secure = Read-Host '    License key' -AsSecureString
+    $LicenseKey = ([Runtime.InteropServices.Marshal]::PtrToStringAuto(
+        [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure))).Trim()
 }
 if ([string]::IsNullOrWhiteSpace($LicenseKey)) {
     Write-Warn 'no key entered - server.cfg gets a placeholder, fill it in before starting'

@@ -526,7 +526,10 @@ sync_weapons
 step 'server.cfg'
 if [[ -z "$LICENSE_KEY" ]]; then
     echo '    Paste the key from https://keymaster.fivem.net (server type: Development).'
-    read -r -p '    License key: ' LICENSE_KEY </dev/tty || true
+    # -s keeps the key off the screen: it ends up in scrollback and in every
+    # screenshot otherwise, and a leaked key is a key someone else can run on.
+    read -rs -p '    License key: ' LICENSE_KEY </dev/tty || true
+    echo
 fi
 if [[ -z "$LICENSE_KEY" ]]; then
     warn 'no key entered - server.cfg gets a placeholder, fill it in before starting'
