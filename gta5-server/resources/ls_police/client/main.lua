@@ -922,3 +922,118 @@ CreateThread(function()
         Wait(wait)
     end
 end)
+
+-- --- раздел "Работа" в меню E ------------------------------------------------
+--
+-- F6 остаётся: там штрафы, арест, розыск, МВД-база - всё, что требует ввода
+-- цифр и текста. А то, что делается одним нажатием над стоящим рядом
+-- человеком, живёт здесь, потому что искать это в отдельном окне неудобно.
+
+local workTarget = nil
+
+local function offer(id, label, order)
+    TriggerEvent('ls_interact:offer', {
+        id = 'ls_police:w:' .. id,
+        label = label,
+        group = 'police',
+        order = order or 50,
+    })
+end
+
+AddEventHandler('ls_interact:collect', function()
+    if not State.onDuty or uiOpen then return end
+
+    workTarget = nil
+    local playerId = nearestPlayer()
+
+    -- Раздел показываем, даже когда рядом никого: изъятие транспорта и
+    -- конусы к человеку не привязаны.
+    TriggerEvent('ls_interact:offer', {
+        id = 'ls_police:work', label = 'Работа', submenu = 'police', order = 4,
+    })
+
+    if playerId then
+        workTarget = GetPlayerServerId(playerId)
+        local who = GetPlayerName(playerId)
+
+        offer('cuffHard', ('Наручники — %s'):format(who), 10)
+        offer('cuffSoft', ('Стяжки — %s'):format(who), 11)
+        offer('uncuff', 'Снять наручники', 12)
+        offer('escort', 'Вести за собой', 13)
+        offer('carIn', 'Посадить в машину', 14)
+        offer('carOut', 'Вытащить из машины', 15)
+        offer('kneelDown', 'На колени', 16)
+        offer('kneelUp', 'Встать', 17)
+        offer('search', 'Обыскать', 18)
+        offer('docs', 'Проверить документы', 19)
+        offer('taser', 'Тазер', 20)
+    end
+
+    offer('impound', 'Изъять транспорт', 30)
+    offer('propRemove', 'Убрать ближайший конус', 31)
+    for _, prop in ipairs(Config.Props or {}) do
+        offer('prop:' .. prop.id, ('Поставить — %s'):format(prop.label), 32)
+    end
+    offer('duty', 'Снять со службы', 40)
+end)
+
+AddEventHandler('ls_interact:run', function(id)
+    if type(id) ~= 'string' or id:sub(1, 12) ~= 'ls_police:w:' then return end
+    local action = id:sub(13)
+
+    local propId = action:match('^prop:(.+)$')
+    if propId then placeProp(propId) return end
+
+    if action == 'propRemove' then removeNearestProp() return end
+    if action == 'duty' then TriggerServerEvent('ls_police:toggleDuty') return end
+
+    if action == 'impound' then
+        local ped = PlayerPedId()
+        local vehicle = GetVehiclePedIsIn(ped, false)
+        if vehicle == 0 then
+            vehicle = GetClosestVehicle(GetEntityCoords(ped), 6.0, 0, 71)
+        end
+        if vehicle == 0 or not DoesEntityExist(vehicle) then
+            notify(Locale.impoundNotFound)
+            return
+        end
+        local plate = GetVehicleNumberPlateText(vehicle)
+        TriggerServerEvent('ls_police:impound', plate and plate:gsub('%s+$', '') or '', '')
+        SetEntityAsMissionEntity(vehicle, true, true)
+        DeleteVehicle(vehicle)
+        return
+    end
+
+    -- Всё остальное - про конкретного человека.
+    if not workTarget then return end
+
+    if action == 'cuffHard' or action == 'cuffSoft' then
+        -- Та же анимация, что и из меню МВД: надеть наручники мгновенно
+        -- нельзя, иначе это делается на бегу.
+        if loadAnim(ARREST_DICT) then
+            TaskPlayAnim(PlayerPedId(), ARREST_DICT, 'cop_garage_arrest', 8.0, -8.0,
+                Config.Cuffs.applySeconds * 1000, 49, 0.0, false, false, false)
+        end
+        Wait(Config.Cuffs.applySeconds * 1000)
+        TriggerServerEvent('ls_police:cuff', workTarget,
+            action == 'cuffSoft' and 'soft' or 'hard')
+    elseif action == 'uncuff' then
+        TriggerServerEvent('ls_police:uncuff', workTarget)
+    elseif action == 'escort' then
+        TriggerServerEvent('ls_police:escort', workTarget)
+    elseif action == 'carIn' then
+        TriggerServerEvent('ls_police:vehicleMove', workTarget, 'in')
+    elseif action == 'carOut' then
+        TriggerServerEvent('ls_police:vehicleMove', workTarget, 'out')
+    elseif action == 'kneelDown' then
+        TriggerServerEvent('ls_police:kneel', workTarget, true)
+    elseif action == 'kneelUp' then
+        TriggerServerEvent('ls_police:kneel', workTarget, false)
+    elseif action == 'search' then
+        TriggerServerEvent('ls_police:search', workTarget)
+    elseif action == 'docs' then
+        TriggerServerEvent('ls_police:checkDocs', workTarget)
+    elseif action == 'taser' then
+        TriggerServerEvent('ls_police:taser', workTarget)
+    end
+end)

@@ -3,4 +3,5 @@ InteractLocale = {
     title  = 'Взаимодействие',
     footer = '~b~W/S~w~ — выбор, ~b~Enter~w~ — сделать, ~b~Esc~w~ — закрыть',
     empty  = 'Здесь ничего нет',
+    footerSub = '~b~W/S~w~ — выбор, ~b~Enter~w~ — сделать, ~b~Esc~w~ — назад',
 }

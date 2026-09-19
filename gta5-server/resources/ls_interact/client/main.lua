@@ -18,6 +18,17 @@
 --         })
 --     end)
 --
+-- Действий много - убери их в свой раздел, чтобы не топить корень:
+--
+--     TriggerEvent('ls_interact:offer', {
+--         id = 'мой_ресурс:раздел', label = 'Работа', submenu = 'work', order = 4,
+--     })
+--     TriggerEvent('ls_interact:offer', {
+--         id = 'мой_ресурс:обыскать', label = 'Обыскать', group = 'work',
+--     })
+--
+-- Esc внутри раздела возвращает в корень, а не закрывает меню.
+--
 --     AddEventHandler('ls_interact:run', function(id)
 --         if id:sub(1, 11) ~= 'мой_ресурс:' then return end
 --         ...
@@ -26,21 +37,42 @@
 -- TriggerEvent на клиенте синхронный, поэтому после опроса список уже
 -- собран - ждать ничего не надо.
 
-local offers = {}
+local offers = {}       -- всё, что предложили в этот заход
+local shown = {}        -- то, что видно на текущей странице
+local page = nil        -- nil - корень, иначе имя раздела
+local pageTitle = nil
 local open = false
 local pick = 1
 local scroll = 0
 local available = 0     -- сколько действий рядом, для подсказки
 
-local function collect()
-    offers = {}
-    TriggerEvent('ls_interact:collect')
-    table.sort(offers, function(a, b)
+local function sortOffers(list)
+    table.sort(list, function(a, b)
         local oa, ob = a.order or 50, b.order or 50
         if oa ~= ob then return oa < ob end
         return (a.label or '') < (b.label or '')
     end)
-    return offers
+    return list
+end
+
+-- Корень показывает всё без раздела; раздел - только своё.
+local function build()
+    shown = {}
+    for _, offer in ipairs(offers) do
+        if (offer.group or nil) == page then shown[#shown + 1] = offer end
+    end
+    sortOffers(shown)
+    pick = 1
+    scroll = 0
+    return shown
+end
+
+local function collect()
+    offers = {}
+    TriggerEvent('ls_interact:collect')
+    sortOffers(offers)
+    page, pageTitle = nil, nil
+    return build()
 end
 
 AddEventHandler('ls_interact:offer', function(offer)
@@ -63,7 +95,7 @@ local function text(content, x, y, scale, centred, colour)
 end
 
 local function draw()
-    local total = #offers
+    local total = #shown
     local rows = math.min(total, Config.Rows)
     local top = 0.32
     local lineHeight = 0.035
@@ -71,11 +103,11 @@ local function draw()
     DrawRect(0.5, top + rows * lineHeight / 2 - 0.012,
         0.32, rows * lineHeight + 0.085, 0, 0, 0, 190)
 
-    text(InteractLocale.title, 0.5, top - 0.05, 0.42, true)
+    text(pageTitle or InteractLocale.title, 0.5, top - 0.05, 0.42, true)
 
     for row = 1, rows do
         local index = row + scroll
-        local offer = offers[index]
+        local offer = shown[index]
         if offer then
             local picked = index == pick
             text((picked and '> ' or '   ') .. offer.label,
@@ -86,9 +118,11 @@ local function draw()
 
     if total > rows then
         text(('%d / %d'):format(pick, total), 0.5, top + rows * lineHeight + 0.004, 0.28, true)
-        text(InteractLocale.footer, 0.5, top + rows * lineHeight + 0.028, 0.28, true)
+        text(page and InteractLocale.footerSub or InteractLocale.footer,
+            0.5, top + rows * lineHeight + 0.028, 0.28, true)
     else
-        text(InteractLocale.footer, 0.5, top + rows * lineHeight + 0.008, 0.28, true)
+        text(page and InteractLocale.footerSub or InteractLocale.footer,
+            0.5, top + rows * lineHeight + 0.008, 0.28, true)
     end
 end
 
@@ -103,6 +137,8 @@ end
 local function close()
     open = false
     offers = {}
+    shown = {}
+    page, pageTitle = nil, nil
 end
 
 local function openMenu()
@@ -127,17 +163,30 @@ CreateThread(function()
             draw()
 
             if IsControlJustReleased(0, Config.Up) then
-                pick = pick > 1 and pick - 1 or #offers
+                pick = pick > 1 and pick - 1 or #shown
                 keepInView()
             elseif IsControlJustReleased(0, Config.Down) then
-                pick = pick < #offers and pick + 1 or 1
+                pick = pick < #shown and pick + 1 or 1
                 keepInView()
             elseif IsControlJustReleased(0, Config.Enter) then
-                local offer = offers[pick]
-                close()
-                if offer then TriggerEvent('ls_interact:run', offer.id) end
+                local offer = shown[pick]
+                if offer and offer.submenu then
+                    -- Внутрь раздела, список уже собран - опрашивать заново
+                    -- нечего.
+                    page, pageTitle = offer.submenu, offer.label
+                    build()
+                elseif offer then
+                    close()
+                    TriggerEvent('ls_interact:run', offer.id)
+                end
             elseif IsControlJustReleased(0, Config.Back) then
-                close()
+                -- Из раздела - назад в корень, а не сразу из меню.
+                if page then
+                    page, pageTitle = nil, nil
+                    build()
+                else
+                    close()
+                end
             end
 
             -- Меню не должно висеть, когда игрок умер или уехал.
@@ -163,7 +212,7 @@ CreateThread(function()
         Wait(500)
         if Config.ShowHint and not open and not IsEntityDead(PlayerPedId()) then
             available = #collect()
-            offers = {}
+            offers, shown = {}, {}
         else
             available = 0
         end
