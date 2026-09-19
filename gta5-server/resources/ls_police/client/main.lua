@@ -651,13 +651,31 @@ RegisterNetEvent('ls_police:wantedList', function(rows)
     SendNUIMessage({ action = 'wantedList', rows = rows })
 end)
 
+-- A sheet without the cursor is a trap: it draws over the screen with nothing
+-- to click. Whenever one is shown, make sure focus comes with it.
+local function ensureFocus()
+    if not uiOpen then
+        uiOpen = true
+        SetNuiFocus(true, true)
+    end
+end
+
 RegisterNetEvent('ls_police:duty', function(list)
+    ensureFocus()
     SendNUIMessage({ action = 'dutyList', list = list })
 end)
 
 RegisterNetEvent('ls_police:impoundList', function(rows)
+    ensureFocus()
     SendNUIMessage({ action = 'impoundList', rows = rows })
 end)
+
+-- Last resort if any menu ever leaves the cursor stuck.
+RegisterCommand('unstuck', function()
+    closeMenu()
+    SetNuiFocus(false, false)
+    notify('~g~Интерфейс сброшен')
+end, false)
 
 -- --- boot -------------------------------------------------------------------
 

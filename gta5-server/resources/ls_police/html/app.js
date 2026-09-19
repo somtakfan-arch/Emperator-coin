@@ -265,10 +265,15 @@
     overlay.classList.remove('hidden');
   }
 
-  $('sheet-close').addEventListener('click', () => {
+  function closeSheet() {
     overlay.classList.add('hidden');
     searchTarget = null;
-  });
+    // With the main panel gone too there is nothing left to click, so hand the
+    // cursor back rather than leaving the player stuck.
+    if (panel.classList.contains('hidden')) post('close');
+  }
+
+  $('sheet-close').addEventListener('click', closeSheet);
 
   function renderSearch(result) {
     searchTarget = result.target;
@@ -370,7 +375,7 @@
 
   document.addEventListener('keydown', (ev) => {
     if (ev.key !== 'Escape') return;
-    if (!overlay.classList.contains('hidden')) $('sheet-close').click();
+    if (!overlay.classList.contains('hidden')) closeSheet();
     else post('close');
   });
 

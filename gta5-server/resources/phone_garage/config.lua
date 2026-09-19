@@ -40,33 +40,71 @@ Config.RestrictParkHere = false
 -- setup.ps1 / setup.sh wrote into spawn-names.txt.
 -- ---------------------------------------------------------------------------
 Config.Catalog = {
-    -- Гиперкары
-    { model = 'adder',     label = 'Truffade Adder',        class = 'Гиперкары', price = 1000000 },
-    { model = 'nero2',     label = 'Truffade Nero Custom',  class = 'Гиперкары', price = 1440000 },
-    { model = 'thrax',     label = 'Truffade Thrax',        class = 'Гиперкары', price = 2325000 },
-    { model = 'deveste',   label = 'Principe Deveste Eight',class = 'Гиперкары', price = 1795000 },
-    { model = 'krieger',   label = 'Benefactor Krieger',    class = 'Гиперкары', price = 2875000 },
-    { model = 'emerus',    label = 'Progen Emerus',         class = 'Гиперкары', price = 2750000 },
-    { model = 'zorrusso',  label = 'Pegassi Zorrusso',      class = 'Гиперкары', price = 1925000 },
-    { model = 'entity2',   label = 'Överflöd Entity XXR',   class = 'Гиперкары', price = 2305000 },
+    -- ===== Самые быстрые =====
+    -- Разгон и максималка выше всего в игре. Цены как в GTA Online.
+    { model = 'pariah',    label = 'Ocelot Pariah',          class = 'Самые быстрые', price = 1420000 },
+    { model = 'italirsx',  label = 'Grotti Itali RSX',       class = 'Самые быстрые', price = 3465000 },
+    { model = 'zeno',      label = 'Överflöd Zeno',          class = 'Самые быстрые', price = 4295000 },
+    { model = 'virtue',    label = 'Ocelot Virtue',          class = 'Самые быстрые', price = 3230000 },
+    { model = 'champion',  label = 'Dewbauchee Champion',    class = 'Самые быстрые', price = 2995000 },
+    { model = 'corsita',   label = 'Lampadati Corsita',      class = 'Самые быстрые', price = 1795000 },
+    { model = 'tigon',     label = 'Lampadati Tigon',        class = 'Самые быстрые', price = 2310000 },
+    { model = 'furia',     label = 'Grotti Furia',           class = 'Самые быстрые', price = 2740000 },
+    { model = 'pfister811', label = 'Pfister 811',           class = 'Самые быстрые', price = 1135000 },
+    { model = 'banshee2',  label = 'Bravado Banshee 900R',   class = 'Самые быстрые', price = 565000 },
+    { model = 'cyclone',   label = 'Coil Cyclone',           class = 'Самые быстрые', price = 1890000 },
+    { model = 'tempesta',  label = 'Pegassi Tempesta',       class = 'Самые быстрые', price = 1329000 },
+    { model = 'sheava',    label = 'Emperor ETR1',           class = 'Самые быстрые', price = 1995000 },
+    { model = 'prototipo', label = 'Grotti X80 Proto',       class = 'Самые быстрые', price = 2700000 },
+    { model = 'tyrus',     label = 'Progen Tyrus',           class = 'Самые быстрые', price = 2550000 },
+    { model = 'fmj',       label = 'Vapid FMJ',              class = 'Самые быстрые', price = 1750000 },
+    { model = 'reaper',    label = 'Pegassi Reaper',         class = 'Самые быстрые', price = 1595000 },
+    { model = 'taipan',    label = 'Cheval Taipan',          class = 'Самые быстрые', price = 1980000 },
+    { model = 'visione',   label = 'Grotti Visione',         class = 'Самые быстрые', price = 2385000 },
+    { model = 'penetrator', label = 'Ocelot Penetrator',     class = 'Самые быстрые', price = 880000 },
+    { model = 'infernus',  label = 'Pegassi Infernus',       class = 'Самые быстрые', price = 440000 },
+    { model = 'turismor',  label = 'Grotti Turismo R',       class = 'Самые быстрые', price = 705000 },
+    { model = 'entityxf',  label = 'Överflöd Entity XF',     class = 'Самые быстрые', price = 795000 },
+    { model = 'cheetah',   label = 'Grotti Cheetah',         class = 'Самые быстрые', price = 650000 },
+    { model = 'bullet',    label = 'Vapid Bullet',           class = 'Самые быстрые', price = 155000 },
+    { model = 'vacca',     label = 'Pegassi Vacca',          class = 'Самые быстрые', price = 240000 },
 
-    -- Суперкары
-    { model = 'zentorno',  label = 'Pegassi Zentorno',      class = 'Суперкары', price = 725000 },
-    { model = 't20',       label = 'Progen T20',            class = 'Суперкары', price = 2200000 },
-    { model = 'italigtb2', label = 'Progen Itali GTB Custom',class = 'Суперкары',price = 1189000 },
-    { model = 'osiris',    label = 'Pegassi Osiris',        class = 'Суперкары', price = 1950000 },
+    -- ===== Гиперкары =====
+    { model = 'adder',     label = 'Truffade Adder',         class = 'Гиперкары', price = 1000000 },
+    { model = 'nero',      label = 'Truffade Nero',          class = 'Гиперкары', price = 1440000 },
+    { model = 'nero2',     label = 'Truffade Nero Custom',   class = 'Гиперкары', price = 1605000 },
+    { model = 'thrax',     label = 'Truffade Thrax',         class = 'Гиперкары', price = 2325000 },
+    { model = 'deveste',   label = 'Principe Deveste Eight', class = 'Гиперкары', price = 1795000 },
+    { model = 'krieger',   label = 'Benefactor Krieger',     class = 'Гиперкары', price = 2875000 },
+    { model = 'emerus',    label = 'Progen Emerus',          class = 'Гиперкары', price = 2750000 },
+    { model = 'zorrusso',  label = 'Pegassi Zorrusso',       class = 'Гиперкары', price = 1925000 },
+    { model = 'entity2',   label = 'Överflöd Entity XXR',    class = 'Гиперкары', price = 2305000 },
+    { model = 'entity3',   label = 'Överflöd Entity MT',     class = 'Гиперкары', price = 2695000 },
+    { model = 'tyrant',    label = 'Överflöd Tyrant',        class = 'Гиперкары', price = 2515000 },
+    { model = 'vagner',    label = 'Dewbauchee Vagner',      class = 'Гиперкары', price = 1535000 },
+    { model = 's80',       label = 'Annis S80RR',            class = 'Гиперкары', price = 2575000 },
+    { model = 'torero2',   label = 'Pegassi Torero XO',      class = 'Гиперкары', price = 2280000 },
+    { model = 'ignus',     label = 'Pegassi Ignus',          class = 'Гиперкары', price = 2445000 },
 
-    -- Спорт
-    { model = 'elegy2',    label = 'Annis Elegy RH8',       class = 'Спорт',     price = 95000 },
-    { model = 'sultan',    label = 'Karin Sultan',          class = 'Спорт',     price = 12000 },
-    { model = 'comet2',    label = 'Pfister Comet',         class = 'Спорт',     price = 100000 },
-    { model = 'dominator', label = 'Vapid Dominator',       class = 'Спорт',     price = 35000 },
+    -- ===== Суперкары =====
+    { model = 'zentorno',  label = 'Pegassi Zentorno',       class = 'Суперкары', price = 725000 },
+    { model = 't20',       label = 'Progen T20',             class = 'Суперкары', price = 2200000 },
+    { model = 'italigtb2', label = 'Progen Itali GTB Custom',class = 'Суперкары', price = 1189000 },
+    { model = 'osiris',    label = 'Pegassi Osiris',         class = 'Суперкары', price = 1950000 },
 
-    -- Внедорожники и прочее
-    { model = 'kuruma2',   label = 'Karin Kuruma (броня)',  class = 'Разное',    price = 698000 },
-    { model = 'sandking',  label = 'Vapid Sandking XL',     class = 'Разное',    price = 45000 },
-    { model = 'sanchez',   label = 'Maibatsu Sanchez',      class = 'Разное',    price = 8000 },
-    { model = 'vigilante', label = 'Vigilante',             class = 'Разное',    price = 3750000 },
+    -- ===== Спорт =====
+    { model = 'elegy2',    label = 'Annis Elegy RH8',        class = 'Спорт',     price = 95000 },
+    { model = 'sultan',    label = 'Karin Sultan',           class = 'Спорт',     price = 12000 },
+    { model = 'comet2',    label = 'Pfister Comet',          class = 'Спорт',     price = 100000 },
+    { model = 'dominator', label = 'Vapid Dominator',        class = 'Спорт',     price = 35000 },
+
+    -- ===== Разное =====
+    { model = 'kuruma2',   label = 'Karin Kuruma (броня)',   class = 'Разное',    price = 698000 },
+    { model = 'sandking',  label = 'Vapid Sandking XL',      class = 'Разное',    price = 45000 },
+    { model = 'sanchez',   label = 'Maibatsu Sanchez',       class = 'Разное',    price = 8000 },
+    { model = 'vigilante', label = 'Vigilante',              class = 'Разное',    price = 3750000 },
+    { model = 'scramjet',  label = 'Declasse Scramjet',      class = 'Разное',    price = 4628000 },
+    { model = 'voltic2',   label = 'Coil Rocket Voltic',     class = 'Разное',    price = 3830000 },
 }
 
 -- ---------------------------------------------------------------------------
