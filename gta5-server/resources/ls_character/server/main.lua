@@ -8,6 +8,7 @@ local characters = {}   -- [identifier] = { gender, first, last, static, appeara
 local nextStatic = Config.FirstStatic
 local roster = {}       -- [serverId] = { name, static, masked }
 local masked = {}       -- [serverId] = label of the mask being worn
+local lastReport = {}   -- [serverId] = момент последнего принятого пакета позиции
 local dirty = false
 
 local function readJson(file, fallback)
@@ -74,21 +75,61 @@ end)
 
 -- --- validation ------------------------------------------------------------
 
--- Capitalises the first letter and lowercases the rest, so "иВАН" reads "Иван".
+-- Lua ничего не знает про юникод: ":upper()" кириллицу не трогает, а
+-- символьные классы в шаблонах работают по байтам. Поэтому и проверка
+-- букв, и регистр здесь делаются по кодпоинтам.
+
+local function isNameChar(code)
+    for _, range in ipairs(Config.NameRanges) do
+        if code >= range[1] and code <= range[2] then return true end
+    end
+    return false
+end
+
+local function upperCode(code)
+    if code >= 0x0061 and code <= 0x007A then return code - 0x20 end   -- a-z
+    if code >= 0x0430 and code <= 0x044F then return code - 0x20 end   -- а-я
+    if code == 0x0451 then return 0x0401 end                           -- ё
+    return code
+end
+
+local function lowerCode(code)
+    if code >= 0x0041 and code <= 0x005A then return code + 0x20 end
+    if code >= 0x0410 and code <= 0x042F then return code + 0x20 end
+    if code == 0x0401 then return 0x0451 end
+    return code
+end
+
+-- Приводит "иВАН" к "Иван", "петров-водкин" к "Петров-Водкин".
+-- Возвращает nil, если имя не годится.
 local function tidyName(name)
     if type(name) ~= 'string' then return nil end
     name = name:gsub('^%s+', ''):gsub('%s+$', '')
 
-    local length = utf8 and utf8.len(name) or #name
-    if not length or length < Config.NameMin or length > Config.NameMax then return nil end
-    if not name:match(Config.NamePattern) then return nil end
+    -- utf8.codes падает на битой последовательности, а клиент может
+    -- прислать что угодно.
+    local codes = {}
+    local ok = pcall(function()
+        for _, code in utf8.codes(name) do codes[#codes + 1] = code end
+    end)
+    if not ok then return nil end
 
-    if utf8 then
-        local first = name:sub(1, utf8.offset(name, 2) - 1)
-        local rest = name:sub(utf8.offset(name, 2))
-        return first:upper() .. rest:lower()
+    if #codes < Config.NameMin or #codes > Config.NameMax then return nil end
+
+    local HYPHEN = 0x002D
+    if codes[1] == HYPHEN or codes[#codes] == HYPHEN then return nil end
+
+    local out = {}
+    local startOfWord = true
+    for index, code in ipairs(codes) do
+        if not isNameChar(code) then return nil end
+        if code == HYPHEN and startOfWord then return nil end   -- "Пе--тров"
+
+        out[index] = utf8.char(startOfWord and upperCode(code) or lowerCode(code))
+        startOfWord = (code == HYPHEN)
     end
-    return name:sub(1, 1):upper() .. name:sub(2):lower()
+
+    return table.concat(out)
 end
 
 -- Appearance is cosmetic, so it is shape-checked and stored rather than
@@ -153,8 +194,64 @@ end)
 AddEventHandler('playerDropped', function()
     masked[tostring(source)] = nil
     roster[tostring(source)] = nil
+    lastReport[tostring(source)] = nil
     pushRoster()
     if dirty then save() end
+end)
+
+-- --- last known position ---------------------------------------------------
+-- Спавн на точке выхода. Позиция едет внутри самого характера, поэтому
+-- сохраняется и грузится тем же кодом, что и всё остальное.
+
+local function tidyPosition(raw)
+    if type(raw) ~= 'table' then return nil end
+
+    local x, y, z = tonumber(raw.x), tonumber(raw.y), tonumber(raw.z)
+    if not x or not y or not z then return nil end
+
+    -- NaN не равен сам себе. Один такой в файле - и персонаж больше никогда
+    -- нормально не заспавнится, так что ловим здесь.
+    if x ~= x or y ~= y or z ~= z then return nil end
+
+    -- Карта GTA V с большим запасом. Всё, что дальше - мусор или чит.
+    if math.abs(x) > 10000.0 or math.abs(y) > 10000.0 then return nil end
+    if z < -1000.0 or z > 3000.0 then return nil end
+
+    local h = tonumber(raw.h) or 0.0
+    if h ~= h then h = 0.0 end
+
+    return { x = x, y = y, z = z, h = h % 360.0 }
+end
+
+RegisterNetEvent('ls_character:position', function(raw)
+    local src = source
+    if not Config.RememberPosition then return end
+
+    -- Пол-интервала форы на пинг, всё что чаще - выбрасываем: иначе клиент
+    -- с читом может слать по пакету на тик.
+    local key = tostring(src)
+    local now = GetGameTimer()
+    if lastReport[key] and now - lastReport[key] < Config.PositionInterval * 0.5 then
+        return
+    end
+    lastReport[key] = now
+
+    local char = characters[identifierOf(src)]
+    if not char then return end
+
+    local pos = tidyPosition(raw)
+    if not pos then return end
+
+    char.position = pos
+    dirty = true
+end)
+
+-- Файл пишется по таймеру, а не на каждый пакет.
+CreateThread(function()
+    while true do
+        Wait(Config.PositionFlush)
+        if dirty then save() end
+    end
 end)
 
 -- --- client requests -------------------------------------------------------
@@ -303,4 +400,29 @@ RegisterCommand('setname', function(src, args)
     save()
     enterRoster(target, char)
     TriggerClientEvent('ls_character:load', target, char)
+end, false)
+
+-- Точка выхода может оказаться внутри стены или под картой - тогда игрок
+-- спавнится и сразу проваливается, и сам себя оттуда не вытащит.
+RegisterCommand('clearspawn', function(src, args)
+    if src ~= 0 and not IsPlayerAceAllowed(src, 'garage.admin') then return end
+
+    local target = tonumber(args[1])
+    if not target or GetPlayerName(target) == nil then
+        print('usage: clearspawn <player id>')
+        return
+    end
+
+    local char = characters[identifierOf(target)]
+    if not char then
+        print('[ls_character] that player has no character yet')
+        return
+    end
+
+    char.position = nil
+    dirty = true
+    save()
+    TriggerClientEvent('ls_character:notify', target,
+        '~y~Точка выхода сброшена — следующий заход со спавна')
+    print(('[ls_character] spawn point cleared for %s'):format(GetPlayerName(target)))
 end, false)

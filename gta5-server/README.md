@@ -74,6 +74,25 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force
 
 ---
 
+## Спавн на точке выхода
+
+Игрок заходит там, где вышел. Позиция лежит в
+`resources/ls_character/characters.json` рядом с самим персонажем, так что
+переживает и релог, и рестарт сервера.
+
+Координаты уезжают на сервер раз в 10 секунд (`Config.PositionInterval`),
+файл пишется раз в минуту (`Config.PositionFlush`). Мёртвых не сохраняем —
+их разбирает `ls_medical` и уводит в больницу.
+
+Если точка выхода оказалась в стене или под картой:
+
+```
+/clearspawn <id игрока>
+```
+
+Следующий заход будет с обычного спавна. Выключить всё целиком —
+`Config.RememberPosition = false`.
+
 ## Добавить ещё машин
 
 1. Кидаешь папку пака в `C:\FXServer\server-data\resources\[cars]\`

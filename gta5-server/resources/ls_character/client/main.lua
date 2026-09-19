@@ -210,16 +210,77 @@ RegisterNUICallback('submit', function(data, cb)
     cb('ok')
 end)
 
+-- --- last known position ---------------------------------------------------
+
+-- Спавн на точке выхода. Просто переставить педа мало: коллизия вокруг
+-- новой точки ещё не подгружена, и игрок проваливается сквозь карту. Ждём
+-- её под чёрным экраном и только потом отпускаем.
+local function restorePosition(pos)
+    local ped = PlayerPedId()
+
+    DoScreenFadeOut(0)
+    FreezeEntityPosition(ped, true)
+    SetEntityCoordsNoOffset(ped, pos.x, pos.y, pos.z, false, false, false)
+    SetEntityHeading(ped, tonumber(pos.h) or 0.0)
+
+    -- Потолок на случай, если коллизия так и не приедет: лучше отпустить
+    -- игрока в воздухе, чем оставить его навсегда в чёрном экране.
+    local deadline = GetGameTimer() + 15000
+    while GetGameTimer() < deadline do
+        RequestCollisionAtCoord(pos.x, pos.y, pos.z)
+        if HasCollisionLoadedAroundEntity(ped) then break end
+        Wait(50)
+    end
+
+    FreezeEntityPosition(ped, false)
+    DoScreenFadeIn(500)
+end
+
+-- Координаты уезжают на сервер по таймеру. Этот же интервал - максимум,
+-- сколько игрок откатится назад при вылете.
+CreateThread(function()
+    local last = vector3(0.0, 0.0, 0.0)
+    while true do
+        Wait(Config.PositionInterval)
+
+        if Config.RememberPosition and character and not creating then
+            local ped = PlayerPedId()
+            -- Труп не сохраняем: мёртвых разбирает ls_medical, и заходить
+            -- обратно на место собственной смерти игрок не должен.
+            if not IsEntityDead(ped) then
+                local coords = GetEntityCoords(ped)
+                if #(coords - last) >= Config.PositionMinMove then
+                    last = coords
+                    TriggerServerEvent('ls_character:position', {
+                        x = coords.x, y = coords.y, z = coords.z,
+                        h = GetEntityHeading(ped),
+                    })
+                end
+            end
+        end
+    end
+end)
+
 -- --- server events ---------------------------------------------------------
 
 RegisterNetEvent('ls_character:create', function()
     if not creating then openCreator() end
 end)
 
+local restored = false
+
 RegisterNetEvent('ls_character:load', function(char)
     character = char
     if creating then closeCreator() end
     applyCharacter(char)
+
+    -- Только на первой загрузке за сессию. playerSpawned прилетает и после
+    -- смерти, а туда лезть нельзя: больницу ставит ls_medical.
+    if Config.RememberPosition and char.position and not restored then
+        restored = true
+        restorePosition(char.position)
+    end
+
     notify(('~g~%s %s~w~ — статик ~b~#%d'):format(char.first, char.last, char.static))
 end)
 
