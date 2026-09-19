@@ -3,6 +3,7 @@
 local uiOpen = false
 local shopBlips = {}
 local current = nil    -- { vehicle, plate, original, draft }
+local pending = nil    -- { plate, vehicle } waiting for its saved build
 
 local function notify(text)
     SetNotificationTextEntry('STRING')
@@ -314,26 +315,41 @@ RegisterNetEvent('ls_tuning:rejected', function()
 end)
 
 RegisterNetEvent('ls_tuning:build', function(plate, build)
-    if not build then return end
-    -- The car the garage just put on the ground carries this plate.
-    local ped = PlayerPedId()
-    local vehicle = GetVehiclePedIsIn(ped, false)
-    if vehicle == 0 then
-        vehicle = GetClosestVehicle(GetEntityCoords(ped), 12.0, 0, 71)
+    if not build then
+        pending = nil
+        return
     end
-    if vehicle == 0 or not DoesEntityExist(vehicle) then return end
 
-    local onPlate = GetVehicleNumberPlateText(vehicle)
-    if onPlate and onPlate:gsub('%s+$', '') == plate then
-        applyBuild(vehicle, build)
+    -- Prefer the exact vehicle the garage just spawned; it may be parked well
+    -- out of sight, so searching around the player would miss it.
+    local vehicle
+    if pending and pending.plate == plate and DoesEntityExist(pending.vehicle) then
+        vehicle = pending.vehicle
+    else
+        local ped = PlayerPedId()
+        vehicle = GetVehiclePedIsIn(ped, false)
+        if vehicle == 0 then
+            vehicle = GetClosestVehicle(GetEntityCoords(ped), 12.0, 0, 71)
+        end
+        if vehicle ~= 0 and DoesEntityExist(vehicle) then
+            local onPlate = GetVehicleNumberPlateText(vehicle)
+            if not onPlate or onPlate:gsub('%s+$', '') ~= plate then
+                vehicle = 0
+            end
+        end
     end
+
+    pending = nil
+    if not vehicle or vehicle == 0 or not DoesEntityExist(vehicle) then return end
+
+    applyBuild(vehicle, build)
 end)
 
 -- The garage says when it has spawned something, so the saved build goes on.
-AddEventHandler('phone_garage:spawned', function(plate)
-    if type(plate) == 'string' and plate ~= '' then
-        TriggerServerEvent('ls_tuning:request', plate)
-    end
+AddEventHandler('phone_garage:spawned', function(plate, vehicle)
+    if type(plate) ~= 'string' or plate == '' then return end
+    pending = { plate = plate, vehicle = vehicle }
+    TriggerServerEvent('ls_tuning:request', plate)
 end)
 
 AddEventHandler('onResourceStop', function(name)

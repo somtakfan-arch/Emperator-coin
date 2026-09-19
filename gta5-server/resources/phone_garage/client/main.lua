@@ -206,8 +206,10 @@ local function deliver(car)
 
     activeVehicle, activePlate = veh, car.plate
 
-    -- ls_tuning listens for this and puts the saved build back on.
-    TriggerEvent('phone_garage:spawned', car.plate)
+    -- ls_tuning listens for this and puts the saved build back on. The car is
+    -- delivered to a parking spot that can be far away, so hand over the entity
+    -- itself rather than leaving it to search near the player.
+    TriggerEvent('phone_garage:spawned', car.plate, veh)
 
     -- Drop a waypoint so you can actually find it.
     SetNewWaypoint(spot.x, spot.y)
