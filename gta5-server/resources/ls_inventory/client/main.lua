@@ -92,9 +92,58 @@ RegisterNetEvent('ls_inventory:equip', function(item, ammo)
     notify('~g~Экипировано')
 end)
 
+-- --- видимый бронежилет ------------------------------------------------------
+
+local vestOn = false
+
+local function genderOf()
+    local ok, char = pcall(function() return exports.ls_character:getCharacter() end)
+    if ok and type(char) == 'table' and char.gender == 'female' then return 'female' end
+    return 'male'
+end
+
+-- Ближайший заданный уровень: настроены 50 и 100, а приходить может что угодно.
+local function vestFor(value)
+    local table_ = Config.ArmourLook and Config.ArmourLook[genderOf()]
+    if not table_ then return nil end
+
+    local best, bestGap
+    for level, look in pairs(table_) do
+        local gap = math.abs(level - value)
+        if not bestGap or gap < bestGap then best, bestGap = look, gap end
+    end
+    return best
+end
+
+local function takeVestOff()
+    if not vestOn then return end
+    vestOn = false
+    -- Возвращаем сохранённый в гардеробе комплект целиком: снимать слот 9
+    -- вручную нельзя, под жилетом мог быть свой.
+    TriggerEvent('ls_character:applied')
+end
+
 RegisterNetEvent('ls_inventory:armour', function(value)
-    SetPedArmour(PlayerPedId(), math.min(100, math.floor(value or 50)))
-    notify(('~g~Броня: %d%%'):format(math.floor(value or 50)))
+    value = math.min(100, math.floor(value or 50))
+    SetPedArmour(PlayerPedId(), value)
+    notify(('~g~Броня: %d%%'):format(value))
+
+    if not Config.ShowArmour then return end
+    local look = vestFor(value)
+    if look then
+        SetPedComponentVariation(PlayerPedId(), 9, look.d, look.t, 0)
+        vestOn = true
+    end
+end)
+
+-- Броню отстрелили или игрок возродился - жилет должен исчезнуть сам.
+CreateThread(function()
+    while true do
+        Wait(1500)
+        if vestOn and GetPedArmour(PlayerPedId()) <= 0 then
+            takeVestOff()
+        end
+    end
 end)
 
 RegisterNetEvent('ls_inventory:heal', function(amount)

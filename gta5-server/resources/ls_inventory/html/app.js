@@ -60,8 +60,13 @@
 
       if (entry) {
         el.classList.remove('empty');
+        // Иконка рисуется инлайновым SVG; если icons.js почему-то не
+        // подключился, ячейка остаётся рабочей, просто без картинки.
+        const art = window.ItemIcons
+          ? window.ItemIcons.iconFor(entry.item, entry.kind) : '';
         el.innerHTML = `
           <span class="slot-kind kind-${entry.kind || 'misc'}"></span>
+          <span class="slot-art kind-${entry.kind || 'misc'}">${art}</span>
           <span class="slot-name"></span>
           ${entry.count > 1 ? `<span class="slot-count">${entry.count}</span>` : ''}`;
         el.querySelector('.slot-name').textContent = entry.label || entry.item;
@@ -113,7 +118,10 @@
       return;
     }
 
-    detail.innerHTML = '<b></b> — ' + (KIND_LABEL[entry.kind] || 'Разное')
+    const detailArt = window.ItemIcons
+      ? window.ItemIcons.iconFor(entry.item, entry.kind) : '';
+    detail.innerHTML = `<span class="detail-art kind-${entry.kind || 'misc'}">${detailArt}</span>`
+      + '<b></b> — ' + (KIND_LABEL[entry.kind] || 'Разное')
       + (entry.count > 1 ? ` · ${entry.count} шт.` : '');
     detail.querySelector('b').textContent = entry.label || entry.item;
 

@@ -120,10 +120,49 @@ body {
   flex: 0 0 auto;
 }
 
-.kind-weapon { background: #4a2630; }
-.kind-armour { background: #1f3f57; }
-.kind-food   { background: #27452f; }
-.kind-misc   { background: #333a4a; }
+/* Цветной квадратик больше не нужен: цвет перешёл на саму иконку. */
+.slot-kind { display: none; }
+
+.slot-art {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  margin-bottom: 3px;
+}
+
+.slot-art svg { width: 19px; height: 19px; }
+
+.detail-art {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  margin-right: 8px;
+}
+
+.detail-art svg { width: 17px; height: 17px; }
+
+/* Цвет плашки и обводки иконки. Обводка всегда светлее фона, иначе
+   на тёмном рисунок сливается. */
+.kind-weapon     { background: #4a2630; color: #ff9db0; }
+.kind-armour     { background: #1f3f57; color: #8ecbff; }
+.kind-food       { background: #27452f; color: #9fe0ac; }
+.kind-painkiller { background: #46315c; color: #cdaaf0; }
+.kind-defib      { background: #5c3a1f; color: #ffc48c; }
+.kind-mask       { background: #3d3348; color: #d3bde4; }
+.kind-drug       { background: #234a46; color: #8fdcd2; }
+.kind-part       { background: #3a4152; color: #b6c2da; }
+.kind-tool       { background: #4a412a; color: #ecd79a; }
+.kind-doc        { background: #2f3c4f; color: #a9c6e6; }
+.kind-misc       { background: #333a4a; color: #b8c0d0; }
+
 
 .divider {
   grid-column: 1 / -1;

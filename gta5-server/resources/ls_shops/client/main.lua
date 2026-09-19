@@ -209,6 +209,12 @@ end
 local function setSlot(ped, slot, look, drawable, texture)
     if slot.kind == 'component' then
         look.components[slot.id] = { d = drawable, t = texture }
+
+        -- Сменили верх - вернуть торс на всегда рисующееся значение,
+        -- иначе рукава от старой куртки оставляют персонажа без рук.
+        if Config.FixArms and slot.id == 11 then
+            look.components[3] = { d = Config.DefaultTorso, t = 0 }
+        end
     elseif slot.kind == 'prop' then
         look.props[slot.id] = { d = drawable, t = texture }
     elseif slot.kind == 'hairColour' then
@@ -536,3 +542,20 @@ AddEventHandler('onResourceStop', function(name)
         SetNuiFocus(false, false)
     end
 end)
+
+-- Аварийная кнопка: руки пропали, а какой торс их вернёт - непонятно.
+-- Перебирает слот 3 по кругу, каждый раз говоря номер, чтобы можно было
+-- остановиться на подходящем.
+RegisterCommand('fixarms', function()
+    local ped = PlayerPedId()
+    local count = GetNumberOfPedDrawableVariations(ped, 3)
+    if count <= 0 then return end
+
+    local next = (GetPedDrawableVariation(ped, 3) + 1) % count
+    SetPedComponentVariation(ped, 3, next, 0, 0)
+
+    SetNotificationTextEntry('STRING')
+    AddTextComponentSubstringPlayerName(
+        ('Торс и руки: ~b~%d~w~ из %d. Не подошло - введи ещё раз.'):format(next, count - 1))
+    DrawNotification(false, true)
+end, false)

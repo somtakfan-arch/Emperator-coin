@@ -113,10 +113,15 @@
       const affordable = listMoney >= item.price;
       const el = document.createElement('div');
       el.className = 'item';
+      const art = window.ItemIcons
+        ? window.ItemIcons.iconFor(item.item, item.kind) : '';
       el.innerHTML = `
-        <div>
-          <span class="item-name"></span>
-          ${item.note ? `<span class="item-note">${item.note}</span>` : ''}
+        <div class="item-left">
+          <span class="item-art kind-${item.kind || 'misc'}">${art}</span>
+          <span>
+            <span class="item-name"></span>
+            ${item.note ? `<span class="item-note">${item.note}</span>` : ''}
+          </span>
         </div>
         <div style="display:flex;align-items:center;gap:12px">
           <span class="item-price">${money(item.price)}</span>

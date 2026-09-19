@@ -229,6 +229,8 @@ RegisterNetEvent('ls_shops:requestStock', function(kind)
                 item = entry.item,
                 label = entry.label,
                 price = entry.price,
+                -- kind нужен витрине, чтобы выбрать иконку.
+                kind = entry.kind,
                 note = entry.addon and 'мод' or nil,
             }
         end

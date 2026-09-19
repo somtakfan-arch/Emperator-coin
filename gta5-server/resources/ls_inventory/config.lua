@@ -12,6 +12,27 @@ Config.Columns = 6
 -- Ammo handed over with a weapon when you use it.
 Config.WeaponAmmo = 250
 
+-- ---------------------------------------------------------------------------
+-- Видимый бронежилет.
+--
+-- Слот 9 у freemode-моделей - это бронежилет. Раньше броня была только
+-- числом в углу экрана: надел - и по тебе не видно, что на тебе жилет.
+-- Теперь виден, и слетает вместе с бронёй, когда её отстреляли в ноль.
+--
+-- d - номер модели жилета, t - расцветка. Подобрать другую можно прямо в
+-- гардеробе: слот "Жилет" крутит те же значения.
+Config.ShowArmour = true
+Config.ArmourLook = {
+    male = {
+        [50]  = { d = 1, t = 0 },
+        [100] = { d = 2, t = 0 },
+    },
+    female = {
+        [50]  = { d = 1, t = 0 },
+        [100] = { d = 2, t = 0 },
+    },
+}
+
 -- Add-on weapons found by the installer are read from this file and registered
 -- automatically, so a new gun pack does not need a config edit.
 Config.AddonWeaponFile = 'addon_weapons.json'
