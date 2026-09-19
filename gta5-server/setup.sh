@@ -63,6 +63,24 @@ ok()   { printf '\033[32m    OK  %s\033[0m\n' "$1"; }
 warn() { printf '\033[33m    !   %s\033[0m\n' "$1"; }
 die()  { printf '\033[31m    ERROR: %s\033[0m\n' "$1" >&2; exit 1; }
 
+# GitHub is reachable from some networks only in fits and starts, so every
+# download retries before giving up. Callers decide whether a failure is fatal;
+# nothing here may take the whole install down on its own.
+fetch() {
+    curl -fL --progress-bar \
+        --connect-timeout 20 --retry 5 --retry-delay 3 --retry-all-errors \
+        "$1" -o "$2"
+}
+
+# Same, for the small JSON API calls.
+fetch_json() {
+    curl -fsSL --connect-timeout 15 --max-time 60 \
+        --retry 4 --retry-delay 2 --retry-all-errors \
+        -H 'User-Agent: fivem-setup-script' "$1"
+}
+
+
+
 [[ $EUID -eq 0 ]] || die "run as root (sudo bash setup.sh)"
 
 # Packs ship in every layout imaginable. Flatten them so that every resource
@@ -298,25 +316,42 @@ if [[ -z "$artifact_url" ]]; then
     artifact_url="$FALLBACK_ARTIFACT"
 fi
 echo "    $artifact_url"
-curl -fL --progress-bar "$artifact_url" -o "$TMP_DIR/fx.tar.xz"
-tar -xJf "$TMP_DIR/fx.tar.xz" -C "$SERVER_DIR"
-[[ -f "$SERVER_DIR/run.sh" ]] || die "run.sh missing after extraction - check $SERVER_DIR"
+# A rerun after a dropped download should not pull 300 MB again.
+if [[ -f "$SERVER_DIR/run.sh" ]]; then
+    ok 'FXServer already unpacked, skipping'
+else
+    fetch "$artifact_url" "$TMP_DIR/fx.tar.xz" \
+        || die 'could not download FXServer - check the network and rerun'
+    tar -xJf "$TMP_DIR/fx.tar.xz" -C "$SERVER_DIR"
+    [[ -f "$SERVER_DIR/run.sh" ]] || die "run.sh missing after extraction - check $SERVER_DIR"
+fi
 chmod +x "$SERVER_DIR/run.sh"
 ok 'FXServer unpacked'
 
 step 'Base resources (cfx-server-data)'
-curl -fL --progress-bar "$SERVER_DATA_ZIP" -o "$TMP_DIR/server-data.zip"
-rm -rf "$TMP_DIR/sd" && mkdir -p "$TMP_DIR/sd"
-unzip -qo "$TMP_DIR/server-data.zip" -d "$TMP_DIR/sd"
-inner="$(find "$TMP_DIR/sd" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
-cp -rn "$inner"/. "$DATA_DIR"/
-ok 'base resources in place'
+if [[ -d "$RES_DIR" && -d "$DATA_DIR/resources/[system]" ]]; then
+    ok 'base resources already in place, skipping'
+    skip_base=1
+else
+    skip_base=0
+    fetch "$SERVER_DATA_ZIP" "$TMP_DIR/server-data.zip" \
+        || die 'could not download cfx-server-data - check the network and rerun'
+fi
+if [[ "$skip_base" == "0" ]]; then
+    rm -rf "$TMP_DIR/sd" && mkdir -p "$TMP_DIR/sd"
+    unzip -qo "$TMP_DIR/server-data.zip" -d "$TMP_DIR/sd"
+    inner="$(find "$TMP_DIR/sd" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+    cp -rn "$inner"/. "$DATA_DIR"/
+    ok 'base resources in place'
+fi
 
 step 'vMenu'
-if vmenu_url="$(curl -fsSL --max-time 20 -H 'User-Agent: fivem-setup-script' "$VMENU_API" \
+if [[ -f "$RES_DIR/vMenu/fxmanifest.lua" ]]; then
+    ok 'vMenu already installed, skipping'
+elif vmenu_url="$(fetch_json "$VMENU_API" \
         | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url' | head -n 1)" \
-   && [[ -n "$vmenu_url" ]]; then
-    curl -fL --progress-bar "$vmenu_url" -o "$TMP_DIR/vmenu.zip"
+   && [[ -n "$vmenu_url" ]] \
+   && fetch "$vmenu_url" "$TMP_DIR/vmenu.zip"; then
     rm -rf "$TMP_DIR/vm" && mkdir -p "$TMP_DIR/vm"
     unzip -qo "$TMP_DIR/vmenu.zip" -d "$TMP_DIR/vm"
     vmenu_src="$(dirname "$(find "$TMP_DIR/vm" -type f -name fxmanifest.lua | head -n 1)")"
@@ -332,10 +367,12 @@ else
 fi
 
 step 'oxmysql'
-if ox_url="$(curl -fsSL --max-time 20 -H 'User-Agent: fivem-setup-script' "$OXMYSQL_API" \
+if [[ -f "$RES_DIR/oxmysql/fxmanifest.lua" ]]; then
+    ok 'oxmysql already installed, skipping'
+elif ox_url="$(fetch_json "$OXMYSQL_API" \
         | jq -r '.assets[] | select(.name | endswith(".zip")) | .browser_download_url' | head -n 1)" \
-   && [[ -n "$ox_url" ]]; then
-    curl -fL --progress-bar "$ox_url" -o "$TMP_DIR/oxmysql.zip"
+   && [[ -n "$ox_url" ]] \
+   && fetch "$ox_url" "$TMP_DIR/oxmysql.zip"; then
     rm -rf "$TMP_DIR/ox" && mkdir -p "$TMP_DIR/ox"
     unzip -qo "$TMP_DIR/oxmysql.zip" -d "$TMP_DIR/ox"
     ox_src="$(dirname "$(find "$TMP_DIR/ox" -type f -name fxmanifest.lua | head -n 1)")"
@@ -351,7 +388,7 @@ else
 fi
 
 step 'pma-voice'
-if curl -fL --progress-bar "$PMA_VOICE_ZIP" -o "$TMP_DIR/pma.zip"; then
+if fetch "$PMA_VOICE_ZIP" "$TMP_DIR/pma.zip"; then
     rm -rf "$TMP_DIR/pma" && mkdir -p "$TMP_DIR/pma"
     unzip -qo "$TMP_DIR/pma.zip" -d "$TMP_DIR/pma"
     pma_src="$(dirname "$(find "$TMP_DIR/pma" -type f -name fxmanifest.lua | head -n 1)")"
@@ -399,7 +436,7 @@ fi
 
 if [[ "$SKIP_GARAGE" != "1" ]]; then
     step 'Phone garage and shops'
-    if curl -fL --progress-bar "$REPO_ZIP" -o "$TMP_DIR/repo.zip"; then
+    if fetch "$REPO_ZIP" "$TMP_DIR/repo.zip"; then
         rm -rf "$TMP_DIR/repo" && mkdir -p "$TMP_DIR/repo"
         unzip -qo "$TMP_DIR/repo.zip" -d "$TMP_DIR/repo"
         # The schema ships in the same archive.
@@ -435,7 +472,7 @@ fi
 
 if [[ "$SKIP_CARS" != "1" ]]; then
     step 'Car pack'
-    if curl -fL --progress-bar "$CAR_PACK_ZIP" -o "$TMP_DIR/cars.zip"; then
+    if fetch "$CAR_PACK_ZIP" "$TMP_DIR/cars.zip"; then
         rm -rf "$TMP_DIR/cars" && mkdir -p "$TMP_DIR/cars" "$CARS_DIR"
         unzip -qo "$TMP_DIR/cars.zip" -d "$TMP_DIR/cars"
         inner="$(find "$TMP_DIR/cars" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
@@ -453,8 +490,8 @@ if [[ "$SKIP_WEAPONS" != "1" ]]; then
         pack_name="${pack##*/}"
         got=0
         for branch in main master; do
-            if curl -fsL "https://github.com/${pack}/archive/refs/heads/${branch}.zip" \
-                    -o "$TMP_DIR/${pack_name}.zip" 2>/dev/null; then
+            if fetch "https://github.com/${pack}/archive/refs/heads/${branch}.zip" \
+                    "$TMP_DIR/${pack_name}.zip" 2>/dev/null; then
                 got=1
                 break
             fi
