@@ -581,8 +581,10 @@ ensure oxmysql
 ensure pma-voice
 
 ## --- base resources -----------------------------------------------
+# chat is NOT listed here: modern artifacts ship it as a system resource in
+# citizen/system_resources and start it themselves. `ensure chat` only logs
+# "Couldn't find resource chat" on every boot.
 ensure mapmanager
-ensure chat
 ensure spawnmanager
 ensure sessionmanager
 ensure basic-gamemode
