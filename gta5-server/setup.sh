@@ -371,7 +371,7 @@ if [[ "$SKIP_GARAGE" != "1" ]]; then
             warn '001_schema.sql not found in the repo archive'
         fi
 
-        for resource in phone_garage ls_character ls_inventory ls_shops ls_medical ls_rp ls_police; do
+        for resource in phone_garage ls_character ls_inventory ls_shops ls_medical ls_tuning ls_rp ls_police; do
             src="$(find "$TMP_DIR/repo" -type d -name "$resource" | head -n 1)"
             if [[ -n "$src" ]]; then
                 rm -rf "${RES_DIR:?}/$resource"
@@ -520,6 +520,7 @@ ensure ls_character
 ensure ls_inventory
 ensure ls_shops
 ensure ls_medical
+ensure ls_tuning
 ensure ls_rp
 ensure ls_police
 

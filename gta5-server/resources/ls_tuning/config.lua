@@ -1,0 +1,104 @@
+Config = {}
+
+-- ---------------------------------------------------------------------------
+-- Ничего не заперто.
+--
+-- Ни уровней, ни репутации, ни «сначала прокачай двигатель, потом турбо».
+-- Любая деталь доступна с первой минуты, ограничение ровно одно — деньги.
+-- Ставить можно сколько угодно позиций за один заход: всё, что выбрал,
+-- применяется и оплачивается одной кнопкой.
+-- ---------------------------------------------------------------------------
+Config.RequireLevel = false      -- оставлено переключателем, но нигде не читается как запрет
+Config.OnlyOwnedCars = true      -- тюнинговать можно только свою машину
+
+-- ---------------------------------------------------------------------------
+-- Мастерские.
+-- ---------------------------------------------------------------------------
+Config.Shops = {
+    { label = 'LSC, Burton',        x = -337.3, y = -136.7, z = 39.0 },
+    { label = 'LSC, La Mesa',       x = 731.6,  y = -1088.8, z = 22.2 },
+    { label = 'LSC, Airport',       x = -1155.5, y = -2007.8, z = 13.2 },
+    { label = 'LSC, Harmony',       x = 1175.0, y = 2640.2, z = 37.8 },
+    { label = 'LSC, Paleto Bay',    x = 110.6,  y = 6626.0, z = 31.8 },
+    { label = 'Benny’s, Strawberry',x = -205.6, y = -1310.5, z = 31.3 },
+    { label = 'Beeker’s, Route 68', x = 108.5,  y = 6619.3, z = 31.8 },
+}
+
+Config.ShopBlip = { sprite = 72, colour = 5, scale = 0.8 }
+Config.ShopRadius = 4.0
+
+-- ---------------------------------------------------------------------------
+-- Категории.
+--
+-- mod - номер типа детали для SetVehicleMod. Специальные категории (цвет,
+-- неон, тонировка и т. д.) помечены kind и обрабатываются отдельно.
+-- perf = true означает, что цена растёт со ступенью: двигатель 4-й ступени
+-- дороже первой. Это цена, а не запрет - взять сразу четвёртую можно.
+-- ---------------------------------------------------------------------------
+Config.Categories = {
+    -- Ходовая
+    { id = 'engine',   label = 'Двигатель',     mod = 11, price = 35000, perf = true },
+    { id = 'brakes',   label = 'Тормоза',       mod = 12, price = 22000, perf = true },
+    { id = 'gearbox',  label = 'Трансмиссия',   mod = 13, price = 28000, perf = true },
+    { id = 'suspension', label = 'Подвеска',    mod = 15, price = 18000, perf = true },
+    { id = 'armour',   label = 'Броня',         mod = 16, price = 45000, perf = true },
+    { id = 'turbo',    label = 'Турбина',       kind = 'toggle', mod = 18, price = 60000 },
+
+    -- Внешний вид
+    { id = 'spoiler',  label = 'Спойлер',       mod = 0,  price = 9000 },
+    { id = 'fbumper',  label = 'Передний бампер', mod = 1, price = 12000 },
+    { id = 'rbumper',  label = 'Задний бампер', mod = 2,  price = 12000 },
+    { id = 'skirt',    label = 'Пороги',        mod = 3,  price = 8000 },
+    { id = 'exhaust',  label = 'Выхлоп',        mod = 4,  price = 11000 },
+    { id = 'cage',     label = 'Каркас',        mod = 5,  price = 14000 },
+    { id = 'grille',   label = 'Решётка',       mod = 6,  price = 7000 },
+    { id = 'hood',     label = 'Капот',         mod = 7,  price = 13000 },
+    { id = 'fender',   label = 'Крылья',        mod = 8,  price = 9000 },
+    { id = 'rfender',  label = 'Задние крылья', mod = 9,  price = 9000 },
+    { id = 'roof',     label = 'Крыша',         mod = 10, price = 10000 },
+    { id = 'livery',   label = 'Винил',         mod = 48, price = 15000 },
+    { id = 'plateh',   label = 'Рамка номера',  mod = 25, price = 2500 },
+    { id = 'horn',     label = 'Клаксон',       mod = 14, price = 4000 },
+
+    -- Салон
+    { id = 'trim',     label = 'Отделка салона', mod = 27, price = 6000 },
+    { id = 'dial',     label = 'Приборная панель', mod = 30, price = 5000 },
+    { id = 'wheelint', label = 'Руль',          mod = 33, price = 5500 },
+    { id = 'shifter',  label = 'Рычаг КПП',     mod = 34, price = 4500 },
+    { id = 'plaque',   label = 'Шильдики',      mod = 35, price = 3500 },
+    { id = 'ornament', label = 'Салонные мелочи', mod = 28, price = 3000 },
+
+    -- Отдельные механики
+    { id = 'wheels',   label = 'Диски',         kind = 'wheels',  price = 16000 },
+    { id = 'colour1',  label = 'Основной цвет', kind = 'colour',  slot = 1, price = 7500 },
+    { id = 'colour2',  label = 'Второй цвет',   kind = 'colour',  slot = 2, price = 7500 },
+    { id = 'pearl',    label = 'Перламутр',     kind = 'colour',  slot = 3, price = 9000 },
+    { id = 'wheelcol', label = 'Цвет дисков',   kind = 'colour',  slot = 4, price = 5000 },
+    { id = 'tint',     label = 'Тонировка',     kind = 'tint',    price = 6500 },
+    { id = 'neon',     label = 'Неон',          kind = 'neon',    price = 25000 },
+    { id = 'neoncol',  label = 'Цвет неона',    kind = 'neoncol', price = 8000 },
+    { id = 'smoke',    label = 'Цветной дым',   kind = 'smoke',   price = 14000 },
+    { id = 'xenon',    label = 'Ксенон',        kind = 'toggle',  mod = 22, price = 9500 },
+}
+
+-- Ступени производительности дорожают: цена * (ступень + 1).
+Config.PerfStepMultiplier = 1.0
+
+-- Типы дисков: индекс для SetVehicleWheelType.
+Config.WheelTypes = {
+    { id = 0,  label = 'Спорт' },
+    { id = 1,  label = 'Внедорожные' },
+    { id = 2,  label = 'Внедорожник' },
+    { id = 3,  label = 'Тюнинг' },
+    { id = 4,  label = 'Байкерские' },
+    { id = 5,  label = 'Классика' },
+    { id = 6,  label = 'Хай-энд' },
+    { id = 7,  label = 'Лоурайдер' },
+    { id = 8,  label = 'Бензин' },
+    { id = 9,  label = 'Туризм' },
+    { id = 10, label = 'Гонка' },
+    { id = 11, label = 'Премиум' },
+}
+
+Config.MaxTint = 5
+Config.MaxColour = 159

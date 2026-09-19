@@ -193,6 +193,8 @@ local function deliver(car)
     end
 
     SetVehicleOnGroundProperly(veh)
+    -- The mod kit has to be open before anything can be fitted to the car.
+    SetVehicleModKit(veh, 0)
     SetVehicleNumberPlateText(veh, car.plate)
     SetVehicleNumberPlateTextIndex(veh, Config.Plates.style or 0)
     SetVehicleHasBeenOwnedByPlayer(veh, true)
@@ -203,6 +205,9 @@ local function deliver(car)
     SetModelAsNoLongerNeeded(hash)
 
     activeVehicle, activePlate = veh, car.plate
+
+    -- ls_tuning listens for this and puts the saved build back on.
+    TriggerEvent('phone_garage:spawned', car.plate)
 
     -- Drop a waypoint so you can actually find it.
     SetNewWaypoint(spot.x, spot.y)

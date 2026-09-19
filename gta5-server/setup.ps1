@@ -311,7 +311,7 @@ if (-not $SkipGarage) {
         if (Test-Path -LiteralPath $repoTmp) { Remove-Item -LiteralPath $repoTmp -Recurse -Force }
         Expand-Archive -LiteralPath $repoZipFile -DestinationPath $repoTmp -Force
 
-        foreach ($resource in @('phone_garage', 'ls_character', 'ls_inventory', 'ls_shops', 'ls_medical', 'ls_rp')) {
+        foreach ($resource in @('phone_garage', 'ls_character', 'ls_inventory', 'ls_shops', 'ls_medical', 'ls_tuning', 'ls_rp')) {
             $src = Get-ChildItem -LiteralPath $repoTmp -Recurse -Directory -Filter $resource |
                 Select-Object -First 1
             if (-not $src) {
@@ -473,6 +473,7 @@ ensure ls_character
 ensure ls_inventory
 ensure ls_shops
 ensure ls_medical
+ensure ls_tuning
 ensure ls_rp
 
 # Who may hand out money with /givemoney:
