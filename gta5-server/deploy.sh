@@ -26,7 +26,7 @@ CFG="$DATA_DIR/server.cfg"
 LOG="$ROOT/server.log"
 TMP="$ROOT/tmp/deploy"
 
-RESOURCES=(phone_garage ls_character ls_inventory ls_shops ls_medical ls_tuning ls_rp ls_police)
+RESOURCES=(phone_garage ls_character ls_inventory ls_shops ls_medical ls_tuning ls_rp ls_police ls_gangs)
 
 MODE=update
 case "${1:-}" in
@@ -104,6 +104,17 @@ if [[ "$MODE" != "check" ]]; then
     fi
 
     step 'Проверяю server.cfg'
+
+    # Без OneSync серверные GetPlayerPed/GetEntityCoords возвращают ноль,
+    # и каждая проверка расстояния в ls_police падает в "слишком далеко":
+    # наручники не надеваются ни на кого. Он же нужен NPC-гангстерам.
+    if ! grep -qE '^[[:space:]]*set[[:space:]]+onesync[[:space:]]+on' "$CFG"; then
+        printf '\n## OneSync - без него полиция не может проверить расстояние\nset onesync on\nset onesync_population true\n' >> "$CFG"
+        ok 'включён OneSync'
+    else
+        ok 'OneSync уже включён'
+    fi
+
     missing=""
     for resource in "${RESOURCES[@]}"; do
         grep -qE "^[[:space:]]*ensure[[:space:]]+${resource}[[:space:]]*$" "$CFG" \
@@ -179,7 +190,7 @@ else
         bad "не стартовали: $down"
         note_problem
     else
-        ok 'все восемь ресурсов стартовали'
+        ok 'все ресурсы стартовали'
     fi
 
     # Ошибки скриптов. grep -c возвращает 1 при нуле совпадений, поэтому || true.

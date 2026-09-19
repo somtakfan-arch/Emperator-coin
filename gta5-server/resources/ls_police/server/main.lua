@@ -796,8 +796,22 @@ end)
 
 RegisterNetEvent('ls_police:taser', function(targetId)
     local src = source
-    targetId = gate(src, 'taser', 'cuff', targetId)
-    if not targetId then return end
+    -- gate без targetId: проверяет смену и права, но не трёхметровую
+    -- дистанцию - у тазера своя, иначе по машине не выстрелишь.
+    if gate(src, 'taser', 'cuff') ~= true then return end
+
+    targetId = tonumber(targetId)
+    if not targetId or targetId == src or GetPlayerName(targetId) == nil then
+        notify(src, Locale.targetNotFound)
+        return
+    end
+
+    local pedA, pedB = GetPlayerPed(src), GetPlayerPed(targetId)
+    if pedA == 0 or pedB == 0
+        or #(GetEntityCoords(pedA) - GetEntityCoords(pedB)) > Config.Taser.range then
+        notify(src, Locale.tooFar)
+        return
+    end
 
     local now = os.time()
     if taserUntil[src] and taserUntil[src] > now then

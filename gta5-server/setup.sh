@@ -619,7 +619,7 @@ if [[ "$SKIP_GARAGE" != "1" ]]; then
             warn '001_schema.sql not found in the repo archive'
         fi
 
-        for resource in phone_garage ls_character ls_inventory ls_shops ls_medical ls_tuning ls_rp ls_police; do
+        for resource in phone_garage ls_character ls_inventory ls_shops ls_medical ls_tuning ls_rp ls_police ls_gangs; do
             src="$(find "$TMP_DIR/repo" -type d -name "$resource" | head -n 1)"
             if [[ -n "$src" ]]; then
                 # Player data lives inside the resource folder - characters,
@@ -742,6 +742,13 @@ sv_maxclients $MAXCLIENTS
 sv_scriptHookAllowed 0
 sets locale "ru-RU"
 
+# OneSync. Не опционально: без него серверные GetPlayerPed/GetEntityCoords
+# возвращают ноль, и КАЖДАЯ проверка расстояния в ls_police падает в
+# "слишком далеко" - надеть наручники нельзя вообще ни на кого. Он же нужен
+# для NPC-гангстеров. До 48 слотов бесплатен.
+set onesync on
+set onesync_population true
+
 ## --- database -----------------------------------------------------------
 set mysql_connection_string "mysql://$DB_USER:$DB_PASS@localhost/$DB_NAME?charset=utf8mb4"
 
@@ -790,6 +797,8 @@ ensure ls_medical
 ensure ls_tuning
 ensure ls_rp
 ensure ls_police
+# NPC-банды. Стартуют после ls_police: спрашивают у него, кто на смене.
+ensure ls_gangs
 
 # Police ranks are handed out in game with /police hire; this ace only guards
 # the admin-side commands.

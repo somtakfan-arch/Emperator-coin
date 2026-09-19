@@ -117,6 +117,11 @@ exports('isBlocked', function()
     return State.cuffed ~= nil
 end)
 
+-- ls_gangs asks this before offering to arrest an NPC.
+exports('isOnDuty', function()
+    return State.onDuty == true
+end)
+
 -- --- escape bar -------------------------------------------------------------
 
 CreateThread(function()
@@ -574,9 +579,106 @@ RegisterNetEvent('ls_police:kneel', function(down)
     end
 end)
 
+-- Игра не проигрывает ragdoll внутри салона: тазер по водителю без этого
+-- не делал бы ровно ничего. Сначала выкидываем, потом роняем.
+local function ejectFromVehicle(ped)
+    local vehicle = GetVehiclePedIsIn(ped, false)
+    if vehicle == 0 then return false end
+
+    SetPedCanBeDraggedOut(ped, true)
+    -- 4160: выпрыгнуть немедленно, не тратя время на аккуратное открывание
+    -- двери. На скорости человек катится по асфальту сам.
+    TaskLeaveVehicle(ped, vehicle, 4160)
+    return true
+end
+
 RegisterNetEvent('ls_police:tased', function(seconds)
     local ped = PlayerPedId()
+
+    if Config.Taser.ejectFromVehicle and ejectFromVehicle(ped) then
+        -- Потолок на случай, если выйти не получилось (машина в воде,
+        -- перевёрнута, дверь заблокирована) - ronять всё равно надо.
+        local deadline = GetGameTimer() + 2000
+        while GetVehiclePedIsIn(PlayerPedId(), false) ~= 0 and GetGameTimer() < deadline do
+            Wait(50)
+        end
+        ped = PlayerPedId()
+    end
+
     SetPedToRagdoll(ped, seconds * 1000, seconds * 1000, 0, false, false, false)
+end)
+
+-- --- выстрел тазером по машине ----------------------------------------------
+
+-- Луч из камеры вперёд. Флаги 10 = машины (2) + педы (8).
+local function aimedEntity(maxDistance)
+    local from = GetGameplayCamCoord()
+    local rot = GetGameplayCamRot(2)
+    local rad = math.pi / 180.0
+    local z = rot.z * rad
+    local x = rot.x * rad
+    local flat = math.abs(math.cos(x))
+    local dir = vector3(-math.sin(z) * flat, math.cos(z) * flat, math.sin(x))
+    local to = from + dir * maxDistance
+
+    local ray = StartShapeTestRay(from.x, from.y, from.z, to.x, to.y, to.z, 10, PlayerPedId(), 0)
+    local _, hit, _, _, entity = GetShapeTestResult(ray)
+    if hit == 1 and entity and entity ~= 0 and DoesEntityExist(entity) then
+        return entity
+    end
+    return nil
+end
+
+local function taserShot()
+    local entity = aimedEntity(Config.Taser.range)
+    if not entity then return end
+
+    local vehicle, occupant
+    if IsEntityAVehicle(entity) then
+        vehicle = entity
+        occupant = GetPedInVehicleSeat(vehicle, -1)     -- за рулём
+    elseif IsEntityAPed(entity) then
+        occupant = entity
+        vehicle = GetVehiclePedIsIn(entity, false)
+    end
+
+    -- По пешему тазер и так работает сам, скриптовать нечего.
+    if not vehicle or vehicle == 0 then return end
+    if not occupant or occupant == 0 or not DoesEntityExist(occupant) then return end
+    if IsPedDeadOrDying(occupant, true) then return end
+
+    local player = NetworkGetPlayerIndexFromPed(occupant)
+    if player and player ~= -1 and player ~= PlayerId() and NetworkIsPlayerActive(player) then
+        -- Про игрока решает сервер: он проверит смену, права и дистанцию.
+        TriggerServerEvent('ls_police:taser', GetPlayerServerId(player))
+    else
+        -- NPC сервер не знает вообще, роняем прямо здесь.
+        ejectFromVehicle(occupant)
+        SetPedToRagdoll(occupant, Config.Taser.stunSeconds * 1000,
+            Config.Taser.stunSeconds * 1000, 0, false, false, false)
+    end
+end
+
+CreateThread(function()
+    local taserHash = GetHashKey(Config.Taser.weapon)
+    local lastShot = 0
+
+    while true do
+        local wait = 500
+        if State.onDuty and Config.Taser.ejectFromVehicle then
+            local ped = PlayerPedId()
+            if GetSelectedPedWeapon(ped) == taserHash then
+                -- Пока тазер в руках, следим покадрово: IsPedShooting живёт
+                -- ровно один кадр.
+                wait = 0
+                if IsPedShooting(ped) and GetGameTimer() - lastShot > 500 then
+                    lastShot = GetGameTimer()
+                    taserShot()
+                end
+            end
+        end
+        Wait(wait)
+    end
 end)
 
 RegisterNetEvent('ls_police:jail', function(jail, config)
