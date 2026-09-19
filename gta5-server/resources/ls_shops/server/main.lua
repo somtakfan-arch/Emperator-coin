@@ -231,7 +231,10 @@ RegisterNetEvent('ls_shops:requestStock', function(kind)
 
     local items = {}
     for _, entry in ipairs(stock) do
-        if allowed[entry.kind] and (tonumber(entry.price) or 0) > 0 then
+        -- Серьёзные стволы в свободной продаже не бывают: в мир они
+        -- попадают только через склад госфракции.
+        local blocked = entry.tier == 'serious'
+        if allowed[entry.kind] and (tonumber(entry.price) or 0) > 0 and not blocked then
             items[#items + 1] = {
                 item = entry.item,
                 label = entry.label,
@@ -256,6 +259,13 @@ RegisterNetEvent('ls_shops:purchase', function(shopKind, item)
     local allowed = Config.Sells[shopKind]
     if not allowed then
         notify(src, '~r~Здесь это не продаётся')
+        return
+    end
+
+    -- Витрину клиент может и не спрашивать - событие приходит от него.
+    local okDef, def = pcall(function() return exports.ls_inventory:getItemDef(item) end)
+    if okDef and type(def) == 'table' and def.tier == 'serious' then
+        notify(src, '~r~Такое в свободной продаже не бывает')
         return
     end
 

@@ -56,6 +56,7 @@ local function sortOffers(list)
 end
 
 -- Корень показывает всё без раздела; раздел - только своё.
+-- pageTitle при этом не трогаем: его ставит тот, кто открыл страницу.
 local function build()
     shown = {}
     for _, offer in ipairs(offers) do
@@ -110,9 +111,14 @@ local function draw()
         local offer = shown[index]
         if offer then
             local picked = index == pick
+            local colour
+            if offer.disabled then
+                colour = picked and { 150, 120, 120 } or { 110, 110, 118 }
+            elseif picked then
+                colour = { 120, 190, 255 }
+            end
             text((picked and '> ' or '   ') .. offer.label,
-                0.5, top + (row - 1) * lineHeight, 0.35, true,
-                picked and { 120, 190, 255 } or nil)
+                0.5, top + (row - 1) * lineHeight, 0.35, true, colour)
         end
     end
 
@@ -148,6 +154,27 @@ local function openMenu()
     scroll = 0
 end
 
+-- Открыть меню готовым списком, минуя опрос.
+--
+-- Нужно там, где содержимое знает только сервер: склад оружейки, например,
+-- приходит ответом, а не лежит под ногами. Пункты с disabled видно, но
+-- выбрать нельзя - чтобы было понятно, что ствол есть, просто не по рангу.
+AddEventHandler('ls_interact:show', function(data)
+    if type(data) ~= 'table' or type(data.rows) ~= 'table' then return end
+
+    offers = {}
+    for _, row in ipairs(data.rows) do
+        if type(row) == 'table' and type(row.id) == 'string' and type(row.label) == 'string' then
+            offers[#offers + 1] = row
+        end
+    end
+    if #offers == 0 then return end
+
+    page, pageTitle = nil, data.title
+    build()
+    open = true
+end)
+
 CreateThread(function()
     while true do
         local wait = 0
@@ -175,7 +202,7 @@ CreateThread(function()
                     -- нечего.
                     page, pageTitle = offer.submenu, offer.label
                     build()
-                elseif offer then
+                elseif offer and not offer.disabled then
                     close()
                     TriggerEvent('ls_interact:run', offer.id)
                 end

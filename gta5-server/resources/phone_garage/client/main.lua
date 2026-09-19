@@ -224,7 +224,13 @@ local function setPhone(open)
     phoneOpen = open
     SetNuiFocus(open, open)
     SendNUIMessage({ action = open and 'open' or 'close' })
-    if open then pushState() end
+    if open then
+        pushState()
+        -- Пока телефон лежал в кармане, на форуме могли ответить, а лот
+        -- на аукционе - закрыться. Спрашиваем заново при каждом открытии.
+        TriggerEvent('ls_forum:refresh')
+        TriggerServerEvent('ls_property:request')
+    end
 end
 
 RegisterCommand('phone', function()
@@ -432,5 +438,23 @@ relay('auctionList', 'ls_property:listLot', function(d)
 end)
 
 relay('auctionBid', 'ls_property:bid', function(d)
+    return { tostring(d.id or '') }
+end)
+
+-- --- форум -------------------------------------------------------------------
+
+AddEventHandler('phone_garage:forumData', function(data)
+    SendNUIMessage({ action = 'forum', data = data })
+end)
+
+relay('forumPost', 'ls_forum:post', function(d)
+    return { tostring(d.board or ''), tostring(d.title or ''), tostring(d.body or '') }
+end)
+
+relay('forumReply', 'ls_forum:reply', function(d)
+    return { tostring(d.id or ''), tostring(d.body or '') }
+end)
+
+relay('forumClose', 'ls_forum:close', function(d)
     return { tostring(d.id or '') }
 end)

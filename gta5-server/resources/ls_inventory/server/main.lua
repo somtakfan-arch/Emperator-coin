@@ -390,6 +390,9 @@ exports('listItems', function()
             kind = def.type,
             price = def.price,
             addon = def.addon == true,
+            -- Магазины смотрят на это, чтобы не торговать тем, что должно
+            -- приходить только со склада госфракции.
+            tier = def.tier,
         }
     end
     return list

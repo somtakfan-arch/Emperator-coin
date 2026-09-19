@@ -936,9 +936,64 @@ exports('garageSlots', function(src)
 end)
 
 exports('familyOf', function(src)
-    local family = familyOf(identifierOf(src))
+    local identifier = identifierOf(src)
+    local family = familyOf(identifier)
     if not family then return nil end
-    return { id = family.id, name = family.name, tag = family.tag }
+    return {
+        id = family.id, name = family.name, tag = family.tag,
+        -- ls_forum смотрит на это: глава разбирает заявки в свою семью.
+        leader = family.leader == identifier,
+    }
+end)
+
+-- Офисы, помеченные семейными, в которых состоит этот игрок. Нужно
+-- ls_armoury, чтобы знать, куда везти семейную поставку.
+exports('familyOffices', function(src)
+    local identifier = identifierOf(src)
+    local family = familyOf(identifier)
+    if not family then return {} end
+
+    local out = {}
+    for key, entry in pairs(owned) do
+        if entry.family == family.id then
+            local def = propertyByKey(key)
+            if def then
+                out[#out + 1] = {
+                    key = key, label = def.label, family = family.id,
+                    x = def.x, y = def.y, z = def.z,
+                }
+            end
+        end
+    end
+    return out
+end)
+
+-- Положить товар на склад офиса мимо инвентаря: поставку привозят фурой,
+-- а не в карманах.
+exports('stockOffice', function(key, item, count)
+    local def = propertyByKey(key)
+    if not def or type(item) ~= 'string' then return false end
+
+    count = math.max(1, math.floor(tonumber(count) or 1))
+    local rec = record(key)
+
+    local used = 0
+    for _ in pairs(rec.storage) do used = used + 1 end
+
+    for _, entry in pairs(rec.storage) do
+        if entry.item == item then
+            entry.count = entry.count + count
+            dirty = true
+            save()
+            return true
+        end
+    end
+
+    if used >= def.storage then return false end
+    rec.storage[#rec.storage + 1] = { item = item, count = count }
+    dirty = true
+    save()
+    return true
 end)
 
 exports('sameFamily', function(a, b)

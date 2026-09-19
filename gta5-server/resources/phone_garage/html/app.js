@@ -57,7 +57,8 @@
   // --- navigation ---------------------------------------------------------
 
   function show(view) {
-    ['home', 'garage', 'shop', 'wardrobe', 'family', 'estate', 'auction'].forEach((name) => {
+    ['home', 'garage', 'shop', 'wardrobe', 'family', 'estate', 'auction', 'forum']
+      .forEach((name) => {
       $(`view-${name}`).classList.toggle('hidden', name !== view);
     });
   }
@@ -521,5 +522,175 @@
     if (data.action === 'property') {
       estate = Object.assign(estate, data.data || {});
       renderEstateAll();
+    }
+  });
+
+  // --- форум ---------------------------------------------------------------
+
+  let forum = { boards: [], topics: [], staff: false, limits: {} };
+  let forumBoard = null;      // null = все разделы
+  let forumOpenId = null;     // открытая тема
+  let forumWriting = false;
+
+  function when(ts) {
+    if (!ts) return '';
+    const d = new Date(ts * 1000);
+    return d.toLocaleString('ru-RU', {
+      day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
+    });
+  }
+
+  function boardLabel(key) {
+    const board = (forum.boards || []).find((b) => b.key === key);
+    return board ? board.label : key;
+  }
+
+  function renderForum() {
+    const chips = $('forum-chips');
+    chips.innerHTML = '';
+
+    const chip = (key, label) => {
+      const el = document.createElement('button');
+      el.className = 'chip' + (forumBoard === key ? ' active' : '');
+      el.textContent = label;
+      el.onclick = () => {
+        forumBoard = key;
+        forumOpenId = null;
+        forumWriting = false;
+        renderForum();
+      };
+      chips.appendChild(el);
+    };
+
+    chip(null, 'Все');
+    (forum.boards || []).forEach((b) => chip(b.key, b.label));
+
+    const box = $('forum-body');
+    box.innerHTML = '';
+
+    // --- открытая тема ----------------------------------------------------
+    if (forumOpenId) {
+      const topic = (forum.topics || []).find((t) => t.id === forumOpenId);
+      if (!topic) { forumOpenId = null; renderForum(); return; }
+
+      const head = card(`
+        <div class="p-title">${topic.title}</div>
+        <div class="f-meta">${boardLabel(topic.board)} · ${topic.author} · ${when(topic.at)}
+          ${topic.open ? '' : ' · <span class="p-tag">закрыта</span>'}</div>
+        <div class="f-body"></div>`);
+      head.querySelector('.f-body').textContent = topic.body;
+      box.appendChild(head);
+
+      (topic.replies || []).forEach((r) => {
+        const el = document.createElement('div');
+        el.className = 'p-card f-reply' + (r.staff ? ' staff' : '');
+        el.innerHTML = `
+          <div class="f-who"><span class="who-name"></span>
+            ${r.staff ? '<span class="p-tag fam">официально</span>' : ''}
+            <span class="f-meta" style="margin-left:6px">${when(r.at)}</span></div>
+          <div class="f-body"></div>`;
+        el.querySelector('.who-name').textContent = r.name;
+        el.querySelector('.f-body').textContent = r.body;
+        box.appendChild(el);
+      });
+
+      if (topic.open) {
+        const form = card(`
+          <textarea class="p-field" id="f-reply" maxlength="${forum.limits.reply || 500}"
+            placeholder="Ответить"></textarea>
+          <div class="p-actions">
+            <button class="btn primary" data-act="reply">Ответить</button>
+            ${(topic.mine || forum.staff)
+              ? '<button class="btn" data-act="close">Закрыть тему</button>' : ''}
+            <button class="btn" data-act="back">Назад</button>
+          </div>`);
+        form.querySelector('[data-act="reply"]').onclick = () => {
+          const body = $('f-reply').value;
+          if (body.trim()) post('forumReply', { id: topic.id, body });
+        };
+        const closeBtn = form.querySelector('[data-act="close"]');
+        if (closeBtn) closeBtn.onclick = () => post('forumClose', { id: topic.id });
+        form.querySelector('[data-act="back"]').onclick = () => {
+          forumOpenId = null;
+          renderForum();
+        };
+        box.appendChild(form);
+      } else {
+        const back = card('<button class="btn" style="width:100%">Назад</button>');
+        back.querySelector('button').onclick = () => { forumOpenId = null; renderForum(); };
+        box.appendChild(back);
+      }
+      return;
+    }
+
+    // --- новая тема -------------------------------------------------------
+    if (forumWriting) {
+      const board = (forum.boards || []).find((b) => b.key === forumBoard)
+        || (forum.boards || [])[0];
+      const el = card(`
+        <div class="p-title">Новая тема — ${board ? board.label : ''}</div>
+        <div class="p-sub">${board ? board.hint : ''}</div>
+        <div style="margin-top:10px">
+          <input class="p-field" id="f-title" maxlength="${forum.limits.title || 60}"
+            placeholder="Заголовок">
+          <textarea class="p-field" id="f-body" maxlength="${forum.limits.body || 900}"
+            placeholder="Текст"></textarea>
+          <div class="p-actions">
+            <button class="btn primary" data-act="send">Отправить</button>
+            <button class="btn" data-act="cancel">Отмена</button>
+          </div>
+        </div>`);
+      el.querySelector('[data-act="send"]').onclick = () => {
+        const title = $('f-title').value;
+        const body = $('f-body').value;
+        if (title.trim() && body.trim()) {
+          post('forumPost', { board: board ? board.key : '', title, body });
+          forumWriting = false;
+        }
+      };
+      el.querySelector('[data-act="cancel"]').onclick = () => { forumWriting = false; renderForum(); };
+      box.appendChild(el);
+      return;
+    }
+
+    // --- список -----------------------------------------------------------
+    const write = card('<button class="btn primary" style="width:100%">Написать</button>');
+    write.querySelector('button').onclick = () => {
+      if (!forumBoard) forumBoard = (forum.boards[0] || {}).key;
+      forumWriting = true;
+      renderForum();
+    };
+    box.appendChild(write);
+
+    const rows = (forum.topics || [])
+      .filter((t) => !forumBoard || t.board === forumBoard);
+
+    if (!rows.length) {
+      box.appendChild(card('<div class="p-sub">Пока пусто.</div>'));
+      return;
+    }
+
+    rows.forEach((topic) => {
+      const el = card(`
+        <div class="p-title"></div>
+        <div class="f-meta">${boardLabel(topic.board)} · ${topic.author} · ${when(topic.at)}
+          · ответов: ${(topic.replies || []).length}
+          ${topic.open ? '' : ' · <span class="p-tag">закрыта</span>'}</div>`);
+      el.classList.add('f-topic');
+      if (!topic.open) el.classList.add('f-closed');
+      el.querySelector('.p-title').textContent = topic.title;
+      el.onclick = () => { forumOpenId = topic.id; renderForum(); };
+      box.appendChild(el);
+    });
+  }
+
+  window.addEventListener('message', (ev) => {
+    const data = ev.data || {};
+    if (data.action === 'forum') {
+      forum = data.data || forum;
+      // Незакрытые темы, где ты нужен, — повод подсветить приложение.
+      const mine = (forum.topics || []).filter((t) => t.open && (t.mine || forum.staff));
+      $('forum-badge').classList.toggle('hidden', mine.length === 0);
+      renderForum();
     }
   });

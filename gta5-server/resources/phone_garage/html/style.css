@@ -141,6 +141,11 @@ body {
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffab6b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><circle cx='8' cy='8' r='3'/><circle cx='16' cy='9' r='2.5'/><path d='M2 20c0-3.3 2.7-6 6-6s6 2.7 6 6'/><path d='M15 14c3 0 5 2 5 6'/></svg>");
 }
 
+.icon-forum {
+  background-color: #2d3b4f;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237fb4ff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M4 5h16v11H9l-5 4z'/><path d='M8 9h8'/><path d='M8 12h5'/></svg>");
+}
+
 .icon-estate {
   background-color: #1f4348;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%235fd6d6' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M3 11l9-7 9 7'/><path d='M5 10v10h14V10'/><path d='M10 20v-5h4v5'/></svg>");
@@ -389,3 +394,40 @@ button.btn:disabled { opacity: .4; cursor: not-allowed; }
 
 .p-tag.mine { background: rgba(61, 220, 132, .18); color: #3ddc84; }
 .p-tag.fam  { background: rgba(255, 171, 107, .18); color: #ffab6b; }
+
+/* --- форум --------------------------------------------------------------- */
+
+.f-topic { cursor: pointer; }
+.f-topic .p-title { font-size: 14px; }
+
+.f-meta {
+  font-size: 11px;
+  opacity: .6;
+  margin-top: 3px;
+}
+
+.f-body {
+  font-size: 13px;
+  line-height: 1.45;
+  margin-top: 8px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.f-reply {
+  border-left: 2px solid rgba(255, 255, 255, .15);
+  padding: 6px 0 6px 10px;
+  margin-top: 8px;
+}
+
+.f-reply.staff { border-left-color: #ffab6b; }
+.f-who { font-size: 12px; font-weight: 600; }
+.f-who .p-tag { margin-left: 6px; }
+
+textarea.p-field {
+  min-height: 90px;
+  resize: none;
+  font-family: inherit;
+}
+
+.f-closed { opacity: .55; }

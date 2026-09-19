@@ -10,6 +10,18 @@ Config.BackpackPrice = 25000
 Config.Columns = 6
 
 -- Ammo handed over with a weapon when you use it.
+-- ---------------------------------------------------------------------------
+-- Кто чем торгует.
+--
+-- tier = 'serious' стоит на всём автоматическом, нарезном и взрывающемся.
+-- Такое не продаётся ни в оружейном магазине, ни на чёрном рынке из воздуха:
+-- в мир оно попадает только через склад госфракции. Дальше ходит по рукам -
+-- отобрали, потеряли, продали на чёрный рынок, - но новых стволов ниоткуда
+-- не берётся. Это и держит цену.
+--
+-- Всё, у чего tier не задан, считается обычным и продаётся как раньше.
+Config.SeriousTier = 'serious'
+
 -- Типы предметов, которые обслуживает другой ресурс. Он же решает, тратится
 -- ли штука: отказ не должен съедать семечко.
 Config.ExternalTypes = {
@@ -106,27 +118,27 @@ Config.Items = {
     -- Оружие (ванильное)
     WEAPON_PISTOL        = { label = 'Пистолет',             type = 'weapon', stack = 1, price = 4500 },
     WEAPON_COMBATPISTOL  = { label = 'Боевой пистолет',      type = 'weapon', stack = 1, price = 9500 },
-    WEAPON_APPISTOL      = { label = 'AP Pistol',            type = 'weapon', stack = 1, price = 15000 },
-    WEAPON_PISTOL50      = { label = 'Pistol .50',           type = 'weapon', stack = 1, price = 17000 },
-    WEAPON_MICROSMG      = { label = 'Micro SMG',            type = 'weapon', stack = 1, price = 18000 },
-    WEAPON_SMG           = { label = 'SMG',                  type = 'weapon', stack = 1, price = 24000 },
-    WEAPON_ASSAULTSMG    = { label = 'Assault SMG',          type = 'weapon', stack = 1, price = 31000 },
+    WEAPON_APPISTOL      = { label = 'AP Pistol',            type = 'weapon', tier = 'serious', stack = 1, price = 15000 },
+    WEAPON_PISTOL50      = { label = 'Pistol .50',           type = 'weapon', tier = 'serious', stack = 1, price = 17000 },
+    WEAPON_MICROSMG      = { label = 'Micro SMG',            type = 'weapon', tier = 'serious', stack = 1, price = 18000 },
+    WEAPON_SMG           = { label = 'SMG',                  type = 'weapon', tier = 'serious', stack = 1, price = 24000 },
+    WEAPON_ASSAULTSMG    = { label = 'Assault SMG',          type = 'weapon', tier = 'serious', stack = 1, price = 31000 },
     WEAPON_PUMPSHOTGUN   = { label = 'Помповый дробовик',    type = 'weapon', stack = 1, price = 22000 },
     WEAPON_SAWNOFFSHOTGUN= { label = 'Обрез',                type = 'weapon', stack = 1, price = 19000 },
-    WEAPON_ASSAULTSHOTGUN= { label = 'Штурмовой дробовик',   type = 'weapon', stack = 1, price = 38000 },
-    WEAPON_HEAVYSHOTGUN  = { label = 'Тяжёлый дробовик',     type = 'weapon', stack = 1, price = 44000 },
-    WEAPON_CARBINERIFLE  = { label = 'Карабин',              type = 'weapon', stack = 1, price = 48000 },
-    WEAPON_ASSAULTRIFLE  = { label = 'Штурмовая винтовка',   type = 'weapon', stack = 1, price = 42000 },
-    WEAPON_SPECIALCARBINE= { label = 'Special Carbine',      type = 'weapon', stack = 1, price = 52000 },
-    WEAPON_BULLPUPRIFLE  = { label = 'Bullpup Rifle',        type = 'weapon', stack = 1, price = 46000 },
-    WEAPON_SNIPERRIFLE   = { label = 'Снайперская винтовка', type = 'weapon', stack = 1, price = 65000 },
-    WEAPON_MARKSMANRIFLE = { label = 'Marksman Rifle',       type = 'weapon', stack = 1, price = 72000 },
-    WEAPON_MG            = { label = 'Пулемёт',              type = 'weapon', stack = 1, price = 58000 },
-    WEAPON_COMBATMG      = { label = 'Боевой пулемёт',       type = 'weapon', stack = 1, price = 68000 },
+    WEAPON_ASSAULTSHOTGUN= { label = 'Штурмовой дробовик',   type = 'weapon', tier = 'serious', stack = 1, price = 38000 },
+    WEAPON_HEAVYSHOTGUN  = { label = 'Тяжёлый дробовик',     type = 'weapon', tier = 'serious', stack = 1, price = 44000 },
+    WEAPON_CARBINERIFLE  = { label = 'Карабин',              type = 'weapon', tier = 'serious', stack = 1, price = 48000 },
+    WEAPON_ASSAULTRIFLE  = { label = 'Штурмовая винтовка',   type = 'weapon', tier = 'serious', stack = 1, price = 42000 },
+    WEAPON_SPECIALCARBINE= { label = 'Special Carbine',      type = 'weapon', tier = 'serious', stack = 1, price = 52000 },
+    WEAPON_BULLPUPRIFLE  = { label = 'Bullpup Rifle',        type = 'weapon', tier = 'serious', stack = 1, price = 46000 },
+    WEAPON_SNIPERRIFLE   = { label = 'Снайперская винтовка', type = 'weapon', tier = 'serious', stack = 1, price = 65000 },
+    WEAPON_MARKSMANRIFLE = { label = 'Marksman Rifle',       type = 'weapon', tier = 'serious', stack = 1, price = 72000 },
+    WEAPON_MG            = { label = 'Пулемёт',              type = 'weapon', tier = 'serious', stack = 1, price = 58000 },
+    WEAPON_COMBATMG      = { label = 'Боевой пулемёт',       type = 'weapon', tier = 'serious', stack = 1, price = 68000 },
     WEAPON_KNIFE         = { label = 'Нож',                  type = 'weapon', stack = 1, price = 1200 },
     WEAPON_MACHETE       = { label = 'Мачете',               type = 'weapon', stack = 1, price = 1800 },
     WEAPON_BAT           = { label = 'Бита',                 type = 'weapon', stack = 1, price = 800 },
     WEAPON_CROWBAR       = { label = 'Монтировка',           type = 'weapon', stack = 1, price = 900 },
-    WEAPON_GRENADE       = { label = 'Граната',              type = 'weapon', stack = 1, price = 12000 },
+    WEAPON_GRENADE       = { label = 'Граната',              type = 'weapon', tier = 'serious', stack = 1, price = 12000 },
     WEAPON_MOLOTOV       = { label = 'Коктейль Молотова',    type = 'weapon', stack = 1, price = 6000 },
 }
