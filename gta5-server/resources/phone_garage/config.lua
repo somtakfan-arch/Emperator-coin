@@ -1,7 +1,8 @@
 Config = {}
 
 -- Key that opens the phone. Rebindable in-game: Settings -> Key Bindings -> FiveM.
-Config.OpenKey = 'F1'
+-- 'UP' is the up arrow; F1 collides with other bindings too often.
+Config.OpenKey = 'UP'
 
 -- Money a player starts with, the first time they ever join.
 Config.StartingMoney = 250000
