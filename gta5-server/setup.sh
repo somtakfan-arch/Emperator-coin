@@ -10,7 +10,10 @@
 #     SKIP_CARS=1 bash setup.sh        # vanilla only
 #     bash setup.sh --sync-packs        # re-scan car packs after adding new ones
 
-set -euo pipefail
+# pipefail is deliberately NOT set. This script is full of `find ... | head -n 1`
+# pipelines; head closes the pipe after the first line, the producer takes a
+# SIGPIPE, and with pipefail + set -e the whole script would die silently.
+set -eu
 
 ROOT="${ROOT:-/opt/fivem}"
 LICENSE_KEY="${LICENSE_KEY:-}"
@@ -221,7 +224,9 @@ if [[ "$SKIP_DB" != "1" ]]; then
     systemctl enable --now mariadb >/dev/null 2>&1 || systemctl enable --now mysql >/dev/null 2>&1 || true
 
     if [[ -z "$DB_PASS" ]]; then
-        DB_PASS="$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 24)"
+        # od reads a fixed number of bytes and exits on its own, so nothing
+        # here can take a SIGPIPE the way `... | head -c` does.
+        DB_PASS="$(od -An -tx1 -N18 /dev/urandom | tr -d ' \n')"
         ok 'generated a database password'
     fi
 
