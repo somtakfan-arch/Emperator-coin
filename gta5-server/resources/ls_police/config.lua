@@ -96,6 +96,16 @@ Config.Wanted = {
         killPlayer    = { level = 3, reason = 'Убийство' },
         vehicleTheft  = { level = 1, reason = 'Угон транспорта' },
         officerAssault= { level = 2, reason = 'Нападение на сотрудника' },
+
+        -- Поднимает ls_crime, когда сервер подтвердил, что дело началось.
+        robbery       = { level = 2, reason = 'Ограбление магазина' },
+        bankRobbery   = { level = 4, reason = 'Ограбление банка' },
+        vanRobbery    = { level = 3, reason = 'Нападение на инкассаторов' },
+        atmBreak      = { level = 2, reason = 'Взлом банкомата' },
+        burglary      = { level = 2, reason = 'Проникновение в жилище' },
+        drugSale      = { level = 1, reason = 'Сбыт наркотиков' },
+        chopShop      = { level = 2, reason = 'Разбор краденого транспорта' },
+        turfWar       = { level = 2, reason = 'Передел территории' },
     },
     autoCooldown = 60,       -- seconds between automatic additions of the same kind
 }

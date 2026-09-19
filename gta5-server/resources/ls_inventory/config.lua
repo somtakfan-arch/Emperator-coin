@@ -10,6 +10,14 @@ Config.BackpackPrice = 25000
 Config.Columns = 6
 
 -- Ammo handed over with a weapon when you use it.
+-- Типы предметов, которые обслуживает другой ресурс. Он же решает, тратится
+-- ли штука: отказ не должен съедать семечко.
+Config.ExternalTypes = {
+    tool = 'ls_crime',
+    drug = 'ls_crime',
+    part = 'ls_crime',
+}
+
 Config.WeaponAmmo = 250
 
 -- ---------------------------------------------------------------------------
@@ -73,6 +81,19 @@ Config.Items = {
     MASK_GASMASK   = { label = 'Противогаз',  type = 'mask', stack = 1, price = 11000 },
     MASK_BANDANA   = { label = 'Бандана',     type = 'mask', stack = 1, price = 1800 },
     MASK_MEDICAL   = { label = 'Медицинская маска', type = 'mask', stack = 1, price = 400 },
+
+    -- Криминал. Инструменты и товар - ими занимается ls_crime.
+    LOCKPICK   = { label = 'Отмычка',      type = 'tool', stack = 5,  price = 2500 },
+    DRILL      = { label = 'Дрель',        type = 'tool', stack = 2,  price = 14000 },
+    THERMITE   = { label = 'Термит',       type = 'tool', stack = 2,  price = 45000 },
+    HACK_KIT   = { label = 'Скиммер',      type = 'tool', stack = 3,  price = 9000 },
+
+    WEED_SEED  = { label = 'Семена конопли', type = 'drug', stack = 20, price = 1200 },
+    WEED_RAW   = { label = 'Сырая конопля',  type = 'drug', stack = 50, price = 0 },
+    WEED_PACK  = { label = 'Пакет травы',    type = 'drug', stack = 30, price = 0 },
+
+    CAR_PART   = { label = 'Автозапчасть',  type = 'part', stack = 30, price = 0 },
+    MONEY_BAG  = { label = 'Мешок с деньгами', type = 'part', stack = 6, price = 0 },
 
     -- Полицейское снаряжение. Цены нулевые: это не продаётся в магазине,
     -- а выдаётся при заступлении на службу.

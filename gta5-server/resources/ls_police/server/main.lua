@@ -661,12 +661,11 @@ end)
 
 -- Automatic additions. The client reports the event; the server decides whether
 -- it counts, so a spoofed report can at worst waste its own cooldown.
-RegisterNetEvent('ls_police:crime', function(kind)
-    local src = source
-    if not allowed(src, 'crime') then return end
-
+-- Вынесено из события, чтобы тем же путём мог ходить ls_crime: ограбление
+-- подтверждает сервер, и розыск должен вешаться оттуда, а не по слову клиента.
+local function raiseWanted(src, kind)
     local rule = Config.Wanted.auto[kind]
-    if not rule then return end
+    if not rule then return false end
 
     local key = ('%d:%s'):format(src, kind)
     local now = os.time()
@@ -684,6 +683,23 @@ RegisterNetEvent('ls_police:crime', function(kind)
             coords = GetEntityCoords(GetPlayerPed(src)),
         })
     end
+    return true
+end
+
+RegisterNetEvent('ls_police:crime', function(kind)
+    local src = source
+    if not allowed(src, 'crime') then return end
+    raiseWanted(src, kind)
+end)
+
+exports('reportCrime', function(src, kind)
+    return raiseWanted(src, kind) == true
+end)
+
+exports('onlineOfficers', function()
+    local n = 0
+    for _ in pairs(onDuty) do n = n + 1 end
+    return n
 end)
 
 -- --- jail -------------------------------------------------------------------

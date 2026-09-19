@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Чёрный рынок</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="market" class="panel hidden">
+  <header>
+    <h1>Чёрный рынок</h1>
+    <span id="money"></span>
+    <button id="close" title="Закрыть">×</button>
+  </header>
+
+  <section>
+    <h2>Купить</h2>
+    <div id="sells" class="rows"></div>
+  </section>
+
+  <section>
+    <h2>Продать</h2>
+    <div id="buys" class="rows"></div>
+  </section>
+
+  <section id="turf-box">
+    <h2>Доход с районов</h2>
+    <div class="rows">
+      <div class="row">
+        <span class="row-left"><span class="row-name" id="turf-sum"></span></span>
+        <button id="collect">Забрать</button>
+      </div>
+    </div>
+  </section>
+</div>
+<script src="nui://ls_inventory/html/icons.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+/* Окно рынка. Тот же тёмный тон, что у инвентаря и магазина, чтобы всё
+   выглядело одним интерфейсом, а не набором разных окон. */
+:root {
+  --bg: #12151c;
+  --line: #2a3140;
+  --slot: #1b2029;
+  --text: #dfe4ee;
+  --dim: #8891a3;
+  --accent: #5aa0ff;
+  --good: #64c98a;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  font-family: 'Segoe UI', Roboto, system-ui, sans-serif;
+  background: transparent;
+  color: var(--text);
+  overflow: hidden;
+}
+
+.hidden { display: none !important; }
+
+.panel {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 460px;
+  max-height: 86vh;
+  overflow-y: auto;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 18px 18px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .55);
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+h1 { font-size: 17px; margin: 0; flex: 1; }
+h2 { font-size: 12px; margin: 16px 0 8px; color: var(--dim); text-transform: uppercase; letter-spacing: .05em; }
+
+#money { color: var(--good); font-variant-numeric: tabular-nums; }
+
+#close {
+  background: none;
+  border: 0;
+  color: var(--dim);
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+#close:hover { color: var(--text); }
+
+.rows { display: flex; flex-direction: column; gap: 6px; }
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--slot);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 8px 10px;
+}
+
+.row-left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+
+.row-art {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.row-art svg { width: 19px; height: 19px; }
+
+.row-name { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row-sub { font-size: 11px; color: var(--dim); }
+.row-price { font-variant-numeric: tabular-nums; font-size: 13px; }
+
+button {
+  background: var(--accent);
+  border: 0;
+  border-radius: 7px;
+  color: #08101d;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+button:disabled { background: #39414f; color: var(--dim); cursor: default; }
+
+/* Цвета плашек берутся из icons.js - дублируем, потому что это отдельное окно. */
+.kind-weapon     { background: #4a2630; color: #ff9db0; }
+.kind-armour     { background: #1f3f57; color: #8ecbff; }
+.kind-food       { background: #27452f; color: #9fe0ac; }
+.kind-painkiller { background: #46315c; color: #cdaaf0; }
+.kind-defib      { background: #5c3a1f; color: #ffc48c; }
+.kind-mask       { background: #3d3348; color: #d3bde4; }
+.kind-drug       { background: #234a46; color: #8fdcd2; }
+.kind-part       { background: #3a4152; color: #b6c2da; }
+.kind-tool       { background: #4a412a; color: #ecd79a; }
+.kind-doc        { background: #2f3c4f; color: #a9c6e6; }
+.kind-misc       { background: #333a4a; color: #b8c0d0; }

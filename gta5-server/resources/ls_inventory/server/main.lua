@@ -279,8 +279,22 @@ RegisterNetEvent('ls_inventory:use', function(slot)
     elseif def.type == 'mask' then
         consume = external('useMask')
     else
-        notify(src, 'Этот предмет ни на что не влияет')
-        return
+        -- Тип, за который отвечает другой ресурс. Спрашиваем его, и он же
+        -- говорит, списывать предмет или нет.
+        local owner = Config.ExternalTypes and Config.ExternalTypes[def.type]
+        if not owner then
+            notify(src, 'Этот предмет ни на что не влияет')
+            return
+        end
+
+        local ok, spent = pcall(function()
+            return exports[owner]:useItem(src, entry.item)
+        end)
+        if not ok then
+            notify(src, 'Эта механика сейчас недоступна')
+            return
+        end
+        consume = spent == true
     end
 
     if not consume then

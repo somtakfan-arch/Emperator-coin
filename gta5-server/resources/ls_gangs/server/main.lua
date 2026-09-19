@@ -266,6 +266,33 @@ RegisterNetEvent('ls_gangs:escortLost', function()
     notify(src, GangLocale.escapedAway)
 end)
 
+-- --- для ls_crime -----------------------------------------------------------
+
+exports('getTerritories', function()
+    local out = {}
+    for _, gang in ipairs(Config.Gangs) do
+        local t = gang.territory
+        out[#out + 1] = {
+            key = gang.key, label = t.label, gang = gang.label,
+            x = t.x, y = t.y, z = t.z, radius = t.radius,
+        }
+    end
+    return out
+end)
+
+-- Район считается зачищенным, когда на нём не осталось ни одного живого
+-- бойца банды. Спрашивает ls_crime, прежде чем отдать район игроку.
+exports('isTerritoryClear', function(key)
+    local seen = false
+    for _, slot in pairs(slots) do
+        if slot.gang == key then
+            seen = true
+            if slot.state == 'alive' then return false end
+        end
+    end
+    return seen
+end)
+
 -- --- админ ------------------------------------------------------------------
 
 RegisterCommand('gangs', function(src)
