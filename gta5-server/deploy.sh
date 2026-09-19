@@ -149,11 +149,18 @@ if [[ "$MODE" == "update" ]]; then
     chown "$SERVICE_USER":"$SERVICE_USER" "$LOG" 2>/dev/null || true
     systemctl restart fivem
 
+    # Ждать надо не первый стартовавший ресурс, а последний: они поднимаются
+    # по очереди, и проверка через две секунды после первого объявляла
+    # мёртвым всё, что просто ещё не дошло до своей строчки.
     printf '    жду старта'
-    for _ in $(seq 1 40); do
+    for _ in $(seq 1 45); do
         sleep 2
         printf '.'
-        grep -qi 'server started\|Started resource' "$LOG" 2>/dev/null && break
+        up=0
+        for resource in "${RESOURCES[@]}"; do
+            grep -q "Started resource $resource" "$LOG" 2>/dev/null && up=$((up + 1))
+        done
+        [[ $up -eq ${#RESOURCES[@]} ]] && break
     done
     printf '\n'
 fi
@@ -188,6 +195,7 @@ else
     done
     if [[ -n "$down" ]]; then
         bad "не стартовали: $down"
+        printf '        причина:  grep -iA3 %s %s\n' "'${down%% *}'" "$LOG"
         note_problem
     else
         ok 'все ресурсы стартовали'
