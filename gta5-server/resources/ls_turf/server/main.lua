@@ -228,6 +228,13 @@ RegisterNetEvent('ls_turf:declare', function(key)
     push()
     tellAll(TurfLocale.warStarted:format(family.name,
         entry.ownerName or TurfLocale.nobody, zone.label, Config.War.minutes))
+
+    -- Война - самая горячая точка, какая бывает.
+    pcall(function()
+        return exports.ls_world:hotspot('war:' .. key,
+            ('ВОЙНА — %s'):format(zone.label), zone.x, zone.y, 0.0,
+            Config.War.minutes * 60)
+    end)
     print(('[ls_turf] война за «%s»: %s против %s')
         :format(zone.label, family.name, entry.ownerName or 'ничьей'))
 end)
@@ -294,6 +301,8 @@ local function endWar(key)
             war.defenderName or TurfLocale.nobody, zone and zone.label or key,
             defend, attack))
     end
+
+    pcall(function() return exports.ls_world:clearHotspot('war:' .. key) end)
 
     scatterDebris(key)
     dirty = true

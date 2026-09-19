@@ -37,6 +37,12 @@ end
 
 local function getUp(src, health)
     down[src] = nil
+
+    -- Раненого видно службам на карте: без этого его никто не найдёт.
+    pcall(function()
+        local coords = GetEntityCoords(GetPlayerPed(src))
+        return exports.ls_world:call('down', nil, coords.x, coords.y, coords.z)
+    end)
     reviving[src] = nil
     TriggerClientEvent('ls_medical:revive', src, health or Config.Death.reviveHealth)
     pushDownList()

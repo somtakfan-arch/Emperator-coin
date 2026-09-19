@@ -295,6 +295,16 @@ RegisterNetEvent('ls_crime:startJob', function(key, point)
         finish = 'ls_crime:finishJob',
         x = job.points[point].x, y = job.points[point].y, z = job.points[point].z,
     })
+
+    -- Горячая точка: дело идёт прямо сейчас, и это видно всем на карте.
+    -- Ради неё и затевается - она стягивает народ.
+    if job.crime then
+        local spot = job.points[point]
+        pcall(function()
+            return exports.ls_world:hotspot(('job:%s:%d'):format(key, point),
+                job.label, spot.x, spot.y, spot.z, job.seconds + 120)
+        end)
+    end
 end)
 
 local function rollLoot(src, loot)

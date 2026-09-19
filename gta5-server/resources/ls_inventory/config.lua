@@ -107,6 +107,10 @@ Config.Items = {
     CAR_PART   = { label = 'Автозапчасть',  type = 'part', stack = 30, price = 0 },
     MONEY_BAG  = { label = 'Мешок с деньгами', type = 'part', stack = 6, price = 0 },
 
+    -- Мир: метки банд и лагеря.
+    SPRAY_CAN = { label = 'Баллончик',        type = 'tool', stack = 10, price = 1500 },
+    CAMP_KIT  = { label = 'Набор для лагеря', type = 'tool', stack = 3,  price = 12000 },
+
     -- Полицейское снаряжение. Цены нулевые: это не продаётся в магазине,
     -- а выдаётся при заступлении на службу.
     HANDCUFFS = { label = 'Наручники',       type = 'misc', stack = 3, price = 0 },

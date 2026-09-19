@@ -1,0 +1,25 @@
+BizLocale = {
+    taken      = '~r~Уже куплено',
+    noMoney    = '~r~Не хватает денег: нужно $%s',
+    bought     = '~g~Куплено: %s',
+    notOwner   = '~r~Это не твоё',
+    tooMany    = '~r~Больше %d заведений на одного',
+    opened     = '~g~«%s» открыт — метка видна всем',
+    closed     = '~y~«%s» закрыт',
+    collected  = '~g~Из кассы: $%s',
+    tillEmpty  = '~y~Касса пуста',
+    sold       = '~g~Продано: %s за $%s',
+
+    openPrompt    = 'Открыть заведение',
+    closePrompt   = 'Закрыть заведение',
+    collectPrompt = 'Забрать выручку',
+    buyPrompt     = 'Купить заведение',
+    sellPrompt    = 'Продать государству',
+    robPrompt     = 'Обнести кассу',
+
+    robClosed  = '~r~Закрыто — касса пустая',
+    robEmpty   = '~r~В кассе пусто',
+    robCooling = '~y~Тут уже поработали. Ещё %s',
+    robbed     = '~g~Из кассы: $%s',
+    robAlert   = '~r~Грабят «%s»',
+}
