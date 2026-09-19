@@ -222,8 +222,8 @@ fi
 step 'Dependencies'
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
-apt-get install -y -qq curl xz-utils unzip jq ca-certificates >/dev/null
-ok 'curl, xz-utils, unzip, jq'
+apt-get install -y -qq curl xz-utils unzip jq ca-certificates screen >/dev/null
+ok 'curl, xz-utils, unzip, jq, screen'
 
 step "Preparing $ROOT"
 id -u "$SERVICE_USER" >/dev/null 2>&1 || useradd -r -m -d "$ROOT" -s /usr/sbin/nologin "$SERVICE_USER"
@@ -626,17 +626,21 @@ CFG
 ok "written: $DATA_DIR/server.cfg"
 
 step 'systemd unit'
+# FXServer reads its console from stdin. Under systemd stdin is /dev/null,
+# which EOFs immediately, and the server reads that as Ctrl-C and quits with
+# "Quitting: Ctrl-C pressed in server console". Running it inside screen gives
+# it a real pty, and as a bonus `screen -r fivem` attaches to the live console.
 cat > /etc/systemd/system/fivem.service <<UNIT
 [Unit]
 Description=FiveM server
-After=network-online.target
+After=network-online.target mariadb.service
 Wants=network-online.target
 
 [Service]
 Type=simple
 User=$SERVICE_USER
 WorkingDirectory=$DATA_DIR
-ExecStart=$SERVER_DIR/run.sh +exec server.cfg
+ExecStart=/usr/bin/screen -DmS fivem $SERVER_DIR/run.sh +exec server.cfg
 Restart=on-failure
 RestartSec=10
 
@@ -667,6 +671,7 @@ cat <<DONE
 
  Start:    systemctl enable --now fivem
  Logs:     journalctl -u fivem -f
+ Console:  screen -r fivem   (detach with Ctrl-A then D)
  Restart:  systemctl restart fivem
 
  In FiveM press F8 and type:   connect $ip_addr
