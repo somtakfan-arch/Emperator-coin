@@ -239,6 +239,48 @@ SQL
         die 'could not reach MariaDB as root - set a root password and rerun with SKIP_DB=1, then create the database by hand'
     fi
 
+    # Defaults assume a big box. On a small VPS the buffer pool and the
+    # performance schema alone eat most of the RAM the game server needs.
+    total_mb="$(awk '/MemTotal/ {print int($2/1024)}' /proc/meminfo)"
+    if [[ "$total_mb" -lt 6000 ]]; then
+        conf_dir='/etc/mysql/mariadb.conf.d'
+        [[ -d "$conf_dir" ]] || conf_dir='/etc/mysql/conf.d'
+        [[ -d "$conf_dir" ]] || mkdir -p "$conf_dir"
+
+        cat > "$conf_dir/99-fivem-small.cnf" <<'CNF'
+# Подогнано под маленький VPS (меньше 6 ГБ RAM).
+# Удали этот файл, если переедешь на машину пожирнее.
+[mysqld]
+innodb_buffer_pool_size = 128M
+innodb_log_file_size    = 64M
+innodb_flush_method     = O_DIRECT
+performance_schema      = OFF
+max_connections         = 50
+key_buffer_size         = 16M
+tmp_table_size          = 16M
+max_heap_table_size     = 16M
+table_open_cache        = 256
+CNF
+        systemctl restart mariadb >/dev/null 2>&1 || systemctl restart mysql >/dev/null 2>&1 || true
+        ok "tuned MariaDB for a ${total_mb} MB box (~200 MB saved)"
+
+        # A little swap keeps a 4 GB box from being killed by a memory spike
+        # during startup, when every resource streams in at once.
+        if [[ "$(swapon --show --noheadings | wc -l)" -eq 0 && ! -f /swapfile ]]; then
+            if fallocate -l 2G /swapfile 2>/dev/null || dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none; then
+                chmod 600 /swapfile
+                mkswap /swapfile >/dev/null 2>&1
+                if swapon /swapfile 2>/dev/null; then
+                    grep -q '^/swapfile' /etc/fstab || echo '/swapfile none swap sw 0 0' >> /etc/fstab
+                    ok 'added 2 GB swap'
+                else
+                    rm -f /swapfile
+                    warn 'swap could not be enabled (common on OpenVZ/LXC) - skipped'
+                fi
+            fi
+        fi
+    fi
+
     # The schema ships with the repo; it is fetched with the resources below.
     ok 'schema will be applied once the repo is downloaded'
 fi
