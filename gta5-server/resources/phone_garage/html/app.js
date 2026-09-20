@@ -536,6 +536,10 @@
       renderFamily();
       renderEstate();
       renderAuction();
+      // Парная к uiError: говорит, что отрисовка дошла до конца и сколько
+      // строк нарисовала. Без неё "ошибки нет" означает и "всё хорошо", и
+      // "функцию вообще не позвали", а это разные поломки.
+      post('uiOk', { where: 'estate', count: (estate.properties || []).length });
     } catch (e) {
       post('uiError', { where: 'estate', message: String((e && e.stack) || e) });
     }

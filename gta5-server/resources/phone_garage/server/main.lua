@@ -239,6 +239,11 @@ RegisterNetEvent('phone_garage:addSpot', function(spot)
     notify(src, ('Парковка записана: %s'):format(label), 'success')
 end)
 
+RegisterNetEvent('phone_garage:uiOk', function(where, count)
+    print(('[phone_garage] интерфейс отрисован у %s (%s): строк %s')
+        :format(GetPlayerName(source) or source, tostring(where), tostring(count)))
+end)
+
 RegisterNetEvent('phone_garage:uiError', function(where, message)
     print(('[phone_garage] ОШИБКА ИНТЕРФЕЙСА у %s (%s): %s')
         :format(GetPlayerName(source) or source, tostring(where), tostring(message)))

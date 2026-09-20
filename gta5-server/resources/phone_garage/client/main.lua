@@ -417,6 +417,12 @@ end
 relay('estateRefresh', 'ls_property:request')
 
 -- Ошибка в интерфейсе телефона уезжает на сервер и печатается в обычный лог.
+RegisterNUICallback('uiOk', function(data, cb)
+    TriggerServerEvent('phone_garage:uiOk',
+        tostring((data or {}).where or '?'), tonumber((data or {}).count) or 0)
+    cb('ok')
+end)
+
 RegisterNUICallback('uiError', function(data, cb)
     TriggerServerEvent('phone_garage:uiError',
         tostring((data or {}).where or '?'),
