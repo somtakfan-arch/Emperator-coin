@@ -224,6 +224,49 @@ RegisterNetEvent('ls_forum:post', function(boardKey, title, body)
     print(('[ls_forum] %s: [%s] %s'):format(nameOf(src), board.label, title))
 end)
 
+-- Тема от сервера, а не от игрока.
+--
+-- Нужна там, где форум - часть игры, а не только канцелярия: загадка про
+-- клад дня должна появляться сама, без человека, который её напишет.
+-- Лимит открытых тем на автора тут не применяется: у системы нет автора,
+-- а её темы закрываются сами, когда теряют смысл.
+exports('systemPost', function(boardKey, title, body, tag)
+    if type(boardKey) ~= 'string' or type(title) ~= 'string' or type(body) ~= 'string' then
+        return nil
+    end
+
+    local board
+    for _, entry in ipairs(Config.Boards) do
+        if entry.key == boardKey then board = entry break end
+    end
+    if not board then return nil end
+
+    -- Тема с тем же тегом заменяется, а не копится: вчерашняя загадка не
+    -- должна лежать рядом с сегодняшней.
+    if tag then
+        for id, topic in pairs(topics) do
+            if topic.tag == tag then topics[id] = nil end
+        end
+    end
+
+    local id = tostring(nextTopic)
+    nextTopic = nextTopic + 1
+    topics[id] = {
+        board = board.key,
+        title = trim(title, Config.TitleMax),
+        body = trim(body, Config.BodyMax),
+        author = 'system', authorName = 'Система',
+        open = true, at = os.time(), replies = {}, tag = tag,
+    }
+
+    dirty = true
+    save()
+    for _, pid in ipairs(GetPlayers()) do
+        push(tonumber(pid))
+    end
+    return id
+end)
+
 RegisterNetEvent('ls_forum:reply', function(id, body)
     local src = source
     if throttled(src) then return end

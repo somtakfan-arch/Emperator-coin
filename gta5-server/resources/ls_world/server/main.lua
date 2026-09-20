@@ -18,6 +18,7 @@ local nextWreck = 1
 local lastCall = {}
 local lastReport = {}
 local dirty = false
+local treasureTakenOn = nil     -- '20260920', если сегодняшний клад уже нашли
 
 local function notify(src, text)
     TriggerClientEvent('ls_world:notify', src, text)
@@ -40,6 +41,11 @@ local function nameOf(src)
     local ok, name = pcall(function() return exports.ls_character:getName(src) end)
     if ok and type(name) == 'string' and name ~= '' then return name end
     return GetPlayerName(src)
+end
+
+local function money(amount)
+    local text = tostring(math.floor(amount))
+    return (text:reverse():gsub('(%d%d%d)', '%1 '):reverse():gsub('^%s+', ''))
 end
 
 local function identifierOf(src)
@@ -78,6 +84,7 @@ local function save()
         tags = tags, nextTag = nextTag,
         camps = camps, nextCamp = nextCamp,
         wrecks = wrecks, nextWreck = nextWreck,
+        treasureTakenOn = treasureTakenOn,
     }), -1)
     dirty = false
 end
@@ -96,6 +103,7 @@ local function load()
     nextCamp = tonumber(data.nextCamp) or 1
     wrecks = data.wrecks or {}
     nextWreck = tonumber(data.nextWreck) or 1
+    treasureTakenOn = data.treasureTakenOn
 end
 
 -- --- рассылка ----------------------------------------------------------------
@@ -491,6 +499,119 @@ AddEventHandler('playerDropped', function()
     lastCall[source] = nil
     lastReport[source] = nil
     if dirty then save() end
+end)
+
+-- ---------------------------------------------------------------------------
+-- Клад дня.
+--
+-- Точка выводится из даты, поэтому одинакова у всех и переживает рестарт:
+-- хранить надо ровно один факт - выкопали сегодня или ещё нет.
+-- ---------------------------------------------------------------------------
+
+local function today()
+    return os.date('%Y%m%d')
+end
+
+local function treasureToday()
+    if not Config.Treasure.enabled then return nil end
+    local seed = tonumber(today()) or 0
+    return Config.Treasure.spots[(seed % #Config.Treasure.spots) + 1]
+end
+
+local function treasureTaken()
+    return treasureTakenOn == today()
+end
+
+-- Центр круга намеренно смещён от настоящей точки, и считается он здесь:
+-- клиенту точные координаты не уходят вообще. Иначе достаточно прочитать
+-- свою же память, чтобы копать по наводке, и загадка теряет смысл.
+local function hintCentre(spot)
+    local angle = ((math.floor(spot.x) + math.floor(spot.y)) % 360) * math.pi / 180.0
+    local shift = Config.Treasure.hint * 0.45
+    return spot.x + math.cos(angle) * shift, spot.y + math.sin(angle) * shift
+end
+
+local function pushTreasure(target)
+    local spot = treasureToday()
+    if not spot or treasureTaken() then
+        TriggerClientEvent('ls_world:treasure', target or -1, nil)
+        return
+    end
+    local cx, cy = hintCentre(spot)
+    TriggerClientEvent('ls_world:treasure', target or -1, {
+        cx = cx, cy = cy, z = spot.z, hint = Config.Treasure.hint,
+    })
+end
+
+RegisterNetEvent('ls_world:treasureRequest', function()
+    pushTreasure(source)
+end)
+
+RegisterNetEvent('ls_world:dig', function()
+    local src = source
+    if throttled(src) then return end
+
+    local spot = treasureToday()
+    if not spot or treasureTaken() then
+        notify(src, WorldLocale.treasureGone)
+        return
+    end
+
+    local coords = coordsOf(src)
+    if not coords then return end
+
+    -- Копать можно где угодно внутри круга; попал или нет, решает сервер.
+    -- Промах не наказывается, а подсказывает: так круг обходится ногами, а
+    -- не чтением памяти.
+    local dist = #(vector3(coords.x, coords.y, 0.0) - vector3(spot.x, spot.y, 0.0))
+    if dist > Config.Treasure.radius then
+        local hint = WorldLocale.treasureCold
+        if dist < 25.0 then hint = WorldLocale.treasureHot
+        elseif dist < 70.0 then hint = WorldLocale.treasureWarm end
+        notify(src, hint)
+        return
+    end
+
+    -- Отмечаем до выдачи: два игрока, докопавшихся в одну секунду, не должны
+    -- получить по кладу каждый.
+    treasureTakenOn = today()
+    dirty = true
+
+    local reward = math.random(Config.Treasure.reward.min, Config.Treasure.reward.max)
+    addMoney(src, reward)
+    notify(src, WorldLocale.treasureFound:format(money(reward)))
+    TriggerClientEvent('ls_world:notify', -1,
+        WorldLocale.treasureTaken:format(nameOf(src)))
+    pushTreasure()
+end)
+
+-- Загадку вешает сам сервер: форум - часть игры, а не канцелярия, и клад
+-- должен появляться там без человека, который его объявит.
+local function postRiddle()
+    local spot = treasureToday()
+    if not spot then return end
+    pcall(function()
+        return exports.ls_forum:systemPost(Config.Treasure.board,
+            'Клад дня',
+            spot.riddle .. '\n\nКруг на карте показывает район. Точное место - копать.',
+            'treasure')
+    end)
+end
+
+CreateThread(function()
+    -- Ждём, пока поднимется форум: ресурсы стартуют по очереди.
+    Wait(15000)
+    local postedFor = nil
+    while true do
+        if Config.Treasure.enabled and postedFor ~= today() then
+            postedFor = today()
+            -- Новые сутки - новый клад и новая загадка.
+            if treasureTakenOn ~= postedFor then treasureTakenOn = nil end
+            postRiddle()
+            pushTreasure()
+        end
+        Wait(60000)
+    end
 end)
 
 RegisterCommand('world', function(src)

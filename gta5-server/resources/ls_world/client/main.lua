@@ -384,3 +384,78 @@ AddEventHandler('onResourceStop', function(name)
         if DoesEntityExist(car) then DeleteEntity(car) end
     end
 end)
+
+-- ---------------------------------------------------------------------------
+-- Клад дня.
+--
+-- На карте только круг: точное место ищется по загадке с форума и глазами.
+-- Копать можно в небольшом радиусе от настоящей точки.
+-- ---------------------------------------------------------------------------
+
+local treasure = nil
+local treasureArea = nil
+local digging = false
+
+local function clearTreasureBlip()
+    if treasureArea then RemoveBlip(treasureArea) treasureArea = nil end
+end
+
+-- Приходит только круг: центр уже смещён сервером, настоящей точки клиент
+-- не знает и знать не должен.
+RegisterNetEvent('ls_world:treasure', function(data)
+    treasure = data
+    clearTreasureBlip()
+    if not treasure then return end
+
+    treasureArea = AddBlipForRadius(treasure.cx, treasure.cy, treasure.z, treasure.hint)
+    SetBlipColour(treasureArea, Config.Treasure.blip.colour)
+    SetBlipAlpha(treasureArea, Config.Treasure.blip.alpha)
+end)
+
+CreateThread(function()
+    while not NetworkIsPlayerActive(PlayerId()) do Wait(200) end
+    Wait(4000)
+    TriggerServerEvent('ls_world:treasureRequest')
+
+    -- Сутки могут смениться, пока игрок на сервере.
+    while true do
+        Wait(600000)
+        TriggerServerEvent('ls_world:treasureRequest')
+    end
+end)
+
+AddEventHandler('ls_interact:collect', function()
+    if not treasure or digging then return end
+
+    -- Копать предлагаем в любом месте круга: где именно зарыто, знает
+    -- только сервер, он же и ответит.
+    local me = GetEntityCoords(PlayerPedId())
+    local flat = #(vector3(me.x, me.y, 0.0) - vector3(treasure.cx, treasure.cy, 0.0))
+    if flat > treasure.hint then return end
+
+    TriggerEvent('ls_interact:offer', {
+        id = 'ls_world:dig', label = WorldLocale.digPrompt, order = 2,
+    })
+end)
+
+AddEventHandler('ls_interact:run', function(id)
+    if id ~= 'ls_world:dig' or digging then return end
+
+    digging = true
+    CreateThread(function()
+        local ped = PlayerPedId()
+        RequestAnimDict('amb@world_human_gardener_plant@male@base')
+        local deadline = GetGameTimer() + 3000
+        while not HasAnimDictLoaded('amb@world_human_gardener_plant@male@base')
+            and GetGameTimer() < deadline do Wait(20) end
+        if HasAnimDictLoaded('amb@world_human_gardener_plant@male@base') then
+            TaskPlayAnim(ped, 'amb@world_human_gardener_plant@male@base', 'base',
+                8.0, -8.0, Config.Treasure.seconds * 1000, 1, 0, false, false, false)
+        end
+
+        Wait(Config.Treasure.seconds * 1000)
+        ClearPedTasks(PlayerPedId())
+        digging = false
+        TriggerServerEvent('ls_world:dig')
+    end)
+end)

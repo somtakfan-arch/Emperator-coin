@@ -18,4 +18,12 @@ WorldLocale = {
     towPrompt   = 'Погрузить машину',
     callPrompt  = 'Вызвать службы',
     closePrompt = 'Закрыть вызов',
+
+    treasureGone  = '~y~Сегодняшний клад уже выкопали',
+    treasureCold  = '~r~Пусто. Здесь явно не то место',
+    treasureWarm  = '~y~Пусто, но земля тут рыхлая. Где-то рядом',
+    treasureHot   = '~y~Почти! Копай в двух шагах отсюда',
+    treasureFound = '~g~Клад! +$%s',
+    treasureTaken = '~y~%s нашёл клад дня. Следующий - завтра',
+    digPrompt     = 'Копать',
 }
