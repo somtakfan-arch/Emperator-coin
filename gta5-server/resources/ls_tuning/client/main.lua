@@ -388,19 +388,85 @@ CreateThread(function()
     TriggerServerEvent('ls_tuning:driveRequest')
 end)
 
--- Сколько должна ехать эта машина и с каким мотором.
+-- Сколько должна ехать эта машина, с каким мотором и как держать дорогу.
 local function driveTarget(vehicle)
     local entry = driveByHash[GetEntityModel(vehicle)]
     local kmh = entry and entry.kmh or Config.Drive.defaultKmh
     local power = entry and entry.power or Config.Drive.defaultPower
     local torque = entry and entry.torque or Config.Drive.defaultTorque
+    local grip = entry and entry.grip or Config.Drive.defaultGrip
 
     -- Класс перебивает каталог вниз, но не вверх: мотоцикл за три миллиона
     -- всё равно не должен ехать семьсот.
-    local byClass = Config.Drive.classKmh[GetVehicleClass(vehicle)]
+    local class = GetVehicleClass(vehicle)
+    local byClass = Config.Drive.classKmh[class]
     if byClass and byClass < kmh then kmh = byClass end
 
-    return math.min(kmh, Config.Drive.maxKmh), power, torque
+    -- Мотоциклам и фурам прибавка к сцеплению даётся вполовину: половина
+    -- отклонения от единицы, а не половина самого значения - иначе
+    -- множитель 1.9 превратился бы в 0.95, то есть в ухудшение.
+    if grip and Config.Drive.softGripClasses[class] then
+        local half = {}
+        for field, value in pairs(grip) do
+            if field == 'gravity' then
+                half[field] = 9.8 + (value - 9.8) * 0.5
+            else
+                half[field] = 1.0 + (value - 1.0) * 0.5
+            end
+        end
+        grip = half
+    end
+
+    return math.min(kmh, Config.Drive.maxKmh), power, torque, grip
+end
+
+-- Сцепление и подвеска.
+--
+-- Хендлинг правится на самой машине, а не в handling.meta: файл разошёлся
+-- бы с аддонами, а так дорогая машина держит дорогу хоть из салона, хоть
+-- угнанная. Правка живёт только у того клиента, который её сделал, - но
+-- своей машиной управляет он же, так что расхождения не видно.
+local function applyGrip(vehicle, grip)
+    if not grip then return end
+
+    -- Множитель к заводскому значению, а не абсолютная цифра: у каждой
+    -- модели своя подвеска, и одно число на всех сделало бы половину
+    -- машин неуправляемыми.
+    local function scale(field, mult)
+        if not mult or mult == 1.0 then return end
+        local base = GetVehicleHandlingFloat(vehicle, 'CHandlingData', field)
+        if type(base) == 'number' and base > 0.0 then
+            SetVehicleHandlingFloat(vehicle, 'CHandlingData', field, base * mult)
+        end
+    end
+
+    -- Шины держат дорогу.
+    scale('fTractionCurveMax', grip.traction)
+    scale('fTractionCurveMin', grip.traction)
+    scale('fTractionCurveLateral', grip.traction)
+
+    -- Подвеска не раскачивается и не отыгрывает после кочки.
+    scale('fSuspensionReboundDamp', grip.damp)
+    scale('fSuspensionCompDamp', grip.damp)
+
+    -- Ход подвески меньше - колёса прижаты, машину не подбрасывает.
+    scale('fSuspensionForce', grip.damp)
+    scale('fTractionSpringDeltaMax', grip.spring)
+
+    -- Притяжение сильнее заводского: на трамплинах машина почти не
+    -- взлетает, а взлетев, быстро возвращается на дорогу.
+    if grip.gravity and grip.gravity > 0.0 then
+        SetVehicleGravityAmount(vehicle, grip.gravity)
+    end
+
+    -- Штатное ухудшение сцепления у GTA (мокрый асфальт, дрифт-режим)
+    -- перебивало бы всё, что мы тут настроили.
+    SetVehicleReduceGrip(vehicle, false)
+
+    -- На семистах километрах приземление ломает подвеску с первого же
+    -- бугра, и машина встаёт посреди трассы.
+    SetVehicleHasStrongAxles(vehicle, true)
+    SetVehicleWheelsCanBreak(vehicle, false)
 end
 
 local function applyDrive(vehicle)
@@ -408,11 +474,13 @@ local function applyDrive(vehicle)
     if not DoesEntityExist(vehicle) then return end
     if Config.Drive.skipClasses[GetVehicleClass(vehicle)] then return end
 
-    local kmh, power, torque = driveTarget(vehicle)
+    local kmh, power, torque, grip = driveTarget(vehicle)
 
     -- Разгон: проценты прибавки к мощности, тут множитель не нужен.
     if power > 0.0 then SetVehicleEnginePowerMultiplier(vehicle, power) end
     if torque and torque ~= 1.0 then SetVehicleEngineTorqueMultiplier(vehicle, torque) end
+
+    applyGrip(vehicle, grip)
 
     -- А максималка задаётся множителем к заводской, поэтому под цель его
     -- надо посчитать. Заводскую берём до того, как что-то накрутили: после
@@ -452,9 +520,9 @@ RegisterCommand('speed', function()
     local vehicle = GetVehiclePedIsIn(PlayerPedId(), false)
     if vehicle == 0 then notify('~r~Сядь в машину') return end
 
-    local kmh, power = driveTarget(vehicle)
-    notify(('~b~Потолок: ~w~%d км/ч~b~, мотор: ~w~+%d%%'):format(
-        math.floor(kmh), math.floor(power)))
+    local kmh, power, _, grip = driveTarget(vehicle)
+    notify(('~b~Потолок: ~w~%d км/ч~b~, мотор: ~w~+%d%%~b~, сцепление: ~w~×%.2f')
+        :format(math.floor(kmh), math.floor(power), (grip and grip.traction) or 1.0))
 end, false)
 
 -- Подобрать цифры проще живьём, чем перезапуском ресурса.

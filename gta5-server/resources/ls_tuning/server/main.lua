@@ -202,6 +202,7 @@ local function buildDriveTable()
             kmh = math.min(tier.kmh, Config.Drive.maxKmh),
             power = tier.power,
             torque = tier.torque,
+            grip = tier.grip,
         }
     end
     return rows
