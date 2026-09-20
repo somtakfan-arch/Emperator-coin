@@ -276,7 +276,18 @@ local function pushEveryone()
 end
 
 RegisterNetEvent('ls_property:request', function()
-    pushPhone(source)
+    local src = source
+    pushPhone(src)
+
+    -- Одна строчка на каждое открытие телефона. Она стоит того: когда
+    -- экраны семьи и недвижимости оказались пустыми, по логам нельзя было
+    -- отличить "телефон не попросил" от "сервер не ответил", и выяснять
+    -- это пришлось бы через клиентскую консоль, куда ещё надо додуматься
+    -- заглянуть.
+    print(('[ls_property] срез отправлен %s: объектов %d, семья %s')
+        :format(GetPlayerName(src) or src,
+            #Config.Properties,
+            familyOf(identifierOf(src)) and 'есть' or 'нет'))
 end)
 
 -- --- семья: события ----------------------------------------------------------

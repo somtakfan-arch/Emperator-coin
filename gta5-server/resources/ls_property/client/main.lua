@@ -67,6 +67,12 @@ RegisterNetEvent('ls_property:phone', function(data)
     rebuildBlips()
     -- Телефон рисует phone_garage; ему нужен свежий срез.
     TriggerEvent('phone_garage:propertyData', phone)
+
+    -- Видно в F8. Парная к серверной строчке: если там "срез отправлен", а
+    -- тут тишина, значит данные до клиента не доехали, и искать надо в
+    -- сети, а не в интерфейсе.
+    print(('[ls_property] срез получен: объектов %d')
+        :format(#(phone.properties or {})))
 end)
 
 RegisterNetEvent('ls_property:storage', function(data)
