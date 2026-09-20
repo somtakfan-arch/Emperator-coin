@@ -54,6 +54,11 @@
     part: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M6 6l2 2M16 16l2 2M18 6l-2 2M8 16l-2 2"/>',
 
     jerrycan: '<path d="M5 7h11v13H5z"/><path d="M16 10h3v7h-3"/><path d="M8 4h5v3H8z"/><path d="M7 11h7"/>',
+    ore: '<path d="M4 13l5-7 7 2 4 6-6 6H8z"/><path d="M9 6l2 7 5-4"/><path d="M11 13l-3 7"/>',
+    log: '<path d="M3 8h13v9H3z"/><ellipse cx="16" cy="12.5" rx="3" ry="4.5"/><ellipse cx="16" cy="12.5" rx="1.2" ry="1.8"/>',
+    pelt: '<path d="M7 3c-3 3-4 7-2 10l3 8h8l3-8c2-3 1-7-2-10-2 2-3 3-6 3s-4-1-6-3z"/>',
+    meat: '<path d="M8 5c5-3 11 1 10 6-1 4-5 6-8 5"/><path d="M10 16l-4 4-3-1 1-3 4-4z"/><circle cx="14" cy="9" r="1.5"/>',
+    fish: '<path d="M3 12c4-5 10-5 14 0-4 5-10 5-14 0z"/><path d="M17 12l4-3v6z"/><circle cx="8" cy="12" r="1"/>',
     misc: '<rect x="4" y="7" width="16" height="13" rx="2"/><path d="M4 11h16"/><path d="M12 7V4"/>'
   };
 
@@ -64,6 +69,7 @@
     DEFIBRILLATOR: 'defib',
     HANDCUFFS: 'cuffs', CUFF_KEY: 'key',
     BACKPACK: 'backpack', JERRYCAN: 'jerrycan',
+    ORE_RAW: 'ore', LOG_WOOD: 'log', PELT: 'pelt', MEAT_RAW: 'meat', FISH: 'fish',
     MASK_GASMASK: 'gasmask', MASK_BANDANA: 'bandana',
     WEAPON_STUNGUN: 'taser', WEAPON_NIGHTSTICK: 'baton', WEAPON_BAT: 'bat',
     WEAPON_CROWBAR: 'tool', WEAPON_KNIFE: 'melee', WEAPON_MACHETE: 'melee'

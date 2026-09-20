@@ -112,6 +112,14 @@ Config.Items = {
     CAMP_KIT  = { label = 'Набор для лагеря', type = 'tool', stack = 3,  price = 12000 },
     JERRYCAN  = { label = 'Канистра',         type = 'tool', stack = 2,  price = 900 },
 
+    -- Промысел. Цена стоит для справки в инвентаре; покупают их только
+    -- скупщики на севере, в магазинах этого нет.
+    ORE_RAW   = { label = 'Руда',              type = 'part', stack = 30, price = 350 },
+    LOG_WOOD  = { label = 'Бревно',            type = 'part', stack = 20, price = 280 },
+    PELT      = { label = 'Шкура',             type = 'part', stack = 15, price = 700 },
+    MEAT_RAW  = { label = 'Мясо',              type = 'food', stack = 20, price = 300 },
+    FISH      = { label = 'Рыба',              type = 'food', stack = 25, price = 420 },
+
     -- Полицейское снаряжение. Цены нулевые: это не продаётся в магазине,
     -- а выдаётся при заступлении на службу.
     HANDCUFFS = { label = 'Наручники',       type = 'misc', stack = 3, price = 0 },
