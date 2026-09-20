@@ -53,6 +53,27 @@ local pick = 1
 local scroll = 0
 local available = 0     -- сколько действий рядом, для подсказки
 
+-- IsControlJustReleased истинна ровно один кадр, поэтому опрашивать её
+-- можно только каждый кадр. Раньше в закрытом состоянии цикл спал по 150 мс
+-- - девять кадров при 60 fps, - и нажатие E терялось примерно в девяти
+-- случаях из десяти. Выглядело это как "меню не открывается".
+--
+-- Читаем через IsDisabledControl*: обычная версия молчит про клавишу,
+-- которую мы сами же заблокировали, а W/S внутри меню как раз блокируются,
+-- чтобы игрок не уходил, листая список.
+local function pressed(keys)
+    if type(keys) == 'number' then return IsDisabledControlJustReleased(0, keys) end
+    for _, key in ipairs(keys) do
+        if IsDisabledControlJustReleased(0, key) then return true end
+    end
+    return false
+end
+
+local function disable(keys)
+    if type(keys) == 'number' then DisableControlAction(0, keys, true) return end
+    for _, key in ipairs(keys) do DisableControlAction(0, key, true) end
+end
+
 local function sortOffers(list)
     table.sort(list, function(a, b)
         local oa, ob = a.order or 50, b.order or 50
@@ -192,17 +213,23 @@ CreateThread(function()
             DisableControlAction(0, 24, true)
             DisableControlAction(0, 25, true)
             DisableControlAction(0, 68, true)
-            DisableControlAction(0, Config.Key, true)
+            disable(Config.Key)
+
+            -- Ходьба: иначе листание списка на W уводит персонажа от того,
+            -- с чем он собрался взаимодействовать.
+            for _, key in ipairs({ 30, 31, 32, 33, 34, 35 }) do
+                DisableControlAction(0, key, true)
+            end
 
             draw()
 
-            if IsControlJustReleased(0, Config.Up) then
+            if pressed(Config.Up) then
                 pick = pick > 1 and pick - 1 or #shown
                 keepInView()
-            elseif IsControlJustReleased(0, Config.Down) then
+            elseif pressed(Config.Down) then
                 pick = pick < #shown and pick + 1 or 1
                 keepInView()
-            elseif IsControlJustReleased(0, Config.Enter) then
+            elseif pressed(Config.Enter) then
                 local offer = shown[pick]
                 if offer and offer.submenu then
                     -- Внутрь раздела, список уже собран - опрашивать заново
@@ -213,7 +240,7 @@ CreateThread(function()
                     close()
                     TriggerEvent('ls_interact:run', offer.id)
                 end
-            elseif IsControlJustReleased(0, Config.Back) then
+            elseif pressed(Config.Back) then
                 -- Из раздела - назад в корень, а не сразу из меню.
                 if page then
                     page, pageTitle = nil, nil
@@ -227,9 +254,9 @@ CreateThread(function()
             if IsEntityDead(PlayerPedId()) then close() end
 
         else
-            wait = 150
+            -- Ни в коем случае не спим: см. комментарий к pressed().
             if not IsPauseMenuActive() and not IsEntityDead(PlayerPedId())
-                and IsControlJustReleased(0, Config.Key) then
+                and pressed(Config.Key) then
                 openMenu()
             end
         end
