@@ -275,6 +275,11 @@ local function pushEveryone()
     for _, id in ipairs(GetPlayers()) do pushPhone(tonumber(id)) end
 end
 
+RegisterNetEvent('ls_property:ack', function(count)
+    print(('[ls_property] срез ПРИНЯТ клиентом %s: объектов %s')
+        :format(GetPlayerName(source) or source, tostring(count)))
+end)
+
 RegisterNetEvent('ls_property:request', function()
     local src = source
     pushPhone(src)

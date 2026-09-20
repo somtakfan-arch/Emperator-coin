@@ -527,10 +527,18 @@
   }
 
   function renderEstateAll() {
-    $('auction-count').textContent = String((estate.auctions || []).length);
-    renderFamily();
-    renderEstate();
-    renderAuction();
+    // Исключение здесь раньше означало навсегда пустой экран без единого
+    // следа: ошибки интерфейса не попадают ни в серверный лог, ни куда-либо
+    // ещё, кроме клиентской консоли, куда надо догадаться заглянуть. Теперь
+    // они уезжают на сервер и видны в обычном логе.
+    try {
+      $('auction-count').textContent = String((estate.auctions || []).length);
+      renderFamily();
+      renderEstate();
+      renderAuction();
+    } catch (e) {
+      post('uiError', { where: 'estate', message: String((e && e.stack) || e) });
+    }
   }
 
   window.addEventListener('message', (ev) => {

@@ -239,6 +239,11 @@ RegisterNetEvent('phone_garage:addSpot', function(spot)
     notify(src, ('Парковка записана: %s'):format(label), 'success')
 end)
 
+RegisterNetEvent('phone_garage:uiError', function(where, message)
+    print(('[phone_garage] ОШИБКА ИНТЕРФЕЙСА у %s (%s): %s')
+        :format(GetPlayerName(source) or source, tostring(where), tostring(message)))
+end)
+
 -- --- exports ---------------------------------------------------------------
 -- The wallet lives here, so other resources (ls_shops) go through these.
 

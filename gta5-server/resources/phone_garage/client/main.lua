@@ -416,6 +416,14 @@ end
 -- оставляет экран пустым до перезахода.
 relay('estateRefresh', 'ls_property:request')
 
+-- Ошибка в интерфейсе телефона уезжает на сервер и печатается в обычный лог.
+RegisterNUICallback('uiError', function(data, cb)
+    TriggerServerEvent('phone_garage:uiError',
+        tostring((data or {}).where or '?'),
+        tostring((data or {}).message or ''):sub(1, 400))
+    cb('ok')
+end)
+
 relay('familyCreate', 'ls_property:createFamily', function(d)
     return { tostring(d.name or ''), tostring(d.tag or '') }
 end)

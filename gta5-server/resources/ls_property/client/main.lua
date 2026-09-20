@@ -73,6 +73,9 @@ RegisterNetEvent('ls_property:phone', function(data)
     -- сети, а не в интерфейсе.
     print(('[ls_property] срез получен: объектов %d')
         :format(#(phone.properties or {})))
+    -- Подтверждение уходит и на сервер: клиентская консоль существует, но
+    -- заглянуть в неё догадывается не каждый, а серверный лог уже читают.
+    TriggerServerEvent('ls_property:ack', #(phone.properties or {}))
 end)
 
 RegisterNetEvent('ls_property:storage', function(data)
