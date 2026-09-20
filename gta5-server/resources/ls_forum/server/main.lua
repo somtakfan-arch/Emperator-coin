@@ -230,6 +230,31 @@ end)
 -- клад дня должна появляться сама, без человека, который её напишет.
 -- Лимит открытых тем на автора тут не применяется: у системы нет автора,
 -- а её темы закрываются сами, когда теряют смысл.
+-- Последние темы доски, без тела и ответов.
+--
+-- Нужно физической доске объявлений в мире: она показывает заголовки прямо
+-- в меню E, чтобы её можно было прочитать, не доставая телефон. Закрытые
+-- темы не отдаём - объявление о продаже машины, которой уже нет, только
+-- путает.
+exports('latest', function(boardKey, limit)
+    if type(boardKey) ~= 'string' then return {} end
+    limit = math.min(tonumber(limit) or 8, 25)
+
+    local rows = {}
+    for id, topic in pairs(topics) do
+        if topic.board == boardKey and topic.open then
+            rows[#rows + 1] = {
+                id = id, title = topic.title, body = topic.body,
+                author = topic.authorName, at = topic.at,
+            }
+        end
+    end
+
+    table.sort(rows, function(a, b) return (a.at or 0) > (b.at or 0) end)
+    while #rows > limit do table.remove(rows) end
+    return rows
+end)
+
 exports('systemPost', function(boardKey, title, body, tag)
     if type(boardKey) ~= 'string' or type(title) ~= 'string' or type(body) ~= 'string' then
         return nil

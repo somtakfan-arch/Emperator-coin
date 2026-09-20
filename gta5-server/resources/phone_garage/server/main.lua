@@ -247,6 +247,20 @@ exports('getMoney', function(src)
     return rec.money
 end)
 
+-- Каталог автосалона. Нужен физическому салону в мире: он выставляет в зале
+-- машины отсюда, а покупка всё равно идёт через phone_garage:buy.
+-- Отдаём копию: чужой ресурс не должен править наш конфиг на ходу.
+exports('catalog', function()
+    local rows = {}
+    for _, car in ipairs(Config.Catalog) do
+        rows[#rows + 1] = {
+            model = car.model, label = car.label,
+            class = car.class, price = car.price,
+        }
+    end
+    return rows
+end)
+
 exports('addMoney', function(src, amount)
     amount = math.floor(tonumber(amount) or 0)
     if amount <= 0 then return false end

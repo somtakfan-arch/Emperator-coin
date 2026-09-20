@@ -237,6 +237,12 @@ RegisterCommand('phone', function()
     setPhone(not phoneOpen)
 end, false)
 
+-- Телефон достают не только по клавише: у физической доски объявлений в
+-- мире есть пункт "написать", и он должен открывать то же самое окно.
+exports('openPhone', function()
+    if not phoneOpen then setPhone(true) end
+end)
+
 RegisterKeyMapping('phone', 'Телефон: гараж и автосалон', 'keyboard', Config.OpenKey)
 
 RegisterCommand('parkhere', function()
