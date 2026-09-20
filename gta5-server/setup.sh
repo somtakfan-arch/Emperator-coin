@@ -863,13 +863,21 @@ cat > /etc/systemd/system/fivem.service <<UNIT
 Description=FiveM server
 After=network-online.target mariadb.service
 Wants=network-online.target
+StartLimitIntervalSec=600
+StartLimitBurst=5
 
 [Service]
 Type=simple
 User=$SERVICE_USER
 WorkingDirectory=$DATA_DIR
 ExecStart=/usr/bin/screen -L -Logfile $ROOT/server.log -DmS fivem $SERVER_DIR/run.sh +exec server.cfg
-Restart=on-failure
+# on-failure не годится: если FXServer отказался от лицензионного ключа или
+# прочитал EOF со stdin, он выходит с кодом 0, systemd считает это штатным
+# завершением и сервер просто лежит. always поднимает его в любом случае, а
+# StartLimit (он в [Unit]) не даёт уйти в бесконечный цикл на сломанном
+# конфиге: пять попыток за десять минут, дальше служба встаёт с 'failed'
+# и ждёт человека.
+Restart=always
 RestartSec=10
 
 [Install]

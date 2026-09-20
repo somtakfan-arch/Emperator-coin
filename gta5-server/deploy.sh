@@ -268,6 +268,20 @@ if need 'юнит fivem.service' test -f /etc/systemd/system/fivem.service; then
     bad 'юнита нет. Это полная установка:'
     printf '        cd /opt/fivem && curl -fL "%s?v=%s" -o setup.sh && bash setup.sh\n' \
         "$SETUP_URL" "$(date +%s)"
+elif grep -q '^Restart=on-failure' /etc/systemd/system/fivem.service 2>/dev/null; then
+    # on-failure означает: сервер, вышедший с кодом 0 (отказ лицензии, EOF на
+    # stdin), лежит и никто его не поднимает. Правим на месте - это одна
+    # строчка, полная переустановка ради неё не нужна.
+    if [[ "$MODE" == "check" ]]; then
+        warn 'юнит перезапускает сервер только при ошибке - deploy.sh без --check это починит'
+    else
+        sed -i 's/^Restart=on-failure/Restart=always/' /etc/systemd/system/fivem.service
+        grep -q '^StartLimitBurst=' /etc/systemd/system/fivem.service \
+            || sed -i '/^Wants=network-online.target/a StartLimitIntervalSec=600\nStartLimitBurst=5' \
+                /etc/systemd/system/fivem.service
+        systemctl daemon-reload
+        ok 'юнит: Restart=always (раньше сервер не поднимался после чистого выхода)'
+    fi
 fi
 
 if [[ "$fixing" == "1" ]]; then
@@ -432,8 +446,35 @@ else
     note_problem
 fi
 
+# Известные причины, по которым FXServer умирает, не дойдя до ресурсов.
+# Слева - что искать в логе, справа - что это значит человеку.
+diagnose_log() {
+    local found=0 pattern meaning
+    while IFS='|' read -r pattern meaning; do
+        [[ -z "$pattern" ]] && continue
+        if grep -qiE "$pattern" "$LOG" 2>/dev/null; then
+            bad "причина: $meaning"
+            found=1
+        fi
+    done <<'REASONS'
+invalid license key|лицензионный ключ не принят. Возьми новый на portal.cfx.re и впиши в server.cfg (строка sv_licenseKey)
+license key.*(not valid|expired|revoked)|лицензионный ключ недействителен или отозван - заведи новый на portal.cfx.re
+could not fetch.*license|сервер не смог проверить ключ - нет связи с Cfx или ключ сломан
+Ctrl-C pressed|сервер прочитал конец ввода со stdin и вышел. Значит screen не дал ему терминал
+(address|adress) already in use|порт 30120 уже занят. Проверь: ss -lntup | grep 30120
+could not bind|сервер не смог занять порт 30120
+error parsing.*server\.cfg|в server.cfg синтаксическая ошибка
+couldn.t find resource|в server.cfg включён ресурс, которого нет на диске
+no such file or directory.*run\.sh|FXServer распакован не до конца - перекачай ядро
+REASONS
+    return $((1 - found))
+}
+
 if [[ ! -s "$LOG" ]]; then
     warn "лог пуст ($LOG) - если сервер только что перезапущен, подожди минуту"
+    warn 'запусти руками, он напечатает причину:'
+    printf '        cd %s && timeout 40 sudo -u %s %s/run.sh +exec server.cfg 2>&1 | tail -n 30\n' \
+        "$DATA_DIR" "$SERVICE_USER" "$SERVER_DIR"
 else
     # Какие ресурсы реально поднялись.
     down=""
@@ -442,8 +483,18 @@ else
     done
     if [[ -n "$down" ]]; then
         bad "не стартовали: $down"
-        printf '        причина:  grep -iA3 %s %s\n' "'${down%% *}'" "$LOG"
         note_problem
+        # Если не поднялся вообще никто, дело не в ресурсах: сервер умер
+        # раньше, чем дошёл до них. Хвост лога тут полезнее списка имён.
+        if [[ $(printf '%s' "$down" | wc -w) -eq ${#RESOURCES[@]} ]]; then
+            bad 'не стартовал ни один - сервер умер до загрузки ресурсов'
+            diagnose_log || warn 'знакомых причин в логе нет, смотри хвост ниже'
+            printf '\n        --- последние 25 строк %s ---\n' "$LOG"
+            tail -n 25 "$LOG" 2>/dev/null | sed 's/^/        /'
+            printf '\n'
+        else
+            printf '        причина:  grep -iA3 %s %s\n' "'${down%% *}'" "$LOG"
+        fi
     else
         ok 'все ресурсы стартовали'
     fi
