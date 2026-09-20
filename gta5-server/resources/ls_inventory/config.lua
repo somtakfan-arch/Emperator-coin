@@ -133,7 +133,10 @@ Config.Items = {
     WEAPON_HEAVYSHOTGUN  = { label = 'Тяжёлый дробовик',     type = 'weapon', tier = 'serious', stack = 1, price = 44000 },
     WEAPON_CARBINERIFLE  = { label = 'Карабин',              type = 'weapon', tier = 'serious', stack = 1, price = 48000 },
     WEAPON_ASSAULTRIFLE  = { label = 'Штурмовая винтовка',   type = 'weapon', tier = 'serious', stack = 1, price = 42000 },
-    WEAPON_SPECIALCARBINE= { label = 'Special Carbine',      type = 'weapon', tier = 'serious', stack = 1, price = 52000 },
+    -- Спешик - единственный нарезной в свободной продаже: решение владельца
+    -- сервера, не недосмотр. Остальное автоматическое по-прежнему только
+    -- через склад госфракции.
+    WEAPON_SPECIALCARBINE= { label = 'Special Carbine',      type = 'weapon', stack = 1, price = 52000 },
     WEAPON_BULLPUPRIFLE  = { label = 'Bullpup Rifle',        type = 'weapon', tier = 'serious', stack = 1, price = 46000 },
     WEAPON_SNIPERRIFLE   = { label = 'Снайперская винтовка', type = 'weapon', tier = 'serious', stack = 1, price = 65000 },
     WEAPON_MARKSMANRIFLE = { label = 'Marksman Rifle',       type = 'weapon', tier = 'serious', stack = 1, price = 72000 },
