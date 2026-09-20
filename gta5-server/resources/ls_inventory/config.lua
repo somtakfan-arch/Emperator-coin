@@ -110,6 +110,7 @@ Config.Items = {
     -- Мир: метки банд и лагеря.
     SPRAY_CAN = { label = 'Баллончик',        type = 'tool', stack = 10, price = 1500 },
     CAMP_KIT  = { label = 'Набор для лагеря', type = 'tool', stack = 3,  price = 12000 },
+    JERRYCAN  = { label = 'Канистра',         type = 'tool', stack = 2,  price = 900 },
 
     -- Полицейское снаряжение. Цены нулевые: это не продаётся в магазине,
     -- а выдаётся при заступлении на службу.

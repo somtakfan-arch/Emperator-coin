@@ -53,6 +53,7 @@
     tool: '<path d="M14 4a4 4 0 00-5 5L4 14v6h6l5-5a4 4 0 005-5l-3 3-3-3z"/>',
     part: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M6 6l2 2M16 16l2 2M18 6l-2 2M8 16l-2 2"/>',
 
+    jerrycan: '<path d="M5 7h11v13H5z"/><path d="M16 10h3v7h-3"/><path d="M8 4h5v3H8z"/><path d="M7 11h7"/>',
     misc: '<rect x="4" y="7" width="16" height="13" rx="2"/><path d="M4 11h16"/><path d="M12 7V4"/>'
   };
 
@@ -62,7 +63,7 @@
     SNACK: 'snack', BURGER: 'food', WATER: 'drink', ENERGY: 'drink', MEDKIT: 'medkit',
     DEFIBRILLATOR: 'defib',
     HANDCUFFS: 'cuffs', CUFF_KEY: 'key',
-    BACKPACK: 'backpack',
+    BACKPACK: 'backpack', JERRYCAN: 'jerrycan',
     MASK_GASMASK: 'gasmask', MASK_BANDANA: 'bandana',
     WEAPON_STUNGUN: 'taser', WEAPON_NIGHTSTICK: 'baton', WEAPON_BAT: 'bat',
     WEAPON_CROWBAR: 'tool', WEAPON_KNIFE: 'melee', WEAPON_MACHETE: 'melee'

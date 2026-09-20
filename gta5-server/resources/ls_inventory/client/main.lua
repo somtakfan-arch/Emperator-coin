@@ -163,6 +163,37 @@ exports('buyBackpack', function()
     TriggerServerEvent('ls_inventory:buyBackpack')
 end)
 
+-- Есть ли предмет на руках - вопрос, который задают все остальные ресурсы,
+-- когда решают, показывать пункт в меню E или нет. Ответ берётся из того же
+-- слепка, что рисует витрину: отдельного запроса на сервер не нужно, а
+-- настоящую проверку всё равно делает сервер, когда предмет тратится.
+exports('hasItem', function(itemId, count)
+    if type(itemId) ~= 'string' or not lastState or type(lastState.slots) ~= 'table' then
+        return false
+    end
+    local need = tonumber(count) or 1
+    local have = 0
+    for _, entry in pairs(lastState.slots) do
+        if entry.item == itemId then
+            have = have + (tonumber(entry.count) or 0)
+            if have >= need then return true end
+        end
+    end
+    return false
+end)
+
+-- Сколько именно штук - нужно там, где от количества зависит текст пункта.
+exports('countItem', function(itemId)
+    if type(itemId) ~= 'string' or not lastState or type(lastState.slots) ~= 'table' then
+        return 0
+    end
+    local have = 0
+    for _, entry in pairs(lastState.slots) do
+        if entry.item == itemId then have = have + (tonumber(entry.count) or 0) end
+    end
+    return have
+end)
+
 -- --- boot ------------------------------------------------------------------
 
 CreateThread(function()
