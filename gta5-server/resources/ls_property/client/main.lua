@@ -94,9 +94,22 @@ CreateThread(function()
     TriggerServerEvent('ls_property:ready')
 end)
 
+-- Дом покупается у двери, а не только в телефоне.
+--
+-- Так честнее по смыслу - приехал, посмотрел, купил, - и так это работает
+-- даже когда телефон почему-то не показывает список. Телефонное приложение
+-- никуда не делось, просто перестало быть единственным способом.
+local function money(amount)
+    local text = tostring(math.floor(amount))
+    return (text:reverse():gsub('(%d%d%d)', '%1 '):reverse():gsub('^%s+', ''))
+end
+
+local buyKey = nil
+local sellKey = nil
+
 AddEventHandler('ls_interact:collect', function()
     local me = GetEntityCoords(PlayerPedId())
-    doorKey = nil
+    doorKey, buyKey, sellKey = nil, nil, nil
 
     for _, row in ipairs(phone.properties or {}) do
         if #(me - vector3(row.x, row.y, row.z)) <= Config.Interact then
@@ -105,6 +118,21 @@ AddEventHandler('ls_interact:collect', function()
                 TriggerEvent('ls_interact:offer', {
                     id = 'ls_property:storage',
                     label = ('Склад — %s'):format(row.label),
+                    order = 15,
+                })
+                if row.mine then
+                    sellKey = row.key
+                    TriggerEvent('ls_interact:offer', {
+                        id = 'ls_property:sell',
+                        label = ('Продать — %s'):format(row.label),
+                        order = 17,
+                    })
+                end
+            elseif not row.owner then
+                buyKey = row.key
+                TriggerEvent('ls_interact:offer', {
+                    id = 'ls_property:buy',
+                    label = ('Купить %s — $%s'):format(row.label, money(row.price or 0)),
                     order = 15,
                 })
             end
@@ -116,8 +144,70 @@ end)
 AddEventHandler('ls_interact:run', function(id)
     if id == 'ls_property:storage' and doorKey then
         TriggerServerEvent('ls_property:openStorage', doorKey)
+    elseif id == 'ls_property:buy' and buyKey then
+        TriggerServerEvent('ls_property:buy', buyKey)
+    elseif id == 'ls_property:sell' and sellKey then
+        TriggerServerEvent('ls_property:sellBack', sellKey)
     end
 end)
+
+-- --- семья командами ----------------------------------------------------------
+-- Телефонное приложение - удобство, а не единственная дверь. Команды делают
+-- то же самое и не зависят от интерфейса вообще.
+
+RegisterCommand('family', function(_, args)
+    local action = (args[1] or ''):lower()
+
+    if action == 'create' then
+        local name = args[2]
+        local tag = args[3]
+        if not name then
+            notify('~y~/family create <название> <тег>')
+            return
+        end
+        TriggerServerEvent('ls_property:createFamily', name, tag or '')
+
+    elseif action == 'invite' then
+        -- Ближайший игрок: искать его глазами в списке номеров незачем.
+        local me = GetEntityCoords(PlayerPedId())
+        local best, bestDist
+        for _, other in ipairs(GetActivePlayers()) do
+            if other ~= PlayerId() then
+                local ped = GetPlayerPed(other)
+                local dist = #(me - GetEntityCoords(ped))
+                if dist < 5.0 and (not bestDist or dist < bestDist) then
+                    best, bestDist = other, dist
+                end
+            end
+        end
+        if not best then
+            notify('~r~Рядом никого нет')
+            return
+        end
+        TriggerServerEvent('ls_property:invite', GetPlayerServerId(best))
+
+    elseif action == 'accept' then
+        TriggerServerEvent('ls_property:answerInvite', true)
+
+    elseif action == 'decline' then
+        TriggerServerEvent('ls_property:answerInvite', false)
+
+    elseif action == 'leave' then
+        TriggerServerEvent('ls_property:leaveFamily')
+
+    elseif action == 'who' then
+        local family = phone.family
+        if type(family) ~= 'table' or not family.name then
+            notify('~y~Ты не в семье')
+            return
+        end
+        notify(('~b~%s~w~ [%s] — человек: %d')
+            :format(family.name, family.tag or '', #(family.members or {})))
+
+    else
+        notify('~y~/family create | invite | accept | decline | leave | who')
+    end
+end, false)
 
 -- ls_rp спрашивает это перед тем, как показать кнопку "Пригласить в семью".
 -- Клиентский экспорт: серверный из клиента не вызвать.
