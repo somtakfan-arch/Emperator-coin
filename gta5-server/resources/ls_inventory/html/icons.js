@@ -59,6 +59,7 @@
     pelt: '<path d="M7 3c-3 3-4 7-2 10l3 8h8l3-8c2-3 1-7-2-10-2 2-3 3-6 3s-4-1-6-3z"/>',
     meat: '<path d="M8 5c5-3 11 1 10 6-1 4-5 6-8 5"/><path d="M10 16l-4 4-3-1 1-3 4-4z"/><circle cx="14" cy="9" r="1.5"/>',
     fish: '<path d="M3 12c4-5 10-5 14 0-4 5-10 5-14 0z"/><path d="M17 12l4-3v6z"/><circle cx="8" cy="12" r="1"/>',
+    crate: '<path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4"/><path d="M12 12v8"/>',
     misc: '<rect x="4" y="7" width="16" height="13" rx="2"/><path d="M4 11h16"/><path d="M12 7V4"/>'
   };
 
@@ -70,6 +71,7 @@
     HANDCUFFS: 'cuffs', CUFF_KEY: 'key',
     BACKPACK: 'backpack', JERRYCAN: 'jerrycan',
     ORE_RAW: 'ore', LOG_WOOD: 'log', PELT: 'pelt', MEAT_RAW: 'meat', FISH: 'fish',
+    CONTRABAND: 'crate',
     MASK_GASMASK: 'gasmask', MASK_BANDANA: 'bandana',
     WEAPON_STUNGUN: 'taser', WEAPON_NIGHTSTICK: 'baton', WEAPON_BAT: 'bat',
     WEAPON_CROWBAR: 'tool', WEAPON_KNIFE: 'melee', WEAPON_MACHETE: 'melee'

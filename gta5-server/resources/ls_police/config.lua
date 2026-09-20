@@ -137,6 +137,7 @@ Config.Wanted = {
         drugSale      = { level = 1, reason = 'Сбыт наркотиков' },
         chopShop      = { level = 2, reason = 'Разбор краденого транспорта' },
         turfWar       = { level = 2, reason = 'Передел территории' },
+        smuggling     = { level = 3, reason = 'Контрабанда' },
     },
     autoCooldown = 60,       -- seconds between automatic additions of the same kind
 }

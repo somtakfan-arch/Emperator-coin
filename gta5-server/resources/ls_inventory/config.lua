@@ -120,6 +120,10 @@ Config.Items = {
     MEAT_RAW  = { label = 'Мясо',              type = 'food', stack = 20, price = 300 },
     FISH      = { label = 'Рыба',              type = 'food', stack = 25, price = 420 },
 
+    -- Контрабанда. В магазинах её нет и быть не может: берут только
+    -- скупщики, и за это дают розыск.
+    CONTRABAND = { label = 'Контрабанда',      type = 'part', stack = 6,  price = 0 },
+
     -- Полицейское снаряжение. Цены нулевые: это не продаётся в магазине,
     -- а выдаётся при заступлении на службу.
     HANDCUFFS = { label = 'Наручники',       type = 'misc', stack = 3, price = 0 },
