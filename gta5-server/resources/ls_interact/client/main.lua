@@ -104,10 +104,58 @@ local function collect()
     return build()
 end
 
+-- Всё, что хоть раз предлагали за сессию: id -> подпись.
+--
+-- Нужен меню биндов: оно показывает список действий, которые вообще бывают,
+-- а не только те, что доступны прямо сейчас. Иначе назначить клавишу на
+-- наручники можно было бы, только стоя над нарушителем.
+local known = {}
+
+-- Подписи часто содержат имя цели: "Наручники — Вася". Для каталога нужна
+-- сама команда, без того, к кому её применили в последний раз.
+local function plainLabel(label)
+    return (label:gsub('%s+[—-]%s+.*$', ''))
+end
+
 AddEventHandler('ls_interact:offer', function(offer)
     if type(offer) ~= 'table' then return end
     if type(offer.id) ~= 'string' or type(offer.label) ~= 'string' then return end
     offers[#offers + 1] = offer
+    if not offer.submenu then
+        known[offer.id] = plainLabel(offer.label)
+    end
+end)
+
+-- Каталог для меню биндов.
+exports('knownActions', function()
+    local rows = {}
+    for id, label in pairs(known) do
+        rows[#rows + 1] = { id = id, label = label }
+    end
+    table.sort(rows, function(a, b) return a.label < b.label end)
+    return rows
+end)
+
+-- Выполнить действие по id, если оно доступно здесь и сейчас.
+--
+-- Опрашиваем заново, а не берём из последнего показа меню: между открытием
+-- меню и нажатием клавиши игрок мог отойти, и тогда бинд сработал бы по
+-- тому, чего рядом уже нет.
+exports('runAction', function(id)
+    if type(id) ~= 'string' then return false end
+
+    offers = {}
+    TriggerEvent('ls_interact:collect')
+    for _, offer in ipairs(offers) do
+        if offer.id == id and not offer.disabled then
+            offers, shown = {}, {}
+            TriggerEvent('ls_interact:run', id)
+            return true
+        end
+    end
+
+    offers, shown = {}, {}
+    return false
 end)
 
 -- --- рисование ---------------------------------------------------------------
