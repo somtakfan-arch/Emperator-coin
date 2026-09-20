@@ -42,12 +42,14 @@ CAR_PACK_ZIP='https://github.com/Rymex47/free-modpack/archive/refs/heads/main.zi
 SETUP_URL="https://raw.githubusercontent.com/somtakfan-arch/Emperator-coin/${REPO_BRANCH}/gta5-server/setup.sh"
 
 MODE=update
+CMD_TEXT=""
 case "${1:-}" in
     --check)      MODE=check ;;
     --no-restart) MODE=norestart ;;
     --key)        MODE=key ;;
+    --cmd)        MODE=cmd; shift; CMD_TEXT="$*" ;;
     '')           ;;
-    *)            printf 'usage: bash deploy.sh [--check|--no-restart|--key]\n' >&2; exit 2 ;;
+    *)            printf 'usage: bash deploy.sh [--check|--no-restart|--key|--cmd "команда"]\n' >&2; exit 2 ;;
 esac
 
 step() { printf '\n\033[36m==> %s\033[0m\n' "$1"; }
@@ -88,6 +90,39 @@ clean_key() {
 # restart просто откажет: "Start request repeated too quickly". Счётчик надо
 # сбросить, иначе починка ключа выглядит как ещё одна неудача.
 reset_failed() { systemctl reset-failed fivem 2>/dev/null || true; }
+
+# Отправить команду в консоль сервера, не заходя в неё.
+#
+#     bash deploy.sh --cmd "owner 2"
+#
+# Само по себе это делается через screen, но сессия принадлежит пользователю
+# fivem, а не руту: у каждого пользователя свои сессии, и `screen -S fivem`
+# от рута честно отвечает "No screen session found", хотя сервер работает.
+# Ошибка выглядит как поломка, поэтому прячем её сюда целиком.
+if [[ "$MODE" == "cmd" ]]; then
+    [[ $EUID -eq 0 ]] || die 'запускай от рута: sudo bash deploy.sh --cmd "..."'
+    [[ -n "$CMD_TEXT" ]] || die 'что отправлять? bash deploy.sh --cmd "owner 2"'
+
+    if ! sudo -u "$SERVICE_USER" screen -ls 2>/dev/null | grep -q '[0-9]\+\.fivem'; then
+        bad "консоль сервера не найдена (сессия screen пользователя $SERVICE_USER)"
+        printf '        сервер запущен?  systemctl status fivem\n'
+        exit 1
+    fi
+
+    step 'Команда в консоль'
+    mark=0
+    [[ -f "$LOG" ]] && mark="$(wc -c < "$LOG")"
+
+    # Перевод строки в конце обязателен: он вместо Enter.
+    sudo -u "$SERVICE_USER" screen -S fivem -p 0 -X stuff "$CMD_TEXT$(printf '\r')"
+    ok "отправлено: $CMD_TEXT"
+
+    sleep 2
+    printf '\n        --- что ответил сервер ---\n'
+    tail -c "+$((mark + 1))" "$LOG" 2>/dev/null | tail -n 15 | sed 's/^/        /'
+    printf '\n'
+    exit 0
+fi
 
 if [[ "$MODE" == "key" ]]; then
     # Этот режим стоит раньше общей проверки на рута, так что проверяем сами.
