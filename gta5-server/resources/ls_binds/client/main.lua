@@ -86,8 +86,20 @@ local function setUI(open)
     if open then push() end
 end
 
-RegisterCommand('binds', function()
+-- Меню открывают два независимых пути: привязка FiveM и прямое чтение
+-- клавиши. Без этой заслонки одно нажатие сработало бы дважды и закрыло
+-- меню в том же кадре, в котором открыло.
+local lastToggle = 0
+
+local function toggle()
+    local now = GetGameTimer()
+    if now - lastToggle < Config.ToggleGuard then return end
+    lastToggle = now
     setUI(not uiOpen)
+end
+
+RegisterCommand('binds', function()
+    toggle()
 end, false)
 
 RegisterKeyMapping('binds', 'Меню биндов', 'keyboard', Config.OpenKey)
@@ -159,6 +171,12 @@ CreateThread(function()
 
     while true do
         Wait(0)
+
+        -- Открытие меню читаем всегда, даже когда меню открыто: иначе
+        -- закрыть его той же клавишей было бы нельзя.
+        if not IsPauseMenuActive() and IsRawKeyJustPressed(Config.OpenRawKey) then
+            if uiOpen or not IsNuiFocused() then toggle() end
+        end
 
         if not busy() then
             for id, key in pairs(binds) do
