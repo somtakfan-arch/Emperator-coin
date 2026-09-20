@@ -411,6 +411,11 @@ local function relay(callback, event, build)
     end)
 end
 
+-- Перезапрос среза ls_property. Телефон дёргает его при открытии экрана
+-- семьи, недвижимости или аукциона: одно потерянное сообщение больше не
+-- оставляет экран пустым до перезахода.
+relay('estateRefresh', 'ls_property:request')
+
 relay('familyCreate', 'ls_property:createFamily', function(d)
     return { tostring(d.name or ''), tostring(d.tag or '') }
 end)

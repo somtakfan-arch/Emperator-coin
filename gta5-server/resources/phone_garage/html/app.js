@@ -65,7 +65,16 @@
 
   document.addEventListener('click', (ev) => {
     const target = ev.target.closest('[data-open]');
-    if (target) show(target.dataset.open);
+    if (!target) return;
+    show(target.dataset.open);
+
+    // Семья, недвижимость и аукцион живут в ls_property и приходят
+    // отдельным сообщением. Раньше его просили только в момент открытия
+    // телефона: если оно терялось или опаздывало, экран оставался пустым
+    // навсегда и никак об этом не говорил.
+    if (['family', 'estate', 'auction'].indexOf(target.dataset.open) !== -1) {
+      post('estateRefresh');
+    }
   });
 
   document.addEventListener('keydown', (ev) => {
@@ -412,6 +421,13 @@
     const box = $('estate-list');
     box.innerHTML = '';
 
+    if (!(estate.properties || []).length) {
+      box.appendChild(card(
+        '<div class="p-sub">Список пока не пришёл с сервера. Закрой и открой телефон.</div>'
+      ));
+      return;
+    }
+
     box.appendChild(card(`
       <div class="p-title">Мест в гараже: ${estate.slots}</div>
       <div class="p-sub">База 2, офис +5, дом +1…2</div>`));
@@ -524,6 +540,12 @@
       renderEstateAll();
     }
   });
+
+  // Первая отрисовка по значениям по умолчанию. Без неё экран до прихода
+  // данных был не "пустым списком", а полностью пустым - без заголовков,
+  // фильтров и формы создания семьи, - и отличить "ещё не пришло" от
+  // "сломалось" было невозможно.
+  renderEstateAll();
 
   // --- форум ---------------------------------------------------------------
 
