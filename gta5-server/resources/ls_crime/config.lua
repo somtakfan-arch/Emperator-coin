@@ -193,6 +193,7 @@ Config.BlackMarket = {
         { item = 'WEED_SEED', price = 900 },
         { item = 'WEAPON_PISTOL',         price = 3200 },
         { item = 'WEAPON_SAWNOFFSHOTGUN', price = 14000 },
+        { item = 'STASH_KIT',             price = 25000 },
     },
 
     -- Что рынок выкупает.

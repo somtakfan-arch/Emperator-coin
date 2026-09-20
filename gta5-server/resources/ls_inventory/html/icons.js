@@ -60,6 +60,7 @@
     meat: '<path d="M8 5c5-3 11 1 10 6-1 4-5 6-8 5"/><path d="M10 16l-4 4-3-1 1-3 4-4z"/><circle cx="14" cy="9" r="1.5"/>',
     fish: '<path d="M3 12c4-5 10-5 14 0-4 5-10 5-14 0z"/><path d="M17 12l4-3v6z"/><circle cx="8" cy="12" r="1"/>',
     crate: '<path d="M4 8l8-4 8 4v8l-8 4-8-4z"/><path d="M4 8l8 4 8-4"/><path d="M12 12v8"/>',
+    stash: '<path d="M3 14c0-4 4-7 9-7s9 3 9 7v5H3z"/><path d="M3 14h18"/><circle cx="12" cy="17" r="1.3"/><path d="M12 7V3"/>',
     misc: '<rect x="4" y="7" width="16" height="13" rx="2"/><path d="M4 11h16"/><path d="M12 7V4"/>'
   };
 
@@ -71,7 +72,7 @@
     HANDCUFFS: 'cuffs', CUFF_KEY: 'key',
     BACKPACK: 'backpack', JERRYCAN: 'jerrycan',
     ORE_RAW: 'ore', LOG_WOOD: 'log', PELT: 'pelt', MEAT_RAW: 'meat', FISH: 'fish',
-    CONTRABAND: 'crate',
+    CONTRABAND: 'crate', STASH_KIT: 'stash',
     MASK_GASMASK: 'gasmask', MASK_BANDANA: 'bandana',
     WEAPON_STUNGUN: 'taser', WEAPON_NIGHTSTICK: 'baton', WEAPON_BAT: 'bat',
     WEAPON_CROWBAR: 'tool', WEAPON_KNIFE: 'melee', WEAPON_MACHETE: 'melee'
