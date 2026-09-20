@@ -211,11 +211,31 @@ install_real_cars() {
             printf '        cloning %s\n' "$repo"
             # --filter=blob:none downloads the tree only; the checkout below
             # then pulls the blobs for one car and nothing else.
-            if ! git -c gc.auto=0 clone --quiet --depth 1 --filter=blob:none \
-                    --no-checkout --branch "$branch" \
-                    "https://github.com/$repo.git" "$clone"; then
-                warn "$repo is unreachable, its cars are skipped"
+            #
+            # Three attempts, not one: from a Russian datacentre a connection
+            # to github.com times out often enough that a single failure means
+            # nothing, and skipping the repo costs every car in it. The default
+            # timeout is over two minutes of waiting per try, so we cut it to
+            # 45 s and spend the time on a retry instead.
+            cloned=0
+            for attempt in 1 2 3; do
+                if git -c gc.auto=0 -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=45 \
+                        clone --quiet --depth 1 --filter=blob:none \
+                        --no-checkout --branch "$branch" \
+                        "https://github.com/$repo.git" "$clone"; then
+                    cloned=1
+                    break
+                fi
                 rm -rf "$clone"
+                # Именно if, а не `[[ ]] && printf`: на последней попытке
+                # такая связка вернула бы 1 последней командой в теле цикла,
+                # и set -e прибил бы весь скрипт.
+                if [[ $attempt -lt 3 ]]; then
+                    printf '        attempt %d failed, retrying\n' "$attempt"
+                fi
+            done
+            if [[ $cloned -eq 0 ]]; then
+                warn "$repo is unreachable after 3 tries, its cars are skipped"
                 continue
             fi
         fi

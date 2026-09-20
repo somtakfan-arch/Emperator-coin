@@ -84,6 +84,11 @@ clean_key() {
     printf '%s' "$text" | tr -cd 'A-Za-z0-9_'
 }
 
+# Если служба упёрлась в лимит перезапусков (start-limit-hit), systemctl
+# restart просто откажет: "Start request repeated too quickly". Счётчик надо
+# сбросить, иначе починка ключа выглядит как ещё одна неудача.
+reset_failed() { systemctl reset-failed fivem 2>/dev/null || true; }
+
 if [[ "$MODE" == "key" ]]; then
     # Этот режим стоит раньше общей проверки на рута, так что проверяем сами.
     [[ $EUID -eq 0 ]] || die 'запускай от рута: sudo bash deploy.sh --key'
@@ -126,6 +131,7 @@ if [[ "$MODE" == "key" ]]; then
     # что сервер напишет после этой секунды.
     mark=0
     [[ -f "$LOG" ]] && mark="$(wc -c < "$LOG")"
+    reset_failed
     systemctl restart fivem
 
     printf '    жду сервер'
@@ -517,6 +523,7 @@ if [[ "$MODE" == "update" ]]; then
     step 'Перезапускаю'
     : > "$LOG" 2>/dev/null || true
     chown "$SERVICE_USER":"$SERVICE_USER" "$LOG" 2>/dev/null || true
+    reset_failed
     systemctl restart fivem
 
     # Ждать надо не первый стартовавший ресурс, а последний: они поднимаются
@@ -544,6 +551,9 @@ if systemctl is-active --quiet fivem 2>/dev/null; then
 else
     bad "служба лежит (состояние: $(systemctl is-active fivem 2>/dev/null || echo недоступна))"
     note_problem
+    if systemctl show -p Result --value fivem 2>/dev/null | grep -q 'start-limit-hit'; then
+        warn 'она упёрлась в лимит перезапусков - после починки: systemctl reset-failed fivem'
+    fi
     printf '\n'
     systemctl status fivem --no-pager -n 15 2>&1 | sed 's/^/        /'
 fi
