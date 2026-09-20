@@ -950,6 +950,9 @@ AddEventHandler('ls_interact:collect', function()
     -- конусы к человеку не привязаны.
     TriggerEvent('ls_interact:offer', {
         id = 'ls_police:work', label = 'Работа', submenu = 'police', order = 4,
+        -- Раздел доступен всю смену, поэтому подсказку он не поднимает:
+        -- иначе у копа плашка горела бы от заступления до конца дежурства.
+        quiet = true,
     })
 
     if playerId then

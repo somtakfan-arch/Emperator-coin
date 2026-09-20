@@ -14,6 +14,31 @@ local function notify(text)
     DrawNotification(false, true)
 end
 
+-- Какую машину тюнингуем.
+--
+-- Сначала ту, за рулём которой сидим. Если вышли - ближайшую в паре шагов:
+-- требовать сидеть за рулём незачем, в мастерской из машины как раз
+-- вылезают, а понять, почему меню пустое, было невозможно.
+local function tuneVehicle()
+    local ped = PlayerPedId()
+
+    local veh = GetVehiclePedIsIn(ped, false)
+    if veh ~= 0 then
+        if GetPedInVehicleSeat(veh, -1) == ped then return veh end
+        return nil      -- пассажиру чужую машину красить нечего
+    end
+
+    local me = GetEntityCoords(ped)
+    local best, bestDist
+    for _, other in ipairs(GetGamePool('CVehicle')) do
+        local dist = #(me - GetEntityCoords(other))
+        if dist <= Config.TuneReach and (not bestDist or dist < bestDist) then
+            best, bestDist = other, dist
+        end
+    end
+    return best
+end
+
 local function drawText3D(x, y, z, text)
     SetTextScale(0.35, 0.35)
     SetTextFont(4)
@@ -235,8 +260,13 @@ CreateThread(function()
         local coords = GetEntityCoords(ped)
         nearTuning = nil
 
+        -- Сидя в машине меряем от самой машины: её центр ближе к метке,
+        -- чем водительское сиденье, и на длинной машине разница решает.
+        local inVeh = GetVehiclePedIsIn(ped, false)
+        local from = inVeh ~= 0 and GetEntityCoords(inVeh) or coords
+
         for _, shop in ipairs(Config.Shops) do
-            local dist = #(coords - vector3(shop.x, shop.y, shop.z))
+            local dist = #(from - vector3(shop.x, shop.y, shop.z))
             if dist < 25.0 then
                 wait = 0
                 DrawMarker(1, shop.x, shop.y, shop.z - 0.98, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
@@ -247,8 +277,7 @@ CreateThread(function()
                     -- "сядь за руль" оставляем: без него непонятно, почему
                     -- в меню ничего нет.
                     nearTuning = shop
-                    local vehicle = GetVehiclePedIsIn(ped, false)
-                    if vehicle == 0 or GetPedInVehicleSeat(vehicle, -1) ~= ped then
+                    if not tuneVehicle() then
                         drawText3D(shop.x, shop.y, shop.z + 0.6, TuneLocale.notInCar)
                     end
                 end
@@ -453,6 +482,10 @@ local function applyGrip(vehicle, grip)
     scale('fSuspensionForce', grip.damp)
     scale('fTractionSpringDeltaMax', grip.spring)
 
+    -- Тормоза. Половина ощущения "машина слушается" - это возможность
+    -- сбросить скорость перед поворотом, а не проехать его по прямой.
+    scale('fBrakeForce', grip.brakes)
+
     -- Притяжение сильнее заводского: на трамплинах машина почти не
     -- взлетает, а взлетев, быстро возвращается на дорогу.
     if grip.gravity and grip.gravity > 0.0 then
@@ -565,10 +598,7 @@ end, false)
 
 AddEventHandler('ls_interact:collect', function()
     if uiOpen or not nearTuning then return end
-
-    local ped = PlayerPedId()
-    local vehicle = GetVehiclePedIsIn(ped, false)
-    if vehicle == 0 or GetPedInVehicleSeat(vehicle, -1) ~= ped then return end
+    if not tuneVehicle() then return end
 
     TriggerEvent('ls_interact:offer', {
         id = 'ls_tuning:open',
@@ -579,6 +609,6 @@ end)
 
 AddEventHandler('ls_interact:run', function(id)
     if id ~= 'ls_tuning:open' then return end
-    local vehicle = GetVehiclePedIsIn(PlayerPedId(), false)
-    if vehicle ~= 0 then openShop(vehicle) end
+    local vehicle = tuneVehicle()
+    if vehicle then openShop(vehicle) end
 end)

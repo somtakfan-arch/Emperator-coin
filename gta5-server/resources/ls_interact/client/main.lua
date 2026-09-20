@@ -27,6 +27,13 @@
 --         id = 'мой_ресурс:обыскать', label = 'Обыскать', group = 'work',
 --     })
 --
+-- Действие, доступное всегда и везде, помечай quiet = true - иначе плашка
+-- "[E] Взаимодействие" будет висеть на экране постоянно:
+--
+--     TriggerEvent('ls_interact:offer', {
+--         id = 'мой_ресурс:позвонить', label = 'Позвонить', quiet = true,
+--     })
+--
 -- Esc внутри раздела возвращает в корень, а не закрывает меню.
 --
 --     AddEventHandler('ls_interact:run', function(id)
@@ -234,11 +241,27 @@ end)
 -- --- подсказка ---------------------------------------------------------------
 -- Опрашивать всех каждый кадр дорого, а раз в полсекунды - незаметно.
 
+-- Подсказку поднимают не все действия.
+--
+-- Есть те, что доступны всегда и везде: позвонить в службы, открыть раздел
+-- работы у копа на смене. Они законно лежат в меню, но если считать и их,
+-- плашка "[E] Взаимодействие" висит на экране непрерывно с первой секунды
+-- и перестаёт что-либо значить. Такие помечаются quiet = true: в меню
+-- видны, подсказку не поднимают.
+local function loudCount()
+    local n = 0
+    for _, offer in ipairs(shown) do
+        if not offer.quiet then n = n + 1 end
+    end
+    return n
+end
+
 CreateThread(function()
     while true do
         Wait(500)
         if Config.ShowHint and not open and not IsEntityDead(PlayerPedId()) then
-            available = #collect()
+            collect()
+            available = loudCount()
             offers, shown = {}, {}
         else
             available = 0

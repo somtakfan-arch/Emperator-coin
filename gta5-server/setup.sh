@@ -657,7 +657,7 @@ if [[ "$SKIP_GARAGE" != "1" ]]; then
             warn 'sql files not found in the repo archive'
         fi
 
-        for resource in phone_garage ls_character ls_inventory ls_shops ls_medical ls_tuning ls_rp ls_police ls_gangs ls_crime ls_property ls_interact ls_armoury ls_forum ls_turf ls_city ls_business ls_fuel ls_jobs ls_wild ls_race ls_smuggle ls_stash ls_places ls_world; do
+        for resource in phone_garage ls_character ls_inventory ls_shops ls_medical ls_tuning ls_rp ls_police ls_gangs ls_crime ls_property ls_interact ls_armoury ls_forum ls_turf ls_city ls_business ls_fuel ls_jobs ls_wild ls_race ls_smuggle ls_stash ls_places ls_owner ls_world; do
             src="$(find "$TMP_DIR/repo" -type d -name "$resource" | head -n 1)"
             if [[ -n "$src" ]]; then
                 # Player data lives inside the resource folder - characters,
@@ -892,6 +892,8 @@ ensure ls_stash
 # Автосалон в мире и доски объявлений. После phone_garage и ls_forum:
 # каталог и темы берутся оттуда.
 ensure ls_places
+# Владелец сервера: права и кошелёк. После ls_police и phone_garage.
+ensure ls_owner
 ensure ls_world
 
 # Police ranks are handed out in game with /police hire; this ace only guards

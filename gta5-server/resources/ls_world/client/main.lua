@@ -308,17 +308,27 @@ local function isOnDuty()
 end
 
 AddEventHandler('ls_interact:collect', function()
+    -- Позвонить в службы можно откуда угодно - это телефон, а не точка на
+    -- карте. Поэтому quiet: в меню пункт есть, но плашку он не поднимает.
     TriggerEvent('ls_interact:offer', {
-        id = 'ls_world:call', label = WorldLocale.callPrompt, order = 45,
+        id = 'ls_world:call', label = WorldLocale.callPrompt, order = 45, quiet = true,
     })
 
-    if Config.Graffiti.enabled and wallInFront() then
+    local function hasItem(item)
+        local ok, has = pcall(function() return exports.ls_inventory:hasItem(item) end)
+        return ok and has == true
+    end
+
+    if Config.Graffiti.enabled and wallInFront() and hasItem(Config.Graffiti.item) then
         TriggerEvent('ls_interact:offer', {
             id = 'ls_world:spray', label = WorldLocale.sprayPrompt, order = 35,
         })
     end
 
-    if Config.Camp.enabled then
+    -- Лагерь тратит набор, и сервер без него откажет. Предлагать пункт,
+    -- который гарантированно ответит "нужен набор", смысла нет - а он ещё и
+    -- держал плашку зажжённой по всей карте.
+    if Config.Camp.enabled and hasItem(Config.Camp.item) then
         TriggerEvent('ls_interact:offer', {
             id = 'ls_world:camp', label = WorldLocale.campPrompt, order = 36,
         })
