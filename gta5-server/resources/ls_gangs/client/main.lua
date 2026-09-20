@@ -333,6 +333,26 @@ CreateThread(function()
     end
 end)
 
+-- Тот же список районов, что отдаёт серверная сторона.
+--
+-- Он нужен и клиенту: ls_crime проверяет каждую секунду, стоит ли игрок в
+-- чужом районе, и раньше звал серверный экспорт прямо отсюда. Так это не
+-- работает - экспорт другой стороны просто не находится, pcall гасит
+-- ошибку, и список молча остаётся пустым, а захват территорий не
+-- срабатывает вообще. Данные лежат в config.lua, который объявлен
+-- shared_script, поэтому дублируется только несколько строк, а не логика.
+exports('getTerritories', function()
+    local out = {}
+    for _, gang in ipairs(Config.Gangs) do
+        local t = gang.territory
+        out[#out + 1] = {
+            key = gang.key, label = t.label, gang = gang.label,
+            x = t.x, y = t.y, z = t.z, radius = t.radius,
+        }
+    end
+    return out
+end)
+
 AddEventHandler('onResourceStop', function(name)
     if name ~= GetCurrentResourceName() then return end
     for id in pairs(peds) do despawn(id) end
