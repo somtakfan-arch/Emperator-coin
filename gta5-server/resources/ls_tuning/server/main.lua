@@ -170,6 +170,49 @@ end)
 
 -- --- exports ----------------------------------------------------------------
 
+-- ---------------------------------------------------------------------------
+-- Как быстро едет какая машина.
+--
+-- Таблица модель -> цель строится из каталога автосалона: дорогая машина
+-- едет быстро не потому, что её имя вписали в список, а потому что она
+-- дорогая. Правят ценник - едет по-новому, без правки этого файла.
+-- ---------------------------------------------------------------------------
+
+local driveTable = nil
+
+local function tierFor(price)
+    for _, tier in ipairs(Config.Drive.tiers) do
+        if price >= tier.from then return tier end
+    end
+    return Config.Drive.tiers[#Config.Drive.tiers]
+end
+
+local function buildDriveTable()
+    local rows = {}
+
+    local ok, catalog = pcall(function() return exports.phone_garage:catalog() end)
+    if not ok or type(catalog) ~= 'table' then
+        print('[ls_tuning] каталог автосалона недоступен, скорости будут по умолчанию')
+        return rows
+    end
+
+    for _, car in ipairs(catalog) do
+        local tier = tierFor(tonumber(car.price) or 0)
+        rows[car.model] = {
+            kmh = math.min(tier.kmh, Config.Drive.maxKmh),
+            power = tier.power,
+            torque = tier.torque,
+        }
+    end
+    return rows
+end
+
+RegisterNetEvent('ls_tuning:driveRequest', function()
+    -- Считаем один раз: каталог за время работы сервера не меняется.
+    if not driveTable then driveTable = buildDriveTable() end
+    TriggerClientEvent('ls_tuning:driveTable', source, driveTable)
+end)
+
 exports('getBuild', function(plate)
     return builds[plate]
 end)

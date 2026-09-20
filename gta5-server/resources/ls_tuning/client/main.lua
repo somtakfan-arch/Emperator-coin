@@ -369,29 +369,62 @@ end)
 -- Поэтому накладываем при каждой посадке, а не один раз.
 
 local boosted = {}      -- [машина] = true, чтобы не давить одно и то же каждый кадр
+local driveTable = {}   -- модель -> { kmh, power, torque }, прислал сервер
+
+-- Модель приходит строкой, а на руках у нас хэш: считаем хэши один раз.
+local driveByHash = {}
+
+RegisterNetEvent('ls_tuning:driveTable', function(rows)
+    driveTable = rows or {}
+    driveByHash = {}
+    for model, entry in pairs(driveTable) do
+        driveByHash[GetHashKey(model)] = entry
+    end
+end)
+
+CreateThread(function()
+    while not NetworkIsPlayerActive(PlayerId()) do Wait(200) end
+    Wait(3000)
+    TriggerServerEvent('ls_tuning:driveRequest')
+end)
+
+-- Сколько должна ехать эта машина и с каким мотором.
+local function driveTarget(vehicle)
+    local entry = driveByHash[GetEntityModel(vehicle)]
+    local kmh = entry and entry.kmh or Config.Drive.defaultKmh
+    local power = entry and entry.power or Config.Drive.defaultPower
+    local torque = entry and entry.torque or Config.Drive.defaultTorque
+
+    -- Класс перебивает каталог вниз, но не вверх: мотоцикл за три миллиона
+    -- всё равно не должен ехать семьсот.
+    local byClass = Config.Drive.classKmh[GetVehicleClass(vehicle)]
+    if byClass and byClass < kmh then kmh = byClass end
+
+    return math.min(kmh, Config.Drive.maxKmh), power, torque
+end
 
 local function applyDrive(vehicle)
     if not Config.Drive or not Config.Drive.enabled then return end
     if not DoesEntityExist(vehicle) then return end
+    if Config.Drive.skipClasses[GetVehicleClass(vehicle)] then return end
 
-    local class = GetVehicleClass(vehicle)
-    if Config.Drive.skipClasses[class] then return end
+    local kmh, power, torque = driveTarget(vehicle)
 
-    local power = Config.Drive.power or 0.0
-    local topSpeed = Config.Drive.topSpeed or 0.0
-    local torque = Config.Drive.torque or 1.0
-
-    local bonus = Config.Drive.classBonus[class]
-    if bonus then
-        power = power + (bonus.power or 0.0)
-        topSpeed = topSpeed + (bonus.topSpeed or 0.0)
-        torque = torque + (bonus.torque or 0.0)
-    end
-
-    -- Проценты прибавки, а не множители: 0 оставил бы машину как есть.
+    -- Разгон: проценты прибавки к мощности, тут множитель не нужен.
     if power > 0.0 then SetVehicleEnginePowerMultiplier(vehicle, power) end
-    if torque ~= 1.0 then SetVehicleEngineTorqueMultiplier(vehicle, torque) end
-    if topSpeed > 0.0 then ModifyVehicleTopSpeed(vehicle, topSpeed) end
+    if torque and torque ~= 1.0 then SetVehicleEngineTorqueMultiplier(vehicle, torque) end
+
+    -- А максималка задаётся множителем к заводской, поэтому под цель его
+    -- надо посчитать. Заводскую берём до того, как что-то накрутили: после
+    -- ModifyVehicleTopSpeed эта же функция вернёт уже изменённое значение,
+    -- и повторный заход в машину умножил бы всё второй раз.
+    local base = GetVehicleEstimatedMaxSpeed(vehicle)
+    if base and base > 1.0 then
+        local want = kmh / 3.6
+        if want > base then
+            ModifyVehicleTopSpeed(vehicle, want / base)
+        end
+    end
 
     boosted[vehicle] = true
 end
@@ -413,8 +446,22 @@ CreateThread(function()
     end
 end)
 
+-- Сколько эта машина едет по нашим правилам - чтобы можно было проверить,
+-- не разгоняясь до упора на трассе.
+RegisterCommand('speed', function()
+    local vehicle = GetVehiclePedIsIn(PlayerPedId(), false)
+    if vehicle == 0 then notify('~r~Сядь в машину') return end
+
+    local kmh, power = driveTarget(vehicle)
+    notify(('~b~Потолок: ~w~%d км/ч~b~, мотор: ~w~+%d%%'):format(
+        math.floor(kmh), math.floor(power)))
+end, false)
+
 -- Подобрать цифры проще живьём, чем перезапуском ресурса.
--- /drive 80 1.8 30  -> мощность +80%, момент 1.8, максималка +30%
+-- /drive 250 300 2.5  -> потолок 250 км/ч, мотор +300%, момент 2.5
+--
+-- Максималка тут в километрах в час, как и в конфиге: возиться с
+-- множителями к заводской, подбирая цифру на глаз, смысла нет.
 RegisterCommand('drive', function(_, args)
     local vehicle = GetVehiclePedIsIn(PlayerPedId(), false)
     if vehicle == 0 then
@@ -422,21 +469,28 @@ RegisterCommand('drive', function(_, args)
         return
     end
 
-    local power = tonumber(args[1])
-    local torque = tonumber(args[2])
-    local top = tonumber(args[3])
-    if not power then
-        notify('~y~/drive <мощность %> <момент> <максималка %>')
+    local kmh = tonumber(args[1])
+    local power = tonumber(args[2])
+    local torque = tonumber(args[3])
+    if not kmh then
+        notify('~y~/drive <км/ч> [мощность %] [момент]')
         return
     end
 
-    if power > 0.0 then SetVehicleEnginePowerMultiplier(vehicle, power) end
+    if power and power > 0.0 then SetVehicleEnginePowerMultiplier(vehicle, power) end
     if torque then SetVehicleEngineTorqueMultiplier(vehicle, torque) end
-    if top and top > 0.0 then ModifyVehicleTopSpeed(vehicle, top) end
+
+    -- Машину могли уже разогнать при посадке, поэтому сначала возвращаем
+    -- заводскую максималку, иначе множитель ляжет на множитель.
+    ModifyVehicleTopSpeed(vehicle, 1.0)
+    local base = GetVehicleEstimatedMaxSpeed(vehicle)
+    if base and base > 1.0 then
+        ModifyVehicleTopSpeed(vehicle, (kmh / 3.6) / base)
+    end
     boosted[vehicle] = true
 
-    notify(('~g~Мощность +%d%%, момент %.1f, максималка +%d%%')
-        :format(math.floor(power), torque or 1.0, math.floor(top or 0)))
+    notify(('~g~Потолок %d км/ч, мотор +%d%%, момент %.1f')
+        :format(math.floor(kmh), math.floor(power or 0), torque or 1.0))
 end, false)
 
 -- --- взаимодействие ----------------------------------------------------------
