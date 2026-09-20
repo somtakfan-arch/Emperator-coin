@@ -515,17 +515,27 @@ local function applyDrive(vehicle)
 
     applyGrip(vehicle, grip)
 
-    -- А максималка задаётся множителем к заводской, поэтому под цель его
-    -- надо посчитать. Заводскую берём до того, как что-то накрутили: после
-    -- ModifyVehicleTopSpeed эта же функция вернёт уже изменённое значение,
-    -- и повторный заход в машину умножил бы всё второй раз.
+    -- Максималка задаётся множителем к заводской, поэтому под цель его надо
+    -- посчитать. Сначала сбрасываем множитель в единицу: после
+    -- ModifyVehicleTopSpeed эта же функция возвращает уже изменённое
+    -- значение, и второй заход умножил бы всё повторно.
+    local want = kmh / 3.6
+    ModifyVehicleTopSpeed(vehicle, 1.0)
     local base = GetVehicleEstimatedMaxSpeed(vehicle)
     if base and base > 1.0 then
-        local want = kmh / 3.6
-        if want > base then
-            ModifyVehicleTopSpeed(vehicle, want / base)
-        end
+        -- Множитель применяется в обе стороны. Раньше тут стояло
+        -- `if want > base`, то есть ограничитель умел только разгонять:
+        -- аддонные суперкары приезжают со своим хендлингом, где максималка
+        -- и так за четыреста, и мы их не трогали вообще. Самые быстрые
+        -- машины на сервере оставались ровно такими, какими их сделал автор
+        -- мода, что бы ни стояло в конфиге.
+        ModifyVehicleTopSpeed(vehicle, want / base)
     end
+
+    -- И жёсткий потолок сверху. Множитель считается от хендлинга, а тот у
+    -- аддонов бывает какой угодно: эта строчка не зависит от него вообще и
+    -- держит предел, даже если множитель промахнулся.
+    SetVehicleMaxSpeed(vehicle, want)
 
     boosted[vehicle] = true
 end
@@ -554,8 +564,15 @@ RegisterCommand('speed', function()
     if vehicle == 0 then notify('~r~Сядь в машину') return end
 
     local kmh, power, _, grip = driveTarget(vehicle)
-    notify(('~b~Потолок: ~w~%d км/ч~b~, мотор: ~w~+%d%%~b~, сцепление: ~w~×%.2f')
-        :format(math.floor(kmh), math.floor(power), (grip and grip.traction) or 1.0))
+
+    -- Показываем и то, что игра реально считает пределом этой машины.
+    -- Именно расхождение этих двух цифр когда-то и означало, что
+    -- ограничитель не сработал, а понять это можно было только на трассе.
+    local real = (GetVehicleEstimatedMaxSpeed(vehicle) or 0.0) * 3.6
+
+    notify(('~b~Цель: ~w~%d~b~, по факту: ~w~%d км/ч~n~~b~мотор ~w~+%d%%~b~, сцепление ~w~×%.2f')
+        :format(math.floor(kmh), math.floor(real), math.floor(power),
+            (grip and grip.traction) or 1.0))
 end, false)
 
 -- Подобрать цифры проще живьём, чем перезапуском ресурса.
@@ -588,6 +605,7 @@ RegisterCommand('drive', function(_, args)
     if base and base > 1.0 then
         ModifyVehicleTopSpeed(vehicle, (kmh / 3.6) / base)
     end
+    SetVehicleMaxSpeed(vehicle, kmh / 3.6)
     boosted[vehicle] = true
 
     notify(('~g~Потолок %d км/ч, мотор +%d%%, момент %.1f')
