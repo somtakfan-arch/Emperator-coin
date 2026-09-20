@@ -723,7 +723,7 @@ sync_weapons
 
 step 'server.cfg'
 if [[ -z "$LICENSE_KEY" ]]; then
-    echo '    Paste the key from https://keymaster.fivem.net (server type: Development).'
+    echo '    Paste the key from https://portal.cfx.re (server type: Development).'
     # -s keeps the key off the screen: it ends up in scrollback and in every
     # screenshot otherwise, and a leaked key is a key someone else can run on.
     read -rs -p '    License key: ' LICENSE_KEY </dev/tty || true
@@ -732,6 +732,30 @@ fi
 if [[ -z "$LICENSE_KEY" ]]; then
     warn 'no key entered - server.cfg gets a placeholder, fill it in before starting'
     LICENSE_KEY='PASTE_YOUR_KEY_HERE'
+elif [[ "$LICENSE_KEY" != 'PASTE_YOUR_KEY_HERE' ]]; then
+    # `read` has no line editing, so an arrow key pressed at this prompt lands
+    # in the variable as the three bytes ESC [ B. svadhesive then builds the
+    # check URL with them in it, curl answers "error code 3 (bad/illegal
+    # format)" and the server quits before it loads a single resource - with
+    # exit code 0, so systemd calls it a clean shutdown and says nothing.
+    #
+    # Cfx keys are letters, digits and underscores and start with cfxk_, so
+    # everything to the left of that marker is junk by definition. Stripping
+    # escape sequences by regex first is deliberate: it also catches an arrow
+    # pressed after the paste.
+    clean="$(printf '%s' "$LICENSE_KEY" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g')"
+    case "$clean" in
+        *cfxk_*) clean="cfxk_${clean#*cfxk_}" ;;
+    esac
+    clean="$(printf '%s' "$clean" | tr -cd 'A-Za-z0-9_')"
+
+    if [[ "$clean" != "$LICENSE_KEY" ]]; then
+        warn "stray characters removed from the key (arrows, spaces): $(( ${#LICENSE_KEY} - ${#clean} ))"
+    fi
+    if [[ ${#clean} -lt 20 ]]; then
+        warn "the key looks truncated (${#clean} chars) - fix it later with: bash deploy.sh --key"
+    fi
+    LICENSE_KEY="$clean"
 fi
 
 car_ensure=""

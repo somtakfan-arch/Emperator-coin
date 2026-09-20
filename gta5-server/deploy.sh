@@ -45,8 +45,9 @@ MODE=update
 case "${1:-}" in
     --check)      MODE=check ;;
     --no-restart) MODE=norestart ;;
+    --key)        MODE=key ;;
     '')           ;;
-    *)            printf 'usage: bash deploy.sh [--check|--no-restart]\n' >&2; exit 2 ;;
+    *)            printf 'usage: bash deploy.sh [--check|--no-restart|--key]\n' >&2; exit 2 ;;
 esac
 
 step() { printf '\n\033[36m==> %s\033[0m\n' "$1"; }
@@ -57,6 +58,114 @@ die()  { printf '\033[31m    ОШИБКА: %s\033[0m\n' "$1" >&2; exit 1; }
 
 problems=0
 note_problem() { problems=$((problems + 1)); }
+
+# В ключе Cfx бывают только буквы, цифры и подчёркивание. Всё остальное -
+# мусор из терминала: стрелки оставляют в буфере ^[[B, телефонные клавиатуры
+# любят дорисовать пробел или перевод строки. Один такой символ - и svadhesive
+# строит с ним адрес проверки, curl отвечает "code 3 (bad/illegal format)",
+# сервер выходит, не дойдя до ресурсов.
+#
+# Выкинуть "всё, кроме букв и цифр" мало: ^[[B - это три байта, ESC и [
+# отфильтруются, а B останется буквой и прилипнет к ключу.
+#
+# Разбирать ESC-последовательности регулярным выражением - лишний риск
+# (первая версия этой функции съедала на символ больше, чем надо). Ключи Cfx
+# начинаются с cfxk_, так что всё слева от этой метки - мусор по определению:
+# режем по ней, и только потом убираем остатки вроде пробела и перевода
+# строки. Ключ без метки чистим как умеем, о чём режим --key предупредит.
+clean_key() {
+    local text
+    # Простая форма ESC-последовательности; она же снимает стрелку, нажатую
+    # уже после вставки ключа.
+    text="$(printf '%s' "$1" | sed 's/\x1b\[[0-9;]*[A-Za-z]//g')"
+    case "$text" in
+        *cfxk_*) text="cfxk_${text#*cfxk_}" ;;
+    esac
+    printf '%s' "$text" | tr -cd 'A-Za-z0-9_'
+}
+
+if [[ "$MODE" == "key" ]]; then
+    # Этот режим стоит раньше общей проверки на рута, так что проверяем сами.
+    [[ $EUID -eq 0 ]] || die 'запускай от рута: sudo bash deploy.sh --key'
+    [[ -f "$CFG" ]] || die "$CFG не найден - сначала прогони setup.sh"
+
+    step 'Лицензионный ключ'
+    printf '    Возьми новый на https://portal.cfx.re (тип: Development).\n'
+    printf '    Ключ не будет виден при вводе - это нормально.\n'
+    printf '    Ключ: '
+    read -rs raw
+    printf '\n'
+
+    key="$(clean_key "$raw")"
+    junk=$(( ${#raw} - ${#key} ))
+    if [[ $junk -gt 0 ]]; then
+        warn "выкинул мусорных символов: $junk (стрелки, пробелы, перевод строки)"
+    fi
+
+    if [[ ${#key} -lt 20 ]]; then
+        die "ключ подозрительно короткий (${#key} символов) - скопируй его целиком и повтори"
+    fi
+    if [[ "$key" != cfxk_* ]]; then
+        warn 'ключ не начинается с cfxk_ - если сервер его не примет, скопируй заново с portal.cfx.re'
+    fi
+    ok "длина ключа: ${#key} символов, посторонних символов не осталось"
+
+    # Пишем через awk, а не sed: ключ идёт в шаблон замены, и оказавшийся в
+    # нём слэш или амперсанд sed истолковал бы по-своему.
+    awk -v key="$key" '
+        /^[[:space:]]*sv_licenseKey/ { print "sv_licenseKey \"" key "\""; done = 1; next }
+        { print }
+        END { if (!done) print "sv_licenseKey \"" key "\"" }
+    ' "$CFG" > "$CFG.new" && mv "$CFG.new" "$CFG"
+    chown "$SERVICE_USER":"$SERVICE_USER" "$CFG" 2>/dev/null || true
+    ok 'ключ записан в server.cfg'
+
+    step 'Перезапускаю'
+    # screen дописывает в лог, а не перезаписывает его, поэтому старая ошибка
+    # про ключ никуда не делась. Запоминаем размер файла и смотрим только то,
+    # что сервер напишет после этой секунды.
+    mark=0
+    [[ -f "$LOG" ]] && mark="$(wc -c < "$LOG")"
+    systemctl restart fivem
+
+    printf '    жду сервер'
+    verdict=wait
+    for _ in $(seq 1 30); do
+        sleep 2
+        printf '.'
+        fresh="$(tail -c "+$((mark + 1))" "$LOG" 2>/dev/null || true)"
+        if printf '%s' "$fresh" | grep -qi 'license key' \
+           && printf '%s' "$fresh" | grep -qiE 'error|CURL error'; then
+            verdict=bad
+            break
+        fi
+        # Ресурсы грузятся только после того, как ключ приняли: одна такая
+        # строчка - доказательство надёжнее любого "Authenticating...".
+        if printf '%s' "$fresh" | grep -q 'Started resource'; then
+            verdict=good
+            break
+        fi
+    done
+    printf '\n'
+
+    case "$verdict" in
+        good)
+            ok 'ключ принят, ресурсы грузятся'
+            printf '\n    Проверка целиком:  bash deploy.sh --check\n\n'
+            ;;
+        bad)
+            bad 'ключ снова не принят:'
+            printf '%s' "$fresh" | grep -i 'license key' | tail -n 3 | sed 's/^/        /'
+            printf '\n    Заведи новый ключ на https://portal.cfx.re и повтори: bash deploy.sh --key\n\n'
+            exit 1
+            ;;
+        *)
+            warn 'за минуту сервер не дошёл до ресурсов - смотри: bash deploy.sh --check'
+            printf '\n'
+            ;;
+    esac
+    exit 0
+fi
 
 [[ $EUID -eq 0 ]] || die "запускай от рута: sudo bash deploy.sh"
 [[ -d "$DATA_DIR" ]] || die "$DATA_DIR не существует - сервер ещё не установлен, гоняй setup.sh"
@@ -457,6 +566,8 @@ diagnose_log() {
             found=1
         fi
     done <<'REASONS'
+CURL error code 3|в лицензионном ключе посторонний символ (стрелки, пробел). Перепиши: bash deploy.sh --key
+error.*checking server license key|сервер не смог проверить лицензионный ключ. Перепиши его: bash deploy.sh --key
 invalid license key|лицензионный ключ не принят. Возьми новый на portal.cfx.re и впиши в server.cfg (строка sv_licenseKey)
 license key.*(not valid|expired|revoked)|лицензионный ключ недействителен или отозван - заведи новый на portal.cfx.re
 could not fetch.*license|сервер не смог проверить ключ - нет связи с Cfx или ключ сломан
@@ -515,6 +626,20 @@ fi
 if grep -q 'PASTE_YOUR_KEY_HERE' "$CFG" 2>/dev/null; then
     bad "в server.cfg не вписан лицензионный ключ - возьми на portal.cfx.re"
     note_problem
+else
+    cfg_key="$(grep -oP 'sv_licenseKey\s+"\K[^"]*' "$CFG" 2>/dev/null | head -n 1 || true)"
+    if [[ -z "$cfg_key" ]]; then
+        bad 'строки sv_licenseKey в server.cfg нет вообще'
+        note_problem
+    elif [[ "$(clean_key "$cfg_key")" != "$cfg_key" ]]; then
+        # Сам ключ не печатаем: он секретный, а длины и факта поломки хватает.
+        bad 'в ключе посторонние символы - сервер не сможет его проверить'
+        printf '        перепиши:  bash deploy.sh --key\n'
+        note_problem
+    elif [[ ${#cfg_key} -lt 20 ]]; then
+        bad "ключ обрезан (${#cfg_key} символов) - перепиши: bash deploy.sh --key"
+        note_problem
+    fi
 fi
 
 printf '\n'
