@@ -239,6 +239,11 @@ RegisterNetEvent('phone_garage:addSpot', function(spot)
     notify(src, ('Парковка записана: %s'):format(label), 'success')
 end)
 
+RegisterNetEvent('phone_garage:loadMarks', function(marks)
+    print(('[phone_garage] клиент %s прошёл загрузку: %s')
+        :format(GetPlayerName(source) or source, tostring(marks)))
+end)
+
 RegisterNetEvent('phone_garage:uiOk', function(where, count)
     print(('[phone_garage] интерфейс отрисован у %s (%s): строк %s')
         :format(GetPlayerName(source) or source, tostring(where), tostring(count)))

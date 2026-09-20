@@ -1,5 +1,21 @@
 -- Client side: the phone UI, finding a parking spot and putting the car there.
 
+-- Метки загрузки.
+--
+-- Если скрипт падает на середине, всё объявленное выше работает, а всё
+-- ниже - нет, и со стороны это выглядит как "часть телефона не работает".
+-- Ошибка при этом видна только в клиентской консоли. Метки уезжают на
+-- сервер: по последней видно, где именно оборвалось.
+local loadMarks = {}
+local function mark(where) loadMarks[#loadMarks + 1] = where end
+
+CreateThread(function()
+    Wait(8000)
+    TriggerServerEvent('phone_garage:loadMarks', table.concat(loadMarks, ' '))
+end)
+
+mark('1-начало')
+
 local State = { money = 0, cars = {}, spots = {} }
 local phoneOpen = false
 local activeVehicle = nil
@@ -233,6 +249,8 @@ local function setPhone(open)
     end
 end
 
+mark('2-до-команд')
+
 RegisterCommand('phone', function()
     setPhone(not phoneOpen)
 end, false)
@@ -271,6 +289,8 @@ RegisterCommand('park', function()
         notify('~r~Сейчас нет вызванной машины')
     end
 end, false)
+
+mark('3-до-колбэков')
 
 -- --- NUI callbacks ---------------------------------------------------------
 
@@ -395,9 +415,13 @@ end)
 -- Телефон рисует семью, недвижимость и аукцион, но ничего про них не знает:
 -- данные приходят из ls_property, а нажатия уходят туда же.
 
+mark('4-до-приёма-недвижимости')
+
 AddEventHandler('phone_garage:propertyData', function(data)
     SendNUIMessage({ action = 'property', data = data })
 end)
+
+mark('5-до-relay')
 
 local function relay(callback, event, build)
     RegisterNUICallback(callback, function(data, cb)
@@ -483,3 +507,5 @@ end)
 relay('forumClose', 'ls_forum:close', function(d)
     return { tostring(d.id or '') }
 end)
+
+mark('6-конец-файла')
