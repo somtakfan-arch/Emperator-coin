@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<title>Badchat</title>
+<meta name="description" content="Badchat — лёгкий мессенджер: личные чаты, группы, фото и голосовые." />
+<meta name="theme-color" content="#0a0d12" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<link rel="manifest" href="./manifest.json" />
+<link rel="icon" href="./icons/icon-192.png" />
+<link rel="apple-touch-icon" href="./icons/icon-192.png" />
+<link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+
+<div class="bg-layer" id="bgLayer"></div>
+
+<!-- ================= ЭКРАН АВТОРИЗАЦИИ ================= -->
+<section class="screen auth-screen" id="authScreen" hidden>
+  <div class="glass auth-card">
+    <div class="brand">
+      <div class="brand-mark">B</div>
+      <div>
+        <h1>Badchat</h1>
+        <p class="muted">Свой мессенджер. Быстро и без лишнего.</p>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-authtab="login" type="button">Вход</button>
+      <button class="tab" data-authtab="register" type="button">Регистрация</button>
+    </div>
+
+    <form class="auth-form" id="loginForm" autocomplete="on">
+      <label class="field">
+        <span>Email</span>
+        <input type="email" id="loginEmail" required placeholder="you@mail.com" autocomplete="email" />
+      </label>
+      <label class="field">
+        <span>Пароль</span>
+        <input type="password" id="loginPassword" required minlength="6" placeholder="••••••" autocomplete="current-password" />
+      </label>
+      <button class="btn primary" type="submit">Войти</button>
+    </form>
+
+    <form class="auth-form" id="registerForm" hidden autocomplete="on">
+      <label class="field">
+        <span>Юзернейм</span>
+        <input type="text" id="regUsername" required minlength="3" maxlength="20"
+               pattern="[a-zA-Z0-9_]{3,20}" placeholder="emperatorrr" autocomplete="off" />
+        <small class="hint" id="usernameHint">3–20 символов: латиница, цифры, _</small>
+      </label>
+      <label class="field">
+        <span>Имя</span>
+        <input type="text" id="regName" required maxlength="32" placeholder="Как тебя звать" autocomplete="nickname" />
+      </label>
+      <label class="field">
+        <span>Email</span>
+        <input type="email" id="regEmail" required placeholder="you@mail.com" autocomplete="email" />
+      </label>
+      <label class="field">
+        <span>Пароль</span>
+        <input type="password" id="regPassword" required minlength="6" placeholder="минимум 6 символов" autocomplete="new-password" />
+      </label>
+      <button class="btn primary" type="submit">Создать аккаунт</button>
+    </form>
+
+    <p class="auth-error" id="authError" hidden></p>
+  </div>
+</section>
+
+<!-- ================= ОСНОВНОЙ ЭКРАН ================= -->
+<main class="screen app-screen" id="appScreen" hidden>
+
+  <!-- Список чатов -->
+  <aside class="glass panel sidebar" id="sidebar">
+    <header class="panel-head">
+      <button class="avatar-btn" id="myAvatarBtn" type="button" title="Мой профиль">
+        <img id="myAvatar" alt="" />
+      </button>
+      <div class="panel-title">
+        <strong>Badchat</strong>
+        <span class="muted small" id="myUsername"></span>
+      </div>
+      <button class="icon-btn" id="newGroupBtn" type="button" title="Новая группа" aria-label="Новая группа">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </header>
+
+    <div class="search-box">
+      <svg viewBox="0 0 24 24" class="search-ico"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input type="search" id="searchInput" placeholder="Поиск по @юзернейму" autocomplete="off" />
+    </div>
+
+    <div class="list" id="searchResults" hidden></div>
+    <div class="list" id="chatList"></div>
+    <p class="empty" id="chatListEmpty">Пока нет чатов. Найди человека по @юзернейму выше.</p>
+  </aside>
+
+  <!-- Чат -->
+  <section class="glass panel chat" id="chatPanel">
+    <div class="chat-placeholder" id="chatPlaceholder">
+      <div class="brand-mark big">B</div>
+      <p class="muted">Выбери чат слева или найди человека по @юзернейму</p>
+    </div>
+
+    <div class="chat-inner" id="chatInner" hidden>
+      <header class="panel-head chat-head">
+        <button class="icon-btn back" id="backBtn" type="button" aria-label="Назад">
+          <svg viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg>
+        </button>
+        <button class="avatar-btn" id="chatAvatarBtn" type="button">
+          <img id="chatAvatar" alt="" />
+        </button>
+        <div class="panel-title" id="chatTitleBox">
+          <strong id="chatTitle"></strong>
+          <span class="muted small" id="chatStatus"></span>
+        </div>
+        <button class="icon-btn" id="chatInfoBtn" type="button" title="Инфо" aria-label="Инфо">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.6v.2"/></svg>
+        </button>
+      </header>
+
+      <div class="messages" id="messages"></div>
+
+      <div class="reply-bar" id="replyBar" hidden>
+        <div class="reply-strip"></div>
+        <div class="reply-text">
+          <strong id="replyName"></strong>
+          <span id="replyPreview"></span>
+        </div>
+        <button class="icon-btn" id="replyCancel" type="button" aria-label="Отменить ответ">
+          <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+
+      <div class="uploading" id="uploadBar" hidden><span id="uploadText">Загрузка…</span></div>
+
+      <footer class="composer" id="composer">
+        <input type="file" id="photoInput" accept="image/*" hidden />
+        <button class="icon-btn" id="attachBtn" type="button" title="Фото" aria-label="Фото">
+          <svg viewBox="0 0 24 24"><path d="M21 15l-5-5L5 21"/><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/></svg>
+        </button>
+        <textarea id="messageInput" rows="1" placeholder="Сообщение" maxlength="4000"></textarea>
+        <button class="icon-btn send" id="sendBtn" type="button" hidden aria-label="Отправить">
+          <svg viewBox="0 0 24 24"><path d="M4 12l16-8-6 8 6 8z"/></svg>
+        </button>
+        <button class="icon-btn mic" id="micBtn" type="button" title="Удерживай для записи" aria-label="Голосовое">
+          <svg viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+        </button>
+      </footer>
+
+      <div class="rec-overlay" id="recOverlay" hidden>
+        <span class="rec-dot"></span>
+        <span id="recTime">0:00</span>
+        <span class="muted small">отпусти — отправить, уведи палец вверх — отмена</span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ================= МОДАЛКИ ================= -->
+<div class="modal-root" id="modalRoot" hidden>
+  <div class="modal-backdrop" data-close></div>
+
+  <!-- Профиль -->
+  <div class="glass modal" id="profileModal" hidden>
+    <header class="modal-head">
+      <strong>Мой профиль</strong>
+      <button class="icon-btn" data-close type="button" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </header>
+    <div class="modal-body center">
+      <label class="avatar-edit">
+        <img id="profileAvatar" alt="" />
+        <span>Сменить</span>
+        <input type="file" id="profileAvatarInput" accept="image/*" hidden />
+      </label>
+      <label class="field"><span>Имя</span><input type="text" id="profileName" maxlength="32" /></label>
+      <label class="field"><span>Юзернейм</span><input type="text" id="profileUsername" disabled /></label>
+      <button class="btn primary" id="profileSave" type="button">Сохранить</button>
+      <button class="btn ghost" id="logoutBtn" type="button">Выйти</button>
+    </div>
+  </div>
+
+  <!-- Новая группа -->
+  <div class="glass modal" id="groupModal" hidden>
+    <header class="modal-head">
+      <strong id="groupModalTitle">Новая группа</strong>
+      <button class="icon-btn" data-close type="button" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </header>
+    <div class="modal-body">
+      <div class="center" id="groupCreateFields">
+        <label class="avatar-edit">
+          <img id="groupAvatar" alt="" />
+          <span>Аватар</span>
+          <input type="file" id="groupAvatarInput" accept="image/*" hidden />
+        </label>
+        <label class="field full"><span>Название группы</span><input type="text" id="groupName" maxlength="40" placeholder="Клан BedSMP" /></label>
+      </div>
+      <label class="field full"><span>Добавить людей</span><input type="search" id="groupSearch" placeholder="@юзернейм" autocomplete="off" /></label>
+      <div class="chips" id="groupChips"></div>
+      <div class="list small-list" id="groupResults"></div>
+      <button class="btn primary" id="groupCreateBtn" type="button">Создать группу</button>
+    </div>
+  </div>
+
+  <!-- Инфо о чате -->
+  <div class="glass modal" id="infoModal" hidden>
+    <header class="modal-head">
+      <strong>Информация</strong>
+      <button class="icon-btn" data-close type="button" aria-label="Закрыть"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </header>
+    <div class="modal-body">
+      <div class="center">
+        <img class="info-avatar" id="infoAvatar" alt="" />
+        <strong id="infoTitle"></strong>
+        <span class="muted small" id="infoSubtitle"></span>
+      </div>
+      <div class="list small-list" id="infoMembers"></div>
+      <button class="btn ghost" id="addMembersBtn" type="button" hidden>Добавить людей</button>
+    </div>
+  </div>
+</div>
+
+<!-- Просмотр фото -->
+<div class="lightbox" id="lightbox" hidden><img id="lightboxImg" alt="" /></div>
+
+<!-- Тост -->
+<div class="toast" id="toast" hidden></div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>
