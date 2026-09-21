@@ -14,13 +14,15 @@ from PIL import Image, ImageEnhance
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC, DST = os.path.join(HERE, "img"), os.path.join(HERE, "img_print")
-PDF = os.path.join(HERE, "Америка-география.pdf")
+PDF = os.path.join(HERE, "Открытие-Америки.pdf")
 CHROME = next((p for p in ["/opt/pw-browsers/chromium-1194/chrome-linux/chrome",
                            shutil.which("chromium") or "", shutil.which("google-chrome") or ""] if p and os.path.exists(p)), None)
 FONTS_CSS = ("https://fonts.googleapis.com/css2?family=Oswald:wght@300;500;700"
              "&family=Golos+Text:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap")
 INK = (8, 13, 17)
-DUO = {"jaguar", "condor"}
+# точка фокуса кадра (доля ширины, доля высоты) — чтобы у портретов не срезало лица
+FOCUS = {"columbus": (0.68, 0.16), "vespucci": (0.70, 0.18), "magellan": (0.68, 0.14),
+         "isabella": (0.62, 0.22), "conquest": (0.58, 0.50)}
 
 def curl(url):
     return subprocess.run(["curl", "-sS", "-m", "90", "-A", "Mozilla/5.0", url],
@@ -28,28 +30,22 @@ def curl(url):
 
 def prepare_images():
     os.makedirs(DST, exist_ok=True)
-    def cover(im, w, h):
+    def cover(im, w, h, focus=(0.5, 0.5)):
         s = max(w / im.width, h / im.height)
         im = im.resize((round(im.width * s), round(im.height * s)), Image.LANCZOS)
-        l, t = (im.width - w) // 2, (im.height - h) // 2
+        l = round((im.width - w) * focus[0])
+        t = round((im.height - h) * focus[1])
         return im.crop((l, t, l + w, t + h))
     for name in sorted(os.listdir(SRC)):
         if not name.endswith(".jpg"):
             continue
         slug = name[:-4]
         im = Image.open(os.path.join(SRC, name)).convert("RGB")
-        if slug in DUO:
-            im = cover(im, 700, 480)
-            im = ImageEnhance.Color(im).enhance(1.05)
-            im = ImageEnhance.Contrast(im).enhance(1.03)
-            q = 82
-        else:
-            im = cover(im, 1280, 720)
-            im = ImageEnhance.Color(im).enhance(1.06)
-            im = ImageEnhance.Contrast(im).enhance(1.04)
-            im = Image.blend(Image.new("RGB", im.size, INK), im, 0.94)
-            q = 80
-        im.save(os.path.join(DST, name), "JPEG", quality=q, optimize=True, progressive=True)
+        im = cover(im, 1280, 720, FOCUS.get(slug, (0.5, 0.5)))
+        im = ImageEnhance.Color(im).enhance(1.06)
+        im = ImageEnhance.Contrast(im).enhance(1.04)
+        im = Image.blend(Image.new("RGB", im.size, INK), im, 0.94)
+        im.save(os.path.join(DST, name), "JPEG", quality=80, optimize=True, progressive=True)
 
 def inline_fonts():
     css = curl(FONTS_CSS).decode("utf-8", "replace")

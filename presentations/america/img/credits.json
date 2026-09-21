@@ -1,52 +1,10 @@
 {
-  "canyon": {
-    "file": "File:Grand Canyon Hopi Point with rainbow 2013.jpg",
-    "license": "CC BY-SA 3.0",
-    "author": "<a href=\"//commons.wikimedia.org/wiki/User:Tuxyso\" title=\"User:Tuxyso\">Tuxyso</a>",
-    "bytes": 344885,
-    "page": "https://commons.wikimedia.org/wiki/File%3AGrand_Canyon_Hopi_Point_with_rainbow_2013.jpg"
-  },
-  "denali": {
-    "file": "File:Parque nacional y reserva Denali, Alaska, Estados Unidos, 2017-08-30, DD 72.jpg",
-    "license": "CC BY-SA 4.0",
-    "author": "<bdi><a href=\"https://www.wikidata.org/wiki/Q28147777\" class=\"extiw\" title=\"d:Q28147777\"><span title=\"Spanish photographer\">Diego Delso</span></a></bdi>",
-    "bytes": 146680,
-    "page": "https://commons.wikimedia.org/wiki/File%3AParque_nacional_y_reserva_Denali%2C_Alaska%2C_Estados_Unidos%2C_2017-08-30%2C_DD_72.jpg"
-  },
   "chichen": {
     "file": "File:Chichen Itza 3.jpg",
     "license": "CC BY-SA 4.0",
     "author": "<a href=\"//commons.wikimedia.org/wiki/User:Dschwen\" title=\"User:Dschwen\">Daniel Schwen</a>",
     "bytes": 230694,
     "page": "https://commons.wikimedia.org/wiki/File%3AChichen_Itza_3.jpg"
-  },
-  "panama": {
-    "file": "File:Panama Canal Miraflores Locks.jpg",
-    "license": "CC BY-SA 3.0",
-    "author": "<a href=\"//commons.wikimedia.org/wiki/User:Stan_Shebs\" title=\"User:Stan Shebs\">User:Stan Shebs</a>",
-    "bytes": 190398,
-    "page": "https://commons.wikimedia.org/wiki/File%3APanama_Canal_Miraflores_Locks.jpg"
-  },
-  "amazon": {
-    "file": "File:Aerial view of the Amazon Rainforest.jpg",
-    "license": "CC BY-SA 2.0",
-    "author": "<a rel=\"nofollow\" class=\"external text\" href=\"https://www.flickr.com/people/44577875@N08\">lubasi</a>",
-    "bytes": 339777,
-    "page": "https://commons.wikimedia.org/wiki/File%3AAerial_view_of_the_Amazon_Rainforest.jpg"
-  },
-  "andes": {
-    "file": "File:Aconcagua Provincial Park 04.jpg",
-    "license": "CC BY-SA 4.0",
-    "author": "<a href=\"//commons.wikimedia.org/wiki/User:Bgag\" title=\"User:Bgag\">Bernard Gagnon</a>",
-    "bytes": 354971,
-    "page": "https://commons.wikimedia.org/wiki/File%3AAconcagua_Provincial_Park_04.jpg"
-  },
-  "iguazu": {
-    "file": "File:00 1838 Iguazu Falls from the Brazilian side.jpg",
-    "license": "CC BY-SA 4.0",
-    "author": "<a href=\"//commons.wikimedia.org/wiki/User:W._Bulach\" title=\"User:W. Bulach\">W. Bulach</a>",
-    "bytes": 351934,
-    "page": "https://commons.wikimedia.org/wiki/File%3A00_1838_Iguazu_Falls_from_the_Brazilian_side.jpg"
   },
   "machu": {
     "file": "File:Machu Picchu, Perú, 2015-07-30, DD 47.JPG",
@@ -55,40 +13,12 @@
     "bytes": 367633,
     "page": "https://commons.wikimedia.org/wiki/File%3AMachu_Picchu%2C_Per%C3%BA%2C_2015-07-30%2C_DD_47.JPG"
   },
-  "rio": {
-    "file": "File:Panoramic view of Rio de Janeiro at dusk from Sugarloaf Mountain, Brazil.jpg",
-    "license": "CC0",
-    "author": "<a href=\"//commons.wikimedia.org/wiki/User:Wilfredor\" class=\"mw-redirect\" title=\"User:Wilfredor\">Wilfredor</a>",
-    "bytes": 112195,
-    "page": "https://commons.wikimedia.org/wiki/File%3APanoramic_view_of_Rio_de_Janeiro_at_dusk_from_Sugarloaf_Mountain%2C_Brazil.jpg"
-  },
-  "atacama": {
-    "file": "File:Catedrales de Tara, Chile, 2016-02-07, DD 62.JPG",
-    "license": "CC BY-SA 4.0",
-    "author": "<bdi><a href=\"https://www.wikidata.org/wiki/Q28147777\" class=\"extiw\" title=\"d:Q28147777\"><span title=\"Spanish photographer\">Diego Delso</span></a></bdi>",
-    "bytes": 270004,
-    "page": "https://commons.wikimedia.org/wiki/File%3ACatedrales_de_Tara%2C_Chile%2C_2016-02-07%2C_DD_62.JPG"
-  },
   "caribbean": {
     "file": "File:Beach on the Caribbean side of Isla Mujeres (4257546308).jpg",
     "license": "CC BY-SA 2.0",
     "author": "<a rel=\"nofollow\" class=\"external text\" href=\"https://www.flickr.com/people/24401970@N03\">Šarūnas Burdulis</a> from USA",
     "bytes": 576850,
     "page": "https://commons.wikimedia.org/wiki/File%3ABeach_on_the_Caribbean_side_of_Isla_Mujeres_%284257546308%29.jpg"
-  },
-  "mississippi": {
-    "file": "File:Mississippi delta from space.jpg",
-    "license": "Public domain",
-    "author": "NASA",
-    "bytes": 644683,
-    "page": "https://commons.wikimedia.org/wiki/File%3AMississippi_delta_from_space.jpg"
-  },
-  "greenland": {
-    "file": "File:Major Greenland Glacier Is Growing.jpeg",
-    "license": "Public domain",
-    "author": "NASA Earth Observatory images by Joshua Stevens, using Landsat data from the U.S. Geological Survey, and data courtesy of Josh Willis/NASA JPL and the Oceans Melting Greenland (OMG) Program. Story by ",
-    "bytes": 374273,
-    "page": "https://commons.wikimedia.org/wiki/File%3AMajor_Greenland_Glacier_Is_Growing.jpeg"
   },
   "globe": {
     "file": "File:Blue Marble Western Hemisphere.jpg",
@@ -97,46 +27,95 @@
     "bytes": 396486,
     "page": "https://commons.wikimedia.org/wiki/File%3ABlue_Marble_Western_Hemisphere.jpg"
   },
-  "niagara": {
-    "file": "File:Niagara Falls Horseshoe Falls 03.jpg",
-    "license": "CC BY-SA 4.0",
-    "author": "<a href=\"//commons.wikimedia.org/w/index.php?title=User:FuchsiaPeacock&amp;action=edit&amp;redlink=1\" class=\"new\" title=\"User:FuchsiaPeacock (page does not exist)\">FuchsiaPeacock</a>",
-    "bytes": 408560,
-    "page": "https://commons.wikimedia.org/wiki/File%3ANiagara_Falls_Horseshoe_Falls_03.jpg"
+  "ptolemy": {
+    "file": "File:1482 Ulm Ptolemy World Map.jpg",
+    "license": "Public domain",
+    "author": "<bdi><a href=\"https://en.wikipedia.org/wiki/en:Ptolemy\" class=\"extiw\" title=\"w:en:Ptolemy\"><span title=\"2nd-century Roman mathematician, astronomer, geographer\">Ptolemy</span></a></bdi>",
+    "bytes": 1300127,
+    "page": "https://commons.wikimedia.org/wiki/File%3A1482_Ulm_Ptolemy_World_Map.jpg"
   },
-  "nyc": {
-    "file": "File:Lower Manhattan from Governors Island with a fishing boat (46294p).jpg",
-    "license": "CC BY-SA 4.0",
-    "author": "<a href=\"//commons.wikimedia.org/wiki/User:Rhododendrites\" title=\"User:Rhododendrites\">Rhododendrites</a>",
-    "bytes": 219093,
-    "page": "https://commons.wikimedia.org/wiki/File%3ALower_Manhattan_from_Governors_Island_with_a_fishing_boat_%2846294p%29.jpg"
+  "columbus": {
+    "file": "File:Portrait of a Man, Said to be Christopher Columbus.jpg",
+    "license": "Public domain",
+    "author": "<bdi><a href=\"https://en.wikipedia.org/wiki/en:Sebastiano_del_Piombo\" class=\"extiw\" title=\"w:en:Sebastiano del Piombo\"><span title=\"Italian painter (c.1485-1547)\">Sebastiano del Piombo</span></a></bdi",
+    "bytes": 1560519,
+    "page": "https://commons.wikimedia.org/wiki/File%3APortrait_of_a_Man%2C_Said_to_be_Christopher_Columbus.jpg"
   },
-  "patagonia": {
-    "file": "File:Cuernos del Paine in Torres del Paine National Park.jpg",
-    "license": "CC BY-SA 2.0",
-    "author": "<a rel=\"nofollow\" class=\"external text\" href=\"https://www.flickr.com/people/43355249@N00\">Pedro Szekely</a> from Los Angeles, USA",
-    "bytes": 303225,
-    "page": "https://commons.wikimedia.org/wiki/File%3ACuernos_del_Paine_in_Torres_del_Paine_National_Park.jpg"
-  },
-  "jaguar": {
-    "file": "File:Jaguar (Panthera onca palustris) male Rio Negro 2.JPG",
-    "license": "CC BY-SA 4.0",
-    "author": "<bdi><a href=\"https://www.wikidata.org/wiki/Q54800218\" class=\"extiw\" title=\"d:Q54800218\"><span title=\"Scottish wildlife photographer\">Charles J. Sharp</span></a></bdi>",
-    "bytes": 502857,
-    "page": "https://commons.wikimedia.org/wiki/File%3AJaguar_%28Panthera_onca_palustris%29_male_Rio_Negro_2.JPG"
-  },
-  "condor": {
-    "file": "File:Condor des Andes mâle adulte.jpg",
+  "caravel": {
+    "file": "File:Notorious from bow.jpg",
     "license": "CC BY-SA 3.0",
-    "author": "Hugo Pedel",
-    "bytes": 159246,
-    "page": "https://commons.wikimedia.org/wiki/File%3ACondor_des_Andes_m%C3%A2le_adulte.jpg"
+    "author": "<a href=\"//commons.wikimedia.org/w/index.php?title=User:Martyvis&amp;action=edit&amp;redlink=1\" class=\"new\" title=\"User:Martyvis (page does not exist)\">Martyvis</a>",
+    "bytes": 620051,
+    "page": "https://commons.wikimedia.org/wiki/File%3ANotorious_from_bow.jpg"
   },
-  "sequoia": {
-    "file": "File:Sequoiadendron giganteum kz11.jpg",
+  "landing": {
+    "file": "File:BEP-(Multiple)-Landing of Columbus (Vanderlyn).jpg",
+    "license": "Public domain",
+    "author": "The <a href=\"https://en.wikipedia.org/wiki/Bureau_of_Engraving_and_Printing\" class=\"extiw\" title=\"w:Bureau of Engraving and Printing\">Bureau of Engraving and Printing</a>",
+    "bytes": 716005,
+    "page": "https://commons.wikimedia.org/wiki/File%3ABEP-%28Multiple%29-Landing_of_Columbus_%28Vanderlyn%29.jpg"
+  },
+  "viking": {
+    "file": "File:Små langskip Tønsberg havn, Norway 2015-09-25.jpg",
     "license": "CC BY-SA 4.0",
-    "author": "<a href=\"//commons.wikimedia.org/wiki/User:Kenraiz\" title=\"User:Kenraiz\">Krzysztof Ziarnek, Kenraiz</a>",
-    "bytes": 969840,
-    "page": "https://commons.wikimedia.org/wiki/File%3ASequoiadendron_giganteum_kz11.jpg"
+    "author": "<a href=\"//commons.wikimedia.org/wiki/User:Wolfmann\" title=\"User:Wolfmann\">Wolfmann</a>",
+    "bytes": 733390,
+    "page": "https://commons.wikimedia.org/wiki/File%3ASm%C3%A5_langskip_T%C3%B8nsberg_havn%2C_Norway_2015-09-25.jpg"
+  },
+  "waldseemuller": {
+    "file": "File:Waldseemuller map 2.jpg",
+    "license": "Public domain",
+    "author": "<bdi><a href=\"https://en.wikipedia.org/wiki/en:Martin_Waldseem%C3%BCller\" class=\"extiw\" title=\"w:en:Martin Waldseemüller\"><span title=\"German cartographer\">Martin Waldseemüller</span></a></bdi>",
+    "bytes": 1020949,
+    "page": "https://commons.wikimedia.org/wiki/File%3AWaldseemuller_map_2.jpg"
+  },
+  "vespucci": {
+    "file": "File:Michele Bisi (Italian, c. 1788-1874) - Portrait of Amerigo Vespucci - 1949.92 - Cleveland Museum of Art.jpg",
+    "license": "Public domain",
+    "author": "",
+    "bytes": 1404189,
+    "page": "https://commons.wikimedia.org/wiki/File%3AMichele_Bisi_%28Italian%2C_c._1788-1874%29_-_Portrait_of_Amerigo_Vespucci_-_1949.92_-_Cleveland_Museum_of_Art.jpg"
+  },
+  "isabella": {
+    "file": "File:Ferdinand of Aragon, Isabella of Castile (cropped).jpg",
+    "license": "Public domain",
+    "author": "<bdi><a href=\"https://www.wikidata.org/wiki/Q4233718\" class=\"extiw\" title=\"d:Q4233718\"><span title='unknown creator of a work (do not use as value of P50; use \"unknown value\" instead)'>anonymous</span",
+    "bytes": 408948,
+    "page": "https://commons.wikimedia.org/wiki/File%3AFerdinand_of_Aragon%2C_Isabella_of_Castile_%28cropped%29.jpg"
+  },
+  "magellan": {
+    "file": "File:Retrato de Hernando de Magallanes.jpg",
+    "license": "Public domain",
+    "author": "<div class=\"fn value\">\nUnknown artist<span style=\"display: none;\">Unknown artist</span></div>",
+    "bytes": 299204,
+    "page": "https://commons.wikimedia.org/wiki/File%3ARetrato_de_Hernando_de_Magallanes.jpg"
+  },
+  "conquest": {
+    "file": "File:The Meeting of Cortés and Moctezuma (Conquest of Mexico) Painting.jpg",
+    "license": "Public domain",
+    "author": "Unknown artist",
+    "bytes": 680956,
+    "page": "https://commons.wikimedia.org/wiki/File%3AThe_Meeting_of_Cort%C3%A9s_and_Moctezuma_%28Conquest_of_Mexico%29_Painting.jpg"
+  },
+  "smallpox": {
+    "file": "File:Aztec smallpox victims.jpg",
+    "license": "Public domain",
+    "author": "Unknown author<span style=\"display: none;\">Unknown author</span>",
+    "bytes": 576499,
+    "page": "https://commons.wikimedia.org/wiki/File%3AAztec_smallpox_victims.jpg"
+  },
+  "astrolabe": {
+    "file": "File:Astrolabio Aveiro Lisboa ca1600.jpg",
+    "license": "CC BY-SA 4.0",
+    "author": "<a href=\"//commons.wikimedia.org/wiki/User:Hispalois\" title=\"User:Hispalois\">Hispalois</a>",
+    "bytes": 288354,
+    "page": "https://commons.wikimedia.org/wiki/File%3AAstrolabio_Aveiro_Lisboa_ca1600.jpg"
+  },
+  "vinland": {
+    "file": "File:Norstead - Living History Attraction - 11 September 2023.jpg",
+    "license": "CC BY-SA 2.0",
+    "author": "Larry Syverson",
+    "bytes": 599955,
+    "page": "https://commons.wikimedia.org/wiki/File%3ANorstead_-_Living_History_Attraction_-_11_September_2023.jpg"
   }
 }
