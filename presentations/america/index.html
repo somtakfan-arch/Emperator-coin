@@ -612,7 +612,7 @@ h3{font-family:var(--display);font-weight:500;font-size:clamp(14px,1.55cqw,30px)
       <p class="eyebrow an" style="--i:0">Приложение</p>
       <h2 class="an" style="--i:1">Источники изображений</h2>
       <p class="lead an" style="--i:2">Иллюстрации — из Wikimedia Commons: старинные карты и картины в общественном достоянии, фотографии под свободными лицензиями. Карта маршрутов построена по данным Natural Earth (110 м) в равновеликой проекции Equal Earth; маршруты — по историческим описаниям плаваний.</p>
-      <ul class="credits an" style="--i:3"><li><i>Waldseemuller map 2.jpg</i><br>Martin Waldseemüller · Public domain</li><li><i>1482 Ulm Ptolemy World Map.jpg</i><br>Ptolemy · Public domain</li><li><i>Chichen Itza 3.jpg</i><br>Daniel Schwen · CC BY-SA 4.0</li><li><i>Machu Picchu, Perú, 2015-07-30, DD 47.JPG</i><br>Diego Delso · CC BY-SA 4.0</li><li><i>Små langskip Tønsberg havn, Norway 2015-09-25.jpg</i><br>Wolfmann · CC BY-SA 4.0</li><li><i>Norstead - Living History Attraction - 11 September 2023.jpg</i><br>Larry Syverson · CC BY-SA 2.0</li><li><i>Astrolabio Aveiro Lisboa ca1600.jpg</i><br>Hispalois · CC BY-SA 4.0</li><li><i>Blue Marble Western Hemisphere.jpg</i><br>NASA images by Reto Stöckli, based on data from NASA and NOAA. Instrum… · Public domain</li><li><i>Ferdinand of Aragon, Isabella of Castile (cropped).jpg</i><br>anonymous&lt;/span · Public domain</li><li><i>Notorious from bow.jpg</i><br>Martyvis · CC BY-SA 3.0</li><li><i>Beach on the Caribbean side of Isla Mujeres (4257546308).jpg</i><br>Šarūnas Burdulis from USA · CC BY-SA 2.0</li><li><i>BEP-(Multiple)-Landing of Columbus (Vanderlyn).jpg</i><br>The Bureau of Engraving and Printing · Public domain</li><li><i>Portrait of a Man, Said to be Christopher Columbus.jpg</i><br>Sebastiano del Piombo&lt;/bdi · Public domain</li><li><i>Michele Bisi (Italian, c. 1788-1874) - Portrait of Amerigo Vespucci - 1949.92 - Cleveland Museum of Art.jpg</i><br>Wikimedia Commons · Public domain</li><li><i>Retrato de Hernando de Magallanes.jpg</i><br>Unknown artistUnknown artist · Public domain</li><li><i>The Meeting of Cortés and Moctezuma (Conquest of Mexico) Painting.jpg</i><br>Unknown artist · Public domain</li><li><i>Aztec smallpox victims.jpg</i><br>Unknown authorUnknown author · Public domain</li></ul>
+      <ul class="credits an" style="--i:3"><li><i>Waldseemuller map 2.jpg</i><br>Martin Waldseemüller · Public domain</li><li><i>1482 Ulm Ptolemy World Map.jpg</i><br>Ptolemy · Public domain</li><li><i>Chichen Itza 3.jpg</i><br>Daniel Schwen · CC BY-SA 4.0</li><li><i>Machu Picchu, Perú, 2015-07-30, DD 47.JPG</i><br>Diego Delso · CC BY-SA 4.0</li><li><i>Små langskip Tønsberg havn, Norway 2015-09-25.jpg</i><br>Wolfmann · CC BY-SA 4.0</li><li><i>Norstead - Living History Attraction - 11 September 2023.jpg</i><br>Larry Syverson · CC BY-SA 2.0</li><li><i>Astrolabio Aveiro Lisboa ca1600.jpg</i><br>Hispalois · CC BY-SA 4.0</li><li><i>Blue Marble Western Hemisphere.jpg</i><br>NASA images by Reto Stöckli, based on data from NASA and NOAA. Instrum… · Public domain</li><li><i>Ferdinand of Aragon, Isabella of Castile (cropped).jpg</i><br>anonymous · Public domain</li><li><i>Notorious from bow.jpg</i><br>Martyvis · CC BY-SA 3.0</li><li><i>Beach on the Caribbean side of Isla Mujeres (4257546308).jpg</i><br>Šarūnas Burdulis from USA · CC BY-SA 2.0</li><li><i>BEP-(Multiple)-Landing of Columbus (Vanderlyn).jpg</i><br>The Bureau of Engraving and Printing · Public domain</li><li><i>Portrait of a Man, Said to be Christopher Columbus.jpg</i><br>Sebastiano del Piombo · Public domain</li><li><i>Michele Bisi (Italian, c. 1788-1874) - Portrait of Amerigo Vespucci - 1949.92 - Cleveland Museum of Art.jpg</i><br>Wikimedia Commons · Public domain</li><li><i>Retrato de Hernando de Magallanes.jpg</i><br>Unknown artist · Public domain</li><li><i>The Meeting of Cortés and Moctezuma (Conquest of Mexico) Painting.jpg</i><br>Unknown artist · Public domain</li><li><i>Aztec smallpox victims.jpg</i><br>Unknown author · Public domain</li></ul>
     </div>
   </div>
 </section>
@@ -683,7 +683,17 @@ h3{font-family:var(--display);font-weight:500;font-size:clamp(14px,1.55cqw,30px)
     if(!first) s.classList.add('in-'+dir);
     dots[i].classList.add('on');
 
-    var w=s.querySelector('.wrap'); if(w) w.scrollTop=0;
+    var w=s.querySelector('.wrap');
+    if(w){
+      w.scrollTop=0;
+      w.style.transform='';                       // пересчитываем масштаб под текущий размер
+      var need=w.scrollHeight, have=w.clientHeight;
+      if(need > have+1){
+        var k=Math.max(0.62,(have-4)/need);
+        w.style.transform='scale('+k.toFixed(4)+')';
+        w.style.transformOrigin='center center';
+      }
+    }
     bar.style.width=((i+1)/total*100)+'%';
     countEl.textContent=pad(i+1)+' / '+pad(total);
     geoEl.textContent=s.getAttribute('data-geo')||'';
@@ -721,5 +731,6 @@ h3{font-family:var(--display);font-weight:500;font-size:clamp(14px,1.55cqw,30px)
   },{passive:true});
 
   go(i);
+  window.addEventListener('resize',function(){ var c=i; first=true; go(c); });
 })();
 </script>

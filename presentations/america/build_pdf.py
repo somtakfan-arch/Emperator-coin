@@ -74,6 +74,7 @@ html,body{ margin:0; padding:0; background:#080D11; display:block; min-height:0;
         overflow:hidden; display:block; break-after:page; page-break-after:always; animation:none!important; }
 .slide:last-of-type{ break-after:auto; page-break-after:auto; }
 .slide *{ animation:none!important; transition:none!important; }
+.wrap{ overflow:visible!important; padding-bottom:7.6cqw!important; }
 .bg img{ transform:none!important; opacity:1!important; filter:none!important; }
 .duo img{ filter:none!important; }
 .coast{ stroke-dasharray:none!important; stroke-dashoffset:0!important; }
@@ -86,6 +87,21 @@ html,body{ margin:0; padding:0; background:#080D11; display:block; min-height:0;
 .slide::before{ content:attr(data-num); position:absolute; right:clamp(16px,4.2cqw,96px); top:1.6cqw; z-index:6;
   font-family:'IBM Plex Mono',ui-monospace,monospace; font-size:clamp(8.5px,.8cqw,15px);
   letter-spacing:.1em; color:#8FA0A9; }
+"""
+
+FIT_SCRIPT = """
+<script>
+/* Вписываем содержимое каждого слайда в страницу: на печати прокрутки нет,
+   поэтому длинные слайды слегка уменьшаем, чтобы текст не налезал на подпись. */
+document.querySelectorAll('.slide .wrap').forEach(function(w){
+  var need = w.scrollHeight, have = w.clientHeight;
+  if (need > have - 2) {
+    var k = Math.max(0.62, (have - 6) / need);
+    w.style.transform = 'scale(' + k.toFixed(4) + ')';
+    w.style.transformOrigin = 'center center';
+  }
+});
+</script>
 """
 
 def build_html(fonts):
@@ -101,6 +117,7 @@ def build_html(fonts):
         return f'<section class="slide" data-num="{n[0]:02d} / {total}"'
     d = re.sub(r'<section class="slide"', number, d)
     d = d.replace("</style>", "</style>\n<style>" + fonts + "</style>\n<style>" + PRINT_CSS + "</style>")
+    d += FIT_SCRIPT
     path = os.path.join(HERE, "_print.html")
     open(path, "w", encoding="utf-8").write("<!doctype html><meta charset='utf-8'>" + d)
     return path, total
