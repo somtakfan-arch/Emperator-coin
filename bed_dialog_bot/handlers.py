@@ -6416,7 +6416,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         body, kb = _rings_view(storage, message.from_user.id)
         await message.reply_text(body, parse_mode="HTML", reply_markup=kb)
         return
-    if text.startswith("/rep") or text.startswith("/реп"):
+    if (text.split() or [""])[0].split("@")[0] in ("/rep", "/реп"):
         uid = message.from_user.id
         parts = text.split()
         target = _resolve_person(storage, parts[1]) if len(parts) >= 2 else _reply_target(message)
