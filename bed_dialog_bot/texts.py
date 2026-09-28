@@ -8,6 +8,17 @@ from .commands import SPAM_WINDOW_SECONDS
 from .formatting import format_sender
 
 
+REBIRTH_BANNER = (
+    "🔥🌙 <b>BED DIALOG — ПЕРЕРОЖДЕНИЕ</b> 🌙🔥\n\n"
+    "Мы прошли через большие перемены и вернулись <b>сильнее</b>.\n"
+    "Старая глава закрыта — начинается новая эра.\n\n"
+    "⚡️ Именные ID · 🎬 медиа-ранги · 🏆 престиж · 🏰 кланы · 🗿 аура\n"
+    "💎 Экономика BED — живее, чем когда-либо\n\n"
+    "🚀 <b>Первые вернувшиеся забирают лучшее.</b> Топовые ID и статусы "
+    "ждут — успей первым! 👑\n\nОткрывай меню: /menu"
+)
+
+
 def build_intro_text(bot_username: str) -> str:
     # HTML-styled welcome mirroring NeverDialog: bold section headers, a boxed
     # <blockquote> feature list and a quoted "how to connect" block. The

@@ -5366,6 +5366,13 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
                 )
             except Exception:
                 logger.exception("Failed to send trial notice")
+        # 🔥 Relaunch announcement — shown once per user on /start.
+        if storage.get_setting(f"rebirth:{message.from_user.id}") != "1":
+            storage.set_setting(f"rebirth:{message.from_user.id}", "1")
+            try:
+                await message.reply_text(texts.REBIRTH_BANNER, parse_mode="HTML")
+            except Exception:
+                pass
         if storage.get_bcid_for_owner(message.from_user.id):
             # Connected — open the main menu.
             await menus.send_section(
