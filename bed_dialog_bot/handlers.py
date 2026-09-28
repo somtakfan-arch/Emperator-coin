@@ -656,7 +656,9 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
                     styled = f"{emopre} {styled}"
                 if emosuf:
                     styled = f"{styled} {emosuf}"
-            if styled:
+            autoanim = (storage.is_ultra(owner_id)
+                        and storage.get_setting(f"autoanimate:{owner_id}") == "1")
+            if styled and not autoanim:
                 try:
                     await context.bot.edit_message_text(
                         chat_id=message.chat_id,
@@ -667,6 +669,27 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
                     )
                 except Exception:
                     logger.exception("style restyle failed")
+            # 🔱 ULTRA auto-animate: type the message out letter by letter, then
+            # settle on the styled (or plain) final text.
+            if autoanim:
+                src = message.text[:200]
+                shown = ""
+                for ch in src:
+                    shown += ch
+                    try:
+                        await context.bot.edit_message_text(
+                            chat_id=message.chat_id, message_id=message.message_id,
+                            business_connection_id=bcid, text=shown + "▌")
+                    except Exception:
+                        break
+                    await asyncio.sleep(0.12)
+                final_text = styled if styled else html.escape(src)
+                try:
+                    await context.bot.edit_message_text(
+                        chat_id=message.chat_id, message_id=message.message_id,
+                        business_connection_id=bcid, text=final_text, parse_mode="HTML")
+                except Exception:
+                    pass
 
     chat_type = getattr(message.chat, "type", "private")
     is_private = chat_type == "private"

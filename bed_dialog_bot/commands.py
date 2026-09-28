@@ -58,6 +58,7 @@ _INFO_RE = re.compile(r"^\.info\s*$")
 _STATUS_RE = re.compile(r"^\.status\s*$")
 _AFK_RE = re.compile(r"^\.afk(?:\s+(.*))?$", re.DOTALL)
 _KAWAI_RE = re.compile(r"^\.kawai\s*$")
+_ANIMATEALL_RE = re.compile(r"^\.animateall\s*$")
 _SPEK_RE = re.compile(r"^\.spek\s+(.+)$", re.DOTALL)
 _PREFIX_RE = re.compile(r"^\.prefix\s+(\S+)\s*$")
 _CLONE_RE = re.compile(r"^\.clone\s*$")
@@ -1148,6 +1149,22 @@ async def try_handle_owner_command(
         else:
             storage.set_setting(key, "🥱 Я сейчас AFK, отвечу позже.")
             note = "😴 AFK включён — на входящие бот ответит автоматически."
+        await _edit_command_message(context, bcid, chat_id, message_id, "⚙️")
+        await context.bot.send_message(chat_id=owner_chat_id, text=note)
+        return True
+
+    if _ANIMATEALL_RE.match(text):
+        if not is_ultra_owner:
+            await _edit_command_message(
+                context, bcid, chat_id, message_id,
+                "🔱 Авто-анимация — только для ULTRA PREMIUM.")
+            return True
+        key = f"autoanimate:{message.from_user.id}"
+        on = storage.get_setting(key) == "1"
+        storage.set_setting(key, "0" if on else "1")
+        note = ("🎬 Авто-анимация выключена." if on else
+                "🎬 Авто-анимация включена — каждое твоё сообщение будет "
+                "печататься по буквам, как живая печать ✨")
         await _edit_command_message(context, bcid, chat_id, message_id, "⚙️")
         await context.bot.send_message(chat_id=owner_chat_id, text=note)
         return True
