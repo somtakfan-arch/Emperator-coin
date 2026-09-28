@@ -496,6 +496,24 @@ async def _deposit_loop(application: Application) -> None:
     if not ton.configured():
         return
     storage: Storage = application.bot_data["storage"]
+    # 🛡 Fresh-start guard: after a DB reset the ton_deposits table is empty, so
+    # the poller would re-credit EVERY historical on-chain deposit (phantom BED).
+    # On the first cycle, mark all current on-chain deposits as already processed
+    # WITHOUT crediting, and zero any phantom balances once. Only genuinely NEW
+    # deposits after this baseline get credited.
+    if storage.get_setting("deposit_baseline") != "1":
+        try:
+            baseline = await ton.fetch_deposits(200)
+            for d in baseline:
+                tx = d.get("tx_hash")
+                if tx:
+                    storage.record_deposit(tx, ton.match_user(d.get("comment")) or 0, 0, 0)
+            storage.wipe_bed_balances()
+            storage.set_setting("deposit_baseline", "1")
+            logger.warning("Deposit baseline set: %d historical deposits marked seen, "
+                           "balances zeroed (fresh start).", len(baseline))
+        except Exception:
+            logger.exception("Deposit baseline failed; will retry next boot")
     while True:
         try:
             for d in await ton.fetch_deposits(40):

@@ -4280,6 +4280,15 @@ class Storage:
                 (tx_hash, user_id, amount, credited, int(_t.time())),
             )
 
+    def wipe_bed_balances(self) -> None:
+        """One-time fresh-start cleanup: zero every internal BED balance and the
+        fractional dust. Used after a DB reset so phantom-credited historical
+        deposits don't leave inflated balances."""
+        with self._connect() as conn:
+            conn.execute("DELETE FROM bed_balances")
+            conn.execute("DELETE FROM bed_dust")
+            conn.execute("DELETE FROM bed_ledger")
+
     def create_withdrawal(self, user_id: int, address: str, amount: int) -> int:
         import time as _t
         with self._connect() as conn:
