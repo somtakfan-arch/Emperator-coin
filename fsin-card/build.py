@@ -77,9 +77,13 @@ def main():
             name = f'fsin-list-{g + 1}' if has_people else 'fsin-a4'
             ins, cov = os.path.join(tmp, 'i.jpeg'), os.path.join(tmp, 'c.jpeg')
             shot(f'{url}?part=inside&g={g}', ins)
+            rot = os.path.join(tmp, 'r.jpeg')
             shot(f'{url}?part=cover&g={g}', cov)
+            shot(f'{url}?part=cover&g={g}&rot=1', rot)
             jpegs_to_pdf([ins], os.path.join(outdir, f'{name}-1-vnutri.pdf'))
-            jpegs_to_pdf([cov], os.path.join(outdir, f'{name}-2-oblozhka.pdf'))
+            # ручная вставка: лист переворачивается по короткому краю -> обложка развёрнута на 180°
+            jpegs_to_pdf([rot], os.path.join(outdir, f'{name}-2-oblozhka.pdf'))
+            # автодуплекс «по длинному краю»
             jpegs_to_pdf([ins, cov], os.path.join(outdir, f'{name}-dvustoronniy.pdf'))
     dog_html, dog_pdf = os.path.join(HERE, 'dogovor.html'), os.path.join(HERE, 'fsin-dogovor.pdf')
     if not os.path.exists(dog_pdf) or os.path.getmtime(dog_html) > os.path.getmtime(dog_pdf):

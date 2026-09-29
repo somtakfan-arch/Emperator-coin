@@ -5,12 +5,15 @@
 *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 html,body{background:#fff}
 body{font-family:"DejaVu Sans",sans-serif}
-.sheet{width:210mm;height:297mm;padding:13mm 10mm;display:flex;flex-direction:column;justify-content:flex-start;gap:9mm;margin:0 auto;background:#fff}
+.sheet{width:210mm;height:297mm;padding:0 10mm;display:flex;flex-direction:column;justify-content:center;gap:12mm;margin:0 auto;background:#fff}
 .sheet{position:relative;page-break-after:always;break-after:page;overflow:hidden}
-.row{display:flex;justify-content:center;position:relative;outline:0.3mm dashed #999;outline-offset:0;width:190mm;margin:0 auto}
-.row.out{outline:none;box-shadow:0 0 0 2.5mm #0c0c10}
-.row.out::after{display:none}
-.row::after{content:"";position:absolute;left:95mm;top:-4mm;bottom:-4mm;border-left:0.3mm dashed #999}
+.row{display:flex;justify-content:center;position:relative;width:190mm;margin:0 auto;box-shadow:0 0 0 2.5mm #0c0c10}
+/* метки реза и сгиба — снаружи от запаса фона */
+.m{position:absolute;background:#000}
+.m.h{height:0.25mm;width:5mm}
+.m.v{width:0.25mm;height:2.5mm}
+.m.f{background:#888}
+.sheet.rot{transform:rotate(180deg)}
 .slot{width:95mm;height:60mm;overflow:hidden;position:relative}
 .slot>.card{transform:scale(0.28051);transform-origin:0 0;position:absolute;top:0;left:0}
 .hint{position:absolute;left:0;right:0;bottom:4mm;text-align:center;font-size:8pt;color:#888}
@@ -160,20 +163,22 @@ const COVER = p => `<div class="card cover"><svg class="big"><use href="#emb"/><
 const BCOVER = p => `<div class="card bcover"><svg class="small"><use href="#emb"/></svg>
  <div class="motto2">ЧЕСТЬ · ПОРЯДОК · ВЕРНОСТЬ СВОИМ</div><div class="bsn">№ ${p.sn}</div></div>`;
 const doc = document.getElementById('doc');
-const qs = new URLSearchParams(location.search), PART = qs.get('part'), G = qs.get('g');
+const qs = new URLSearchParams(location.search), PART = qs.get('part'), G = qs.get('g'), ROT = qs.get('rot');
+const MARKS = [
+  ...[0, 60].flatMap(y => [`left:-9mm;top:${y}mm`, `left:194mm;top:${y}mm`].map(p => `<i class="m h" style="${p}"></i>`)),
+  ...[0, 95, 190].flatMap(x => [`left:${x}mm;top:-6.3mm`, `left:${x}mm;top:63.8mm`].map(p => `<i class="m v${x === 95 ? ' f' : ''}" style="${p}"></i>`)),
+].join('');
 for (let i = 0; i < people.length; i += 4) {
   if (G !== null && i / 4 !== +G) continue;
   const group = people.slice(i, i + 4);
   // стр. 1 — внутренний разворот
   const inside = document.createElement('div');
   inside.className = 'sheet';
-  for (const p of group) inside.insertAdjacentHTML('beforeend', `<div class="row"><div class="slot">${FRONT(p)}</div><div class="slot">${BACK(p)}</div></div>`);
-  inside.insertAdjacentHTML('beforeend', '<div class="hint">Стр. 1 — внутри. Печать двусторонняя, «переворот по длинному краю». Вырезать по пунктиру → согнуть внутрь по средней линии</div>');
+  for (const p of group) inside.insertAdjacentHTML('beforeend', `<div class="row"><div class="slot">${FRONT(p)}</div><div class="slot">${BACK(p)}</div>${MARKS}</div>`);
   // стр. 2 — обложка на обороте: слева задняя, справа лицевая
   const outside = document.createElement('div');
-  outside.className = 'sheet';
-  for (const p of group) outside.insertAdjacentHTML('beforeend', `<div class="row out"><div class="slot">${BCOVER(p)}</div><div class="slot">${COVER(p)}</div></div>`);
-  outside.insertAdjacentHTML('beforeend', '<div class="hint">Стр. 2 — обложка</div>');
+  outside.className = ROT ? 'sheet rot' : 'sheet';
+  for (const p of group) outside.insertAdjacentHTML('beforeend', `<div class="row"><div class="slot">${BCOVER(p)}</div><div class="slot">${COVER(p)}</div></div>`);
   if (PART !== 'cover') doc.append(inside);
   if (PART !== 'inside') doc.append(outside);
 }
