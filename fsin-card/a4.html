@@ -6,7 +6,10 @@
 html,body{background:#fff}
 body{font-family:"DejaVu Sans",sans-serif}
 .sheet{width:210mm;height:297mm;padding:13mm 10mm;display:flex;flex-direction:column;justify-content:flex-start;gap:9mm;margin:0 auto;background:#fff}
-.row{display:flex;justify-content:center;position:relative;outline:0.3mm dashed #999;outline-offset:1.5mm;width:190mm;margin:0 auto}
+.sheet{position:relative;page-break-after:always;break-after:page;overflow:hidden}
+.row{display:flex;justify-content:center;position:relative;outline:0.3mm dashed #999;outline-offset:0;width:190mm;margin:0 auto}
+.row.out{outline:none;box-shadow:0 0 0 2.5mm #0c0c10}
+.row.out::after{display:none}
 .row::after{content:"";position:absolute;left:95mm;top:-4mm;bottom:-4mm;border-left:0.3mm dashed #999}
 .slot{width:95mm;height:60mm;overflow:hidden;position:relative}
 .slot>.card{transform:scale(0.28051);transform-origin:0 0;position:absolute;top:0;left:0}
@@ -65,6 +68,19 @@ body{font-family:"DejaVu Sans",sans-serif}
 .back .note{font-size:15px;letter-spacing:1px;color:#6d727c;margin-top:14px}
 .serial{font-family:"DejaVu Sans Mono",monospace;font-size:24px;color:#8a909a;letter-spacing:4px}
 
+/* обложка */
+.cover{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+.cover::before,.bcover::before{inset:22px}
+.cover .big{width:300px;height:300px}
+.cover .cfsin{font-family:"DejaVu Serif",serif;font-weight:bold;font-size:130px;letter-spacing:34px;margin:18px 0 0 34px;line-height:1;
+  background:linear-gradient(180deg,#ffffff,#b9bec8 50%,#7d828c);-webkit-background-clip:text;color:transparent}
+.cover .cname{font-size:25px;letter-spacing:6px;color:#aab0ba;margin-top:18px}
+.cover .ctype{position:absolute;bottom:62px;left:0;right:0;font-family:"DejaVu Serif",serif;font-size:30px;letter-spacing:12px;color:#c9ced8}
+.bcover{display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:repeating-linear-gradient(135deg,rgba(255,255,255,.025) 0 2px,transparent 2px 14px),radial-gradient(ellipse at 80% 100%,#2a2d36 0%,#14151a 55%,#0c0c10 100%)}
+.bcover .small{width:150px;height:150px;opacity:.55}
+.bcover .motto2{font-family:"DejaVu Serif",serif;font-size:26px;letter-spacing:9px;color:#8a909a;margin-top:26px}
+.bcover .bsn{position:absolute;bottom:62px;left:0;right:0;text-align:center;font-family:"DejaVu Sans Mono",monospace;font-size:26px;letter-spacing:6px;color:#6d727c}
 </style></head><body>
 
 <svg width="0" height="0" style="position:absolute">
@@ -82,7 +98,7 @@ body{font-family:"DejaVu Sans",sans-serif}
 </svg>
 
 
-<div class="sheet" id="sheet" style="position:relative"></div>
+<div id="doc"></div>
 <script src="people.js" onerror="void 0"></script>
 <script>
 const list = x => Array.isArray(x) ? x : [x];
@@ -138,15 +154,27 @@ const BACK = p => `<div class="card back"><svg class="wm"><use href="#emb"/></sv
  </div>
 </div>`;
 const DEFAULT_POWERS = ["Представлять организацию ФСИН", "Участвовать в операциях своего отдела", "Требовать соблюдения устава ФСИН"];
-const sheet = document.getElementById('sheet');
-for (const p of people) {
-  const row = document.createElement('div');
-  row.className = 'row';
-  row.innerHTML = `<div class="slot">${FRONT(p)}</div><div class="slot">${BACK(p)}</div>`;
-  sheet.appendChild(row);
+const COVER = p => `<div class="card cover"><svg class="big"><use href="#emb"/></svg>
+ <div class="cfsin">ФСИН</div><div class="cname">ФИЛИПОВСКАЯ СЛУЖБА ИСПОЛНЕНИЯ НАКАЗАНИЙ</div>
+ <div class="ctype">УДОСТОВЕРЕНИЕ</div></div>`;
+const BCOVER = p => `<div class="card bcover"><svg class="small"><use href="#emb"/></svg>
+ <div class="motto2">ЧЕСТЬ · ПОРЯДОК · ВЕРНОСТЬ СВОИМ</div><div class="bsn">№ ${p.sn}</div></div>`;
+const doc = document.getElementById('doc');
+for (let i = 0; i < people.length; i += 4) {
+  const group = people.slice(i, i + 4);
+  // стр. 1 — внутренний разворот
+  const inside = document.createElement('div');
+  inside.className = 'sheet';
+  for (const p of group) inside.insertAdjacentHTML('beforeend', `<div class="row"><div class="slot">${FRONT(p)}</div><div class="slot">${BACK(p)}</div></div>`);
+  inside.insertAdjacentHTML('beforeend', '<div class="hint">Стр. 1 — внутри. Печать двусторонняя, «переворот по длинному краю». Вырезать по пунктиру → согнуть внутрь по средней линии</div>');
+  // стр. 2 — обложка на обороте: слева задняя, справа лицевая
+  const outside = document.createElement('div');
+  outside.className = 'sheet';
+  for (const p of group) outside.insertAdjacentHTML('beforeend', `<div class="row out"><div class="slot">${BCOVER(p)}</div><div class="slot">${COVER(p)}</div></div>`);
+  outside.insertAdjacentHTML('beforeend', '<div class="hint">Стр. 2 — обложка</div>');
+  doc.append(inside, outside);
 }
 // ужать шрифт, если строка не влезает
 document.querySelectorAll('.v').forEach(v => { let f = parseFloat(getComputedStyle(v).fontSize); while (v.scrollWidth > v.clientWidth && f > 16) v.style.fontSize = (f -= 1) + 'px'; });
-sheet.insertAdjacentHTML('beforeend','<div class="hint">Вырезать по пунктиру → согнуть пополам по средней линии → склеить</div>');
 </script>
 </body></html>
