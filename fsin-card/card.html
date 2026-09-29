@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0b0b0e;width:1400px;padding:40px;display:flex;flex-direction:column;gap:40px;align-items:center;font-family:"DejaVu Sans",sans-serif}
+.card{width:1280px;height:808px;border-radius:36px;position:relative;overflow:hidden;
+  background:radial-gradient(ellipse at 20% 0%,#2a2d36 0%,#14151a 55%,#0c0c10 100%);
+  border:3px solid #9aa0aa;box-shadow:0 0 0 8px #1a1b20,0 30px 80px #000;color:#e8eaee}
+.card::before{content:"";position:absolute;inset:18px;border:1.5px solid rgba(200,205,215,.35);border-radius:24px;pointer-events:none}
+.wm{position:absolute;right:-60px;bottom:-80px;width:620px;height:620px;opacity:.06}
+.head{display:flex;align-items:center;gap:30px;padding:46px 60px 26px;border-bottom:2px solid rgba(200,205,215,.25)}
+.head svg{width:130px;height:130px;flex:none}
+.title{flex:1}
+.fsin{font-family:"DejaVu Serif",serif;font-weight:bold;font-size:92px;letter-spacing:22px;
+  background:linear-gradient(180deg,#ffffff,#b9bec8 50%,#7d828c);-webkit-background-clip:text;color:transparent;line-height:1}
+.sub{font-size:26px;letter-spacing:8px;color:#aab0ba;margin-top:10px}
+.num{text-align:right;font-family:"DejaVu Sans Mono",monospace}
+.num small{display:block;font-size:20px;letter-spacing:4px;color:#8a909a}
+.num b{font-size:64px;color:#e8eaee;letter-spacing:6px}
+.body{display:flex;gap:50px;padding:40px 60px 0}
+.photo{width:270px;height:360px;flex:none;border-radius:14px;border:2px solid #9aa0aa;
+  background:repeating-linear-gradient(45deg,#1c1d23 0 14px,#202128 14px 28px);
+  display:flex;align-items:center;justify-content:center;color:#6d727c;font-size:30px;text-align:center}
+.fields{flex:1;display:grid;grid-template-columns:250px 1fr;row-gap:20px;align-content:start}
+.l{font-size:22px;letter-spacing:3px;color:#8a909a;text-transform:uppercase;padding-top:8px}
+.v{font-size:36px;font-weight:bold;color:#f2f3f5;border-bottom:1.5px solid rgba(200,205,215,.2);padding-bottom:6px}
+.v.rank{background:linear-gradient(90deg,#ffffff,#aeb3bd);-webkit-background-clip:text;color:transparent}
+.foot{position:absolute;left:60px;right:60px;bottom:40px;display:flex;justify-content:space-between;align-items:flex-end}
+.dates{font-size:22px;color:#aab0ba;line-height:1.6}
+.dates b{color:#e8eaee}
+.school{font-size:20px;letter-spacing:3px;color:#7d828c;margin-top:6px}
+.sign{text-align:center;font-size:20px;color:#8a909a;position:relative}
+.sign .line{width:300px;border-bottom:1.5px solid #9aa0aa;height:60px;margin-bottom:8px;
+  font-family:"DejaVu Serif",serif;font-style:italic;font-size:40px;color:#c9ced8;display:flex;align-items:flex-end;justify-content:center}
+.stamp{position:absolute;right:330px;bottom:-20px;width:170px;height:170px;opacity:.55;transform:rotate(-14deg)}
+/* back */
+.back .content{padding:60px 80px}
+.back h2{font-family:"DejaVu Serif",serif;font-size:44px;letter-spacing:10px;color:#dfe2e8;margin-bottom:30px}
+.ranks{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 24px;margin-bottom:34px}
+.ranks div{white-space:nowrap;font-size:19px;color:#aab0ba;padding:8px 12px;border:1px solid rgba(200,205,215,.18);border-radius:8px}
+.ranks div.on{color:#0c0c10;background:linear-gradient(180deg,#f2f3f5,#a9aeb8);font-weight:bold;border-color:transparent}
+.note{font-size:24px;color:#aab0ba;line-height:1.6}
+.note b{color:#e8eaee}
+.serial{position:absolute;right:80px;bottom:56px;font-family:"DejaVu Sans Mono",monospace;font-size:26px;color:#8a909a;letter-spacing:4px}
+</style></head><body>
+
+<!-- эмблема -->
+<svg width="0" height="0" style="position:absolute">
+ <defs>
+  <linearGradient id="sv" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset=".5" stop-color="#b9bec8"/><stop offset="1" stop-color="#6f747e"/></linearGradient>
+  <symbol id="emb" viewBox="0 0 200 200">
+   <path d="M100 18 L172 44 V100 C172 142 140 170 100 184 C60 170 28 142 28 100 V44 Z" fill="#15161b" stroke="url(#sv)" stroke-width="6"/>
+   <path d="M100 32 L160 54 V100 C160 134 134 158 100 170 C66 158 40 134 40 100 V54 Z" fill="none" stroke="url(#sv)" stroke-width="2" opacity=".6"/>
+   <path d="M62 112 L56 72 L78 90 L100 60 L122 90 L144 72 L138 112 Z" fill="url(#sv)"/>
+   <rect x="62" y="118" width="76" height="10" rx="2" fill="url(#sv)"/>
+   <circle cx="56" cy="70" r="5" fill="url(#sv)"/><circle cx="100" cy="57" r="6" fill="url(#sv)"/><circle cx="144" cy="70" r="5" fill="url(#sv)"/>
+   <path d="M78 142 H122" stroke="url(#sv)" stroke-width="3"/>
+  </symbol>
+ </defs>
+</svg>
+
+<div class="card">
+ <svg class="wm"><use href="#emb"/></svg>
+ <div class="head">
+  <svg><use href="#emb"/></svg>
+  <div class="title"><div class="fsin">ФСИН</div><div class="sub">СЛУЖЕБНОЕ УДОСТОВЕРЕНИЕ</div></div>
+  <div class="num"><small>№ СЕРИЯ</small><b>347</b></div>
+ </div>
+ <div class="body">
+  <div class="photo">ФОТО<br>3×4</div>
+  <div class="fields">
+   <div class="l">Фамилия</div><div class="v">Иванов</div>
+   <div class="l">Имя, отчество</div><div class="v">Александр Евгеньевич</div>
+   <div class="l">Звание</div><div class="v rank">Генерал-полковник</div>
+   <div class="l">Должность</div><div class="v">Начальник отдела</div>
+   <div class="l">Отдел</div><div class="v">Отдел охраны порядка</div>
+  </div>
+ </div>
+ <div class="foot">
+  <div>
+   <div class="dates">Выдано: <b>01.09.2025</b> &nbsp;·&nbsp; Действительно до: <b>31.05.2026</b></div>
+   <div class="school">ОРГАНИЗАЦИЯ ШКОЛЫ № ____</div>
+  </div>
+  <svg class="stamp" viewBox="0 0 200 200">
+   <circle cx="100" cy="100" r="92" fill="none" stroke="#9aa6c8" stroke-width="5"/>
+   <circle cx="100" cy="100" r="66" fill="none" stroke="#9aa6c8" stroke-width="2"/>
+   <path id="arc" d="M100 100 m-79 0 a79 79 0 1 1 158 0 a79 79 0 1 1 -158 0" fill="none"/>
+   <text font-size="17" fill="#9aa6c8" letter-spacing="3" font-family="DejaVu Sans" font-weight="bold"><textPath href="#arc">★ ОРГАНИЗАЦИЯ «ФСИН» ★ ШКОЛА № ____ ★</textPath></text>
+   <text x="100" y="112" text-anchor="middle" font-size="34" font-weight="bold" fill="#9aa6c8" font-family="DejaVu Serif">ФСИН</text>
+  </svg>
+  <div class="sign"><div class="line">Петров</div>Начальник ФСИН</div>
+ </div>
+</div>
+
+<div class="card back">
+ <svg class="wm"><use href="#emb"/></svg>
+ <div class="content">
+  <h2>ТАБЕЛЬ ЗВАНИЙ</h2>
+  <div class="ranks">
+   <div>Рядовой</div><div>Мл. сержант</div><div>Сержант</div><div>Ст. сержант</div>
+   <div>Старшина</div><div>Прапорщик</div><div>Мл. лейтенант</div><div>Лейтенант</div>
+   <div>Ст. лейтенант</div><div>Капитан</div><div>Майор</div><div>Подполковник</div>
+   <div>Полковник</div><div>Генерал-майор</div><div>Генерал-лейтенант</div><div class="on">Генерал-полковник</div>
+  </div>
+  <div class="note">Владелец — член организации <b>«ФСИН»</b> школы № ____.<br>
+  Удостоверение внутреннее, не является государственным документом.<br>
+  При утере вернуть начальнику организации.</div>
+ </div>
+ <div class="serial">SN 347 / 100–999</div>
+</div>
+</body></html>
