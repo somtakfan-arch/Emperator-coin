@@ -160,7 +160,9 @@ const COVER = p => `<div class="card cover"><svg class="big"><use href="#emb"/><
 const BCOVER = p => `<div class="card bcover"><svg class="small"><use href="#emb"/></svg>
  <div class="motto2">ЧЕСТЬ · ПОРЯДОК · ВЕРНОСТЬ СВОИМ</div><div class="bsn">№ ${p.sn}</div></div>`;
 const doc = document.getElementById('doc');
+const qs = new URLSearchParams(location.search), PART = qs.get('part'), G = qs.get('g');
 for (let i = 0; i < people.length; i += 4) {
+  if (G !== null && i / 4 !== +G) continue;
   const group = people.slice(i, i + 4);
   // стр. 1 — внутренний разворот
   const inside = document.createElement('div');
@@ -172,7 +174,8 @@ for (let i = 0; i < people.length; i += 4) {
   outside.className = 'sheet';
   for (const p of group) outside.insertAdjacentHTML('beforeend', `<div class="row out"><div class="slot">${BCOVER(p)}</div><div class="slot">${COVER(p)}</div></div>`);
   outside.insertAdjacentHTML('beforeend', '<div class="hint">Стр. 2 — обложка</div>');
-  doc.append(inside, outside);
+  if (PART !== 'cover') doc.append(inside);
+  if (PART !== 'inside') doc.append(outside);
 }
 // ужать шрифт, если строка не влезает
 document.querySelectorAll('.v').forEach(v => { let f = parseFloat(getComputedStyle(v).fontSize); while (v.scrollWidth > v.clientWidth && f > 16) v.style.fontSize = (f -= 1) + 'px'; });
