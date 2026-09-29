@@ -48,3 +48,6 @@ h1.big{font-size:18pt;letter-spacing:4pt;margin-top:6mm}
 .ranks{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5mm 6mm;margin:1.5mm 0 1.5mm 9mm}
 .ranks div{font-size:8.8pt;line-height:1.35}
 .ranks div b{display:block;font-family:"DejaVu Sans",sans-serif;font-size:6.8pt;letter-spacing:1pt;color:#555;text-transform:uppercase;margin-bottom:.3mm}
+.gl{column-count:2;column-gap:8mm;margin-top:2mm}
+.gl p{font-size:9pt;line-height:1.38;margin-bottom:1.7mm;break-inside:avoid}
+.gl b{font-size:9.4pt}
