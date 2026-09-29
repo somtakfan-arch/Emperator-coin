@@ -85,9 +85,14 @@ def main():
             jpegs_to_pdf([rot], os.path.join(outdir, f'{name}-2-oblozhka.pdf'))
             # автодуплекс «по длинному краю»
             jpegs_to_pdf([ins, cov], os.path.join(outdir, f'{name}-dvustoronniy.pdf'))
-    dog_html, dog_pdf = os.path.join(HERE, 'dogovor.html'), os.path.join(HERE, 'fsin-dogovor.pdf')
-    if not os.path.exists(dog_pdf) or os.path.getmtime(dog_html) > os.path.getmtime(dog_pdf):
-        chrome('--no-pdf-header-footer', '--print-to-pdf=' + dog_pdf, 'file://' + dog_html)
+    # документы (вектор, без прозрачности) — пересобираются, только если менялся шаблон
+    subprocess.run([sys.executable, os.path.join(HERE, 'gen_docs.py')], check=True, stdout=subprocess.DEVNULL)
+    css = os.path.join(HERE, 'doc.css')
+    for n in ('dogovor', 'ustav', 'kodeks', 'order'):
+        html, pdf = os.path.join(HERE, f'{n}.html'), os.path.join(HERE, f'fsin-{n}.pdf')
+        src_time = max(os.path.getmtime(html), os.path.getmtime(css) if n != 'dogovor' else 0)
+        if not os.path.exists(pdf) or src_time > os.path.getmtime(pdf):
+            chrome('--no-pdf-header-footer', '--print-to-pdf=' + pdf, 'file://' + html)
     for f in sorted(os.listdir(outdir)):
         if f.endswith('.pdf'):
             print(f'{os.path.getsize(os.path.join(outdir, f)) // 1024:>6} KB  {f}')

@@ -1,0 +1,50 @@
+
+@page{size:A4;margin:0}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{background:#fff;font-family:"DejaVu Serif",serif;color:#15161b}
+.page{width:210mm;height:297mm;padding:14mm 16mm 12mm;position:relative;overflow:hidden;z-index:0}
+.page::before{content:"";position:absolute;inset:7mm;border:0.6mm solid #15161b;pointer-events:none}
+.page::after{content:"";position:absolute;inset:8.3mm;border:0.2mm solid #8a909a;pointer-events:none}
+.wm{position:absolute;left:50%;top:52%;width:120mm;height:120mm;transform:translate(-50%,-50%);z-index:-1}
+.head{display:flex;align-items:center;gap:5mm;border-bottom:0.5mm solid #15161b;padding-bottom:3mm}
+.head svg{width:17mm;height:17mm;flex:none}
+.head .t{flex:1}
+.head .org{font-size:22pt;font-weight:bold;letter-spacing:5pt;line-height:1}
+.head .sub{font-family:"DejaVu Sans",sans-serif;font-size:7.5pt;letter-spacing:2pt;color:#555;margin-top:1.5mm}
+.head .no{font-family:"DejaVu Sans Mono",monospace;font-size:10pt;text-align:right}
+h1{text-align:center;font-size:14pt;letter-spacing:2pt;margin:5mm 0 1mm}
+.h1sub{text-align:center;font-size:9.5pt;font-style:italic;color:#444;margin-bottom:3.5mm}
+.place{display:flex;justify-content:space-between;font-size:9.5pt;margin-bottom:3mm}
+p,li{font-size:9.6pt;line-height:1.5;text-align:left}
+.parties{margin-bottom:2.5mm}
+h2{font-size:9.8pt;letter-spacing:1pt;margin:3.2mm 0 1.2mm;text-transform:uppercase}
+ol{padding-left:0;list-style:none;counter-reset:i}
+ol li{counter-increment:i;padding-left:9mm;position:relative;margin-bottom:.6mm}
+ol li::before{content:var(--s) "." counter(i);position:absolute;left:0;font-weight:bold}
+.blank{display:inline-block;border-bottom:0.25mm solid #15161b;min-width:40mm}
+.blank.l{min-width:75mm}.blank.s{min-width:14mm}
+.box{border:0.3mm solid #15161b;padding:2mm 3mm;margin-top:2mm;background:#f4f5f7}
+.box p{font-size:8.8pt}
+.sig{display:flex;gap:10mm;margin-top:4mm}
+.sig .col{flex:1;font-size:9pt}
+.sig .col b{display:block;font-size:9.5pt;letter-spacing:1pt;margin-bottom:2mm;text-transform:uppercase}
+.sig .ln{border-bottom:0.25mm solid #15161b;height:8mm;margin-bottom:1mm}
+.sig small{font-family:"DejaVu Sans",sans-serif;font-size:6.8pt;color:#555;display:block;margin-bottom:1.5mm}
+.mp{position:absolute;left:62mm;bottom:13mm;width:26mm;height:26mm;border:0.3mm dashed #999;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-family:"DejaVu Sans",sans-serif;font-size:7pt;color:#999}
+.foot{position:absolute;left:16mm;right:16mm;bottom:10.5mm;font-family:"DejaVu Sans",sans-serif;font-size:6.5pt;color:#777;text-align:center;letter-spacing:.5pt}
+
+/* устав / кодекс / ордер */
+.page+.page{break-before:page}
+h1.big{font-size:18pt;letter-spacing:4pt;margin-top:6mm}
+.pno{position:absolute;right:16mm;bottom:10.5mm;font-family:"DejaVu Sans",sans-serif;font-size:7pt;color:#777}
+.art{margin-bottom:2mm}
+.art .t{font-size:9.6pt;font-weight:bold;margin-bottom:.4mm}
+.art .t span{display:inline-block;min-width:27mm}
+.art p{padding-left:27mm;font-size:9.3pt;line-height:1.4}
+.art p.sn{color:#15161b}
+.art p.sn b{font-family:"DejaVu Sans",sans-serif;font-size:7.8pt;letter-spacing:1pt;text-transform:uppercase}
+.part{font-size:11pt;letter-spacing:2pt;text-align:center;border-top:0.4mm solid #15161b;border-bottom:0.4mm solid #15161b;padding:1.4mm 0;margin:4mm 0 3mm;text-transform:uppercase}
+.ranks{display:grid;grid-template-columns:repeat(3,1fr);gap:1.5mm 6mm;margin:1.5mm 0 1.5mm 9mm}
+.ranks div{font-size:8.8pt;line-height:1.35}
+.ranks div b{display:block;font-family:"DejaVu Sans",sans-serif;font-size:6.8pt;letter-spacing:1pt;color:#555;text-transform:uppercase;margin-bottom:.3mm}
