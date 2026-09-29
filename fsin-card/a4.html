@@ -48,14 +48,21 @@ body{font-family:"DejaVu Sans",sans-serif}
   font-family:"DejaVu Serif",serif;font-style:italic;font-size:40px;color:#c9ced8;display:flex;align-items:flex-end;justify-content:center}
 .stamp{position:absolute;right:330px;bottom:-20px;width:170px;height:170px;opacity:.55;transform:rotate(-14deg)}
 /* back */
-.back .content{padding:60px 80px}
-.back h2{font-family:"DejaVu Serif",serif;font-size:44px;letter-spacing:10px;color:#dfe2e8;margin-bottom:30px}
-.ranks{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 24px;margin-bottom:34px}
-.ranks div{white-space:nowrap;font-size:19px;color:#aab0ba;padding:8px 12px;border:1px solid rgba(200,205,215,.18);border-radius:8px}
-.ranks div.on{color:#0c0c10;background:linear-gradient(180deg,#f2f3f5,#a9aeb8);font-weight:bold;border-color:transparent}
-.note{font-size:24px;color:#aab0ba;line-height:1.6}
-.note b{color:#e8eaee}
-.serial{position:absolute;right:80px;bottom:56px;font-family:"DejaVu Sans Mono",monospace;font-size:26px;color:#8a909a;letter-spacing:4px}
+.back{display:flex}
+.back .oath{width:440px;flex:none;padding:56px 40px 50px 60px;border-right:2px solid rgba(200,205,215,.25);display:flex;flex-direction:column;align-items:center;text-align:center}
+.back .oath svg{width:150px;height:150px}
+.back .motto{font-family:"DejaVu Serif",serif;font-weight:bold;font-size:30px;letter-spacing:5px;line-height:1.5;margin:18px 0 20px;
+  background:linear-gradient(180deg,#ffffff,#aeb3bd);-webkit-background-clip:text;color:transparent}
+.back .vow{font-family:"DejaVu Serif",serif;font-style:italic;font-size:22px;line-height:1.55;color:#aab0ba}
+.back .pw{flex:1;padding:56px 60px 50px 50px;display:flex;flex-direction:column}
+.back h2{font-family:"DejaVu Serif",serif;font-size:34px;letter-spacing:7px;color:#dfe2e8;margin-bottom:24px}
+.back ol{list-style:none;counter-reset:n}
+.back li{counter-increment:n;font-size:29px;line-height:1.35;color:#e8eaee;padding:16px 0 16px 60px;position:relative;border-bottom:1.5px solid rgba(200,205,215,.14)}
+.back li::before{content:counter(n,upper-roman);position:absolute;left:0;top:16px;font-family:"DejaVu Serif",serif;font-weight:bold;color:#8a909a}
+.back .ownsign{margin-top:auto;display:flex;justify-content:space-between;align-items:flex-end;font-size:19px;color:#8a909a}
+.back .ownsign .ln{width:280px;border-bottom:1.5px solid #9aa0aa;height:40px;margin-bottom:6px}
+.back .note{font-size:15px;letter-spacing:1px;color:#6d727c;margin-top:14px}
+.serial{font-family:"DejaVu Sans Mono",monospace;font-size:24px;color:#8a909a;letter-spacing:4px}
 
 </style></head><body>
 
@@ -117,26 +124,24 @@ const FRONT = p => `<div class="card"><svg class="wm"><use href="#emb"/></svg>
  </div>
 </div>`;
 const BACK = p => `<div class="card back"><svg class="wm"><use href="#emb"/></svg>
- <div class="content">
-  <h2>ТАБЕЛЬ ЗВАНИЙ</h2>
-  <div class="ranks">
-   <div>Рядовой</div><div>Мл. сержант</div><div>Сержант</div><div>Ст. сержант</div>
-   <div>Старшина</div><div>Прапорщик</div><div>Мл. лейтенант</div><div>Лейтенант</div>
-   <div>Ст. лейтенант</div><div>Капитан</div><div>Майор</div><div>Подполковник</div>
-   <div>Полковник</div><div>Генерал-майор</div><div>Генерал-лейтенант</div><div>Генерал-полковник</div>
-  </div>
-  <div class="note">Владелец — член организации <b>«ФСИН»</b> школы № ____.<br>
-  Удостоверение внутреннее, не является государственным документом.<br>
-  При утере вернуть начальнику организации.</div>
+ <div class="oath">
+  <svg><use href="#emb"/></svg>
+  <div class="motto">ЧЕСТЬ<br>ПОРЯДОК<br>ВЕРНОСТЬ СВОИМ</div>
+  <div class="vow">«Клянусь хранить честь ФСИН, стоять за своих и соблюдать устав организации»</div>
  </div>
- <div class="serial">SN ${p.sn} / 100–999</div>
+ <div class="pw">
+  <h2>ВЛАДЕЛЕЦ ИМЕЕТ ПРАВО</h2>
+  <ol>${(p.powers || DEFAULT_POWERS).map(x => `<li>${x}</li>`).join('')}</ol>
+  <div class="ownsign"><div><div class="ln"></div>Подпись владельца</div><div class="serial">SN ${p.sn}</div></div>
+  <div class="note">Организация школы № ____ · не является государственным документом</div>
+ </div>
 </div>`;
+const DEFAULT_POWERS = ["Представлять организацию ФСИН", "Участвовать в операциях своего отдела", "Требовать соблюдения устава ФСИН"];
 const sheet = document.getElementById('sheet');
 for (const p of people) {
   const row = document.createElement('div');
   row.className = 'row';
   row.innerHTML = `<div class="slot">${FRONT(p)}</div><div class="slot">${BACK(p)}</div>`;
-  row.querySelectorAll('.ranks div').forEach(d => { if (d.textContent === p.rank) d.classList.add('on'); });
   sheet.appendChild(row);
 }
 // ужать шрифт, если строка не влезает
