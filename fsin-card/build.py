@@ -81,8 +81,9 @@ def main():
             jpegs_to_pdf([ins], os.path.join(outdir, f'{name}-1-vnutri.pdf'))
             jpegs_to_pdf([cov], os.path.join(outdir, f'{name}-2-oblozhka.pdf'))
             jpegs_to_pdf([ins, cov], os.path.join(outdir, f'{name}-dvustoronniy.pdf'))
-    chrome('--no-pdf-header-footer', '--print-to-pdf=' + os.path.join(HERE, 'fsin-dogovor.pdf'),
-           'file://' + os.path.join(HERE, 'dogovor.html'))
+    dog_html, dog_pdf = os.path.join(HERE, 'dogovor.html'), os.path.join(HERE, 'fsin-dogovor.pdf')
+    if not os.path.exists(dog_pdf) or os.path.getmtime(dog_html) > os.path.getmtime(dog_pdf):
+        chrome('--no-pdf-header-footer', '--print-to-pdf=' + dog_pdf, 'file://' + dog_html)
     for f in sorted(os.listdir(outdir)):
         if f.endswith('.pdf'):
             print(f'{os.path.getsize(os.path.join(outdir, f)) // 1024:>6} KB  {f}')
