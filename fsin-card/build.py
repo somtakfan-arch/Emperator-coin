@@ -88,7 +88,7 @@ def main():
     # документы (вектор, без прозрачности) — пересобираются, только если менялся шаблон
     subprocess.run([sys.executable, os.path.join(HERE, 'gen_docs.py')], check=True, stdout=subprocess.DEVNULL)
     css = os.path.join(HERE, 'doc.css')
-    for n in ('dogovor', 'ustav', 'kodeks', 'order'):
+    for n in ('dogovor', 'ustav', 'kodeks', 'protsess', 'order'):
         html, pdf = os.path.join(HERE, f'{n}.html'), os.path.join(HERE, f'fsin-{n}.pdf')
         src_time = max(os.path.getmtime(html), os.path.getmtime(css) if n != 'dogovor' else 0)
         if not os.path.exists(pdf) or src_time > os.path.getmtime(pdf):
