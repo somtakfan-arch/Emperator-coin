@@ -331,11 +331,7 @@ def patent(fam='', io='', rank='', no=''):
         'Решение Верховного судьи окончательное; помиловать осуждённого может только Лидер ФСИН.',
     ]) + '''
  <p class="pt-term">Срок полномочий: до 31 мая 20___ г.</p>
- <div class="sig" style="margin-top:6mm">
-  <div class="col"><b>Лидер ФСИН</b><small>назначил</small><div class="ln"></div><small>подпись / ФИО</small></div>
-  <div class="col"><b>Верховный судья</b><small>принял присягу судьи</small><div class="ln"></div><small>подпись</small></div>
- </div>
- <div class="mp">М.П.</div>'''
+ <div class="mp" style="left:auto;right:22mm;bottom:18mm">М.П.</div>'''
 
 
 patent_css = '''<style>
