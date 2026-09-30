@@ -88,9 +88,15 @@ def main():
     # документы (вектор, без прозрачности) — пересобираются, только если менялся шаблон
     subprocess.run([sys.executable, os.path.join(HERE, 'gen_docs.py')], check=True, stdout=subprocess.DEVNULL)
     css = os.path.join(HERE, 'doc.css')
-    for n in ('dogovor', 'ustav', 'kodeks', 'protsess', 'slovar', 'order'):
-        html, pdf = os.path.join(HERE, f'{n}.html'), os.path.join(HERE, f'fsin-{n}.pdf')
-        src_time = max(os.path.getmtime(html), os.path.getmtime(css) if n != 'dogovor' else 0)
+    docs = [(os.path.join(HERE, f'{n}.html'), os.path.join(HERE, f'fsin-{n}.pdf'))
+            for n in ('dogovor', 'ustav', 'kodeks', 'protsess', 'slovar', 'order', 'sudya')]
+    # именные патенты судей (out/sudya-*.html, создаёт gen_docs.py из people.js)
+    out = os.path.join(HERE, 'out')
+    if os.path.isdir(out):
+        docs += [(os.path.join(out, f), os.path.join(out, 'fsin-' + f[:-5] + '.pdf'))
+                 for f in sorted(os.listdir(out)) if f.startswith('sudya-') and f.endswith('.html')]
+    for html, pdf in docs:
+        src_time = max(os.path.getmtime(html), os.path.getmtime(css) if 'dogovor' not in html else 0)
         if not os.path.exists(pdf) or src_time > os.path.getmtime(pdf):
             chrome('--no-pdf-header-footer', '--print-to-pdf=' + pdf, 'file://' + html)
     for f in sorted(os.listdir(outdir)):

@@ -300,4 +300,70 @@ for name, title, pages in [
 o = doc('Ордер на задержание', ['']).replace('<div class="page"></div>', f'<div class="page two">{order_one}{order_one}</div>')
 o = o.replace('</head>', order_css + '</head>')
 write('order.html', o)
+
+
+# ───────────────────────── ПАТЕНТ ВЕРХОВНОГО СУДЬИ ─────────────────────────
+def blank(v, cls=''):
+    return f'<b class="fill">{v}</b>' if v else f'<span class="blank {cls}"></span>'
+
+
+def patent(fam='', io='', rank='', no=''):
+    fio = f'{fam} {io}'.strip()
+    return head(f'ПАТЕНТ<br>№ {no or "ВС-____"}') + f'''
+ <h1 class="big" style="margin-top:9mm">ПАТЕНТ</h1>
+ <div class="h1sub">на право осуществления правосудия</div>
+ <p class="pt-lead">Приказом Лидера ФСИН</p>
+ <p class="pt-name">{blank(fio, 'xl')}</p>
+ <p class="pt-rank">{blank(rank)}</p>
+ <p class="pt-lead">назначается на должность</p>
+ <div class="pt-title">ВЕРХОВНЫЙ СУДЬЯ ФСИН</div>
+''' + '<h2>Полномочия Верховного судьи</h2>' + ol('1', [
+        'Проводить заседания Суда ФСИН в <b>Зале суда — раздевалке</b>.',
+        'Рассматривать дела по КоАП и УК ФСИН, выносить обвинительные и оправдательные решения.',
+        'Рассматривать жалобы на решения других судей ФСИН.',
+        'Назначать судей, секретаря и пристава заседания.',
+        'Удалять из Зала суда нарушителей порядка.',
+        'Давать официальное толкование Кодекса ФСИН.',
+    ]) + '<h2>Правила Зала суда</h2>' + ol('2', [
+        'Заседания проводятся на перемене или после уроков.',
+        'Участие обвиняемого добровольное: он может сказать «стоп» и уйти, дело продолжится заочно. Двери не запираются.',
+        'Верховный судья не рассматривает дела, в которых сам выступает адвокатом или стороной.',
+        'Решение Верховного судьи окончательное; помиловать осуждённого может только Лидер ФСИН.',
+    ]) + '''
+ <p class="pt-term">Срок полномочий: до 31 мая 20___ г.</p>
+ <div class="sig" style="margin-top:6mm">
+  <div class="col"><b>Лидер ФСИН</b><small>назначил</small><div class="ln"></div><small>подпись / ФИО</small></div>
+  <div class="col"><b>Верховный судья</b><small>принял присягу судьи</small><div class="ln"></div><small>подпись</small></div>
+ </div>
+ <div class="mp">М.П.</div>'''
+
+
+patent_css = '''<style>
+.pt-lead{text-align:center;font-size:10pt;font-style:italic;color:#444;margin:2mm 0 1mm}
+.pt-name{text-align:center;font-size:15pt;margin:1mm 0}
+.pt-rank{text-align:center;font-size:11pt;margin:0 0 2mm}
+.fill{font-weight:bold;letter-spacing:.5pt}
+.blank.xl{min-width:120mm}
+.pt-title{text-align:center;font-size:17pt;font-weight:bold;letter-spacing:4pt;border-top:0.5mm solid #15161b;border-bottom:0.5mm solid #15161b;padding:2mm 0;margin:3mm 18mm 4mm}
+.pt-term{font-size:9.6pt;margin-top:3mm}
+</style>'''
+
+
+def patent_doc(**kw):
+    return doc('Патент Верховного судьи', [patent(**kw)]).replace('</head>', patent_css + '</head>')
+
+
+write('sudya.html', patent_doc())
+
+# именные патенты — из people.js (judge: true), только в out/ (не коммитится)
+pj = os.path.join(HERE, 'people.js')
+if os.path.exists(pj):
+    import json, subprocess
+    js = subprocess.run(['node', '-e', 'global.window={};eval(require("fs").readFileSync(process.argv[1],"utf8"));'
+                         'console.log(JSON.stringify(window.PEOPLE.filter(p=>p.judge)))', pj],
+                        capture_output=True, text=True, check=True).stdout
+    os.makedirs(os.path.join(HERE, 'out'), exist_ok=True)
+    for p in json.loads(js):
+        html = patent_doc(fam=p['fam'], io=p['io'], rank=p.get('judgeRank', p['rank']), no=f"ВС-{p['sn']}")
+        write(os.path.join('out', f"sudya-{p['sn']}.html"), html.replace('href="doc.css"', 'href="../doc.css"'))
 print('ok')
