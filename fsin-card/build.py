@@ -70,7 +70,7 @@ def main():
     count = 4
     if has_people:
         js = open(os.path.join(HERE, 'people.js'), encoding='utf-8').read()
-        count = len(re.findall(r'\bsn\s*:', js))
+        count = len(re.findall(r'\bsn\s*:', js)) - len(re.findall(r'\bdone\s*:\s*true', js))
     url = 'file://' + os.path.join(HERE, 'a4.html')
     with tempfile.TemporaryDirectory() as tmp:
         for g in range((count + 3) // 4):
