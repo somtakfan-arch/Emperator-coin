@@ -91,7 +91,10 @@ def main():
     docs = [(os.path.join(HERE, f'{n}.html'), os.path.join(HERE, f'fsin-{n}.pdf'))
             for n in ('dogovor', 'ustav', 'kodeks', 'protsess', 'slovar', 'order', 'sudya',
                       'povestka', 'zhaloba', 'pomilovanie', 'miranda', 'dezhurstva', 'anketa',
-                      'delo', 'reestr', 'struktura', 'nabor', 'rozysk', 'shifr')]
+                      'delo', 'reestr', 'struktura', 'nabor', 'rozysk', 'shifr',
+                      'rech', 'zayavlenie', 'oblozhka-dela', 'reestr-prigovorov', 'rasporyazhenie', 'raport',
+                      'otstavka', 'akt-uterya', 'prikaz-otdel', 'licenziya', 'kodeks-plakat', 'listovka-advokat',
+                      'yashchik-tablichka', 'anon-zhaloba', 'zhetony', 'voenbilet')]
     # именные документы (out/*.html, создаёт gen_docs.py из people.js)
     out = os.path.join(HERE, 'out')
     if os.path.isdir(out):

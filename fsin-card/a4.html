@@ -95,6 +95,18 @@ body{font-family:"DejaVu Sans",sans-serif}
 .card.prist::before{border-color:rgba(111,155,224,.4)}
 .card.prist .fsin,.card.prist .v.rank,.card.prist .cfsin,.card.prist .motto{background:linear-gradient(180deg,#e9f1ff,#7fa6e0 50%,#3b5d94);-webkit-background-clip:text;color:transparent}
 .card.prist .photo,.card.prist .sign .line{border-color:#5b86c9}
+/* судья: бордо с золотом */
+.card.judge{border-color:#c9a54a;background:radial-gradient(ellipse at 20% 0%,#4a1820 0%,#2a0e13 55%,#16070a 100%)}
+.card.judge::before{border-color:rgba(217,180,74,.45)}
+.card.judge .fsin,.card.judge .v.rank,.card.judge .cfsin,.card.judge .motto{background:linear-gradient(180deg,#fff4c8,#d9b44a 50%,#8a6a1c);-webkit-background-clip:text;color:transparent}
+.card.judge .photo,.card.judge .sign .line{border-color:#c9a54a}
+.card.judge .motto{font-size:24px;letter-spacing:2px}
+/* пресс-служба: белое серебро */
+.card.press{border-color:#e8eaee}
+.card.press::before{border-color:rgba(255,255,255,.5)}
+.card.press .fsin,.card.press .cfsin,.card.press .motto{background:none;color:#ffffff}
+.card.press .v.rank{background:none;color:#ffffff}
+.card.press .photo,.card.press .sign .line{border-color:#e8eaee}
 </style></head><body>
 
 <svg width="0" height="0" style="position:absolute">
@@ -124,6 +136,20 @@ body{font-family:"DejaVu Sans",sans-serif}
    <path d="M100 32 L160 54 V100 C160 134 134 158 100 170 C66 158 40 134 40 100 V54 Z" fill="none" stroke="url(#bl)" stroke-width="2" opacity=".6"/>
    <path d="M100 52 L111 84 L145 84 L118 104 L128 137 L100 117 L72 137 L82 104 L55 84 L89 84 Z" fill="url(#bl)"/>
    <circle cx="100" cy="98" r="9" fill="#15161b"/>
+  </symbol>
+  <symbol id="embJ" viewBox="0 0 200 200">
+   <path d="M100 18 L172 44 V100 C172 142 140 170 100 184 C60 170 28 142 28 100 V44 Z" fill="#2a0e13" stroke="url(#gd)" stroke-width="6"/>
+   <path d="M100 32 L160 54 V100 C160 134 134 158 100 170 C66 158 40 134 40 100 V54 Z" fill="none" stroke="url(#gd)" stroke-width="2" opacity=".6"/>
+   <g transform="rotate(-35 100 95)"><rect x="66" y="66" width="58" height="26" rx="5" fill="url(#gd)"/><rect x="91" y="90" width="9" height="56" rx="3" fill="url(#gd)"/></g>
+   <rect x="62" y="134" width="56" height="9" rx="2" fill="url(#gd)"/>
+  </symbol>
+  <linearGradient id="wt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c9ced8"/></linearGradient>
+  <symbol id="embW" viewBox="0 0 200 200">
+   <path d="M100 18 L172 44 V100 C172 142 140 170 100 184 C60 170 28 142 28 100 V44 Z" fill="#15161b" stroke="url(#wt)" stroke-width="6"/>
+   <path d="M100 32 L160 54 V100 C160 134 134 158 100 170 C66 158 40 134 40 100 V54 Z" fill="none" stroke="url(#wt)" stroke-width="2" opacity=".6"/>
+   <path d="M136 52 C112 62 86 92 74 132 L82 136 C96 104 118 78 140 60 Z" fill="url(#wt)"/>
+   <path d="M136 52 C150 60 146 86 120 104 C108 112 94 118 82 136 C100 98 120 74 136 52 Z" fill="url(#wt)" opacity=".7"/>
+   <rect x="62" y="142" width="76" height="5" rx="2" fill="url(#wt)"/>
   </symbol>
  </defs>
 </svg>
@@ -157,6 +183,18 @@ const KINDS = {
         motto2:'ПОРЯДОК · ДОЛГ · ЗАКОН', ctype:'УДОСТОВЕРЕНИЕ ПРИСТАВА',
         powers:['Дежурить у мест содержания (КПЗ, тюрьма)', 'Поддерживать порядок в Зале суда', 'Освобождать задержанного по слову «стоп» или звонку',
                 'Удалять нарушителей из Зала суда по указанию судьи', 'Сопровождать задержанных на разбирательство']},
+  judge: {cls:' judge', emb:'embJ', sub:'СУД ФСИН', num:'СУДЬЯ №', rank:'Статус', dep:['Суд','Суд'], type:'УДОСТОВЕРЕНИЕ СУДЬИ',
+        ring:'★ СУД ФСИН ★ ИМЕНЕМ ФСИН ★', ink:'#c9a54a', motto:'ЗАКОН<br>ПРАВДА<br>СПРАВЕДЛИВОСТЬ',
+        vow:'«Клянусь судить честно и беспристрастно, по Кодексу ФСИН и совести»', rights:'СУДЬЯ ИМЕЕТ ПРАВО',
+        motto2:'ЗАКОН · ПРАВДА · СПРАВЕДЛИВОСТЬ', ctype:'УДОСТОВЕРЕНИЕ СУДЬИ',
+        powers:['Проводить заседания Суда ФСИН в Зале суда', 'Выносить обвинительные и оправдательные решения',
+                'Выдавать ордера на задержание и повестки', 'Давать указания приставам в Зале суда', 'Прекращать дела за примирением сторон']},
+  press: {cls:' press', emb:'embW', sub:'ПРЕСС-СЛУЖБА ФСИН', num:'ПРЕСС №', rank:'Звание', dep:['Канал','Каналы'], type:'УДОСТОВЕРЕНИЕ ПРЕССЫ',
+        ring:'★ ПРЕСС-СЛУЖБА ФСИН ★ ПРАВДА И СЛОВО ★', ink:'#e8eaee', motto:'ПРАВДА<br>СЛОВО<br>ЧЕСТЬ',
+        vow:'«Клянусь сообщать только правду и не снимать никого без согласия»', rights:'ПРЕССА ИМЕЕТ ПРАВО',
+        motto2:'ПРАВДА · СЛОВО · ЧЕСТЬ', ctype:'УДОСТОВЕРЕНИЕ ПРЕССЫ',
+        powers:['Освещать работу ФСИН в ТГ-канале и TikTok', 'Присутствовать на открытых заседаниях Суда ФСИН',
+                'Брать интервью у сотрудников ФСИН', 'Выпускать газету и пресс-релизы ФСИН', 'Снимать фото и видео — только с согласия']},
 };
 const K = p => KINDS[p.kind || 'std'];
 // blank: true — пустой бланк, поля заполняются ручкой

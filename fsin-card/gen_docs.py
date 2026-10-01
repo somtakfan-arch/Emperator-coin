@@ -701,4 +701,299 @@ code{font-family:"DejaVu Sans Mono",monospace;font-size:10pt;background:#eceef2;
 table.cd td{height:auto;font-size:9.5pt}
 '''
 write('shifr.html', styled('Шифр ФСИН', [shifr], SH_CSS))
+
+
+# ═══════════════════════ ПАРТИЯ 3 ═══════════════════════
+def lines(n):
+    return '<div class="lines">' + '<span></span>' * n + '</div>'
+
+
+def cks(*items, block=False):
+    sep = '<br>' if block else ' '
+    return f'<p class="row2">' + sep.join(f'<span class="ck">☐ {i}</span>' for i in items) + '</p>'
+
+
+def to_from(to='Лидеру ФСИН'):
+    return f'<p style="text-align:right;margin-top:5mm;font-size:10pt;line-height:1.7">{to}<br>от <span class="blank" style="min-width:62mm"></span><br>звание / класс <span class="blank" style="min-width:36mm"></span></p>'
+
+
+def decision(text):
+    return f'<div class="box" style="margin-top:4mm"><p><b>Резолюция:</b> {text}</p></div>'
+
+
+# ── 3. РЕЧЬ АДВОКАТА
+rech = head('РЕЧЬ<br>защиты') + '''
+ <h1 class="big" style="margin-top:5mm">РЕЧЬ АДВОКАТА</h1><div class="h1sub">шаблон защитной речи в Суде ФСИН</div>
+''' + field('Дело №', 's') + field('Подзащитный', 'xl') + field('Статья обвинения', 's') + '''
+ <h2>1. Вступление</h2><p class="say">«Уважаемый суд! Я, адвокат Коллегии адвокатов ФСИН <span class="blank" style="min-width:45mm"></span>, представляю интересы <span class="blank" style="min-width:45mm"></span>.»</p>
+ <h2>2. Позиция защиты</h2>''' + cks('невиновен', 'вина не доказана', 'виноват, но есть смягчающие', 'прошу примирения') + '''
+ <h2>3. Доводы защиты</h2>''' + lines(4) + '''
+ <h2>4. Свидетели и доказательства</h2>''' + lines(2) + '''
+ <h2>5. Смягчающие обстоятельства</h2>''' + cks('первое нарушение', 'раскаялся', 'извинился', 'спровоцировали', 'помогал ФСИН', block=False) + '''
+ <h2>6. Заключение</h2><p class="say">«На основании изложенного прошу суд:</p>''' + cks('оправдать подзащитного', 'прекратить дело за примирением', 'смягчить взыскание до') + '''<p class="say">Все сомнения толкуются в пользу обвиняемого (ПК ФСИН, ст. 5.4). Спасибо, у меня всё.»</p>'''
+write('rech.html', styled('Речь адвоката', [rech], FORM_CSS + '.say{font-size:10pt;font-style:italic;line-height:1.7;margin-bottom:1.5mm}.lines span{height:6.5mm}'))
+
+# ── 6. ЗАЯВЛЕНИЕ ПОТЕРПЕВШЕГО
+zayav = head('ЗАЯВЛЕНИЕ<br>вх. № ____') + to_from('В Отдел задержания ФСИН') + '''
+ <h1 class="big">ЗАЯВЛЕНИЕ</h1><div class="h1sub">потерпевшего</div>
+ <p class="row2" style="font-style:italic">Прошу разобраться в следующем:</p>
+''' + field('Кто', 'xl') + field('Что произошло', 'xl') + lines(3) + field('Когда', '') + field('Где', 'xl') + field('Свидетели', 'xl') + '''
+ <p class="row2" style="margin-top:2mm"><b>Чего я хочу:</b></p>''' + cks('чтобы это прекратилось', 'извинений', 'разбирательства в Суде ФСИН', block=True) + '''
+ <p class="row2"><b>Нужна помощь:</b></p>''' + cks('Отдела помощи', 'адвоката', 'сообщить классному руководителю', block=True) + sig2(('Заявитель', 'подаёт заявление'), ('Принял', 'Отдел задержания')) + decision('☐ ордер выдан № ____ &nbsp; ☐ примирение &nbsp; ☐ передано учителю &nbsp; ☐ отказ')
+write('zayavlenie.html', styled('Заявление потерпевшего', [zayav], FORM_CSS))
+
+# ── 12. ОБЛОЖКА ДЕЛА
+oblozhka = '''<svg class="wm"><use href="#embL"/></svg>
+ <div class="ob">
+  <svg class="obe"><use href="#emb"/></svg>
+  <div class="obf">ФСИН</div><div class="obn">''' + ORG + '''</div>
+  <div class="obt">ДЕЛО №</div><div class="obno"><span class="blank" style="min-width:60mm"></span></div>
+  <div class="obg">
+''' + ''.join(f'<p><b>{k}</b><span class="blank"></span></p>' for k in ['Обвиняемый', 'Класс', 'Статья Кодекса ФСИН', 'Потерпевший', 'Судья', 'Обвинитель', 'Адвокат', 'Начато', 'Окончено', 'Решение']) + '''
+  </div>
+  <div class="obs">Хранить в Отделе кадров. Посторонним не открывать.</div>
+ </div>'''
+write('oblozhka-dela.html', styled('Обложка дела', [oblozhka], '''
+.ob{text-align:center;padding-top:10mm}
+.obe{width:36mm;height:36mm}
+.obf{font-size:40pt;font-weight:bold;letter-spacing:10pt;margin-left:10pt}
+.obn{font-family:"DejaVu Sans",sans-serif;font-size:8.5pt;letter-spacing:2pt;color:#444}
+.obt{font-size:46pt;font-weight:bold;letter-spacing:8pt;margin-top:14mm}
+.obno{margin:3mm 0 12mm;font-size:20pt}
+.obg{text-align:left;margin:0 14mm;border:0.5mm solid #15161b;padding:5mm 7mm}
+.obg p{display:flex;align-items:flex-end;gap:3mm;font-size:11pt;margin-bottom:4mm}
+.obg b{min-width:52mm}.obg .blank{flex:1}
+.obs{font-family:"DejaVu Sans",sans-serif;font-size:8.5pt;letter-spacing:1pt;color:#555;margin-top:10mm}'''))
+
+# ── 20. РЕЕСТР ПРИГОВОРОВ
+rp_rows = ''.join(f'<tr><td>{i}</td>' + '<td></td>' * 7 + '</tr>' for i in range(1, 24))
+reestr_p = head('РЕЕСТР<br>Суд ФСИН') + f'''
+ <h1 class="big" style="margin-top:5mm">РЕЕСТР ПРИГОВОРОВ</h1><div class="h1sub">Суда ФСИН</div>
+ <table class="t rp"><tr><th style="width:7mm">№</th><th style="width:14mm">Дело</th><th style="width:16mm">Дата</th><th>Обвиняемый</th><th style="width:13mm">Ст.</th><th style="width:22mm">Судья</th><th style="width:30mm">Решение / срок</th><th style="width:12mm">Исп.</th></tr>{rp_rows}</table>
+ <p style="font-size:8pt;color:#555;margin-top:2mm">Решение: О — оправдан, В — взыскание, П — примирение, Пм — помилован. Исп.: ✓ — исполнено.</p>'''
+write('reestr-prigovorov.html', styled('Реестр приговоров', [reestr_p], FORM_CSS + 'table.rp td{height:8.4mm}'))
+
+# ── 22. РАСПОРЯЖЕНИЕ ПО ОТДЕЛУ
+rasp = head('РАСПОРЯЖЕНИЕ<br>№ ____') + '''
+ <h1 class="big" style="margin-top:8mm">РАСПОРЯЖЕНИЕ</h1><div class="h1sub">по отделу</div>
+ <div class="place"><span>Отдел: <span class="blank"></span></span><span>«____» __________ 20___ г.</span></div>
+ <p class="row2" style="margin-top:4mm">В целях <span class="blank" style="min-width:140mm"></span></p>
+ <p class="row2" style="font-weight:bold;letter-spacing:2pt;margin:4mm 0 2mm">ПРЕДПИСЫВАЮ:</p>
+ <ol style="--s:'П'">''' + ''.join('<li><span class="blank" style="min-width:150mm"></span></li>' for _ in range(6)) + '''</ol>
+''' + field('Срок исполнения', '') + field('Контроль за исполнением возложить на', '') + '''
+ <p class="row2" style="margin-top:2mm">С распоряжением ознакомлены:</p>''' + lines(4) + sig2(('Руководитель отдела', 'подписал'), ('Лидер ФСИН', 'согласовано'))
+write('rasporyazhenie.html', styled('Распоряжение по отделу', [rasp], FORM_CSS + 'ol li{margin-bottom:4mm}'))
+
+# ── 23. РАПОРТ СОТРУДНИКА
+raport = head('РАПОРТ<br>вх. № ____') + to_from('Руководителю отдела / Лидеру ФСИН') + '''
+ <h1 class="big">РАПОРТ</h1>
+ <p class="row2" style="margin-top:4mm"><b>Докладываю, что</b></p>''' + lines(9) + field('Дата и время события', '') + field('Место', 'xl') + field('Участники / свидетели', 'xl') + '''
+ <p class="row2"><b>Предлагаю:</b></p>''' + lines(2) + sig2(('Сотрудник', 'докладывает'), ('Принял', 'руководитель')) + decision('<span class="blank" style="min-width:150mm"></span>')
+write('raport.html', styled('Рапорт', [raport], FORM_CSS))
+
+# ── 25. РАПОРТ ОБ ОТСТАВКЕ
+otstavka = head('РАПОРТ<br>вх. № ____') + to_from() + '''
+ <h1 class="big">РАПОРТ</h1><div class="h1sub">об отставке</div>
+ <p class="say" style="margin-top:6mm">Прошу <span class="ck">☐ освободить меня от должности</span> <span class="blank"></span><br><span class="ck">☐ уволить меня из рядов ФСИН по собственному желанию</span><br>с «____» ____________ 20___ г.</p>
+''' + field('Звание', '') + field('Удостоверение №', 's') + '''
+ <p class="row2"><b>Причина</b> (по желанию):</p>''' + lines(3) + '''
+ <p class="row2" style="margin-top:2mm"><b>Прошу:</b></p>''' + cks('перевести в ветераны ФСИН', 'сохранить звание', 'оставить в резерве', block=True) + '''
+ <p class="row2">Удостоверение сдаю: <span class="ck">☐ да</span><span class="ck">☐ оставляю на память с пометкой «ветеран»</span></p>
+''' + sig2(('Сотрудник', 'подаёт рапорт'), ('Отдел кадров', 'принял')) + decision('☐ уволен с «__» ____ &nbsp; ☐ переведён в ветераны &nbsp; ☐ освобождён от должности &nbsp;&nbsp; Лидер ФСИН <span class="blank s"></span>')
+write('otstavka.html', styled('Рапорт об отставке', [otstavka], FORM_CSS + '.say{font-size:10.5pt;line-height:1.9}'))
+
+# ── 39. АКТ ОБ УТЕРЕ УДОСТОВЕРЕНИЯ
+akt = head('АКТ<br>№ ____') + '''
+ <h1 class="big" style="margin-top:8mm">АКТ</h1><div class="h1sub">об утере служебного удостоверения</div>
+ <div class="place"><span>г. Москва</span><span>«____» ______________ 20___ г.</span></div>
+''' + field('Сотрудник (ФИО)', 'xl') + field('Звание', '') + field('Удостоверение №', 's') + field('Вид', '') + cks('служебное', 'адвокатское', 'пристава', 'судьи') + field('Дата утери', '') + '''
+ <p class="row2"><b>Обстоятельства утери:</b></p>''' + lines(4) + '''
+ <h2>Решение Отдела кадров</h2>''' + ol('Р', [
+    'Удостоверение № <span class="blank s"></span> признать <b>недействительным</b> и внести отметку в Реестр сотрудников.',
+    'Взыскание по ст. 6 КоАП ФСИН: <span class="ck">☐ предупреждение</span><span class="ck">☐ без взыскания</span>',
+    'Выдать новое удостоверение № <span class="blank s"></span>',
+    'При находке старое удостоверение сдать в Отдел кадров.',
+]) + sig2(('Сотрудник', 'с актом ознакомлен'), ('Отдел кадров', 'составил'))
+write('akt-uterya.html', styled('Акт об утере удостоверения', [akt], FORM_CSS))
+
+# ── 40. ПРИКАЗ О СОЗДАНИИ ОТДЕЛА
+prikaz = head('ПРИКАЗ<br>№ ____') + '''
+ <h1 class="big" style="margin-top:8mm">ПРИКАЗ</h1><div class="h1sub">Лидера ФСИН</div>
+ <div class="place"><span>г. Москва</span><span>«____» ______________ 20___ г.</span></div>
+ <p class="pt-lead" style="text-align:center;font-size:12pt;margin:4mm 0">О создании <span class="blank" style="min-width:90mm"></span></p>
+ <p class="row2">В целях <span class="blank" style="min-width:140mm"></span></p>
+ <p class="row2" style="font-weight:bold;letter-spacing:2pt;margin:3mm 0 2mm">ПРИКАЗЫВАЮ:</p>''' + ol('1', [
+    'Создать в составе ФСИН <span class="blank" style="min-width:110mm"></span>.',
+    'Задачи отдела:' + lines(3),
+    'Назначить руководителем отдела <span class="blank" style="min-width:80mm"></span>, звание <span class="blank" style="min-width:40mm"></span>.',
+    'Утвердить эмблему / цвет отдела: <span class="blank" style="min-width:80mm"></span>.',
+    'Отделу кадров внести изменения в Реестр сотрудников и Структуру ФСИН.',
+    'Приказ вступает в силу с момента подписания.',
+]) + '<div class="sig"><div class="col"><b>Лидер ФСИН</b><small>подписал</small><div class="ln"></div><small>подпись / ФИО</small></div><div class="col"><b>Совет генералов</b><small>согласовано</small><div class="ln"></div><small>подписи</small></div></div><div class="mp">М.П.</div>'
+write('prikaz-otdel.html', styled('Приказ о создании отдела', [prikaz], FORM_CSS + '.pt-lead{font-style:italic}ol li{margin-bottom:2.5mm}'))
+
+
+# ── 70. ЛИЦЕНЗИЯ АДВОКАТА
+def licenziya(fio='', no=''):
+    return head(f'ЛИЦЕНЗИЯ<br>№ {no or "Л-____"}') + f'''
+ <div class="lc">
+  <svg class="lce"><use href="#emb"/></svg>
+  <h1 class="big" style="margin-top:3mm">ЛИЦЕНЗИЯ</h1>
+  <div class="h1sub">на осуществление адвокатской деятельности</div>
+  <p class="pt-lead">Коллегия адвокатов ФСИН удостоверяет, что</p>
+  <p class="lcn">{blank(fio, 'xl')}</p>
+  <p class="pt-lead">является действительным членом Коллегии адвокатов ФСИН<br>и имеет право:</p>
+ </div>''' + ol('Л', [
+        'Защищать задержанных и обвиняемых на допросе и в Суде ФСИН.',
+        'Присутствовать при любом допросе и знакомиться с материалами дела.',
+        'Подавать жалобы, ходатайства об отводе судьи и о помиловании.',
+        'Требовать освобождения задержанного при нарушении правил задержания.',
+        'Хранить адвокатскую тайну: сказанное подзащитным остаётся между ними.',
+    ]) + '''
+ <div class="lcb"><div><b>Регистрационный № в Коллегии</b><span>''' + (no or '____') + '''</span></div><div><b>Срок действия</b><span>до 31 мая 20___ г.</span></div></div>
+ <div class="mp" style="left:auto;right:22mm;bottom:18mm">М.П.</div>'''
+
+
+LC_CSS = '''<style>.lc{text-align:center;margin-top:6mm}.lce{width:24mm;height:24mm}
+.pt-lead{text-align:center;font-size:10.5pt;font-style:italic;color:#444;margin:3mm 0 1mm;line-height:1.5}
+.lcn{font-size:17pt;margin:3mm 0}.fill{font-weight:bold}.blank.xl{min-width:120mm}
+.lcb{display:flex;gap:8mm;margin-top:6mm}.lcb div{flex:1;border:0.4mm solid #15161b;padding:3mm 4mm}
+.lcb b{display:block;font-family:"DejaVu Sans",sans-serif;font-size:7.5pt;letter-spacing:1pt;color:#555;text-transform:uppercase}
+.lcb span{font-size:13pt;font-weight:bold}</style>'''
+write('licenziya.html', doc('Лицензия адвоката', [licenziya()]).replace('</head>', LC_CSS + '</head>'))
+for p in PEOPLE:
+    if p.get('kind') == 'adv' and not p.get('blank'):
+        write_out(f"licenziya-{p['sn']}.html", doc('Лицензия адвоката', [licenziya(f"{p['fam']} {p['io']}", str(p['sn']).replace('А-', 'Л-'))]).replace('</head>', LC_CSS + '</head>'))
+
+# ── 73. ПЛАКАТ «КОДЕКС ФСИН КОРОТКО»
+top = [('ст. 1', 'Задирание', 'задержание, КПЗ'), ('ст. 2', 'Насмешки над ФСИН', 'предупреждение, КПЗ'),
+       ('ст. 101', 'Оскорбление сотрудника при исполнении', 'тюрьма 1–2 перемены'), ('ст. 102', 'Травля', 'тюрьма до 3 перемен'),
+       ('ст. 103', 'Драка', 'тюрьма 2 перемены'), ('ст. 107', 'Самозванство, подделка корочки', 'лишение звания / КПЗ'),
+       ('ст. 108', 'Ложный донос', 'то же, что грозило обвинённому'), ('ст. 3', 'Неявка по ордеру', 'дело рассматривается заочно')]
+plakat = '''<svg class="wm"><use href="#embL"/></svg>
+ <div class="kp"><svg class="kpe"><use href="#emb"/></svg><div class="kpf">КОДЕКС ФСИН</div><div class="kps">коротко — для всех учеников</div></div>
+ <table class="t kt"><tr><th style="width:22mm">Статья</th><th>Нарушение</th><th style="width:52mm">Взыскание</th></tr>''' + ''.join(
+    f'<tr><td><b>{a}</b></td><td>{b}</td><td>{c}</td></tr>' for a, b, c in top) + '''</table>
+ <div class="kg"><div><b>ТЮРЬМА</b><span>кабинка туалета<br>до конца перемены</span></div><div><b>КПЗ</b><span>туалет<br>до 5 минут</span></div><div><b>ДОПРОСНАЯ</b><span>раздевалка<br>с адвокатом</span></div></div>
+ <div class="kr"><b>Твои права:</b> задержание — только с твоего согласия · скажи <b>«СТОП»</b> — и ты свободен · право на адвоката · со звонком все свободны</div>'''
+write('kodeks-plakat.html', styled('Кодекс ФСИН коротко', [plakat], FORM_CSS + '''
+.kp{text-align:center;margin-top:4mm}.kpe{width:30mm;height:30mm}
+.kpf{font-size:34pt;font-weight:bold;letter-spacing:6pt;margin-top:2mm}
+.kps{font-size:12pt;font-style:italic;color:#444;margin-bottom:6mm}
+table.kt td{font-size:11.5pt;height:auto;padding:3mm}table.kt th{font-size:9pt}
+.kg{display:grid;grid-template-columns:repeat(3,1fr);gap:5mm;margin-top:7mm;text-align:center}
+.kg div{border:0.6mm solid #15161b;padding:4mm 2mm}.kg b{display:block;font-size:15pt;letter-spacing:2pt}.kg span{font-size:10pt;line-height:1.4;display:block;margin-top:1mm}
+.kr{margin-top:7mm;border:0.4mm solid #15161b;background:#eceef2;padding:4mm 5mm;font-size:11.5pt;line-height:1.6;text-align:center}'''))
+
+# ── 74. ЛИСТОВКА АДВОКАТА (2 на лист)
+lst_one = '''<div class="lf"><svg class="lfe"><use href="#emb"/></svg>
+ <div class="lft">ТЕБЯ ЗАДЕРЖАЛИ?</div>
+ <div class="lfs">У тебя есть право на адвоката.</div>
+ <div class="lfb">Коллегия адвокатов ФСИН<br>защитит тебя <b>бесплатно</b></div>
+ <ul><li>присутствуем на допросе</li><li>защищаем в Суде ФСИН</li><li>добиваемся оправдания или примирения</li><li>подаём жалобы и ходатайства о помиловании</li></ul>
+ <div class="lfc">Скажи сотруднику: <b>«Мне нужен адвокат»</b></div>
+ <div class="lfn">Адвокат: <span class="blank" style="min-width:70mm"></span></div>
+ <div class="lfm">ЗАКОН · ЗАЩИТА · СПРАВЕДЛИВОСТЬ</div></div>'''
+write('listovka-advokat.html', doc('Листовка адвоката', ['']).replace('<div class="page"></div>', f'<div class="page halves">{lst_one * 2}</div>').replace('</head>', '''<style>
+.page.halves{padding:0;display:flex;flex-direction:column}.page.halves::before,.page.halves::after{display:none}
+.lf{height:148.5mm;padding:12mm 18mm;text-align:center;position:relative}.lf+.lf{border-top:0.3mm dashed #999}
+.lf::before{content:"";position:absolute;inset:6mm;border:0.6mm solid #15161b}
+.lfe{width:20mm;height:20mm}.lft{font-size:28pt;font-weight:bold;letter-spacing:3pt;margin-top:2mm}
+.lfs{font-size:13pt;font-style:italic;margin:1mm 0 4mm}.lfb{font-size:15pt;line-height:1.4;border-top:0.5mm solid #15161b;border-bottom:0.5mm solid #15161b;padding:2.5mm 0;margin:0 10mm}
+.lf ul{list-style:none;margin:4mm 0;font-size:11pt;line-height:1.6}.lf li::before{content:"✓  ";font-weight:bold}
+.lfc{font-size:12pt}.lfn{font-size:10.5pt;margin-top:4mm}.lfm{font-family:"DejaVu Sans",sans-serif;font-size:8pt;letter-spacing:2pt;color:#555;margin-top:3mm}
+</style></head>'''))
+
+# ── 75. ЯЩИК ЖАЛОБ: табличка + анонимные бланки (4 на лист)
+tabl = '''<div class="yt"><svg class="yte"><use href="#emb"/></svg>
+ <div class="ytt">ЯЩИК ЖАЛОБ</div><div class="ytf">ФСИН</div>
+ <div class="yts">Тебя задирают? Видел несправедливость?<br>Напиши — <b>можно анонимно</b>. Мы разберёмся.</div>
+ <div class="ytr">Бланки — рядом с ящиком · ящик проверяется каждый день</div></div>'''
+write('yashchik-tablichka.html', styled('Ящик жалоб — табличка', [tabl], '''
+.yt{text-align:center;padding-top:28mm}.yte{width:52mm;height:52mm}
+.ytt{font-size:50pt;font-weight:bold;letter-spacing:7pt;margin-top:8mm;border-top:1.2mm solid #15161b;border-bottom:1.2mm solid #15161b;padding:4mm 0}
+.ytf{font-size:30pt;letter-spacing:14pt;margin:6mm 0 0 14pt}
+.yts{font-size:17pt;line-height:1.6;margin-top:14mm}.ytr{font-family:"DejaVu Sans",sans-serif;font-size:10pt;color:#555;margin-top:16mm}'''))
+anon_one = '''<div class="q">
+ <div class="qh"><svg><use href="#emb"/></svg><div><b>ФСИН</b><small>''' + ORG + '''</small></div><span>ЖАЛОБА</span></div>
+ <h3>АНОНИМНАЯ ЖАЛОБА</h3>
+ <p>Кто <span class="blank w"></span></p><p>Что сделал <span class="blank w2"></span></p>
+ <p class="ln2"></p><p class="ln2"></p>
+ <p>Где <span class="blank s"></span> Когда <span class="blank s"></span></p>
+ <p>Кому плохо <span class="blank w2"></span></p>
+ <p class="cks"><span>☐ нужна помощь</span><span>☐ нужен адвокат</span></p>
+ <p class="sm">Подпись не обязательна. Если хочешь, чтобы с тобой связались, напиши имя: ____________</p>
+</div>'''
+write('anon-zhaloba.html', doc('Анонимная жалоба', ['']).replace('<div class="page"></div>', f'<div class="page grid">{anon_one * 4}</div>').replace('</head>', f'<style>{POV_CSS}.q .blank.w2{{min-width:52mm}}.q .ln2{{border-bottom:0.25mm solid #15161b;height:5mm}}</style></head>'))
+
+
+# ── 65. ЖЕТОНЫ (12 на лист, вырезать)
+def zheton(no):
+    return f'''<svg class="zt" viewBox="0 0 200 200">
+  <circle cx="100" cy="100" r="96" fill="#fff" stroke="#15161b" stroke-width="4"/>
+  <circle cx="100" cy="100" r="88" fill="none" stroke="#15161b" stroke-width="1.5"/>
+  <circle cx="100" cy="100" r="64" fill="none" stroke="#15161b" stroke-width="1.5"/>
+  <path id="za" d="M100 100 m-76 0 a76 76 0 1 1 152 0 a76 76 0 1 1 -152 0" fill="none"/>
+  <text font-size="12.5" font-family="DejaVu Sans" font-weight="bold" letter-spacing="1.4"><textPath href="#za">★ ФИЛИПОВСКАЯ СЛУЖБА ИСПОЛНЕНИЯ НАКАЗАНИЙ ★</textPath></text>
+  <use href="#emb" x="68" y="42" width="64" height="64"/>
+  <text x="100" y="128" text-anchor="middle" font-size="15" font-weight="bold" font-family="DejaVu Serif" letter-spacing="3">ФСИН</text>
+  <text x="100" y="152" text-anchor="middle" font-size="20" font-weight="bold" font-family="DejaVu Sans Mono">{no or "№ ____"}</text>
+ </svg>'''
+
+
+ZT_CSS = '''<style>.page.zt-p{padding:12mm 15mm;display:grid;grid-template-columns:repeat(3,56mm);grid-auto-rows:56mm;gap:6mm 8mm;justify-content:center;align-content:center}
+.page.zt-p::before,.page.zt-p::after{display:none}.zt{width:56mm;height:56mm}</style>'''
+write('zhetony.html', doc('Жетоны ФСИН', ['']).replace('<div class="page"></div>', '<div class="page zt-p">' + ''.join(zheton('') for _ in range(12)) + '</div>').replace('</head>', ZT_CSS + '</head>'))
+if STAFF:
+    nos = [f"№ {p['sn']}" for p in STAFF]
+    nos += [''] * (12 - len(nos) % 12 if len(nos) % 12 else 0)
+    pages = ''.join('<div class="page zt-p">' + ''.join(zheton(n) for n in nos[i:i + 12]) + '</div>' for i in range(0, len(nos), 12))
+    write_out('zhetony.html', doc('Жетоны ФСИН', ['']).replace('<div class="page"></div>', pages).replace('</head>', ZT_CSS + '</head>'))
+
+
+# ── 66. ВОЕННЫЙ БИЛЕТ (книжечка: две полосы, склеить спинками, согнуть)
+def voenbilet(p=None, photo=''):
+    p = p or {}
+    v = lambda x: f'<b>{x}</b>' if x else '<span class="blank" style="min-width:52mm"></span>'
+    ph = f'<div class="vph" style="background:url(\'{photo}\') {p.get("photoPos", "50% 35%")}/{p.get("photoZoom", "130%")} no-repeat;border-style:solid"></div>' if photo else '<div class="vph">ФОТО<br>3×4</div>'
+    rows = ''.join('<tr><td></td><td></td><td></td></tr>' for _ in range(7))
+    outside = f'''<div class="vb out">
+  <div class="vp back"><div class="vo">«Клянусь хранить честь ФСИН, стоять за своих и соблюдать устав организации»</div><div class="vm">ЧЕСТЬ · ПОРЯДОК · ВЕРНОСТЬ СВОИМ</div><div class="vn">№ {p.get("sn", "____")}</div></div>
+  <div class="vp front"><svg class="vce"><use href="#emb"/></svg><div class="vcf">ФСИН</div><div class="vcn">{ORG}</div><div class="vct">ВОЕННЫЙ БИЛЕТ</div></div></div>'''
+    inside = f'''<div class="vb in">
+  <div class="vp"><div class="vh">ВОЕННЫЙ БИЛЕТ № {p.get("sn", "____")}</div>
+   <div style="display:flex;gap:4mm;margin-top:3mm">{ph}<div class="vf">
+    <p>Фамилия {v(p.get("fam"))}</p><p>Имя, отчество {v(p.get("io"))}</p><p>Звание {v(p.get("rank"))}</p>
+    <p>Отдел {v(", ".join(lst(p.get("dep"))))}</p><p>Дата вступления <span class="blank" style="min-width:28mm"></span></p></div></div>
+   <p class="vs">Присягу принял <span class="blank" style="min-width:30mm"></span> &nbsp; подпись <span class="blank" style="min-width:30mm"></span></p></div>
+  <div class="vp"><div class="vh">ПРОХОЖДЕНИЕ СЛУЖБЫ</div>
+   <table class="t vt"><tr><th style="width:18mm">Дата</th><th>Звание / должность</th><th style="width:20mm">Приказ</th></tr>{rows}</table>
+   <div class="vh" style="margin-top:2mm">НАГРАДЫ</div><div class="lines"><span></span><span></span></div></div></div>'''
+    return f'<div class="vhint">Вырезать две полосы → склеить спинками (обложка снаружи) → согнуть по середине</div>{outside}{inside}'
+
+
+VB_CSS = FORM_CSS + '''
+.page.vb-p{padding:10mm 10mm;display:flex;flex-direction:column;gap:10mm;align-items:center}
+.page.vb-p::before,.page.vb-p::after{display:none}
+.vhint{font-family:"DejaVu Sans",sans-serif;font-size:8pt;color:#666}
+.vb{display:flex;width:190mm;height:125mm;border:0.3mm dashed #999}
+.vp{width:95mm;height:125mm;padding:7mm;position:relative}
+.vp+.vp{border-left:0.3mm dashed #bbb}
+.vb.out .vp{background:#15161b;color:#e8eaee}
+.front{text-align:center;padding-top:14mm}.vce{width:30mm;height:30mm}
+.vb.out .vce{filter:invert(1)}
+.vcf{font-size:30pt;font-weight:bold;letter-spacing:8pt;margin:4mm 0 0 8pt}
+.vcn{font-family:"DejaVu Sans",sans-serif;font-size:5.6pt;letter-spacing:1.2pt;color:#aab0ba}
+.vct{font-size:15pt;letter-spacing:4pt;margin-top:12mm;border-top:0.4mm solid #aab0ba;border-bottom:0.4mm solid #aab0ba;padding:2mm 0}
+.back{text-align:center;padding-top:30mm}.vo{font-style:italic;font-size:10pt;line-height:1.6;color:#c9ced8}
+.vm{font-size:8pt;letter-spacing:2pt;margin-top:10mm;color:#8a909a}.vn{position:absolute;bottom:8mm;left:0;right:0;font-family:"DejaVu Sans Mono",monospace;font-size:10pt;color:#8a909a}
+.vh{font-family:"DejaVu Sans",sans-serif;font-size:7.5pt;letter-spacing:1.2pt;font-weight:bold;border-bottom:0.3mm solid #15161b;padding-bottom:1mm}
+.vph{width:26mm;height:35mm;border:0.3mm dashed #15161b;display:flex;align-items:center;justify-content:center;text-align:center;font-family:"DejaVu Sans",sans-serif;font-size:7.5pt;color:#777;flex:none}
+.vf p{font-size:8.4pt;margin-bottom:2.4mm;line-height:1.3}.vs{font-size:8pt;margin-top:5mm}
+table.vt{font-size:7.6pt}table.vt td{height:6.3mm}table.vt th{font-size:6pt}
+.vp .lines span{height:5.5mm}
+'''
+write('voenbilet.html', doc('Военный билет ФСИН', ['']).replace('<div class="page"></div>', f'<div class="page vb-p">{voenbilet()}</div>').replace('</head>', f'<style>{VB_CSS}</style></head>'))
+for p in STAFF:
+    write_out(f"voenbilet-{p['sn']}.html", doc('Военный билет ФСИН', ['']).replace('<div class="page"></div>', f'<div class="page vb-p">{voenbilet(p, "../" + p["photo"] if p.get("photo") else "")}</div>').replace('</head>', f'<style>{VB_CSS}</style></head>'))
 print('ok')
