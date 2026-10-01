@@ -90,6 +90,11 @@ body{font-family:"DejaVu Sans",sans-serif}
 .card.adv .fsin,.card.adv .v.rank,.card.adv .cfsin,.card.adv .motto{background:linear-gradient(180deg,#fff4c8,#d9b44a 50%,#8a6a1c);-webkit-background-clip:text;color:transparent}
 .card.adv .photo,.card.adv .sign .line{border-color:#c9a54a}
 .card.adv .motto{font-size:24px;letter-spacing:2px}
+/* пристав: синий со сталью */
+.card.prist{border-color:#5b86c9}
+.card.prist::before{border-color:rgba(111,155,224,.4)}
+.card.prist .fsin,.card.prist .v.rank,.card.prist .cfsin,.card.prist .motto{background:linear-gradient(180deg,#e9f1ff,#7fa6e0 50%,#3b5d94);-webkit-background-clip:text;color:transparent}
+.card.prist .photo,.card.prist .sign .line{border-color:#5b86c9}
 </style></head><body>
 
 <svg width="0" height="0" style="position:absolute">
@@ -112,6 +117,13 @@ body{font-family:"DejaVu Sans",sans-serif}
    <path d="M64 75 L50 108 M64 75 L78 108 M136 75 L122 108 M136 75 L150 108" stroke="url(#gd)" stroke-width="2"/>
    <path d="M46 108 H82 A18 12 0 0 1 46 108 Z M118 108 H154 A18 12 0 0 1 118 108 Z" fill="url(#gd)"/>
    <rect x="78" y="138" width="44" height="7" rx="2" fill="url(#gd)"/>
+  </symbol>
+  <linearGradient id="bl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e9f1ff"/><stop offset=".5" stop-color="#7fa6e0"/><stop offset="1" stop-color="#3b5d94"/></linearGradient>
+  <symbol id="embP" viewBox="0 0 200 200">
+   <path d="M100 18 L172 44 V100 C172 142 140 170 100 184 C60 170 28 142 28 100 V44 Z" fill="#15161b" stroke="url(#bl)" stroke-width="6"/>
+   <path d="M100 32 L160 54 V100 C160 134 134 158 100 170 C66 158 40 134 40 100 V54 Z" fill="none" stroke="url(#bl)" stroke-width="2" opacity=".6"/>
+   <path d="M100 52 L111 84 L145 84 L118 104 L128 137 L100 117 L72 137 L82 104 L55 84 L89 84 Z" fill="url(#bl)"/>
+   <circle cx="100" cy="98" r="9" fill="#15161b"/>
   </symbol>
  </defs>
 </svg>
@@ -139,8 +151,16 @@ const KINDS = {
         ring:'★ КОЛЛЕГИЯ АДВОКАТОВ ФСИН ★ ЗАКОН И ЗАЩИТА ★', ink:'#c9a54a', motto:'ЗАКОН<br>ЗАЩИТА<br>СПРАВЕДЛИВОСТЬ',
         vow:'«Клянусь честно защищать права задержанных, хранить адвокатскую тайну и служить справедливости»', rights:'АДВОКАТ ИМЕЕТ ПРАВО',
         motto2:'ЗАКОН · ЗАЩИТА · СПРАВЕДЛИВОСТЬ', ctype:'АДВОКАТСКОЕ УДОСТОВЕРЕНИЕ'},
+  prist: {cls:' prist', emb:'embP', sub:'СЛУЖБА ПРИСТАВОВ ФСИН', num:'ЖЕТОН №', rank:'Звание', dep:['Пост','Посты'], type:'УДОСТОВЕРЕНИЕ ПРИСТАВА',
+        ring:'★ СЛУЖБА ПРИСТАВОВ ФСИН ★ ПОРЯДОК И ДОЛГ ★', ink:'#6f9be0', motto:'ПОРЯДОК<br>ДОЛГ<br>ЗАКОН',
+        vow:'«Клянусь охранять порядок в Зале суда и местах содержания и соблюдать правила задержания»', rights:'ПРИСТАВ ИМЕЕТ ПРАВО',
+        motto2:'ПОРЯДОК · ДОЛГ · ЗАКОН', ctype:'УДОСТОВЕРЕНИЕ ПРИСТАВА',
+        powers:['Дежурить у мест содержания (КПЗ, тюрьма)', 'Поддерживать порядок в Зале суда', 'Освобождать задержанного по слову «стоп» или звонку',
+                'Удалять нарушителей из Зала суда по указанию судьи', 'Сопровождать задержанных на разбирательство']},
 };
 const K = p => KINDS[p.kind || 'std'];
+// blank: true — пустой бланк, поля заполняются ручкой
+const F = v => v || '&nbsp;';
 const FRONT = p => `<div class="card${K(p).cls}"><svg class="wm"><use href="#${K(p).emb}"/></svg>
  <div class="head">
   <svg><use href="#${K(p).emb}"/></svg>
@@ -150,11 +170,11 @@ const FRONT = p => `<div class="card${K(p).cls}"><svg class="wm"><use href="#${K
  <div class="body">
   ${p.photo ? `<div class="photo" style="background:url('${p.photo}') ${p.photoPos||'50% 35%'}/${p.photoZoom||'130%'} no-repeat"></div>` : `<div class="photo">ФОТО<br>3×4</div>`}
   <div class="fields">
-   <div class="l">Фамилия</div><div class="v">${p.fam}</div>
-   <div class="l">Имя, отчество</div><div class="v">${p.io}</div>
-   <div class="l">${K(p).rank}</div><div class="v rank">${p.rank}</div>
-   <div class="l">${list(p.pos).length>1?'Должности':'Должность'}</div><div class="v${list(p.pos).length>1?' multi':''}">${list(p.pos).join('<br>')}</div>
-   <div class="l">${K(p).dep[list(p.dep).length>1?1:0]}</div><div class="v${list(p.dep).length>1?' multi':''}">${list(p.dep).join(' · ')}</div>
+   <div class="l">Фамилия</div><div class="v">${F(p.fam)}</div>
+   <div class="l">Имя, отчество</div><div class="v">${F(p.io)}</div>
+   <div class="l">${K(p).rank}</div><div class="v rank">${F(p.rank)}</div>
+   <div class="l">${list(p.pos).length>1?'Должности':'Должность'}</div><div class="v${list(p.pos).length>1?' multi':''}">${list(p.pos).map(F).join('<br>')}</div>
+   <div class="l">${K(p).dep[list(p.dep).length>1?1:0]}</div><div class="v${list(p.dep).length>1?' multi':''}">${list(p.dep).map(F).join(' · ')}</div>
   </div>
  </div>
  <div class="foot">
@@ -180,7 +200,7 @@ const BACK = p => `<div class="card back${K(p).cls}"><svg class="wm"><use href="
  </div>
  <div class="pw">
   <h2>${K(p).rights}</h2>
-  <ol>${(p.powers || DEFAULT_POWERS).map(x => `<li>${x}</li>`).join('')}</ol>
+  <ol>${(p.powers || K(p).powers || DEFAULT_POWERS).map(x => `<li>${x}</li>`).join('')}</ol>
   <div class="ownsign"><div></div><div class="serial">SN ${p.sn}</div></div>
   <div class="note">Внутреннее удостоверение · не является государственным документом</div>
  </div>
