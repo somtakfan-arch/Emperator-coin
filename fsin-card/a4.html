@@ -168,7 +168,9 @@ const people = (window.PEOPLE || [
   {fam:"Кузнецов",io:"Даниил Олегович",      rank:"Рядовой",           pos:"Сотрудник",          dep:"Дисциплинарный отдел", sn:903},
 ]).filter(p => !p.done || new URLSearchParams(location.search).get('fam'))
   // ?fam=Фамилия — только корочки одного человека (включая уже напечатанные)
-  .filter(p => { const f = new URLSearchParams(location.search).get('fam'); return !f || p.fam === f; });
+  .filter(p => { const f = new URLSearchParams(location.search).get('fam'); return !f || p.fam === f; })
+  // ?kinds=1 — по одной корочке каждого вида (превью дизайна)
+  .filter((p, i, a) => !new URLSearchParams(location.search).get('kinds') || a.findIndex(q => (q.kind || 'std') === (p.kind || 'std')) === i);
 // вид корочки: std — служебная (серебро), adv — адвокатская (золото, весы)
 const KINDS = {
   std: {cls:'', emb:'emb', sub:'ФИЛИПОВСКАЯ СЛУЖБА ИСПОЛНЕНИЯ НАКАЗАНИЙ', num:'№ СЕРИЯ', rank:'Звание', dep:['Отдел','Отделы'], type:'СЛУЖЕБНОЕ УДОСТОВЕРЕНИЕ',
@@ -271,6 +273,8 @@ for (let i = 0; i < people.length; i += 4) {
   if (PART !== 'cover') doc.append(inside);
   if (PART !== 'inside') doc.append(outside);
 }
+// превью дизайна: все строки на одну длинную «страницу»
+if (qs.get('kinds')) document.querySelectorAll('.sheet').forEach(s => { s.style.height = 'auto'; s.style.padding = '8mm 10mm'; });
 // ужать шрифт, если строка не влезает
 document.querySelectorAll('.v').forEach(v => { let f = parseFloat(getComputedStyle(v).fontSize); while (v.scrollWidth > v.clientWidth && f > 16) v.style.fontSize = (f -= 1) + 'px'; });
 </script>
