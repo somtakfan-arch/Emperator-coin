@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Шифр ФСИН</title>
+<link rel="stylesheet" href="doc.css"><style>
+.row2{margin-bottom:2.2mm;font-size:10pt}
+.blank.xl{min-width:130mm}.blank.full{display:block;width:100%;height:6mm;margin-top:1mm}
+.lines span{display:block;border-bottom:0.25mm solid #15161b;height:7mm}
+.ck{margin:0 2mm 0 0;font-family:"DejaVu Sans",sans-serif;font-size:9.5pt}
+table.t{width:100%;border-collapse:collapse;margin-top:2mm;font-size:9pt}
+table.t th,table.t td{border:0.25mm solid #15161b;padding:1.6mm 2mm;text-align:left;vertical-align:top}
+table.t th{background:#eceef2;font-family:"DejaVu Sans",sans-serif;font-size:7.5pt;letter-spacing:.6pt;text-transform:uppercase}
+table.t td{height:7.5mm}
+
+table.sq{width:auto}
+table.sq th,table.sq td{width:11mm;height:9mm;text-align:center;vertical-align:middle;font-size:12pt;padding:0}
+table.sq td{font-weight:bold}
+.ex p{font-size:10pt;margin-bottom:2.5mm}
+code{font-family:"DejaVu Sans Mono",monospace;font-size:10pt;background:#eceef2;padding:.5mm 1.5mm}
+table.cd td{height:auto;font-size:9.5pt}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute"><defs>
+ <symbol id="emb" viewBox="0 0 200 200">
+  <path d="M100 18 L172 44 V100 C172 142 140 170 100 184 C60 170 28 142 28 100 V44 Z" fill="#fff" stroke="#15161b" stroke-width="7"/>
+  <path d="M100 32 L160 54 V100 C160 134 134 158 100 170 C66 158 40 134 40 100 V54 Z" fill="none" stroke="#15161b" stroke-width="2"/>
+  <path d="M62 112 L56 72 L78 90 L100 60 L122 90 L144 72 L138 112 Z" fill="#15161b"/>
+  <rect x="62" y="118" width="76" height="10" rx="2" fill="#15161b"/>
+  <circle cx="56" cy="70" r="5" fill="#15161b"/><circle cx="100" cy="57" r="6" fill="#15161b"/><circle cx="144" cy="70" r="5" fill="#15161b"/>
+  <path d="M78 142 H122" stroke="#15161b" stroke-width="3"/>
+ </symbol>
+ <symbol id="embL" viewBox="0 0 200 200">
+  <path d="M100 18 L172 44 V100 C172 142 140 170 100 184 C60 170 28 142 28 100 V44 Z" fill="#fff" stroke="#eeeff2" stroke-width="7"/>
+  <path d="M100 32 L160 54 V100 C160 134 134 158 100 170 C66 158 40 134 40 100 V54 Z" fill="none" stroke="#eeeff2" stroke-width="2"/>
+  <path d="M62 112 L56 72 L78 90 L100 60 L122 90 L144 72 L138 112 Z" fill="#eeeff2"/>
+  <rect x="62" y="118" width="76" height="10" rx="2" fill="#eeeff2"/>
+  <circle cx="56" cy="70" r="5" fill="#eeeff2"/><circle cx="100" cy="57" r="6" fill="#eeeff2"/><circle cx="144" cy="70" r="5" fill="#eeeff2"/>
+  <path d="M78 142 H122" stroke="#eeeff2" stroke-width="3"/>
+ </symbol></defs></svg>
+<div class="page"><svg class="wm"><use href="#embL"/></svg>
+ <div class="head"><svg><use href="#emb"/></svg>
+  <div class="t"><div class="org">ФСИН</div><div class="sub">ФИЛИПОВСКАЯ СЛУЖБА ИСПОЛНЕНИЯ НАКАЗАНИЙ</div></div>
+  <div class="no">ШИФР<br>секретно</div></div>
+ <h1 class="big" style="margin-top:5mm">ШИФР ФСИН</h1><div class="h1sub">для служебных записок сотрудников</div>
+ <h2>1. Квадрат ФСИН</h2>
+ <p style="font-size:9.5pt">Каждая буква — две цифры: <b>строка</b>, потом <b>столбец</b>. Буквы разделяются пробелом.</p>
+ <div style="display:flex;gap:8mm;align-items:flex-start"><div style="flex:none"><table class="t sq"><tr><th></th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th></tr><tr><th>1</th><td>А</td><td>Б</td><td>В</td><td>Г</td><td>Д</td><td>Е</td></tr><tr><th>2</th><td>Ё</td><td>Ж</td><td>З</td><td>И</td><td>Й</td><td>К</td></tr><tr><th>3</th><td>Л</td><td>М</td><td>Н</td><td>О</td><td>П</td><td>Р</td></tr><tr><th>4</th><td>С</td><td>Т</td><td>У</td><td>Ф</td><td>Х</td><td>Ц</td></tr><tr><th>5</th><td>Ч</td><td>Ш</td><td>Щ</td><td>Ъ</td><td>Ы</td><td>Ь</td></tr><tr><th>6</th><td>Э</td><td>Ю</td><td>Я</td><td>␣</td><td>.</td><td>?</td></tr></table></div>
+  <div class="ex"><p><b>Пример:</b></p><p>ФСИН → <code>44 41 24 33</code></p><p>СБОР → <code>41 12 34 36</code></p>
+  <p><b>Расшифруй сам:</b></p><p><code>51 16 41 42 56</code></p></div></div>
+ <h2>2. Коды ФСИН</h2>
+ <p style="font-size:9.5pt">Короткий сигнал в чате или на записке: «<b>ФСИН-</b>» и цифра.</p>
+ <table class="t cd"><tr><th style="width:24mm">Код</th><th>Значение</th><th style="width:24mm">Код</th><th>Значение</th></tr><tr><td><b>ФСИН-0</b></td><td>Всё спокойно</td><td><b>ФСИН-5</b></td><td>Суд на следующей перемене</td></tr><tr><td><b>ФСИН-1</b></td><td>Сбор</td><td><b>ФСИН-6</b></td><td>Отбой, расходимся</td></tr><tr><td><b>ФСИН-2</b></td><td>Операция начата</td><td><b>ФСИН-7</b></td><td>Нужна помощь</td></tr><tr><td><b>ФСИН-3</b></td><td>Нужен адвокат</td><td><b>ФСИН-8</b></td><td>Задержанный сказал «стоп» — освобождён</td></tr><tr><td><b>ФСИН-4</b></td><td>Задержание проведено</td><td><b>ФСИН-9</b></td><td>Срочно к Лидеру</td></tr></table>
+ <div class="box" style="margin-top:4mm"><p><b>Правило:</b> шифр — для своих. Таблицу не показывать посторонним, после прочтения записку выбросить.</p></div></div>
+</body></html>
