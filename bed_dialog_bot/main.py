@@ -557,12 +557,15 @@ async def _backup_loop(application: Application) -> None:
     import os
     import sqlite3
     import tempfile
+    import gzip
+    import shutil
 
     interval = max(1, config.BACKUP_INTERVAL_HOURS) * 3600
     while True:
         await asyncio.sleep(interval)
+        tmp = os.path.join(tempfile.gettempdir(), "bed_dialog_backup.db")
+        gz = tmp + ".gz"
         try:
-            tmp = os.path.join(tempfile.gettempdir(), "bed_dialog_backup.db")
             # Online backup — safe to run while the bot is using the DB.
             src = sqlite3.connect(DB_PATH)
             dst = sqlite3.connect(tmp)
@@ -570,17 +573,35 @@ async def _backup_loop(application: Application) -> None:
                 src.backup(dst)
             src.close()
             dst.close()
+            # Gzip it — a SQLite DB compresses several-fold, keeping us under
+            # Telegram's 50 MB bot-upload limit far longer.
+            with open(tmp, "rb") as f_in, gzip.open(gz, "wb", compresslevel=9) as f_out:
+                shutil.copyfileobj(f_in, f_out)
             import time as _t
             stamp = _t.strftime("%Y-%m-%d_%H-%M")
-            with open(tmp, "rb") as fh:
-                await application.bot.send_document(
-                    chat_id=config.BACKUP_CHAT_ID, document=fh,
-                    filename=f"bed_dialog_{stamp}.db",
-                    caption=f"💾 Авто-бэкап БД ({stamp})",
-                )
-            os.remove(tmp)
+            size = os.path.getsize(gz)
+            if size > 49 * 1024 * 1024:
+                # Too large even compressed — don't fail silently; warn the admin.
+                await application.bot.send_message(
+                    chat_id=config.BACKUP_CHAT_ID,
+                    text=(f"⚠️ Авто-бэкап БД не отправлен: архив {size // 1024 // 1024} МБ "
+                          f"(> лимита Telegram 50 МБ). База разрослась — нужна чистка "
+                          f"старых захватов или внешний бэкап."))
+            else:
+                with open(gz, "rb") as fh:
+                    await application.bot.send_document(
+                        chat_id=config.BACKUP_CHAT_ID, document=fh,
+                        filename=f"bed_dialog_{stamp}.db.gz",
+                        caption=f"💾 Авто-бэкап БД ({stamp}, {size // 1024 // 1024 or 1} МБ, gzip)",
+                    )
         except Exception:
             logger.exception("Backup failed")
+        finally:
+            for p in (tmp, gz):
+                try:
+                    os.remove(p)
+                except Exception:
+                    pass
 
 
 async def _post_init(application: Application) -> None:
