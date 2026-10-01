@@ -101,6 +101,11 @@ body{font-family:"DejaVu Sans",sans-serif}
 .card.judge .fsin,.card.judge .v.rank,.card.judge .cfsin,.card.judge .motto{background:linear-gradient(180deg,#fff4c8,#d9b44a 50%,#8a6a1c);-webkit-background-clip:text;color:transparent}
 .card.judge .photo,.card.judge .sign .line{border-color:#c9a54a}
 .card.judge .motto{font-size:24px;letter-spacing:2px}
+/* прокуратура: изумруд с серебром */
+.card.pros{border-color:#5fbf9a;background:radial-gradient(ellipse at 20% 0%,#123a2e 0%,#0b241c 55%,#06140f 100%)}
+.card.pros::before{border-color:rgba(120,210,170,.4)}
+.card.pros .fsin,.card.pros .v.rank,.card.pros .cfsin,.card.pros .motto{background:linear-gradient(180deg,#eafff5,#8fd9b8 50%,#3c8f6c);-webkit-background-clip:text;color:transparent}
+.card.pros .photo,.card.pros .sign .line{border-color:#5fbf9a}
 /* пресс-служба: белое серебро */
 .card.press{border-color:#e8eaee}
 .card.press::before{border-color:rgba(255,255,255,.5)}
@@ -143,7 +148,16 @@ body{font-family:"DejaVu Sans",sans-serif}
    <g transform="rotate(-35 100 95)"><rect x="66" y="66" width="58" height="26" rx="5" fill="url(#gd)"/><rect x="91" y="90" width="9" height="56" rx="3" fill="url(#gd)"/></g>
    <rect x="62" y="134" width="56" height="9" rx="2" fill="url(#gd)"/>
   </symbol>
-  <linearGradient id="wt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c9ced8"/></linearGradient>
+  <linearGradient id="em" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#eafff5"/><stop offset=".5" stop-color="#8fd9b8"/><stop offset="1" stop-color="#3c8f6c"/></linearGradient>
+  <symbol id="embR" viewBox="0 0 200 200">
+   <path d="M100 18 L172 44 V100 C172 142 140 170 100 184 C60 170 28 142 28 100 V44 Z" fill="#0b241c" stroke="url(#em)" stroke-width="6"/>
+   <path d="M100 32 L160 54 V100 C160 134 134 158 100 170 C66 158 40 134 40 100 V54 Z" fill="none" stroke="url(#em)" stroke-width="2" opacity=".6"/>
+   <path d="M100 46 L108 60 V128 H92 V60 Z" fill="url(#em)"/>
+   <rect x="72" y="126" width="56" height="8" rx="3" fill="url(#em)"/>
+   <rect x="95" y="134" width="10" height="20" rx="2" fill="url(#em)"/>
+   <circle cx="100" cy="158" r="6" fill="url(#em)"/>
+  </symbol>
+  <linearGradient id="wt"x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c9ced8"/></linearGradient>
   <symbol id="embW" viewBox="0 0 200 200">
    <path d="M100 18 L172 44 V100 C172 142 140 170 100 184 C60 170 28 142 28 100 V44 Z" fill="#15161b" stroke="url(#wt)" stroke-width="6"/>
    <path d="M100 32 L160 54 V100 C160 134 134 158 100 170 C66 158 40 134 40 100 V54 Z" fill="none" stroke="url(#wt)" stroke-width="2" opacity=".6"/>
@@ -193,6 +207,13 @@ const KINDS = {
         motto2:'ЗАКОН · ПРАВДА · СПРАВЕДЛИВОСТЬ', ctype:'УДОСТОВЕРЕНИЕ СУДЬИ',
         powers:['Проводить заседания Суда ФСИН в Зале суда', 'Выносить обвинительные и оправдательные решения',
                 'Выдавать ордера на задержание и повестки', 'Давать указания приставам в Зале суда', 'Прекращать дела за примирением сторон']},
+  pros: {cls:' pros', emb:'embR', sub:'ПРОКУРАТУРА ФСИН', num:'ПРОКУРОР №', rank:'Статус', dep:['Прокуратура','Прокуратура'], type:'УДОСТОВЕРЕНИЕ ПРОКУРОРА',
+        ring:'★ ПРОКУРАТУРА ФСИН ★ ЗАКОН И НАДЗОР ★', ink:'#5fbf9a', motto:'ЗАКОН<br>НАДЗОР<br>ЧЕСТНОСТЬ',
+        vow:'«Клянусь следить за соблюдением Кодекса ФСИН всеми, включая сотрудников, и поддерживать обвинение честно»', rights:'ПРОКУРОР ИМЕЕТ ПРАВО',
+        motto2:'ЗАКОН · НАДЗОР · ЧЕСТНОСТЬ', ctype:'УДОСТОВЕРЕНИЕ ПРОКУРОРА',
+        powers:['Поддерживать обвинение в Суде ФСИН', 'Проверять законность задержаний и ордеров',
+                'Требовать освобождения при нарушении правил задержания', 'Возбуждать дела по ст. 104 против сотрудников ФСИН',
+                'Опротестовывать незаконные приказы и решения']},
   press: {cls:' press', emb:'embW', sub:'ПРЕСС-СЛУЖБА ФСИН', num:'ПРЕСС №', rank:'Звание', dep:['Канал','Каналы'], type:'УДОСТОВЕРЕНИЕ ПРЕССЫ',
         ring:'★ ПРЕСС-СЛУЖБА ФСИН ★ ПРАВДА И СЛОВО ★', ink:'#e8eaee', motto:'ПРАВДА<br>СЛОВО<br>ЧЕСТЬ',
         vow:'«Клянусь сообщать только правду и не снимать никого без согласия»', rights:'ПРЕССА ИМЕЕТ ПРАВО',
