@@ -61,6 +61,9 @@ ULTRA_FOREVER_BED_PRICE = int(os.environ.get("ULTRA_FOREVER_BED_PRICE", "290"))
 ULTRA_GRACE_DAYS = int(os.environ.get("ULTRA_GRACE_DAYS", "3"))
 # Discount on buying BED with Stars for ULTRA users (0.15 = -15%).
 ULTRA_BED_DISCOUNT = float(os.environ.get("ULTRA_BED_DISCOUNT", "0.15"))
+# 🔱 ULTRA .animateall: only auto-animate messages up to this many characters
+# (longer messages are sent normally — no letter-by-letter typing).
+AUTO_ANIMATE_MAX_CHARS = int(os.environ.get("AUTO_ANIMATE_MAX_CHARS", "50"))
 # Wallet: premium days you get per 1 BED via /exchange.
 BED_DAYS_PER_UNIT = int(os.environ.get("BED_DAYS_PER_UNIT", "3"))
 # Dice game: win chance and payout multiplier.

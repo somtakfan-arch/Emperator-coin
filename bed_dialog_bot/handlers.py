@@ -657,7 +657,8 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
                 if emosuf:
                     styled = f"{styled} {emosuf}"
             autoanim = (storage.is_ultra(owner_id)
-                        and storage.get_setting(f"autoanimate:{owner_id}") == "1")
+                        and storage.get_setting(f"autoanimate:{owner_id}") == "1"
+                        and len(message.text) <= config.AUTO_ANIMATE_MAX_CHARS)
             if styled and not autoanim:
                 try:
                     await context.bot.edit_message_text(
