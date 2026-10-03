@@ -7,6 +7,7 @@ on:
       - claude/reminder-app-store-vvvqle
       - claude/stickman-animation-app-m7mn0x
       - claude/2-4-player-games-clone-67aaml
+      - claude/emperator-case-game
   workflow_dispatch:
 
 permissions:
