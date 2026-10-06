@@ -5,7 +5,7 @@ import {
   sendPasswordResetEmail, updateProfile, signOut,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-auth.js";
 import {
-  doc, runTransaction, onSnapshot, serverTimestamp,
+  doc, runTransaction, onSnapshot, serverTimestamp, updateDoc,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { auth, db } from "./firebase.js";
 
@@ -103,6 +103,12 @@ export async function loginGoogle() {
     }
     throw e;
   }
+}
+
+export async function updateNick(raw) {
+  const nick = String(raw || "").replace(/\s+/g, " ").trim();
+  if (nick.length < 2 || nick.length > 20) throw new Error("Ник — от 2 до 20 символов");
+  await updateDoc(doc(db, "users", auth.currentUser.uid), { nick, updatedAt: serverTimestamp() });
 }
 
 export const resetPassword = (email) => sendPasswordResetEmail(auth, email);

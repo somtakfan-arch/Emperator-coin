@@ -25,3 +25,17 @@ const ICONS = {
 export function icon(name) {
   return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name] || ""}</svg>`;
 }
+
+export const coinIcon = (p, size = "") =>
+  `<span class="coin ${size}" aria-hidden="true">${p ? p.glyph : "$"}</span>`;
+
+export function sourceBadge(source) {
+  const map = {
+    binance: ["live", "Live · Binance"],
+    coingecko: ["warn", "CoinGecko · обновление раз в 30 с"],
+    offline: ["off", "Нет связи с биржей"],
+    connecting: ["warn", "Подключение…"],
+  };
+  const [cls, text] = map[source] || map.connecting;
+  return `<span class="src-badge ${cls}"><i></i>${text}</span>`;
+}

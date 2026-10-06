@@ -1,7 +1,10 @@
 // Точка входа: сессия, навигация, роутер по #hash.
 import { isConfigured } from "./firebase.js";
-import { initAuth, onSession, logout } from "./auth.js";
+import { initAuth, onSession, logout, updateNick, authError } from "./auth.js";
 import { $, esc, icon, toast } from "./ui.js";
+import { startPrices } from "./market.js";
+import { startUserData, stopUserData } from "./store.js";
+import { startOrderWatcher, stopOrderWatcher } from "./trade.js";
 import authView from "./views/auth.js";
 import markets from "./views/markets.js";
 import trade from "./views/trade.js";
@@ -49,10 +52,14 @@ function markActive(name) {
   document.querySelectorAll("[data-route]").forEach((a) => a.classList.toggle("active", a.dataset.route === name));
 }
 
+let renderedUser = "";
 function renderUser(session) {
   const slot = $("#userSlot");
-  if (!session?.user) { slot.innerHTML = ""; return; }
+  if (!session?.user) { slot.innerHTML = ""; renderedUser = ""; return; }
   const nick = session.profile?.nick || session.user.displayName || "Игрок";
+  const sig = `${session.user.uid}|${nick}`;
+  if (sig === renderedUser) return; // не перерисовываем (и не закрываем меню) на каждое обновление профиля
+  renderedUser = sig;
   slot.innerHTML = `
     <button class="user-chip" id="userBtn" aria-haspopup="true" aria-expanded="false">
       <span class="nick">${esc(nick)}</span>
@@ -60,6 +67,7 @@ function renderUser(session) {
     </button>
     <div class="menu glass" id="userMenu" hidden>
       <div class="menu-head">${esc(nick)}<small>${esc(session.user.email || "")}</small></div>
+      <button id="nickBtn">Сменить ник</button>
       <button id="logoutBtn">Выйти</button>
     </div>`;
   const btn = $("#userBtn");
@@ -68,6 +76,16 @@ function renderUser(session) {
     e.stopPropagation();
     menu.hidden = !menu.hidden;
     btn.setAttribute("aria-expanded", String(!menu.hidden));
+  };
+  $("#nickBtn").onclick = async () => {
+    const next = prompt("Новый ник (2–20 символов)", nick);
+    if (next == null) return;
+    try {
+      await updateNick(next);
+      toast("Ник обновлён", "ok");
+    } catch (e) {
+      toast(e.message || authError(e), "err");
+    }
   };
   $("#logoutBtn").onclick = async () => {
     await logout();
@@ -102,7 +120,7 @@ function route() {
   markActive(name);
   if (key === currentKey) return;
   currentKey = key;
-  document.title = `${ROUTES[name].label} · Emperator Exchange`;
+  document.title = `${ROUTES[name].label} · Bed Exchange`;
   mount(ROUTES[name].view, params);
 }
 
@@ -113,12 +131,20 @@ renderNav();
 if (!isConfigured) {
   mount(authView, ["no-config"]);
 } else {
+  startPrices();
   initAuth();
+  let activeUid = null; // session — один и тот же мутируемый объект, поэтому помним uid отдельно
   onSession((s) => {
-    const wasLogged = !!session?.user;
+    const uid = s.user?.uid || null;
+    if (uid !== activeUid) {
+      stopOrderWatcher();
+      stopUserData();
+      if (uid) { startUserData(uid); startOrderWatcher(); }
+      activeUid = uid;
+      currentKey = null;
+    }
     session = s;
     renderUser(s);
-    if (wasLogged !== !!s.user) currentKey = null;
     if (s.user && !location.hash) location.replace("#/markets");
     route();
   });

@@ -1,6 +1,6 @@
 rules_version = '2';
 
-// Правила для Emperator Exchange (симулятор).
+// Правила для Bed Exchange (симулятор).
 // Вставь целиком: Firebase Console → Firestore Database → Rules → Publish.
 service cloud.firestore {
   match /databases/{database}/documents {

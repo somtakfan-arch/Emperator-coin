@@ -6,7 +6,7 @@ const HTML = (noConfig) => `
 <section class="auth-wrap">
   <div class="glass auth-card">
     <div class="auth-title">
-      <h1>EMPERATOR</h1>
+      <h1>BED</h1>
       <p>Криптобиржа-симулятор. Живые цены — виртуальные деньги.</p>
     </div>
     ${noConfig ? `<div class="notice">Firebase ещё не подключён. Вставь свои ключи в <code>firebase-config.js</code> и обнови страницу.</div>` : ""}
@@ -87,7 +87,7 @@ export default {
       try {
         if (mode === "login") await login(email, password);
         else await register(nick, email, password);
-        toast(mode === "login" ? "С возвращением 👑" : "Аккаунт создан. На счету 10 000 USDT", "ok");
+        toast(mode === "login" ? "С возвращением" : "Аккаунт создан. На счету 10 000 USDT", "ok");
       } catch (e2) {
         err.textContent = authError(e2);
         busy(false);
