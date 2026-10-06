@@ -4,10 +4,10 @@
 //  Эти ключи не секретные — защиту даёт firestore.rules.
 // ─────────────────────────────────────────────────────────────
 export const firebaseConfig = {
-  apiKey: "ВСТАВЬ_API_KEY",
-  authDomain: "ВСТАВЬ_PROJECT_ID.firebaseapp.com",
-  projectId: "ВСТАВЬ_PROJECT_ID",
-  storageBucket: "ВСТАВЬ_PROJECT_ID.firebasestorage.app",
-  messagingSenderId: "ВСТАВЬ_SENDER_ID",
-  appId: "ВСТАВЬ_APP_ID",
+  apiKey: "AIzaSyB2lJf7pxqGoWOGrmwTvX0mi0xffuA90kA",
+  authDomain: "bedsmp-ea41e.firebaseapp.com",
+  projectId: "bedsmp-ea41e",
+  storageBucket: "bedsmp-ea41e.firebasestorage.app",
+  messagingSenderId: "512403837392",
+  appId: "1:512403837392:web:abddd15d49ba712905e9d5",
 };
