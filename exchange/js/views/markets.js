@@ -1,5 +1,5 @@
 // 1. Рынки — список пар, цена, изменение за 24ч, поиск.
-import { PAIRS, onPrices } from "../market.js";
+import { PAIRS, onPrices, tickers } from "../market.js";
 import { fmtPrice, fmtPct, fmtCompact } from "../format.js";
 import { $, coinIcon, sourceBadge } from "../ui.js";
 
@@ -16,6 +16,13 @@ export default {
           <input id="q" type="search" placeholder="Поиск монеты" autocomplete="off" />
         </label>
       </section>
+      <div class="chips" id="sortChips">
+        <button class="chip active" data-s="vol">По объёму</button>
+        <button class="chip" data-s="gain">Рост</button>
+        <button class="chip" data-s="loss">Падение</button>
+        <button class="chip" data-s="price">Цена</button>
+        <button class="chip" data-s="az">А–Я</button>
+      </div>
       <div class="glass market-table">
         <div class="mt-head">
           <span>Пара</span><span class="r">Цена</span><span class="r">24ч</span>
@@ -47,7 +54,30 @@ export default {
       $("#empty", el).hidden = shown > 0;
     };
 
+    // сортировка
+    let sortBy = "vol", lastSort = 0;
+    const SORTS = {
+      vol: (a, b) => (tickers[b.symbol]?.quoteVolume ?? 0) - (tickers[a.symbol]?.quoteVolume ?? 0),
+      gain: (a, b) => (tickers[b.symbol]?.change ?? -1e9) - (tickers[a.symbol]?.change ?? -1e9),
+      loss: (a, b) => (tickers[a.symbol]?.change ?? 1e9) - (tickers[b.symbol]?.change ?? 1e9),
+      price: (a, b) => (tickers[b.symbol]?.price ?? 0) - (tickers[a.symbol]?.price ?? 0),
+      az: (a, b) => a.base.localeCompare(b.base),
+    };
+    const resort = () => {
+      lastSort = Date.now();
+      const rows = $("#rows", el);
+      [...PAIRS].sort(SORTS[sortBy]).forEach((p) => rows.append(rows.querySelector(`[data-symbol="${p.symbol}"]`)));
+    };
+    $("#sortChips", el).onclick = (e) => {
+      const b = e.target.closest(".chip");
+      if (!b) return;
+      sortBy = b.dataset.s;
+      el.querySelectorAll("#sortChips .chip").forEach((c) => c.classList.toggle("active", c === b));
+      resort();
+    };
+
     return onPrices((tickers, source) => {
+      if (Date.now() - lastSort > 5000) resort();
       $("#src", el).innerHTML = sourceBadge(source);
       for (const p of PAIRS) {
         const t = tickers[p.symbol];

@@ -18,9 +18,9 @@ export const r8 = (x) => Math.round(x * 1e8) / 1e8;
 export const floor8 = (x) => Math.floor(x * 1e8 + 1e-6) / 1e8;
 
 // ───────── чтение/запись балансов внутри транзакции ─────────
-const balRef = (uid, coin) => doc(db, "users", uid, "balances", coin);
+export const balRef = (uid, coin) => doc(db, "users", uid, "balances", coin);
 
-async function readBal(tx, ref) {
+export async function readBal(tx, ref) {
   const s = await tx.get(ref);
   return { amount: 0, locked: 0, avgPrice: 0, ...(s.exists() ? s.data() : {}) };
 }
@@ -31,7 +31,7 @@ function clean(v, what) {
   return Math.max(0, x);
 }
 
-function writeBal(tx, ref, b, coin) {
+export function writeBal(tx, ref, b, coin) {
   const amount = clean(b.amount, coin);
   const locked = clean(b.locked, coin);
   tx.set(ref, {

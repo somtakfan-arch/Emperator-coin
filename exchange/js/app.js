@@ -8,6 +8,7 @@ import { startOrderWatcher, stopOrderWatcher } from "./trade.js";
 import authView from "./views/auth.js";
 import markets from "./views/markets.js";
 import trade from "./views/trade.js";
+import nft from "./views/nft.js";
 import wallet from "./views/wallet.js";
 import history from "./views/history.js";
 import leaderboard from "./views/leaderboard.js";
@@ -15,6 +16,7 @@ import leaderboard from "./views/leaderboard.js";
 const ROUTES = {
   markets: { view: markets, label: "Рынки" },
   trade: { view: trade, label: "Торговля" },
+  nft: { view: nft, label: "NFT" },
   wallet: { view: wallet, label: "Кошелёк" },
   history: { view: history, label: "История" },
   leaderboard: { view: leaderboard, label: "Рейтинг" },
