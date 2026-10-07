@@ -1,7 +1,8 @@
 // 3. Кошелёк — балансы, общая стоимость в USDT, прибыль/убыток.
 import { PAIRS, onPrices, getPrice } from "../market.js";
 import { store, onStore, total, portfolioValue, nftsValue } from "../store.js";
-import { nftSvg, itemUsd } from "../nft-data.js";
+import { nftSvg, itemUsd, boxSvg, BOX } from "../nft-data.js";
+import { openReveal } from "./nft.js";
 import { START_USDT } from "../auth.js";
 import { fmtUsd, fmtAmount, fmtPrice, fmtPct } from "../format.js";
 import { $, esc, coinIcon } from "../ui.js";
@@ -78,9 +79,18 @@ export default {
         </${r.pair ? "a" : "div"}>`).join("");
 
       // NFT
-      $("#nftCount", el).textContent = store.nfts.length || "";
+      const nb = store.boxes.length;
+      $("#nftCount", el).textContent = store.nfts.length + nb || "";
       $("#nftTotal", el).textContent = nv ? ` · ${fmtUsd(nv)} USDT` : "";
-      $("#nftList", el).innerHTML = store.nfts.length ? `<div class="nft-grid small">${store.nfts.map((n) => {
+      const boxCard = nb ? `
+          <button class="nft-card glass box-card" id="wOpenBox">
+            ${boxSvg("nft-art")}
+            <div class="nft-meta">
+              <div class="nft-name"><b>Мистери-бокс ×${nb}</b></div>
+              <div class="nft-price"><small class="muted">Открыть за ${BOX.reveal} USDT</small></div>
+            </div>
+          </button>` : "";
+      $("#nftList", el).innerHTML = store.nfts.length || nb ? `<div class="nft-grid small">${boxCard}${store.nfts.map((n) => {
         const v = itemUsd(n.item);
         const pnl = v != null ? v - n.price : null;
         return `
@@ -92,6 +102,7 @@ export default {
             </div>
           </a>`;
       }).join("")}</div>` : '<div class="empty">NFT пока нет — загляни во вкладку <a class="link-btn" href="#/nft">NFT</a></div>';
+      $("#wOpenBox", el)?.addEventListener("click", () => openReveal());
     };
 
     let queued = false;

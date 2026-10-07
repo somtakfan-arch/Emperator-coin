@@ -1,13 +1,13 @@
 // Покупка и продажа NFT. Маркет сам выкупает и продаёт токены по текущей цене.
 // Баланс и владение меняются в одной транзакции.
 import {
-  doc, collection, runTransaction, serverTimestamp,
+  doc, collection, runTransaction, serverTimestamp, getDocs,
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { db } from "./firebase.js";
 import { store } from "./store.js";
 import { getSession } from "./auth.js";
 import { FEE, MIN_TOTAL, TradeError, balRef, readBal, writeBal, r8 } from "./trade.js";
-import { itemUsd } from "./nft-data.js";
+import { itemUsd, BOX, allItems, pickWeighted } from "./nft-data.js";
 
 const EPS = 1e-6;
 
@@ -58,4 +58,63 @@ export async function sellNft(item) {
     });
     return { price, fee, profit: price - fee - (owned.data().price || 0) };
   });
+}
+
+// ───────── мистери-бокс ─────────
+export async function buyBox() {
+  const uid = store.uid;
+  const fee = BOX.price * FEE;
+  return runTransaction(db, async (tx) => {
+    const uRef = balRef(uid, "USDT");
+    const usdt = await readBal(tx, uRef);
+    if (usdt.amount + EPS < BOX.price + fee) throw new TradeError("Недостаточно USDT");
+    usdt.amount -= Math.min(BOX.price + fee, usdt.amount);
+    writeBal(tx, uRef, usdt, "USDT");
+    tx.set(doc(collection(db, "users", uid, "boxes")), { price: BOX.price, boughtAt: serverTimestamp() });
+    tx.set(doc(collection(db, "users", uid, "trades")), {
+      pair: "NFT", type: "box", side: "buy", price: BOX.price, amount: 1, total: BOX.price,
+      fee: r8(fee), feeAsset: "USDT", nft: "box", time: serverTimestamp(),
+    });
+  });
+}
+
+class Taken extends Error {}
+
+// Открытие: 10 USDT → случайный свободный токен. Если токен успели купить — тянем другой.
+export async function revealBox(boxId) {
+  const uid = store.uid;
+  const nick = getSession().profile?.nick || "Игрок";
+  const owned = new Set((await getDocs(collection(db, "nfts"))).docs.map((d) => d.id));
+  let pool = allItems().filter((it) => !owned.has(it.id) && itemUsd(it) != null);
+  if (!pool.length) throw new TradeError("Свободных токенов не осталось или нет курса — попробуй позже");
+
+  for (let attempt = 0; attempt < 5 && pool.length; attempt++) {
+    const item = pickWeighted(pool);
+    try {
+      await runTransaction(db, async (tx) => {
+        const bRef = doc(db, "users", uid, "boxes", boxId);
+        const nRef = doc(db, "nfts", item.id);
+        const uRef = balRef(uid, "USDT");
+        const box = await tx.get(bRef);
+        if (!box.exists()) throw new TradeError("Этот бокс уже открыт");
+        if ((await tx.get(nRef)).exists()) throw new Taken();
+        const usdt = await readBal(tx, uRef);
+        if (usdt.amount + EPS < BOX.reveal) throw new TradeError(`Для открытия нужно ${BOX.reveal} USDT`);
+        usdt.amount -= Math.min(BOX.reveal, usdt.amount);
+        writeBal(tx, uRef, usdt, "USDT");
+        tx.delete(bRef);
+        // цена покупки токена = бокс + открытие (для расчёта прибыли)
+        tx.set(nRef, { owner: uid, ownerNick: nick, collection: item.col.id, price: r8(box.data().price + BOX.reveal), boughtAt: serverTimestamp() });
+        tx.set(doc(collection(db, "users", uid, "trades")), {
+          pair: "NFT", type: "reveal", side: "buy", price: BOX.reveal, amount: 1, total: BOX.reveal,
+          fee: 0, feeAsset: "USDT", nft: item.id, time: serverTimestamp(),
+        });
+      });
+      return item;
+    } catch (e) {
+      if (!(e instanceof Taken)) throw e;
+      pool = pool.filter((it) => it !== item);
+    }
+  }
+  throw new TradeError("Не получилось открыть бокс — попробуй ещё раз");
 }

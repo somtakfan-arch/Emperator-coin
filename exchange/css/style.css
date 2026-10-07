@@ -477,6 +477,43 @@ a.asset:hover { background: var(--glass-hover); margin: 0 -10px; padding: 12px 1
 .wallet-nft .count { margin-right: 6px; }
 .nft-grid.small { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
+/* ───────── мистери-бокс ───────── */
+.section-title { margin: 22px 0 12px; font-family: var(--serif); font-weight: 600; font-size: 22px; letter-spacing: .03em; }
+.box-hero { display: grid; gap: 14px; padding: 14px; }
+.box-art { width: 150px; margin: 0 auto; }
+.box-float { animation: float 4s ease-in-out infinite; }
+@keyframes float { 50% { transform: translateY(-4px); } }
+.box-title { margin: 0; font-family: var(--serif); font-weight: 600; font-size: 24px; }
+.box-info p { margin: 6px 0 12px; }
+.box-odds { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 8px; }
+.odd { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; }
+.box-actions { display: grid; gap: 8px; margin-top: 12px; }
+button.nft-card { width: 100%; text-align: left; color: inherit; font: inherit; }
+
+.modal-back {
+  position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px;
+  background: rgba(4,5,7,.6); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  animation: toast-in .2s ease-out;
+}
+.modal { width: 100%; max-width: 380px; padding: 20px; background: var(--glass-strong); }
+.reveal { text-align: center; }
+.reveal-stage { width: 220px; margin: 4px auto 14px; }
+.reveal-box.shaking { animation: shake .45s ease-in-out infinite; }
+@keyframes shake {
+  0%, 100% { transform: rotate(0) scale(1); }
+  25% { transform: rotate(-4deg) scale(1.02); }
+  75% { transform: rotate(4deg) scale(1.02); }
+}
+.reveal-item { animation: pop .5s cubic-bezier(.2, 1.4, .4, 1); border-radius: 14px; }
+@keyframes pop { from { transform: scale(.6) rotateY(90deg); opacity: 0; } }
+.reveal-item.t-rare { box-shadow: 0 0 30px rgba(143,191,255,.35); }
+.reveal-item.t-epic { box-shadow: 0 0 34px rgba(201,162,255,.45); }
+.reveal-item.t-leg { box-shadow: 0 0 44px rgba(233,236,240,.6); }
+#rvText { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 0 0 14px; }
+.rv-name { font-size: 18px; color: var(--text); }
+.rv-price { color: var(--text); }
+.reveal-actions { display: grid; gap: 8px; }
+
 @media (max-width: 899px) { .hide-m { display: none !important; } }
 
 /* ───────── десктоп ───────── */
@@ -524,6 +561,9 @@ a.asset:hover { background: var(--glass-hover); margin: 0 -10px; padding: 12px 1
   .nft-grid.small { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
   .nft-item { grid-template-columns: minmax(0, 1fr) 420px; align-items: start; }
   .wallet-nft { grid-column: 1 / -1; }
+  .box-hero { grid-template-columns: 200px minmax(0, 1fr); align-items: center; padding: 18px 22px; }
+  .box-art { width: 200px; }
+  .box-actions { grid-template-columns: auto auto; justify-content: start; }
   .hrow > .r, .hlist-head .r { text-align: right; }
 }
 
