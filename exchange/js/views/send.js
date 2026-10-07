@@ -125,5 +125,5 @@ export function openSend(prefill = {}) {
     }
   };
   refresh();
-  to.focus();
+  if (prefill.to) { to.value = prefill.to; to.dispatchEvent(new Event("input")); } else to.focus();
 }

@@ -16,6 +16,7 @@ export default {
     el.innerHTML = `
       <section class="page-head">
         <div><h1 class="page-title">История сделок</h1><p class="page-sub" id="hSub">Все исполненные сделки</p></div>
+        <button class="btn btn-sm" id="csvBtn">⬇ Скачать CSV</button>
       </section>
       <div class="chips" id="chips">
         <button class="chip active" data-f="">Все</button>
@@ -101,6 +102,21 @@ export default {
       draw();
     };
     $("#more", el).onclick = () => { n += PAGE; subscribe(); };
+
+    // выгрузка всей истории в CSV (открывается в Excel / Numbers / Google Таблицах)
+    $("#csvBtn", el).onclick = async () => {
+      const { loadTrades } = await import("../stats.js");
+      const rows = await loadTrades(store.uid, 1000);
+      const head = ["Время", "Пара", "Тип", "Сторона", "Цена", "Количество", "Сумма", "Комиссия", "Валюта комиссии", "NFT"];
+      const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+      const lines = rows.map((t) => [fmtDate(t.time?.toMillis?.()), t.pair, t.type, t.side === "buy" ? "покупка" : "продажа", t.price, t.amount, t.total, t.fee, t.feeAsset, t.nft ? getItem(t.nft)?.name || t.nft : ""].map(q).join(";"));
+      const blob = new Blob(["\ufeff" + [head.map(q).join(";"), ...lines].join("\n")], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `bed-exchange-history-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    };
 
     subscribe();
     return () => unsub?.();

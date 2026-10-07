@@ -4,6 +4,7 @@ import { store, onStore, total, portfolioValue, nftsValue } from "../store.js";
 import { nftSvg, itemUsd, boxSvg, BOX } from "../nft-data.js";
 import { openReveal } from "./nft.js";
 import { openSend, openReceive, copyText } from "./send.js";
+import { openSwap } from "./swap.js";
 import { addressOf, onTransfers } from "../transfer.js";
 import { getItem } from "../nft-data.js";
 import { fmtDate } from "../format.js";
@@ -19,7 +20,7 @@ export default {
   render(el) {
     el.innerHTML = `
       <section class="page-head"><div><h1 class="page-title">Кошелёк</h1><p class="page-sub">Все суммы — виртуальные USDT</p></div>
-        <div class="head-actions"><button class="btn btn-sm" id="recvBtn">↓ Получить</button><button class="btn btn-sm btn-primary" id="sendBtn">↑ Отправить</button></div>
+        <div class="head-actions"><button class="btn btn-sm" id="recvBtn">↓ Получить</button><button class="btn btn-sm" id="swapBtn">⇄ Обмен</button><button class="btn btn-sm btn-primary" id="sendBtn">↑ Отправить</button></div>
       </section>
       <div class="glass addr-card">
         <div><small class="muted">Мой адрес</small><code id="myAddr"></code></div>
@@ -124,6 +125,7 @@ export default {
     $("#copyAddr", el).onclick = () => copyText(addr);
     $("#recvBtn", el).onclick = openReceive;
     $("#sendBtn", el).onclick = () => openSend();
+    $("#swapBtn", el).onclick = () => openSwap();
 
     const drawTx = (st) => {
       if (!alive) return;

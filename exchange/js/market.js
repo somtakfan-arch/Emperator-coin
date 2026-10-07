@@ -114,6 +114,31 @@ export function liveStream(streams, onWs, poll, { pollMs = 3000, timeoutMs = 600
   return () => { stopped = true; stopWs(); clearInterval(watchdog); clearInterval(pollTimer); clearTimeout(first); };
 }
 
+// Мини-графики за 7 дней (4-часовые свечи), кэш на 10 минут.
+const sparkCache = new Map();
+export async function fetchSpark(symbol) {
+  const c = sparkCache.get(symbol);
+  if (c && Date.now() - c.t < 600e3) return c.data;
+  const data = (await fetchKlines(symbol, "4h", { limit: 42 })).map((k) => k.close);
+  sparkCache.set(symbol, { t: Date.now(), data });
+  return data;
+}
+
+// Последние сделки на бирже (лента).
+export const fetchTrades = async (symbol, limit = 30) =>
+  (await binanceGet(`/api/v3/trades?symbol=${symbol}&limit=${limit}`)).map((t) => ({ price: +t.price, qty: +t.qty, time: t.time, buyerMaker: t.isBuyerMaker }));
+
+// Индекс страха и жадности (alternative.me), кэш на час.
+let fng = null;
+export async function fetchFearGreed() {
+  if (fng && Date.now() - fng.t < 3600e3) return fng.data;
+  const r = await fetch("https://api.alternative.me/fng/?limit=8");
+  const j = await r.json();
+  const data = j.data.map((d) => ({ value: +d.value, label: d.value_classification }));
+  fng = { t: Date.now(), data };
+  return data;
+}
+
 export const fetchDepth = (symbol, limit = 20) => binanceGet(`/api/v3/depth?symbol=${symbol}&limit=${limit}`);
 
 // ───────── тикеры (цены всех пар) ─────────

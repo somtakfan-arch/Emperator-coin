@@ -1,11 +1,14 @@
 // 2. Торговля — график, стакан, форма купить/продать, открытые ордера.
-import { PAIRS, pairBySymbol, onPrices, tickers, getPrice, fetchKlines, fetchDepth, wsKline, liveStream } from "../market.js";
+import { PAIRS, pairBySymbol, onPrices, tickers, getPrice, fetchKlines, fetchDepth, fetchTrades, wsKline, liveStream } from "../market.js";
+import { isFav, toggleFav, prefs, onPrefs } from "../prefs.js";
+import { addAlert, removeAlert } from "../alerts.js";
+import { sfx } from "../sound.js";
 import { store, onStore } from "../store.js";
 import { marketOrder, placeLimit, cancelOrder, tradeError, FEE, MIN_TOTAL, floor8 } from "../trade.js";
 import { fmtPrice, fmtPct, fmtAmount, fmtUsd, fmtCompact, fmtDate, priceDecimals, parseNum, toInput } from "../format.js";
 import { $, esc, toast, coinIcon, sourceBadge } from "../ui.js";
 
-const TFS = [["1m", "1м"], ["15m", "15м"], ["1h", "1ч"], ["1d", "1д"]];
+const TFS = [["1m", "1м"], ["5m", "5м"], ["15m", "15м"], ["1h", "1ч"], ["4h", "4ч"], ["1d", "1д"], ["1w", "1н"]];
 const UP = "#5fae8f", DOWN = "#c97474";
 
 export default {
@@ -27,6 +30,8 @@ export default {
             </select>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m6 9 6 6 6-6"/></svg>
           </label>
+          <button class="icon-btn fav ${isFav(symbol) ? "on" : ""}" id="favBtn" title="В избранное">★</button>
+          <button class="icon-btn" id="alertBtn" title="Ценовой алерт">🔔<span class="badge" id="alertCount"></span></button>
         </div>
         <div class="tr-last">
           <div class="tr-price" id="lastPrice">—</div>
@@ -46,17 +51,23 @@ export default {
             ${TFS.map(([v, l], i) => `<button type="button" data-tf="${v}" class="${i === 0 ? "active" : ""}">${l}</button>`).join("")}
           </div>
           <span class="muted small" id="ohlc"></span>
-          <span class="ma-legend small"><i class="ma7"></i>MA7 <i class="ma25"></i>MA25</span>
+          <span class="ma-legend small"><i class="ma7"></i>MA7 <i class="ma25"></i>MA25 <button class="chip mini" id="rsiBtn">RSI</button></span>
         </div>
         <div class="chart-box" id="chart"><div class="chart-msg" id="chartMsg"><div class="spinner"></div></div></div>
       </div>
 
       <div class="tr-book glass">
-        <h3 class="card-title">Стакан</h3>
-        <div class="book-head"><span>Цена (USDT)</span><span class="r">Кол-во (${base})</span><span class="r">Сумма</span></div>
-        <div class="book-side asks" id="asks"></div>
-        <div class="book-mid" id="bookMid">—</div>
-        <div class="book-side bids" id="bids"></div>
+        <div class="book-tabs" id="bookTabs"><button class="active" data-bt="book">Стакан</button><button data-bt="trades">Сделки</button></div>
+        <div id="bookPane">
+          <div class="book-head"><span>Цена (USDT)</span><span class="r">Кол-во (${base})</span><span class="r">Сумма</span></div>
+          <div class="book-side asks" id="asks"></div>
+          <div class="book-mid" id="bookMid">—</div>
+          <div class="book-side bids" id="bids"></div>
+        </div>
+        <div id="tradesPane" hidden>
+          <div class="book-head"><span>Цена (USDT)</span><span class="r">Кол-во (${base})</span><span class="r">Время</span></div>
+          <div id="tradeFeed"><div class="boot"><div class="spinner"></div></div></div>
+        </div>
       </div>
 
       <div class="tr-form glass">
@@ -103,6 +114,42 @@ export default {
 
     // ───────── шапка пары ─────────
     $("#pairSel", el).onchange = (e) => (location.hash = `#/trade/${e.target.value}`);
+    $("#favBtn", el).onclick = (e) => { toggleFav(symbol); e.currentTarget.classList.toggle("on", isFav(symbol)); };
+    const drawAlertCount = () => { const n = prefs().alerts.filter((a) => a.symbol === symbol).length; $("#alertCount", el).textContent = n || ""; };
+    drawAlertCount();
+    stops.push(onPrefs(drawAlertCount));
+    $("#alertBtn", el).onclick = () => openAlerts(pair);
+
+    // ───────── лента сделок ─────────
+    let feed = [], feedQueued = false, feedOn = false;
+    const drawFeed = () => {
+      feedQueued = false;
+      if (!alive || !feedOn) return;
+      $("#tradeFeed", el).innerHTML = feed.slice(0, isDesktop() ? 24 : 16).map((t) => `
+        <div class="book-row"><span class="${t.buyerMaker ? "down" : "up"}">${fmtPrice(t.price)}</span><span class="r">${fmtAmount(t.qty, 5)}</span>
+        <span class="r muted">${new Date(t.time).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span></div>`).join("") || '<div class="empty">Нет данных</div>';
+    };
+    const pushTrades = (list) => {
+      const seen = new Set(feed.map((t) => t.time + ":" + t.price + ":" + t.qty));
+      feed = [...list.filter((t) => !seen.has(t.time + ":" + t.price + ":" + t.qty)), ...feed].sort((a, b) => b.time - a.time).slice(0, 40);
+      if (!feedQueued) { feedQueued = true; setTimeout(drawFeed, 300); }
+    };
+    let feedStop = null;
+    $("#bookTabs", el).onclick = (e) => {
+      const b = e.target.closest("button[data-bt]");
+      if (!b) return;
+      el.querySelectorAll("#bookTabs button").forEach((x) => x.classList.toggle("active", x === b));
+      feedOn = b.dataset.bt === "trades";
+      $("#bookPane", el).hidden = feedOn;
+      $("#tradesPane", el).hidden = !feedOn;
+      if (feedOn && !feedStop) {
+        feedStop = liveStream([`${symbol.toLowerCase()}@trade`],
+          (_, d) => pushTrades([{ price: +d.p, qty: +d.q, time: d.T, buyerMaker: d.m }]),
+          async () => pushTrades(await fetchTrades(symbol, 30)), { pollMs: 2500, timeoutMs: 4000 });
+        stops.push(() => feedStop?.());
+      }
+      drawFeed();
+    };
     // ───────── график ─────────
     const LWC = window.LightweightCharts;
     let chart = null, candles = null, volume = null, klineStop = null, tfToken = 0;
@@ -135,6 +182,35 @@ export default {
       const ma7 = chart.addSeries(LWC.LineSeries, maOpts("rgba(233,236,240,0.75)"));
       const ma25 = chart.addSeries(LWC.LineSeries, maOpts("rgba(201,162,255,0.7)"));
       let closes = [];
+      // RSI(14) — отдельной панелью под графиком
+      let rsi = null;
+      const rsiData = (arr, n = 14) => {
+        const out = [];
+        let g = 0, l = 0;
+        for (let i = 1; i < arr.length; i++) {
+          const d = arr[i].close - arr[i - 1].close;
+          const up = Math.max(d, 0), dn = Math.max(-d, 0);
+          if (i <= n) { g += up / n; l += dn / n; if (i < n) continue; }
+          else { g = (g * (n - 1) + up) / n; l = (l * (n - 1) + dn) / n; }
+          out.push({ time: arr[i].time, value: l === 0 ? 100 : 100 - 100 / (1 + g / l) });
+        }
+        return out;
+      };
+      const setRsi = (on) => {
+        if (on && !rsi) {
+          rsi = chart.addSeries(LWC.LineSeries, { color: "#c9a2ff", lineWidth: 1.5, priceLineVisible: false, lastValueVisible: true,
+            autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }) }, 1);
+          rsi.createPriceLine({ price: 70, color: "rgba(201,116,116,.5)", lineStyle: 2, lineWidth: 1, axisLabelVisible: false });
+          rsi.createPriceLine({ price: 30, color: "rgba(95,174,143,.5)", lineStyle: 2, lineWidth: 1, axisLabelVisible: false });
+          try { chart.panes()[1].setHeight(isDesktop() ? 110 : 80); } catch { /* старый API */ }
+          rsi.setData(rsiData(closes));
+        } else if (!on && rsi) {
+          chart.removeSeries(rsi);
+          rsi = null;
+          try { chart.removePane(1); } catch { /* уже удалена */ }
+        }
+      };
+      $("#rsiBtn", el).onclick = (e) => { e.currentTarget.classList.toggle("active", !rsi); setRsi(!rsi); };
       const maAt = (arr, n, i) => { if (i + 1 < n) return null; let s = 0; for (let k = i - n + 1; k <= i; k++) s += arr[k].close; return s / n; };
       const maData = (arr, n) => arr.map((c, i) => ({ time: c.time, value: maAt(arr, n, i) })).filter((p) => p.value != null);
       const volBar = (c) => ({ time: c.time, value: c.volume, color: c.close >= c.open ? "rgba(95,174,143,0.28)" : "rgba(201,116,116,0.28)" });
@@ -158,6 +234,7 @@ export default {
           closes = data.slice();
           ma7.setData(maData(closes, 7));
           ma25.setData(maData(closes, 25));
+          if (rsi) rsi.setData(rsiData(closes));
           chart.timeScale().fitContent();
           chart.timeScale().scrollToRealTime();
           chartMsg("");
@@ -171,6 +248,7 @@ export default {
             const i = closes.length - 1;
             if (i >= 6) ma7.update({ time: c.time, value: maAt(closes, 7, i) });
             if (i >= 24) ma25.update({ time: c.time, value: maAt(closes, 25, i) });
+            if (rsi && i >= 15) { const r = rsiData(closes.slice(-200)).at(-1); if (r) rsi.update(r); }
           };
           klineStop = liveStream(
             [`${symbol.toLowerCase()}@kline_${tf}`],
@@ -233,7 +311,7 @@ export default {
     stops.push(() => clearTimeout(bookEmptyTimer));
     // клик по уровню — подставляет цену в лимитку
     el.querySelector(".tr-book").onclick = (e) => {
-      const r = e.target.closest(".book-row");
+      const r = e.target.closest(".book-row[data-price]");
       if (!r) return;
       setType("limit");
       fPrice.value = toInput(+r.dataset.price);
@@ -336,9 +414,11 @@ export default {
         if (type === "market") {
           const r = await marketOrder(symbol, side, q);
           toast(`${side === "buy" ? "Куплено" : "Продано"} ${fmtAmount(r.qty)} ${base} по ${fmtPrice(r.price)}`, "ok");
+          side === "buy" ? sfx.buy() : sfx.sell();
         } else {
           await placeLimit(symbol, side, p, q);
           toast(`Лимитный ордер выставлен: ${fmtAmount(q)} ${base} по ${fmtPrice(p)}`, "ok");
+          sfx.coin();
         }
         fAmount.value = "";
         fTotal.value = "";
@@ -420,3 +500,42 @@ export default {
     return () => stops.forEach((s) => { try { s(); } catch (e) { console.error(e); } });
   },
 };
+
+// ═════════ окно ценовых алертов ═════════
+function openAlerts(pair) {
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  const cur = getPrice(pair.symbol);
+  back.innerHTML = `<div class="modal glass">
+    <h3 class="modal-title">🔔 Алерт · ${pair.base}/USDT</h3>
+    <p class="muted small">Сайт сообщит, когда цена дойдёт до уровня (пока сайт открыт). Сейчас: <b>${cur ? fmtPrice(cur) : "—"}</b></p>
+    <label class="field ifield"><span>Цена</span><input class="input" id="alPrice" inputmode="decimal" placeholder="${cur ? toInput(cur, priceDecimals(cur)) : "0"}" /><em>USDT</em></label>
+    <div class="pct" id="alQuick">${[-5, -2, 2, 5].map((p) => `<button type="button" data-p="${p}">${p > 0 ? "+" : ""}${p}%</button>`).join("")}</div>
+    <div class="form-error" id="alErr"></div>
+    <button class="btn btn-primary btn-block" id="alAdd">Создать алерт</button>
+    <div id="alList" style="margin-top:12px"></div>
+    <button class="btn btn-block" data-close style="margin-top:8px">Закрыть</button>
+  </div>`;
+  document.body.append(back);
+  back.addEventListener("click", (e) => { if (e.target === back || e.target.closest("[data-close]")) back.remove(); });
+  const inp = back.querySelector("#alPrice");
+  const drawList = () => {
+    const list = prefs().alerts.filter((a) => a.symbol === pair.symbol);
+    back.querySelector("#alList").innerHTML = list.map((a) => `<div class="kv"><span>${a.op === ">" ? "Выше" : "Ниже"} ${fmtPrice(a.price)}</span><button class="link-btn" data-del="${a.id}">удалить</button></div>`).join("");
+  };
+  back.querySelector("#alQuick").onclick = (e) => {
+    const b = e.target.closest("button[data-p]");
+    const c = getPrice(pair.symbol);
+    if (b && c) inp.value = toInput(c * (1 + b.dataset.p / 100), priceDecimals(c));
+  };
+  back.querySelector("#alList").onclick = (e) => { const b = e.target.closest("[data-del]"); if (b) { removeAlert(b.dataset.del); drawList(); } };
+  back.querySelector("#alAdd").onclick = () => {
+    const v = parseNum(inp.value), c = getPrice(pair.symbol);
+    if (!(v > 0) || !c) return (back.querySelector("#alErr").textContent = "Укажи цену");
+    addAlert(pair.symbol, v > c ? ">" : "<", v);
+    toast(`Алерт: ${pair.base} ${v > c ? "выше" : "ниже"} ${fmtPrice(v)}`, "ok");
+    inp.value = "";
+    drawList();
+  };
+  drawList();
+}

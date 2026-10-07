@@ -1,11 +1,15 @@
 // Мелкие UI-утилиты.
+import { prefs, setPref } from "./prefs.js";
+
 export const $ = (sel, root = document) => root.querySelector(sel);
 
 export function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// Уведомления: всплывашка + запись в «колокольчик» (последние 40, на этом устройстве).
 export function toast(text, kind = "") {
+  if (kind) setPref("notifs", [{ text, kind, t: Date.now(), read: false }, ...prefs().notifs].slice(0, 40));
   const box = $("#toasts");
   const el = document.createElement("div");
   el.className = `toast ${kind}`;
