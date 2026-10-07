@@ -7,7 +7,7 @@ import { db } from "./firebase.js";
 import { store } from "./store.js";
 import { getSession } from "./auth.js";
 import { FEE, MIN_TOTAL, TradeError, balRef, readBal, writeBal, r8 } from "./trade.js";
-import { itemUsd, BOX, allItems, pickWeighted } from "./nft-data.js";
+import { itemUsd, BOX, allItems, pickWeighted, TIERS } from "./nft-data.js";
 
 const EPS = 1e-6;
 
@@ -167,4 +167,53 @@ export async function sellMany(items, onProgress = () => {}) {
     }
   }
   return { total, sold };
+}
+
+// ───────── крафт: 3 токена одной редкости → 1 случайный токен следующей ─────────
+export const CRAFT_COST = 3;
+export const craftTarget = (tierName) => {
+  const i = TIERS.findIndex((t) => t.name === tierName);
+  return i > 0 ? TIERS[i - 1] : null; // TIERS идут от легендарного к обычному
+};
+
+export async function craft(items) {
+  const uid = store.uid;
+  if (items.length !== CRAFT_COST) throw new TradeError(`Нужно ровно ${CRAFT_COST} токена`);
+  const tier = items[0].tier;
+  if (items.some((it) => it.tier !== tier)) throw new TradeError("Все токены должны быть одной редкости");
+  const target = craftTarget(tier.name);
+  if (!target) throw new TradeError("Легендарные уже максимальной редкости");
+  const nick = getSession().profile?.nick || "Игрок";
+  const owned = await loadOwned();
+  let pool = allItems().filter((it) => it.tier === target && !owned.has(it.id));
+  if (!pool.length) throw new TradeError(`Свободных токенов редкости «${target.name}» не осталось`);
+
+  for (let attempt = 0; attempt < 5 && pool.length; attempt++) {
+    const result = pool[Math.floor(Math.random() * pool.length)];
+    try {
+      await runTransaction(db, async (tx) => {
+        const refs = items.map((it) => doc(db, "nfts", it.id));
+        const snaps = [];
+        for (const r of refs) snaps.push(await tx.get(r));
+        const tRef = doc(db, "nfts", result.id);
+        if ((await tx.get(tRef)).exists()) throw new Taken();
+        let basis = 0;
+        snaps.forEach((s) => {
+          if (!s.exists() || s.data().owner !== uid) throw new TradeError("Один из токенов тебе уже не принадлежит");
+          basis += s.data().price || 0;
+        });
+        refs.forEach((r) => tx.delete(r));
+        tx.set(tRef, { owner: uid, ownerNick: nick, collection: result.col.id, price: r8(Math.max(basis, 1)), boughtAt: serverTimestamp() });
+        tx.set(doc(collection(db, "users", uid, "trades")), {
+          pair: "NFT", type: "craft", side: "buy", price: r8(Math.max(basis, 1)), amount: 1, total: r8(Math.max(basis, 1)),
+          fee: 0, feeAsset: "USDT", nft: result.id, time: serverTimestamp(),
+        });
+      });
+      return result;
+    } catch (e) {
+      if (!(e instanceof Taken)) throw e;
+      pool = pool.filter((it) => it !== result);
+    }
+  }
+  throw new TradeError("Не получилось скрафтить — попробуй ещё раз");
 }

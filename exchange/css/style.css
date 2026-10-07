@@ -564,6 +564,30 @@ button.nft-card { width: 100%; text-align: left; color: inherit; font: inherit; 
 .tx-main b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .tx-main small { display: block; }
 
+/* ───────── ежедневное, крафт, конфетти ───────── */
+.daily, .craft-card { margin-bottom: 12px; }
+.daily-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.daily-head .card-title { margin: 0; }
+.daily-grid { display: grid; gap: 10px; }
+.daily-box { display: grid; grid-template-columns: 56px 1fr auto; gap: 12px; align-items: center; padding: 10px; border-radius: 12px; border: 1px solid var(--border); background: rgba(255,255,255,.03); }
+.daily-box small { display: block; }
+.quests { display: grid; gap: 8px; }
+.quest { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--border); background: rgba(255,255,255,.025); }
+.quest b { font-weight: 500; font-size: 13.5px; }
+.quest.done { opacity: .55; }
+.q-bar { height: 4px; border-radius: 4px; background: rgba(255,255,255,.08); margin: 6px 0 4px; overflow: hidden; }
+.q-bar i { display: block; height: 100%; background: var(--silver-grad); }
+.craft-rows { display: grid; gap: 8px; }
+.craft-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.05); font-size: 13px; }
+.craft-row:last-child { border-bottom: 0; }
+.ma-legend { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); }
+.ma-legend i { display: inline-block; width: 12px; height: 2px; border-radius: 2px; }
+.ma-legend .ma7 { background: rgba(233,236,240,.75); }
+.ma-legend .ma25 { background: rgba(201,162,255,.7); margin-left: 6px; }
+.confetti { position: fixed; inset: 0; pointer-events: none; z-index: 80; overflow: hidden; }
+.confetti i { position: absolute; top: -12px; width: 7px; height: 11px; border-radius: 2px; animation: confetti-fall linear forwards; }
+@keyframes confetti-fall { to { transform: translate(var(--dx), 105vh) rotate(var(--r)); opacity: .9; } }
+
 @media (max-width: 899px) { .hide-m { display: none !important; } }
 
 /* ───────── десктоп ───────── */
@@ -611,6 +635,8 @@ button.nft-card { width: 100%; text-align: left; color: inherit; font: inherit; 
   .nft-grid.small { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
   .nft-item { grid-template-columns: minmax(0, 1fr) 420px; align-items: start; }
   .wallet-nft { grid-column: 1 / -1; }
+  .daily-grid { grid-template-columns: 300px minmax(0, 1fr); align-items: start; }
+  .quests { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .box-hero { grid-template-columns: 200px minmax(0, 1fr); align-items: center; padding: 18px 22px; }
   .box-art { width: 200px; }
   .box-actions { grid-template-columns: 1fr 1.2fr; gap: 18px; }

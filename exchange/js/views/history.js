@@ -37,6 +37,16 @@ export default {
         const p = pairBySymbol(t.pair);
         const buy = t.side === "buy";
         const it = t.pair === "NFT" ? getItem(t.nft) : null;
+        if (t.type === "quest" || t.type === "daily") return `
+          <div class="hrow">
+            <span class="muted h-time">${fmtDate(t.time?.toMillis?.())}</span>
+            <span class="pair-cell sm"><span class="nft-mini">${boxSvg()}</span><b>${t.type === "daily" ? "Бесплатный бокс" : "Награда за задание"}</b></span>
+            <span class="h-side"><span class="tag up">Бонус</span></span>
+            <span class="r"><small class="lbl">Цена</small>—</span>
+            <span class="r"><small class="lbl">Кол-во</small>1</span>
+            <span class="r"><small class="lbl">Сумма</small>${t.type === "daily" ? "бокс" : `+${fmtUsd(t.total)} USDT`}</span>
+            <span class="r muted"><small class="lbl">Комиссия</small>0</span>
+          </div>`;
         if (t.type === "box") return `
           <div class="hrow">
             <span class="muted h-time">${fmtDate(t.time?.toMillis?.())}</span>
@@ -51,7 +61,7 @@ export default {
           <div class="hrow">
             <span class="muted h-time">${fmtDate(t.time?.toMillis?.())}</span>
             <a class="pair-cell sm" href="#/nft/${it.col.id}/${it.n}"><span class="nft-mini">${nftSvg(it)}</span><b>${esc(it.name)}</b></a>
-            <span class="h-side"><span class="tag ${buy ? "up" : "down"}">${t.type === "reveal" ? "Из бокса" : buy ? "Покупка" : "Продажа"}</span><small class="muted">NFT</small></span>
+            <span class="h-side"><span class="tag ${buy ? "up" : "down"}">${t.type === "reveal" ? "Из бокса" : t.type === "craft" ? "Крафт" : buy ? "Покупка" : "Продажа"}</span><small class="muted">NFT</small></span>
             <span class="r"><small class="lbl">Цена</small>${fmtUsd(t.price)}</span>
             <span class="r"><small class="lbl">Кол-во</small>1 шт</span>
             <span class="r"><small class="lbl">Сумма</small>${fmtUsd(t.total)}</span>
