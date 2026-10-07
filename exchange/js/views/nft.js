@@ -217,6 +217,8 @@ function renderCollection(el, col) {
         <button class="chip active" data-f="all">Все</button><button class="chip" data-f="free">Свободные</button>
         <button class="chip" data-f="mine">Мои</button><button class="chip" data-f="taken">Куплены</button>
       </div>
+      ${items[0].traits["Предмет"] ? `<label class="sort glass"><span class="muted">Предмет</span>
+        <select id="kind"><option value="">Все</option>${[...new Set(items.map((it) => it.traits["Предмет"]))].map((k) => `<option>${k}</option>`).join("")}</select></label>` : ""}
       <label class="sort glass"><span class="muted">Сортировка</span>
         <select id="sort"><option value="rank">Редкость</option><option value="cheap">Цена ↑</option><option value="expensive">Цена ↓</option><option value="n">Номер</option></select>
       </label>
@@ -224,7 +226,7 @@ function renderCollection(el, col) {
     <div class="nft-grid" id="grid"></div>
     <button class="btn btn-block more" id="more" hidden>Показать ещё</button>`;
 
-  let owners = {}, filter = "all", sort = "rank", shown = PAGE, alive = true;
+  let owners = {}, filter = "all", sort = "rank", kind = "", shown = PAGE, alive = true;
   const stops = [() => (alive = false)];
 
   // график флора (детерминированный — считаем сами)
@@ -268,7 +270,7 @@ function renderCollection(el, col) {
       <a class="nft-card glass" href="#/nft/${col.id}/${it.n}" data-id="${it.id}">
         ${nftSvg(it, "nft-art")}
         <div class="nft-meta">
-          <div class="nft-name"><b>${esc(it.col.id === "deck" ? it.name : `#${it.n}`)}</b>${tierBadge(it)}</div>
+          <div class="nft-name"><b>${esc(it.short || (it.col.id === "deck" ? it.name : `#${it.n}`))}</b>${tierBadge(it)}</div>
           <div class="nft-price"><span data-price="${it.id}">—</span>${state}</div>
         </div>
       </a>`;
@@ -276,6 +278,7 @@ function renderCollection(el, col) {
 
   const list = () => {
     let arr = items.filter((it) => {
+      if (kind && it.traits["Предмет"] !== kind) return false;
       const o = owners[it.id];
       return filter === "all" || (filter === "free" && !o) || (filter === "mine" && o?.owner === store.uid) || (filter === "taken" && o);
     });
@@ -318,6 +321,7 @@ function renderCollection(el, col) {
     drawGrid();
   };
   $("#sort", el).onchange = (e) => { sort = e.target.value; shown = PAGE; drawGrid(); };
+  if ($("#kind", el)) $("#kind", el).onchange = (e) => { kind = e.target.value; shown = PAGE; drawGrid(); };
   $("#more", el).onclick = () => { shown += PAGE; drawGrid(); };
 
   drawGrid();
