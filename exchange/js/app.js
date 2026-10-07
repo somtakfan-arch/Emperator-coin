@@ -14,6 +14,9 @@ import wallet from "./views/wallet.js";
 import history from "./views/history.js";
 import leaderboard from "./views/leaderboard.js";
 
+// Подставляется при деплое (scripts/version_assets.py) — видно в меню профиля.
+export const APP_VERSION = "dev";
+
 const ROUTES = {
   markets: { view: markets, label: "Рынки" },
   trade: { view: trade, label: "Торговля" },
@@ -71,6 +74,7 @@ function renderUser(session) {
     <div class="menu glass" id="userMenu" hidden>
       <div class="menu-head">${esc(nick)}<small>${esc(session.user.email || "")}</small></div>
       <button id="nickBtn">Сменить ник</button>
+      <div class="menu-ver">Версия ${APP_VERSION}</div>
       <button id="logoutBtn">Выйти</button>
     </div>`;
   const btn = $("#userBtn");

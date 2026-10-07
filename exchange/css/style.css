@@ -108,6 +108,7 @@ button { cursor: pointer; }
   display: block; width: 100%; text-align: left; padding: 9px 10px; border: 0; border-radius: 8px; background: none;
 }
 .menu button:hover { background: var(--glass-hover); }
+.menu-ver { padding: 6px 10px 4px; font-size: 11px; color: var(--faint); border-top: 1px solid var(--border); margin-top: 4px; }
 
 /* ───────── навигация ───────── */
 .tabbar {
