@@ -21,7 +21,6 @@ export default {
       <div class="chips" id="chips">
         <button class="chip active" data-f="">Все</button>
         <button class="chip" data-f="NFT">NFT</button>
-        ${PAIRS.map((p) => `<button class="chip" data-f="${p.symbol}">${p.base}</button>`).join("")}
       </div>
       <div class="glass card">
         <div class="hlist-head hide-m"><span>Время</span><span>Пара</span><span>Сторона</span><span class="r">Цена</span><span class="r">Кол-во</span><span class="r">Сумма</span><span class="r">Комиссия</span></div>
@@ -31,7 +30,18 @@ export default {
 
     let filter = "", n = PAGE, trades = [], full = false, unsub = null;
 
+    // фильтры — только по тем парам, что есть в истории
+    let chipKey = "";
+    const drawChips = () => {
+      const used = PAIRS.filter((p) => trades.some((t) => t.pair === p.symbol));
+      const key = used.map((p) => p.symbol).join();
+      if (key === chipKey) return;
+      chipKey = key;
+      $("#chips", el).innerHTML = `<button class="chip ${!filter ? "active" : ""}" data-f="">Все</button><button class="chip ${filter === "NFT" ? "active" : ""}" data-f="NFT">NFT</button>`
+        + used.map((p) => `<button class="chip ${filter === p.symbol ? "active" : ""}" data-f="${p.symbol}">${p.stock ? p.ticker : p.base}</button>`).join("");
+    };
     const draw = () => {
+      drawChips();
       const list = filter ? trades.filter((t) => t.pair === filter) : trades;
       $("#hSub", el).textContent = trades.length ? `Сделок: ${trades.length}${full ? "" : "+"}` : "Все исполненные сделки";
       $("#hList", el).innerHTML = list.length ? list.map((t) => {
@@ -71,7 +81,7 @@ export default {
         return `
           <div class="hrow">
             <span class="muted h-time">${fmtDate(t.time?.toMillis?.())}</span>
-            <span class="pair-cell sm">${coinIcon(p, "sm")}<span><b>${p?.base}</b><span class="muted">/USDT</span></span></span>
+            <span class="pair-cell sm">${coinIcon(p, "sm")}<span><b>${p?.stock ? p.ticker : p?.base}</b><span class="muted">${p?.stock ? "" : "/USDT"}</span></span></span>
             <span class="h-side"><span class="tag ${buy ? "up" : "down"}">${buy ? "Покупка" : "Продажа"}</span><small class="muted">${t.type === "limit" ? "лимит" : "рынок"}</small></span>
             <span class="r"><small class="lbl">Цена</small>${fmtPrice(t.price)}</span>
             <span class="r"><small class="lbl">Кол-во</small>${fmtAmount(t.amount)} ${p?.base}</span>
