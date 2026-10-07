@@ -3,6 +3,10 @@ import { PAIRS, onPrices, getPrice } from "../market.js";
 import { store, onStore, total, portfolioValue, nftsValue } from "../store.js";
 import { nftSvg, itemUsd, boxSvg, BOX } from "../nft-data.js";
 import { openReveal } from "./nft.js";
+import { openSend, openReceive, copyText } from "./send.js";
+import { addressOf, onTransfers } from "../transfer.js";
+import { getItem } from "../nft-data.js";
+import { fmtDate } from "../format.js";
 import { START_USDT } from "../auth.js";
 import { fmtUsd, fmtAmount, fmtPrice, fmtPct } from "../format.js";
 import { $, esc, coinIcon } from "../ui.js";
@@ -14,7 +18,13 @@ const signed = (v) => (Math.abs(v) < 0.005 ? "0.00" : `${v > 0 ? "+" : "−"}${f
 export default {
   render(el) {
     el.innerHTML = `
-      <section class="page-head"><div><h1 class="page-title">Кошелёк</h1><p class="page-sub">Все суммы — виртуальные USDT</p></div></section>
+      <section class="page-head"><div><h1 class="page-title">Кошелёк</h1><p class="page-sub">Все суммы — виртуальные USDT</p></div>
+        <div class="head-actions"><button class="btn btn-sm" id="recvBtn">↓ Получить</button><button class="btn btn-sm btn-primary" id="sendBtn">↑ Отправить</button></div>
+      </section>
+      <div class="glass addr-card">
+        <div><small class="muted">Мой адрес</small><code id="myAddr"></code></div>
+        <button class="btn btn-sm" id="copyAddr">Копировать</button>
+      </div>
       <div class="wallet-grid">
         <div class="glass card hero">
           <p class="card-title">Стоимость портфеля</p>
@@ -27,6 +37,10 @@ export default {
           <p class="card-title">Активы</p>
           <div class="asset-head hide-m"><span>Актив</span><span class="r">Баланс</span><span class="r">Цена / средняя покупки</span><span class="r">Прибыль</span></div>
           <div class="assets" id="assets"><div class="boot"><div class="spinner"></div></div></div>
+        </div>
+        <div class="glass card wallet-tx">
+          <p class="card-title">Переводы</p>
+          <div id="txList"><div class="empty">Переводов пока нет</div></div>
         </div>
         <div class="glass card wallet-nft">
           <p class="card-title">NFT <span class="count" id="nftCount"></span><span class="muted" id="nftTotal"></span></p>
@@ -105,10 +119,33 @@ export default {
       $("#wOpenBox", el)?.addEventListener("click", () => openReveal());
     };
 
+    const addr = addressOf(store.uid);
+    $("#myAddr", el).textContent = addr;
+    $("#copyAddr", el).onclick = () => copyText(addr);
+    $("#recvBtn", el).onclick = openReceive;
+    $("#sendBtn", el).onclick = () => openSend();
+
+    const drawTx = (st) => {
+      if (!alive) return;
+      const list = st.list.slice(0, 20);
+      $("#txList", el).innerHTML = list.length ? list.map((t) => {
+        const inc = t.dir === "in";
+        const what = t.coin === "NFT" ? esc(getItem(t.nft)?.name || t.nft) : `${t.coin === "USDT" ? fmtUsd(t.amount) : fmtAmount(t.amount)} ${t.coin}`;
+        const state = t.status === "pending" ? (inc ? "зачисляется…" : "ждёт получателя") : "";
+        return `
+          <div class="tx-row">
+            <span class="tx-dir ${inc ? "up" : "down"}">${inc ? "↓" : "↑"}</span>
+            <span class="tx-main"><b>${what}</b><small class="muted">${inc ? "от" : "кому"} ${esc(inc ? t.fromNick : t.toNick)}${state ? ` · ${state}` : ""}</small></span>
+            <span class="r muted small">${fmtDate(t.createdAt?.toMillis?.())}</span>
+          </div>`;
+      }).join("") : '<div class="empty">Переводов пока нет — нажми «Отправить» или поделись адресом</div>';
+    };
+    const s3 = onTransfers(drawTx);
+
     let queued = false;
     const schedule = () => { if (!queued) { queued = true; setTimeout(() => { queued = false; draw(); }, 500); } };
     const s1 = onStore(draw);
     const s2 = onPrices(schedule);
-    return () => { alive = false; s1(); s2(); };
+    return () => { alive = false; s1(); s2(); s3(); };
   },
 };

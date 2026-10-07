@@ -10,6 +10,7 @@ import { buyNft, sellNft, buyBox, revealBox } from "../nft.js";
 import { tradeError, FEE } from "../trade.js";
 import { fmtUsd, fmtPct, fmtAmount, fmtDate } from "../format.js";
 import { $, esc, toast } from "../ui.js";
+import { openSend } from "./send.js";
 
 const fmtCoin = (v) => fmtAmount(v, v >= 100 ? 1 : v >= 1 ? 3 : 4);
 const chg = (v) => `<span class="${v >= 0 ? "up" : "down"}">${fmtPct(v)}</span>`;
@@ -354,6 +355,7 @@ function renderItem(el, it) {
           <div class="kv"><span>Доступно</span><span id="iAvail">—</span></div>
           <div class="form-error" id="iErr"></div>
           <button class="btn btn-block" id="iBtn" disabled>…</button>
+          <button class="btn btn-block" id="iSend" hidden style="margin-top:8px">Отправить другу по адресу</button>
         </div>
         <div class="glass card">
           <p class="card-title">Черты</p>
@@ -379,6 +381,7 @@ function renderItem(el, it) {
     const mine = owner?.owner === store.uid;
     $("#iOwner", el).innerHTML = !owner ? `<span class="own free">${col.boxOnly ? "Ещё в мистери-боксе" : "Свободен — продаёт маркет"}</span>` : mine ? '<span class="own mine">Ты</span>' : esc(owner.ownerNick);
     $("#iBoughtRow", el).hidden = !mine;
+    $("#iSend", el).hidden = !mine;
     $("#iPnlRow", el).hidden = !mine;
     if (mine) {
       $("#iBought", el).textContent = `${fmtUsd(owner.price)} USDT · ${fmtDate(owner.boughtAt?.toMillis?.())}`;
@@ -406,6 +409,7 @@ function renderItem(el, it) {
     }
   };
 
+  $("#iSend", el).onclick = () => openSend({ nftId: it.id });
   btn.onclick = async () => {
     err.textContent = "";
     const mine = owner?.owner === store.uid;
