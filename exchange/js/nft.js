@@ -16,6 +16,7 @@ export async function buyNft(item) {
   const price = itemUsd(item);
   if (price == null) throw new TradeError(`Нет курса ${item.col.chain} — подожди пару секунд`);
   if (price < MIN_TOTAL) throw new TradeError(`Минимальная сумма сделки — ${MIN_TOTAL} USDT`);
+  if (item.col.boxOnly) throw new TradeError("Этот токен можно получить только из мистери-бокса");
   const fee = price * FEE;
   const nick = getSession().profile?.nick || "Игрок";
 

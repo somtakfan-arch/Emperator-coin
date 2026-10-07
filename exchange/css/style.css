@@ -480,6 +480,10 @@ a.asset:hover { background: var(--glass-hover); margin: 0 -10px; padding: 12px 1
 /* ───────── мистери-бокс ───────── */
 .section-title { margin: 22px 0 12px; font-family: var(--serif); font-weight: 600; font-size: 22px; letter-spacing: .03em; }
 .box-hero { display: grid; gap: 14px; padding: 14px; }
+.chain.box-only { color: #c9a2ff; border-color: rgba(201,162,255,.4); }
+.chain.new { color: #121417; background: var(--silver-grad); border-color: transparent; }
+.col-title { flex-wrap: wrap; }
+.drop-bar { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6px 12px; margin-top: 12px; padding: 12px 14px; border-radius: 12px; font-size: 13px; }
 .box-art { width: 150px; margin: 0 auto; }
 .box-float { animation: float 4s ease-in-out infinite; }
 @keyframes float { 50% { transform: translateY(-4px); } }
