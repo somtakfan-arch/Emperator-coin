@@ -5,11 +5,12 @@ import {
 import { db } from "../firebase.js";
 import { onPrices } from "../market.js";
 import { store, onStore } from "../store.js";
-import { COLLECTIONS, collectionById, getItems, getItem, nftSvg, floorCoin, floorUsd, itemUsd, floorChange24h, BOX, boxSvg, boxOdds, allItems } from "../nft-data.js";
-import { buyNft, sellNft, buyBox, revealBox } from "../nft.js";
+import { COLLECTIONS, collectionById, getItems, getItem, nftSvg, floorCoin, floorUsd, itemUsd, floorChange24h, BOX, boxSvg, boxOdds, allItems, nextDropAt } from "../nft-data.js";
+import { buyNft, sellNft, buyBoxes, revealBox, revealMany, sellMany, BUY_PACKS, OPEN_PACKS } from "../nft.js";
 import { tradeError, FEE } from "../trade.js";
 import { fmtUsd, fmtPct, fmtAmount, fmtDate } from "../format.js";
 import { $, esc, toast } from "../ui.js";
+import { openSend } from "./send.js";
 
 const fmtCoin = (v) => fmtAmount(v, v >= 100 ? 1 : v >= 1 ? 3 : 4);
 const chg = (v) => `<span class="${v >= 0 ? "up" : "down"}">${fmtPct(v)}</span>`;
@@ -40,11 +41,14 @@ function renderOverview(el) {
         <div class="box-odds" id="odds"></div>
         <div class="kv"><span>Средняя цена токена из бокса</span><span id="ev">—</span></div>
         <div class="box-actions">
-          <button class="btn btn-primary" id="buyBox">Купить бокс · ${fmtUsd(BOX.price * (1 + FEE))} USDT</button>
-          <button class="btn" id="openBox" disabled>Открыть · ${BOX.reveal} USDT</button>
+          <div class="pack-row"><span class="muted small">Купить боксы · ${fmtUsd(BOX.price * (1 + FEE))} USDT за штуку</span>
+            <div class="packs" id="buyPacks">${BUY_PACKS.map((n) => `<button class="pack buy" data-n="${n}"><b>×${n}</b><small>${fmtUsd(n * BOX.price * (1 + FEE))}</small></button>`).join("")}</div></div>
+          <div class="pack-row"><span class="muted small">Открыть · ${BOX.reveal} USDT за штуку · у тебя <b id="boxCount">0</b></span>
+            <div class="packs" id="openPacks">${OPEN_PACKS.map((n) => `<button class="pack" data-n="${n}" disabled><b>×${n}</b><small>${fmtUsd(n * BOX.reveal)}</small></button>`).join("")}</div></div>
         </div>
       </div>
     </section>
+    <div class="drop-bar glass"><span>Новый дроп <b>Sigils</b> выходит каждый понедельник и сразу попадает в бокс.</span><span class="muted">Следующий через <b id="dropIn">—</b></span></div>
     <h2 class="section-title">Коллекции</h2>
     <div class="col-grid">
       ${COLLECTIONS.map((c) => {
@@ -53,7 +57,7 @@ function renderOverview(el) {
         <a class="glass col-card" href="#/nft/${c.id}" data-col="${c.id}">
           <div class="col-mosaic">${top.map((it) => nftSvg(it, "nft-art")).join("")}</div>
           <div class="col-body">
-            <div class="col-title"><b>${c.name}</b><span class="chain">${c.chain}</span></div>
+            <div class="col-title"><b>${c.name}</b><span class="chain">${c.chain}</span>${c.boxOnly ? '<span class="chain box-only">ТОЛЬКО БОКС</span>' : ""}${c.drop && Date.now() - c.releasedAt < 7 * 86400e3 ? '<span class="chain new">НОВЫЙ ДРОП</span>' : ""}</div>
             <p class="muted small">${c.desc}</p>
             <div class="col-stats">
               <div><small>Флор</small><span data-f="floor">—</span></div>
@@ -94,27 +98,32 @@ function renderOverview(el) {
         `<span class="odd"><span class="tier ${byTier[t].cls}">${t}</span><b>${(byTier[t].p * 100).toFixed(byTier[t].p < 0.01 ? 2 : 1)}%</b></span>`).join("");
       $("#ev", el).textContent = `≈ ${fmtUsd(ev)} USDT`;
     }
+    const left = Math.max(0, nextDropAt() - Date.now());
+    const dd = Math.floor(left / 86400e3), hh = Math.floor((left % 86400e3) / 3600e3), mm = Math.floor((left % 3600e3) / 60e3);
+    $("#dropIn", el).textContent = dd ? `${dd} д ${hh} ч` : `${hh} ч ${mm} мин`;
     const n = store.boxes.length;
-    const ob = $("#openBox", el);
-    if (!ob.dataset.busy) {
-      ob.disabled = !n;
-      ob.textContent = n ? `Открыть · ${BOX.reveal} USDT · у тебя ${n}` : "Боксов нет";
-    }
+    $("#boxCount", el).textContent = String(n);
+    el.querySelectorAll("#openPacks .pack").forEach((b) => (b.disabled = +b.dataset.n > n));
   };
 
-  $("#buyBox", el).onclick = async (e) => {
-    const b = e.currentTarget;
-    b.disabled = true;
+  $("#buyPacks", el).onclick = async (e) => {
+    const b = e.target.closest(".pack");
+    if (!b) return;
+    const n = +b.dataset.n;
+    el.querySelectorAll("#buyPacks .pack").forEach((x) => (x.disabled = true));
     try {
-      await buyBox();
-      toast("Мистери-бокс куплен — открывай, когда захочешь", "ok");
+      await buyBoxes(n);
+      toast(n === 1 ? "Мистери-бокс куплен" : `Куплено боксов: ${n}`, "ok");
     } catch (e2) {
       toast(tradeError(e2), "err");
     } finally {
-      b.disabled = false;
+      el.querySelectorAll("#buyPacks .pack").forEach((x) => (x.disabled = false));
     }
   };
-  $("#openBox", el).onclick = () => openReveal();
+  $("#openPacks", el).onclick = (e) => {
+    const b = e.target.closest(".pack");
+    if (b && !b.disabled) openReveal(+b.dataset.n);
+  };
 
   const draw = () => {
     for (const c of COLLECTIONS) {
@@ -131,8 +140,9 @@ function renderOverview(el) {
 }
 
 // ═════════ открытие бокса ═════════
-export async function openReveal() {
+export async function openReveal(count = 1) {
   if (!store.boxes.length) return;
+  if (count > 1) return openRevealMany(Math.min(count, store.boxes.length));
   const back = document.createElement("div");
   back.className = "modal-back";
   back.innerHTML = `<div class="modal glass reveal">
@@ -193,7 +203,7 @@ function renderCollection(el, col) {
     <section class="glass card col-head">
       <div class="col-head-art">${nftSvg([...items].sort((a, b) => a.rank - b.rank)[0], "nft-art")}</div>
       <div class="col-head-info">
-        <div class="col-title"><h1 class="page-title">${col.name}</h1><span class="chain">${col.chain}</span></div>
+        <div class="col-title"><h1 class="page-title">${col.name}</h1><span class="chain">${col.chain}</span>${col.boxOnly ? '<span class="chain box-only">ТОЛЬКО БОКС</span>' : ""}</div>
         <p class="muted">${col.desc}</p>
         <div class="col-stats big">
           <div><small>Флор</small><span id="cFloor">—</span></div>
@@ -213,6 +223,8 @@ function renderCollection(el, col) {
         <button class="chip active" data-f="all">Все</button><button class="chip" data-f="free">Свободные</button>
         <button class="chip" data-f="mine">Мои</button><button class="chip" data-f="taken">Куплены</button>
       </div>
+      ${items[0].traits["Предмет"] ? `<label class="sort glass"><span class="muted">Предмет</span>
+        <select id="kind"><option value="">Все</option>${[...new Set(items.map((it) => it.traits["Предмет"]))].map((k) => `<option>${k}</option>`).join("")}</select></label>` : ""}
       <label class="sort glass"><span class="muted">Сортировка</span>
         <select id="sort"><option value="rank">Редкость</option><option value="cheap">Цена ↑</option><option value="expensive">Цена ↓</option><option value="n">Номер</option></select>
       </label>
@@ -220,7 +232,7 @@ function renderCollection(el, col) {
     <div class="nft-grid" id="grid"></div>
     <button class="btn btn-block more" id="more" hidden>Показать ещё</button>`;
 
-  let owners = {}, filter = "all", sort = "rank", shown = PAGE, alive = true;
+  let owners = {}, filter = "all", sort = "rank", kind = "", shown = PAGE, alive = true;
   const stops = [() => (alive = false)];
 
   // график флора (детерминированный — считаем сами)
@@ -259,12 +271,12 @@ function renderCollection(el, col) {
   const card = (it) => {
     const o = owners[it.id];
     const mine = o?.owner === store.uid;
-    const state = !o ? '<span class="own free">Свободен</span>' : mine ? '<span class="own mine">Твой</span>' : `<span class="own taken">${esc(o.ownerNick)}</span>`;
+    const state = !o ? `<span class="own free">${col.boxOnly ? "В боксе" : "Свободен"}</span>` : mine ? '<span class="own mine">Твой</span>' : `<span class="own taken">${esc(o.ownerNick)}</span>`;
     return `
       <a class="nft-card glass" href="#/nft/${col.id}/${it.n}" data-id="${it.id}">
         ${nftSvg(it, "nft-art")}
         <div class="nft-meta">
-          <div class="nft-name"><b>${esc(it.col.id === "deck" ? it.name : `#${it.n}`)}</b>${tierBadge(it)}</div>
+          <div class="nft-name"><b>${esc(it.short || (it.col.id === "deck" ? it.name : `#${it.n}`))}</b>${tierBadge(it)}</div>
           <div class="nft-price"><span data-price="${it.id}">—</span>${state}</div>
         </div>
       </a>`;
@@ -272,6 +284,7 @@ function renderCollection(el, col) {
 
   const list = () => {
     let arr = items.filter((it) => {
+      if (kind && it.traits["Предмет"] !== kind) return false;
       const o = owners[it.id];
       return filter === "all" || (filter === "free" && !o) || (filter === "mine" && o?.owner === store.uid) || (filter === "taken" && o);
     });
@@ -314,6 +327,7 @@ function renderCollection(el, col) {
     drawGrid();
   };
   $("#sort", el).onchange = (e) => { sort = e.target.value; shown = PAGE; drawGrid(); };
+  if ($("#kind", el)) $("#kind", el).onchange = (e) => { kind = e.target.value; shown = PAGE; drawGrid(); };
   $("#more", el).onclick = () => { shown += PAGE; drawGrid(); };
 
   drawGrid();
@@ -346,6 +360,7 @@ function renderItem(el, it) {
           <div class="kv"><span>Доступно</span><span id="iAvail">—</span></div>
           <div class="form-error" id="iErr"></div>
           <button class="btn btn-block" id="iBtn" disabled>…</button>
+          <button class="btn btn-block" id="iSend" hidden style="margin-top:8px">Отправить другу по адресу</button>
         </div>
         <div class="glass card">
           <p class="card-title">Черты</p>
@@ -369,8 +384,9 @@ function renderItem(el, it) {
     $("#iFee", el).textContent = fu ? `${fmtUsd(price * FEE)} USDT` : "—";
     $("#iAvail", el).textContent = `${fmtUsd(store.balances.USDT?.amount || 0)} USDT`;
     const mine = owner?.owner === store.uid;
-    $("#iOwner", el).innerHTML = !owner ? '<span class="own free">Свободен — продаёт маркет</span>' : mine ? '<span class="own mine">Ты</span>' : esc(owner.ownerNick);
+    $("#iOwner", el).innerHTML = !owner ? `<span class="own free">${col.boxOnly ? "Ещё в мистери-боксе" : "Свободен — продаёт маркет"}</span>` : mine ? '<span class="own mine">Ты</span>' : esc(owner.ownerNick);
     $("#iBoughtRow", el).hidden = !mine;
+    $("#iSend", el).hidden = !mine;
     $("#iPnlRow", el).hidden = !mine;
     if (mine) {
       $("#iBought", el).textContent = `${fmtUsd(owner.price)} USDT · ${fmtDate(owner.boughtAt?.toMillis?.())}`;
@@ -379,7 +395,11 @@ function renderItem(el, it) {
     }
     if (busy) return;
     if (!loaded) { btn.disabled = true; btn.textContent = "…"; return; }
-    if (!owner) {
+    if (!owner && col.boxOnly) {
+      btn.className = "btn btn-block";
+      btn.textContent = "Только из мистери-бокса";
+      btn.disabled = true;
+    } else if (!owner) {
       btn.className = "btn btn-block btn-buy";
       btn.textContent = fu ? `Купить за ${fmtUsd(price * (1 + FEE))} USDT` : "Ждём курс…";
       btn.disabled = !fu;
@@ -394,6 +414,7 @@ function renderItem(el, it) {
     }
   };
 
+  $("#iSend", el).onclick = () => openSend({ nftId: it.id });
   btn.onclick = async () => {
     err.textContent = "";
     const mine = owner?.owner === store.uid;
@@ -425,4 +446,73 @@ function renderItem(el, it) {
   const t = setInterval(draw, 3000);
   stops.push(() => clearInterval(t));
   return () => stops.forEach((s) => s());
+}
+
+// ═════════ массовое открытие ═════════
+const TIER_ORDER = ["t-leg", "t-epic", "t-rare", "t-unc", "t-com"];
+async function openRevealMany(count) {
+  const ids = store.boxes.slice(0, count).map((b) => b.id);
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  back.innerHTML = `<div class="modal glass reveal wide">
+    <div class="reveal-stage"><div class="reveal-box shaking">${boxSvg("nft-art")}</div></div>
+    <p class="muted" id="rvText">Открываем 0 / ${count}…</p>
+    <div class="progress"><i id="rvBar"></i></div>
+    <div class="reveal-actions" id="rvActions"></div>
+  </div>`;
+  document.body.append(back);
+  let done = false;
+  const close = () => back.remove();
+  back.addEventListener("click", (e) => { if (done && e.target === back) close(); });
+  const prog = (k, n, word = "Открываем") => {
+    $("#rvText", back).textContent = `${word} ${k} / ${n}…`;
+    $("#rvBar", back).style.width = `${(k / n) * 100}%`;
+  };
+
+  const [{ items, error }] = await Promise.all([revealMany(ids, (k, n) => prog(k, n)), new Promise((r) => setTimeout(r, 1200))]);
+  done = true;
+  if (!items.length) {
+    $("#rvText", back).textContent = tradeError(error);
+    $("#rvActions", back).innerHTML = '<button class="btn btn-block" id="rvClose">Закрыть</button>';
+    $("#rvClose", back).onclick = close;
+    return;
+  }
+  items.sort((a, b) => TIER_ORDER.indexOf(a.tier.cls) - TIER_ORDER.indexOf(b.tier.cls) || (itemUsd(b) || 0) - (itemUsd(a) || 0));
+  const value = items.reduce((s, it) => s + (itemUsd(it) || 0), 0);
+  const spent = items.length * (BOX.price * (1 + FEE) + BOX.reveal);
+  const commons = items.filter((it) => it.tier.cls === "t-com");
+  const commonsValue = commons.reduce((s, it) => s + (itemUsd(it) || 0), 0) * (1 - FEE);
+  const counts = TIER_ORDER.map((c) => [c, items.filter((it) => it.tier.cls === c)]).filter(([, a]) => a.length);
+  const best = items[0];
+  const diff = value - spent;
+
+  back.querySelector(".reveal-stage").outerHTML = `<div class="reveal-grid">${items.map((it, i) => `
+    <a class="rg-item ${it.tier.cls} ${i === 0 ? "best" : ""}" href="#/nft/${it.col.id}/${it.n}" style="animation-delay:${Math.min(i, 30) * 40}ms" title="${esc(it.name)}">${nftSvg(it, "nft-art")}</a>`).join("")}</div>`;
+  $("#rvText", back).innerHTML = `
+    <b class="rv-name">Открыто ${items.length}${error ? ` из ${count}` : ""}</b>
+    <span class="rv-tiers">${counts.map(([c, a]) => `<span class="tier ${c}">${a[0].tier.name} ×${a.length}</span>`).join("")}</span>
+    <span class="muted">Лучший: <b class="rv-price">${esc(best.name)}</b> · ≈ ${fmtUsd(itemUsd(best) || 0)} USDT</span>
+    <span class="muted">Стоимость всего ≈ <b class="rv-price">${fmtUsd(value)} USDT</b> · потрачено ${fmtUsd(spent)}
+      · <span class="${diff >= 0 ? "up" : "down"}">${diff >= 0 ? "+" : "−"}${fmtUsd(Math.abs(diff))}</span></span>
+    ${error ? `<span class="down small">${esc(tradeError(error))}</span>` : ""}`;
+  back.querySelector(".progress").remove();
+  const left = store.boxes.filter((b) => !ids.includes(b.id)).length;
+  $("#rvActions", back).innerHTML = `
+    ${commons.length && commons.length < items.length ? `<button class="btn btn-sell btn-block" id="rvSellCommon">Продать обычные (${commons.length}) · ≈ ${fmtUsd(commonsValue)} USDT</button>` : ""}
+    <button class="btn btn-block" id="rvSellAll">Продать всё · ≈ ${fmtUsd(value * (1 - FEE))} USDT</button>
+    <a class="btn btn-primary btn-block" href="#/wallet" id="rvWallet">Оставить и открыть кошелёк</a>
+    ${left > 0 ? `<button class="btn btn-block" id="rvMore">Открыть ещё ${Math.min(left, count)} · осталось ${left}</button>` : ""}
+    <button class="btn btn-block" id="rvClose">Закрыть</button>`;
+  $("#rvClose", back).onclick = close;
+  $("#rvWallet", back).onclick = close;
+  back.querySelectorAll(".rg-item").forEach((a) => (a.onclick = close));
+  if (left > 0) $("#rvMore", back).onclick = () => { close(); openReveal(Math.min(left, count)); };
+  const sell = async (list, btn) => {
+    back.querySelectorAll("#rvActions button").forEach((b) => (b.disabled = true));
+    const r = await sellMany(list, (k, n) => (btn.textContent = `Продаём ${k} / ${n}…`));
+    toast(`Продано ${r.sold} шт. за ${fmtUsd(r.total)} USDT`, "ok");
+    close();
+  };
+  $("#rvSellAll", back).onclick = (e) => sell(items, e.currentTarget);
+  if ($("#rvSellCommon", back)) $("#rvSellCommon", back).onclick = (e) => sell(commons, e.currentTarget);
 }

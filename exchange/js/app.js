@@ -5,6 +5,7 @@ import { $, esc, icon, toast } from "./ui.js";
 import { startPrices } from "./market.js";
 import { startUserData, stopUserData } from "./store.js";
 import { startOrderWatcher, stopOrderWatcher } from "./trade.js";
+import { startTransfers, stopTransfers } from "./transfer.js";
 import authView from "./views/auth.js";
 import markets from "./views/markets.js";
 import trade from "./views/trade.js";
@@ -140,8 +141,9 @@ if (!isConfigured) {
     const uid = s.user?.uid || null;
     if (uid !== activeUid) {
       stopOrderWatcher();
+      stopTransfers();
       stopUserData();
-      if (uid) { startUserData(uid); startOrderWatcher(); }
+      if (uid) { startUserData(uid); startOrderWatcher(); startTransfers(uid); }
       activeUid = uid;
       currentKey = null;
     }

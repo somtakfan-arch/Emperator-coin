@@ -289,14 +289,193 @@ function genCard(r, uid, n) {
   return { svg: s, name, traits: { "Масть": joker ? "Джокер" : suit[0], "Ранг": rank, "Фольга": foil } };
 }
 
+// ═════════ 7. Bed Relics (только из мистери-бокса) ═════════
+const RELIC_TYPES = ["Меч", "Щит", "Кольцо", "Скипетр", "Ключ", "Кубок", "Амулет", "Зелье", "Монета", "Песочные часы",
+  "Лук", "Топор", "Молот", "Посох", "Книга", "Фонарь", "Компас", "Свеча", "Колокол", "Перо", "Маска", "Шлем", "Кристалл", "Трезубец", "Подкова"];
+export const RELIC_VARIANTS = 50; // вариаций на каждый вид предмета
+const RELIC_METALS = {
+  "Серебро": ["#f4f6f8", "#a9afb8", "#5d626a"], "Золото": ["#fff0b8", "#d9a634", "#7a500e"], "Обсидиан": ["#6e7280", "#25272c", "#08090a"],
+  "Кристалл": ["#ffffff", "#bfe6ff", "#5f8fb8"], "Мифрил": ["#f2fffb", "#8ff0d6", "#2f8f80"],
+};
+function genRelic(r, uid, n) {
+  const type = RELIC_TYPES[(n - 1) % RELIC_TYPES.length];
+  const metal = pick(r, [["Серебро", 40], ["Золото", 28], ["Обсидиан", 16], ["Кристалл", 11], ["Мифрил", 5]]);
+  const M = RELIC_METALS[metal];
+  const gem = pick(r, [["Рубин", 30], ["Сапфир", 26], ["Изумруд", 22], ["Аметист", 15], ["Звёздный камень", 7]]);
+  const G = { "Рубин": "#e0405a", "Сапфир": "#3d6fe0", "Изумруд": "#2fb57a", "Аметист": "#9b59d9", "Звёздный камень": "#fff6c9" }[gem];
+  const effect = pick(r, [["Нет", 45], ["Свечение", 25], ["Искры", 15], ["Пламя", 9], ["Руны", 6]]);
+  const bg = pick(r, [["Подземелье", 35], ["Бархат", 25], ["Лес", 20], ["Бездна", 15], ["Храм", 5]]);
+  const frame = pick(r, [["Нет", 55], ["Серебряная", 25], ["Золотая", 14], ["Узорная", 6]]);
+  const BG = { "Подземелье": ["#2a2c31", "#0a0a0c"], "Бархат": ["#3c1424", "#0e0508"], "Лес": ["#183126", "#050c09"], "Бездна": ["#141a3a", "#04050c"], "Храм": ["#e9e3d6", "#8f887a"] }[bg];
+  const glow = effect === "Пламя" ? "#ff8a3c" : effect === "Руны" ? "#8ab4ff" : M[0];
+  const m = `url(#m${uid})`, st = `stroke="${M[2]}" stroke-width=".7" stroke-linejoin="round"`;
+  const gemAt = (x, y, rr) => `<circle cx="${x}" cy="${y}" r="${rr}" fill="${G}" stroke="#000" stroke-opacity=".3" stroke-width=".4"/><circle cx="${f1(x - rr * .3)}" cy="${f1(y - rr * .3)}" r="${f1(rr * .32)}" fill="#fff" opacity=".8"/>`;
+
+  let s = `<defs><radialGradient id="b${uid}" cx="50%" cy="45%" r="75%"><stop offset="0" stop-color="${BG[0]}"/><stop offset="1" stop-color="${BG[1]}"/></radialGradient>
+    <linearGradient id="m${uid}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${M[0]}"/><stop offset=".5" stop-color="${M[1]}"/><stop offset="1" stop-color="${M[2]}"/></linearGradient>
+    <radialGradient id="h${uid}"><stop offset="0" stop-color="${glow}" stop-opacity=".55"/><stop offset="1" stop-color="${glow}" stop-opacity="0"/></radialGradient></defs>
+    <rect width="100" height="100" fill="url(#b${uid})"/>`;
+  if (effect !== "Нет") s += `<circle cx="50" cy="50" r="${effect === "Свечение" ? 36 : 42}" fill="url(#h${uid})"/>`;
+  if (effect === "Руны") {
+    const runes = "ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊ";
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      s += `<text x="${f1(50 + Math.cos(a) * 40)}" y="${f1(52 + Math.sin(a) * 40)}" text-anchor="middle" font-size="6" fill="#bcd4ff" opacity=".8">${runes[Math.floor(r() * runes.length)]}</text>`;
+    }
+  }
+  s += `<ellipse cx="50" cy="88" rx="22" ry="3" fill="#000" opacity=".45"/>`;
+  const D = {
+    "Меч": () => `<path d="M50 10 L55 20 L55 64 L45 64 L45 20Z" fill="${m}" ${st}/><path d="M50 12 L50 63" stroke="#fff" stroke-opacity=".5" stroke-width=".8"/>
+      <rect x="34" y="63" width="32" height="5" rx="2" fill="${m}" ${st}/><rect x="47.5" y="68" width="5" height="13" fill="#3a2a22"/><circle cx="50" cy="84" r="3.6" fill="${m}" ${st}/>${gemAt(50, 65.5, 2.2)}`,
+    "Щит": () => `<path d="M50 14 L76 22 L74 52 C72 68 62 78 50 86 C38 78 28 68 26 52 L24 22Z" fill="${m}" ${st}/>
+      <path d="M50 20 L70 26 L68 51 C66 64 58 72 50 79 C42 72 34 64 32 51 L30 26Z" fill="none" stroke="#000" stroke-opacity=".25" stroke-width="1.4"/>
+      <path d="M50 30 L50 70 M36 46 L64 46" stroke="${M[2]}" stroke-width="3" stroke-linecap="round"/>${gemAt(50, 46, 4.5)}`,
+    "Кольцо": () => `<ellipse cx="50" cy="58" rx="22" ry="20" fill="none" stroke="${m}" stroke-width="7"/><ellipse cx="50" cy="58" rx="22" ry="20" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="1" transform="translate(-1 -2)"/>
+      <path d="M40 38 L50 30 L60 38 L50 44Z" fill="${m}" ${st}/>${gemAt(50, 32, 7)}`,
+    "Скипетр": () => `<rect x="47" y="34" width="6" height="50" rx="2" fill="${m}" ${st}/><rect x="44" y="52" width="12" height="3" rx="1" fill="${m}" ${st}/><rect x="44" y="74" width="12" height="3" rx="1" fill="${m}" ${st}/>
+      <path d="M38 34 L40 22 L45 29 L50 18 L55 29 L60 22 L62 34Z" fill="${m}" ${st}/>${gemAt(50, 24, 5)}`,
+    "Ключ": () => `<circle cx="50" cy="28" r="13" fill="none" stroke="${m}" stroke-width="6"/><rect x="47" y="40" width="6" height="42" fill="${m}" ${st}/>
+      <rect x="53" y="66" width="10" height="5" fill="${m}" ${st}/><rect x="53" y="75" width="7" height="5" fill="${m}" ${st}/>${gemAt(50, 28, 4)}`,
+    "Кубок": () => `<path d="M30 20 L70 20 C70 44 60 54 50 54 C40 54 30 44 30 20Z" fill="${m}" ${st}/><path d="M33 24 L67 24" stroke="${G}" stroke-width="3" opacity=".8"/>
+      <rect x="47" y="54" width="6" height="18" fill="${m}" ${st}/><path d="M36 82 L64 82 L58 72 L42 72Z" fill="${m}" ${st}/>${gemAt(50, 38, 4)}`,
+    "Амулет": () => `<path d="M26 14 Q50 48 74 14" stroke="${M[1]}" stroke-width="1.5" fill="none" stroke-dasharray="2 1.5"/>
+      <path d="M50 34 L68 54 L50 80 L32 54Z" fill="${m}" ${st}/><path d="M50 42 L61 54 L50 70 L39 54Z" fill="${G}" opacity=".9"/><path d="M47 47 L50 44 L52 47Z" fill="#fff" opacity=".8"/>`,
+    "Зелье": () => `<path d="M44 18 L56 18 L56 34 C68 38 74 48 74 60 C74 74 63 84 50 84 C37 84 26 74 26 60 C26 48 32 38 44 34Z" fill="${m}" opacity=".35" ${st}/>
+      <path d="M28 62 C28 74 38 82 50 82 C62 82 72 74 72 62Z" fill="${G}" opacity=".85"/><rect x="43" y="12" width="14" height="7" rx="2" fill="#7a5638"/>
+      <circle cx="44" cy="70" r="2" fill="#fff" opacity=".6"/><circle cx="55" cy="66" r="1.4" fill="#fff" opacity=".5"/><circle cx="50" cy="74" r="1" fill="#fff" opacity=".5"/><path d="M34 46 C38 40 42 38 44 38" stroke="#fff" stroke-opacity=".5" stroke-width="1.5" fill="none"/>`,
+    "Монета": () => `<circle cx="50" cy="52" r="30" fill="${m}" ${st}/><circle cx="50" cy="52" r="24" fill="none" stroke="${M[2]}" stroke-width="1.2"/>
+      <text x="50" y="62" text-anchor="middle" font-size="28" font-family="serif" font-weight="700" fill="${M[2]}">B</text>${gemAt(50, 24, 2.6)}`,
+    "Песочные часы": () => `<rect x="30" y="14" width="40" height="5" rx="2" fill="${m}" ${st}/><rect x="30" y="81" width="40" height="5" rx="2" fill="${m}" ${st}/>
+      <path d="M35 19 L65 19 L52 50 L65 81 L35 81 L48 50Z" fill="#fff" fill-opacity=".12" stroke="#fff" stroke-opacity=".5" stroke-width=".8"/>
+      <path d="M40 28 L60 28 L51 47 L49 47Z" fill="${G}" opacity=".85"/><path d="M38 80 L62 80 L50 66Z" fill="${G}" opacity=".85"/><path d="M50 48 L50 66" stroke="${G}" stroke-width=".8"/>
+      <rect x="31" y="19" width="3" height="62" fill="${m}"/><rect x="66" y="19" width="3" height="62" fill="${m}"/>`,
+    "Лук": () => `<path d="M40 12 Q76 50 40 88" stroke="${m}" stroke-width="5" fill="none" stroke-linecap="round"/><path d="M40 12 Q76 50 40 88" stroke="${M[2]}" stroke-width=".6" fill="none"/>
+      <path d="M40 13 L40 87" stroke="#e9edf2" stroke-opacity=".7" stroke-width=".7"/><path d="M26 50 L74 50" stroke="#7a5638" stroke-width="1.6"/>
+      <path d="M74 50 L68 46 L68 54Z" fill="${m}" ${st}/><path d="M26 50 L22 46 M26 50 L22 54 M29 50 L25 46 M29 50 L25 54" stroke="${G}" stroke-width="1.2"/>${gemAt(58, 50, 3)}`,
+    "Топор": () => `<rect x="47" y="18" width="6" height="68" rx="2" fill="#6b4a33"/><path d="M53 22 C72 16 82 30 80 42 C78 54 68 60 53 54Z" fill="${m}" ${st}/>
+      <path d="M47 26 C38 24 32 30 32 38 C32 44 38 48 47 46Z" fill="${m}" ${st}/><path d="M74 26 C79 33 79 45 72 53" stroke="#fff" stroke-opacity=".5" stroke-width="1" fill="none"/>${gemAt(62, 38, 3.4)}`,
+    "Молот": () => `<rect x="47" y="38" width="6" height="48" rx="2" fill="#6b4a33"/><rect x="26" y="16" width="48" height="24" rx="3" fill="${m}" ${st}/>
+      <rect x="26" y="20" width="48" height="2" fill="#fff" opacity=".35"/><rect x="32" y="16" width="3" height="24" fill="${M[2]}" opacity=".5"/><rect x="65" y="16" width="3" height="24" fill="${M[2]}" opacity=".5"/>${gemAt(50, 28, 5)}`,
+    "Посох": () => `<path d="M50 34 L49 88" stroke="#6b4a33" stroke-width="5" stroke-linecap="round"/><path d="M50 36 C38 34 36 18 46 12 C56 8 64 16 60 24" stroke="${m}" stroke-width="3.5" fill="none"/>
+      <circle cx="50" cy="24" r="9" fill="${G}" opacity=".35"/>${gemAt(50, 24, 6)}<rect x="45" y="42" width="10" height="3" rx="1" fill="${m}"/>`,
+    "Книга": () => `<rect x="28" y="18" width="46" height="64" rx="3" fill="${mix(G, "#000000", .55)}" stroke="${M[2]}" stroke-width=".7"/><rect x="70" y="21" width="5" height="58" fill="#efe6d2"/>
+      <rect x="28" y="18" width="7" height="64" fill="#000" opacity=".25"/><path d="M28 18 h10 l-10 10z M74 18 h-10 l10 10z M28 82 h10 l-10 -10z M74 82 h-10 l10 -10z" fill="${m}"/>
+      <path d="M51 34 L62 50 L51 66 L40 50Z" fill="${m}" ${st}/>${gemAt(51, 50, 4)}`,
+    "Фонарь": () => `<circle cx="50" cy="14" r="5" fill="none" stroke="${m}" stroke-width="2"/><path d="M38 22 L62 22 L58 30 L42 30Z" fill="${m}" ${st}/>
+      <rect x="38" y="30" width="24" height="38" fill="#ffd27a" opacity=".25"/><circle cx="50" cy="49" r="16" fill="#ffd27a" opacity=".25"/><path d="M50 40 C55 47 53 54 50 56 C47 54 45 47 50 40Z" fill="#ffb36b"/>
+      <path d="M38 30 V68 M62 30 V68 M50 30 V40" stroke="${m}" stroke-width="2.4"/><rect x="34" y="68" width="32" height="7" rx="2" fill="${m}" ${st}/>${gemAt(50, 71.5, 2)}`,
+    "Компас": () => `<circle cx="50" cy="50" r="30" fill="${m}" ${st}/><circle cx="50" cy="50" r="24" fill="#14161a"/><circle cx="50" cy="50" r="24" fill="none" stroke="${M[1]}" stroke-width=".6" stroke-dasharray="1 3"/>
+      <path d="M50 30 L55 50 L50 70 L45 50Z" fill="#e9edf2"/><path d="M50 30 L55 50 L45 50Z" fill="${G}"/><text x="50" y="25" text-anchor="middle" font-size="5" fill="${M[0]}" font-family="Inter, sans-serif" font-weight="700">N</text>
+      <circle cx="50" cy="50" r="2.4" fill="${m}"/><circle cx="50" cy="17" r="4" fill="none" stroke="${m}" stroke-width="2"/>`,
+    "Свеча": () => `<ellipse cx="50" cy="80" rx="24" ry="6" fill="${m}" ${st}/><rect x="42" y="40" width="16" height="38" rx="2" fill="#f1e8d6"/><path d="M42 44 q3 6 0 10 M56 42 q2 8 2 12" stroke="#fff" stroke-width="2" fill="none" opacity=".8"/>
+      <circle cx="50" cy="28" r="12" fill="#ffd27a" opacity=".22"/><path d="M50 22 C56 30 54 36 50 38 C46 36 44 30 50 22Z" fill="#ffb36b"/><path d="M50 28 C52 32 51 35 50 36 C49 35 48 32 50 28Z" fill="#fff3b0"/>${gemAt(50, 80, 2.4)}`,
+    "Колокол": () => `<circle cx="50" cy="16" r="4.5" fill="none" stroke="${m}" stroke-width="2.4"/><path d="M30 70 C30 42 36 22 50 22 C64 22 70 42 70 70Z" fill="${m}" ${st}/>
+      <rect x="26" y="68" width="48" height="6" rx="3" fill="${m}" ${st}/><circle cx="50" cy="79" r="4" fill="${m}" ${st}/><path d="M40 30 C36 40 35 52 35 64" stroke="#fff" stroke-opacity=".45" stroke-width="1.4" fill="none"/>${gemAt(50, 46, 3.6)}`,
+    "Перо": () => `<path d="M68 12 C46 20 34 44 36 70 L40 72 C46 50 56 32 70 16Z" fill="#eef1f5"/><path d="M68 12 C52 26 44 48 40 72" stroke="${M[2]}" stroke-width="1"/>
+      <path d="M62 18 l-6 2 M58 26 l-7 2 M54 34 l-7 2 M50 42 l-7 2 M47 50 l-6 2" stroke="${G}" stroke-width="1.2" opacity=".7"/><path d="M40 72 L36 84" stroke="${m}" stroke-width="2.6" stroke-linecap="round"/>
+      <path d="M34 86 C30 88 30 92 34 92 C38 92 38 88 34 86Z" fill="${G}"/>`,
+    "Маска": () => `<path d="M18 46 C26 34 40 36 50 42 C60 36 74 34 82 46 C80 58 70 64 60 60 C55 58 52 56 50 56 C48 56 45 58 40 60 C30 64 20 58 18 46Z" fill="${m}" ${st}/>
+      <ellipse cx="36" cy="49" rx="7" ry="4.5" fill="#0b0c0f"/><ellipse cx="64" cy="49" rx="7" ry="4.5" fill="#0b0c0f"/><path d="M18 46 L8 40 M82 46 L92 40" stroke="${G}" stroke-width="1.5"/>${gemAt(50, 44, 2.8)}${gemAt(24, 44, 1.8)}${gemAt(76, 44, 1.8)}`,
+    "Шлем": () => `<path d="M64 20 C74 10 86 16 84 30 C78 22 72 22 66 26Z" fill="${G}" opacity=".9"/><path d="M28 74 L28 46 C28 30 38 20 50 20 C62 20 72 30 72 46 L72 74 C64 80 36 80 28 74Z" fill="${m}" ${st}/>
+      <rect x="34" y="44" width="32" height="5" rx="1" fill="#0b0c0f"/><path d="M50 52 V72 M43 56 V68 M57 56 V68" stroke="#0b0c0f" stroke-width="1.6"/><path d="M50 20 V42" stroke="${M[2]}" stroke-width="1.4"/>${gemAt(50, 32, 2.6)}`,
+    "Кристалл": () => `<path d="M24 82 C30 74 70 74 76 82Z" fill="#3a3d43"/><path d="M42 80 L38 40 L48 24 L56 40 L54 80Z" fill="${G}" opacity=".9"/><path d="M48 24 L50 80" stroke="#fff" stroke-opacity=".5" stroke-width=".8"/>
+      <path d="M56 80 L58 52 L66 42 L72 54 L68 80Z" fill="${G}" opacity=".7"/><path d="M34 80 L30 58 L36 50 L42 58 L42 80Z" fill="${G}" opacity=".6"/><path d="M41 42 L46 30" stroke="#fff" stroke-width="1.4" opacity=".8"/>`,
+    "Трезубец": () => `<rect x="47.5" y="36" width="5" height="52" rx="1.5" fill="${m}" ${st}/><path d="M32 18 L32 36 C32 42 68 42 68 36 L68 18" stroke="${m}" stroke-width="4" fill="none"/>
+      <path d="M50 12 L50 40" stroke="${m}" stroke-width="4.4"/><path d="M32 12 L29 20 L35 20Z M50 6 L47 14 L53 14Z M68 12 L65 20 L71 20Z" fill="${m}" ${st}/>${gemAt(50, 42, 3.4)}`,
+    "Подкова": () => `<path d="M30 30 L30 52 C30 68 40 78 50 78 C60 78 70 68 70 52 L70 30" stroke="${m}" stroke-width="9" fill="none" stroke-linecap="round"/>
+      <path d="M30 30 L30 52 C30 68 40 78 50 78 C60 78 70 68 70 52 L70 30" stroke="${M[2]}" stroke-width=".6" fill="none" transform="translate(-3 0)"/>
+      ${[[30, 38], [30, 50], [34, 63], [70, 38], [70, 50], [66, 63]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.4" fill="#14161a"/>`).join("")}${gemAt(50, 78, 3.6)}`,
+  };
+  s += D[type]();
+  if (effect === "Искры" || effect === "Пламя") for (let i = 0; i < 12; i++) {
+    const x = rand(r, 12, 88), y = rand(r, 10, 80), k = rand(r, .5, 1.3);
+    s += `<path d="M${f1(x)} ${f1(y - 2 * k)}L${f1(x + .5 * k)} ${f1(y)}L${f1(x)} ${f1(y + 2 * k)}L${f1(x - .5 * k)} ${f1(y)}Z" fill="${effect === "Пламя" ? "#ffb36b" : "#fff"}" opacity=".85"/>`;
+  }
+  if (frame !== "Нет") {
+    const fc = frame === "Золотая" ? "#d9a634" : frame === "Узорная" ? "#c9a2ff" : "#c9ced6";
+    s += `<rect x="3" y="3" width="94" height="94" rx="6" fill="none" stroke="${fc}" stroke-width="1.2" opacity=".8"/>`;
+    if (frame === "Узорная") s += `<rect x="6" y="6" width="88" height="88" rx="4" fill="none" stroke="${fc}" stroke-width=".6" stroke-dasharray="3 2" opacity=".7"/>`
+      + [[6, 6], [94, 6], [6, 94], [94, 94]].map(([x, y]) => `<circle cx="${x}" cy="${y}" r="2" fill="${fc}"/>`).join("");
+  }
+  const variant = Math.floor((n - 1) / RELIC_TYPES.length) + 1;
+  return { svg: s, name: `${type} · ${metal} · вар. ${variant}`, short: `${type} ${variant}`, traits: { "Предмет": type, "Материал": metal, "Камень": gem, "Эффект": effect, "Фон": bg, "Рамка": frame } };
+}
+
+// ═════════ 8. Еженедельные дропы «Sigils» ═════════
+const DROP_STYLES = [
+  ["Эфир", "#8fdcff", "#5a3fd1"], ["Нова", "#ffd27a", "#d0405a"], ["Аврора", "#6ff0b5", "#3a6bd9"], ["Мираж", "#ffb0d9", "#7a4fd9"],
+  ["Пульс", "#ff6b6b", "#ffd1a1"], ["Комета", "#e9edf2", "#4f7bd9"], ["Нимб", "#fff3b0", "#c9a24f"], ["Вихрь", "#6fe3ff", "#1f8f8a"],
+  ["Сапфир", "#9fb8ff", "#1d2f8f"], ["Фантом", "#d9dde3", "#5a5f69"], ["Затмение", "#ffb36b", "#2a1d3a"], ["Изумруд", "#a8ffcf", "#1e6b4a"],
+];
+function makeSigilGen(style) {
+  const [, c1, c2] = style;
+  return (r, uid) => {
+    const k = pick(r, [[3, 15], [4, 20], [5, 20], [6, 20], [8, 15], [12, 10]]);
+    const petal = pick(r, [["Овал", 40], ["Ромб", 30], ["Луч", 20], ["Капля", 10]]);
+    const rings = pick(r, [[0, 25], [1, 40], [2, 25], [3, 10]]);
+    const core = pick(r, [["Круг", 40], ["Звезда", 25], ["Пусто", 20], ["Глаз", 10], ["Корона", 5]]);
+    const aura = pick(r, [["Нет", 45], ["Мягкая", 35], ["Яркая", 15], ["Двойная", 5]]);
+    const rot = Math.floor(r() * 360);
+    let s = `<defs><radialGradient id="b${uid}" cx="50%" cy="50%" r="70%"><stop offset="0" stop-color="${mix(c2, "#000000", .55)}"/><stop offset="1" stop-color="#060709"/></radialGradient>
+      <linearGradient id="p${uid}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient>
+      <radialGradient id="h${uid}"><stop offset="0" stop-color="${c1}" stop-opacity=".5"/><stop offset="1" stop-color="${c1}" stop-opacity="0"/></radialGradient></defs>
+      <rect width="100" height="100" fill="url(#b${uid})"/>`;
+    if (aura !== "Нет") s += `<circle cx="50" cy="50" r="${aura === "Мягкая" ? 30 : 42}" fill="url(#h${uid})"/>`;
+    if (aura === "Двойная") s += `<circle cx="50" cy="50" r="22" fill="url(#h${uid})"/>`;
+    for (let i = 0; i < rings; i++) s += `<circle cx="50" cy="50" r="${40 - i * 5}" fill="none" stroke="${c1}" stroke-opacity="${f1(.5 - i * .12)}" stroke-width=".7" ${i === 1 ? 'stroke-dasharray="2 2"' : ""}/>`;
+    const P = { "Овал": `<ellipse cx="50" cy="31" rx="6" ry="14" fill="url(#p${uid})" opacity=".85"/>`,
+      "Ромб": `<path d="M50 14 L57 30 L50 44 L43 30Z" fill="url(#p${uid})" opacity=".9"/>`,
+      "Луч": `<path d="M49 12 L51 12 L52.5 44 L47.5 44Z" fill="url(#p${uid})"/>`,
+      "Капля": `<path d="M50 14 C58 26 58 36 50 42 C42 36 42 26 50 14Z" fill="url(#p${uid})" opacity=".9"/>` }[petal];
+    s += `<g transform="rotate(${rot} 50 50)">`;
+    for (let i = 0; i < k; i++) s += `<g transform="rotate(${f1((360 / k) * i)} 50 50)">${P}</g>`;
+    s += `</g>`;
+    const poly = Array.from({ length: k }, (_, i) => { const a = ((360 / k) * i + rot) * Math.PI / 180; return `${f1(50 + Math.sin(a) * 12)},${f1(50 - Math.cos(a) * 12)}`; }).join(" ");
+    s += `<polygon points="${poly}" fill="none" stroke="${c1}" stroke-width=".8" opacity=".8"/>`;
+    const C = { "Круг": `<circle cx="50" cy="50" r="6" fill="url(#p${uid})" stroke="#fff" stroke-opacity=".5" stroke-width=".5"/>`,
+      "Звезда": `<path d="M50 42 L52 48 L58 50 L52 52 L50 58 L48 52 L42 50 L48 48Z" fill="#fff"/>`,
+      "Пусто": "",
+      "Глаз": `<ellipse cx="50" cy="50" rx="8" ry="5" fill="#f5f7fa"/><circle cx="50" cy="50" r="3" fill="${c2}"/><circle cx="50" cy="50" r="1.3" fill="#050506"/>`,
+      "Корона": `<path d="M43 54 L43 46 L46.5 49 L50 44 L53.5 49 L57 46 L57 54Z" fill="#ffd27a" stroke="#7a500e" stroke-width=".4"/>` }[core];
+    s += C;
+    return { svg: s, traits: { "Симметрия": String(k), "Лепестки": petal, "Кольца": String(rings), "Ядро": core, "Аура": aura } };
+  };
+}
+
 // ═════════ коллекции ═════════
-export const COLLECTIONS = [
+const STATIC = [
   { id: "crowns", name: "Bed Crowns", desc: "Короны для тех, кто правит рынком. Металл, камни и аура — у каждой свои.", chain: "ETH", base: 0.11, size: 100, gen: genCrown },
   { id: "peaks", name: "Night Peaks", desc: "Ночные горы под луной. Северное сияние и две луны — большая редкость.", chain: "SOL", base: 1.4, size: 100, gen: genPeaks },
   { id: "orbs", name: "Glass Orbs", desc: "Стеклянные сферы с ядром внутри. Радужные — самые редкие.", chain: "TON", base: 38, size: 120, gen: genOrb },
   { id: "faces", name: "Bit Faces", desc: "Пиксельные лица 12×12. Корона, нимб и лазерные глаза ценятся выше всего.", chain: "ETH", base: 0.028, size: 150, gen: genFace },
   { id: "waves", name: "Silver Waves", desc: "Генеративные волны: от штиля до шторма.", chain: "BNB", base: 0.14, size: 100, gen: genWaves },
   { id: "deck", name: "Silver Deck", desc: "Колода из 54 карт. Джокеров всего два, голографическая фольга — почти легенда.", chain: "TON", base: 22, size: 54, gen: genCard },
+  { id: "relics", name: "Bed Relics", desc: `${RELIC_TYPES.length} видов артефактов по ${RELIC_VARIANTS} вариаций: мечи, луки, посохи, книги, шлемы, кристаллы и другие. Купить нельзя — только выбить из мистери-бокса.`, chain: "ETH", base: 0.027, size: RELIC_TYPES.length * RELIC_VARIANTS, gen: genRelic, boxOnly: true },
+];
+
+// Каждый понедельник (00:00 UTC) выходит новый дроп «Sigils» — автоматически, без обновления сайта.
+const WEEK = 7 * 86400e3;
+const DROP_EPOCH = Date.UTC(2026, 9, 5); // пн, 5 октября 2026 — дроп №1
+const DROP_CHAINS = ["SOL", "TON", "BNB", "ETH"];
+const DROP_BASE = { SOL: 0.7, TON: 55, BNB: 0.11, ETH: 0.03 };
+const letters = (n) => { let s = ""; do { s = String.fromCharCode(97 + (n % 26)) + s; n = Math.floor(n / 26) - 1; } while (n >= 0); return s; };
+export const dropNumber = (t = Date.now()) => Math.max(1, Math.floor((t - DROP_EPOCH) / WEEK) + 1);
+export const nextDropAt = (t = Date.now()) => DROP_EPOCH + dropNumber(t) * WEEK;
+
+function makeDrop(k) {
+  const style = DROP_STYLES[(k - 1) % DROP_STYLES.length];
+  const chain = DROP_CHAINS[(k - 1) % DROP_CHAINS.length];
+  return {
+    id: `drop${letters(k - 1)}`, // буквы, чтобы id подходил под правила: dropa, dropb, …
+    name: `Sigils · ${style[0]}`, desc: `Еженедельный дроп №${k}. 40 символов в палитре «${style[0]}». Выпадают и в мистери-боксе.`,
+    chain, base: DROP_BASE[chain] * (0.8 + ((k * 37) % 50) / 100), size: 40, gen: makeSigilGen(style),
+    drop: k, releasedAt: DROP_EPOCH + (k - 1) * WEEK,
+  };
+}
+
+export const COLLECTIONS = [
+  ...Array.from({ length: dropNumber() }, (_, i) => makeDrop(dropNumber() - i)), // новые дропы — первыми
+  ...STATIC,
 ];
 export const collectionById = (id) => COLLECTIONS.find((c) => c.id === id);
 
@@ -317,7 +496,7 @@ export function getItems(colId) {
   for (let n = 1; n <= col.size; n++) {
     const r = rng(hash(`${col.id}#${n}`));
     const g = col.gen(r, `${col.id}${n}`, n);
-    items.push({ id: `${col.id}-${n}`, n, col, name: g.name || `${col.name} #${n}`, svg: g.svg, viewBox: g.viewBox || "0 0 100 100", traits: g.traits });
+    items.push({ id: `${col.id}-${n}`, n, col, name: g.name || `${col.name} #${n}`, short: g.short, svg: g.svg, viewBox: g.viewBox || "0 0 100 100", traits: g.traits });
   }
   // частоты черт → редкость
   const freq = {};

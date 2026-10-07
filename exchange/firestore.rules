@@ -15,6 +15,19 @@ service cloud.firestore {
     function validCoin(c) { return c is string && c.matches('^[A-Z0-9]{2,10}$'); }
     function validPair(p) { return p is string && p.matches('^[A-Z0-9]{2,10}USDT$'); }
     function validNick(n) { return n is string && n.size() >= 2 && n.size() <= 20; }
+    function balPath(uid, coin) { return /databases/$(database)/documents/users/$(uid)/balances/$(coin); }
+    function nftPath(id) { return /databases/$(database)/documents/nfts/$(id); }
+    function near(a, b) { return a >= b - 0.000001 && a <= b + 0.000001; }
+    // Перевод: в этой же транзакции свободный баланс отправителя уменьшился ровно на amount.
+    function debited(uid, coin, amt) {
+      return exists(balPath(uid, coin))
+        && near(getAfter(balPath(uid, coin)).data.amount, get(balPath(uid, coin)).data.amount - amt);
+    }
+    // Получение: баланс получателя вырос ровно на amount.
+    function credited(uid, coin, amt) {
+      return near(getAfter(balPath(uid, coin)).data.amount,
+                  (exists(balPath(uid, coin)) ? get(balPath(uid, coin)).data.amount : 0) + amt);
+    }
 
     // Профиль: ник + стоимость портфеля читают все (рейтинг), пишет только владелец.
     match /users/{uid} {
@@ -128,7 +141,53 @@ service cloud.firestore {
         && exists(userPath(request.auth.uid));
 
       allow delete: if signedIn() && resource.data.owner == request.auth.uid;
-      allow update: if false;
+
+      // Перевод NFT другому игроку: меняются только владелец, его ник и дата.
+      allow update: if signedIn()
+        && resource.data.owner == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['owner', 'ownerNick', 'boughtAt'])
+        && request.resource.data.owner != request.auth.uid
+        && exists(userPath(request.resource.data.owner))
+        && validNick(request.resource.data.ownerNick)
+        && request.resource.data.boughtAt == request.time;
+    }
+
+    // Переводы по адресу. Монеты: отправитель списывает у себя и создаёт перевод (pending),
+    // получатель сам забирает его (claimed) и зачисляет себе. NFT: владелец меняется сразу (done).
+    match /transfers/{id} {
+      allow read: if signedIn()
+        && (resource.data.from == request.auth.uid || resource.data.to == request.auth.uid);
+
+      allow create: if signedIn()
+        && request.resource.data.keys().hasOnly(['from', 'fromNick', 'to', 'toNick', 'coin', 'amount', 'nft', 'status', 'createdAt'])
+        && request.resource.data.from == request.auth.uid
+        && request.resource.data.to != request.auth.uid
+        && exists(userPath(request.resource.data.to))
+        && validNick(request.resource.data.fromNick)
+        && validNick(request.resource.data.toNick)
+        && request.resource.data.createdAt == request.time
+        && (
+          (validCoin(request.resource.data.coin)
+            && pos(request.resource.data.amount)
+            && request.resource.data.status == 'pending'
+            && debited(request.auth.uid, request.resource.data.coin, request.resource.data.amount))
+          ||
+          (request.resource.data.coin == 'NFT'
+            && request.resource.data.amount == 1
+            && request.resource.data.nft is string
+            && request.resource.data.status == 'done'
+            && get(nftPath(request.resource.data.nft)).data.owner == request.auth.uid
+            && getAfter(nftPath(request.resource.data.nft)).data.owner == request.resource.data.to)
+        );
+
+      allow update: if signedIn()
+        && resource.data.to == request.auth.uid
+        && resource.data.status == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'claimedAt'])
+        && request.resource.data.status == 'claimed'
+        && credited(request.auth.uid, resource.data.coin, resource.data.amount);
+
+      allow delete: if false;
     }
   }
 }
