@@ -101,7 +101,7 @@ export default {
             ${boxSvg("nft-art")}
             <div class="nft-meta">
               <div class="nft-name"><b>Мистери-бокс ×${nb}</b></div>
-              <div class="nft-price"><small class="muted">Открыть за ${BOX.reveal} USDT</small></div>
+              <div class="nft-price"><small class="muted">Открыть ${nb >= 10 ? 10 : nb >= 5 ? 5 : nb >= 3 ? 3 : 1} · ${BOX.reveal} USDT/шт</small></div>
             </div>
           </button>` : "";
       $("#nftList", el).innerHTML = store.nfts.length || nb ? `<div class="nft-grid small">${boxCard}${store.nfts.map((n) => {
@@ -116,7 +116,7 @@ export default {
             </div>
           </a>`;
       }).join("")}</div>` : '<div class="empty">NFT пока нет — загляни во вкладку <a class="link-btn" href="#/nft">NFT</a></div>';
-      $("#wOpenBox", el)?.addEventListener("click", () => openReveal());
+      $("#wOpenBox", el)?.addEventListener("click", () => openReveal(nb >= 10 ? 10 : nb >= 5 ? 5 : nb >= 3 ? 3 : 1));
     };
 
     const addr = addressOf(store.uid);

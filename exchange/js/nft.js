@@ -62,30 +62,38 @@ export async function sellNft(item) {
 }
 
 // ───────── мистери-бокс ─────────
-export async function buyBox() {
+export const BUY_PACKS = [1, 5, 10, 50];
+export const OPEN_PACKS = [1, 3, 5, 10, 50];
+
+// Покупка сразу n боксов — одной транзакцией.
+export async function buyBoxes(n = 1) {
   const uid = store.uid;
-  const fee = BOX.price * FEE;
+  const cost = BOX.price * n, fee = cost * FEE;
   return runTransaction(db, async (tx) => {
     const uRef = balRef(uid, "USDT");
     const usdt = await readBal(tx, uRef);
-    if (usdt.amount + EPS < BOX.price + fee) throw new TradeError("Недостаточно USDT");
-    usdt.amount -= Math.min(BOX.price + fee, usdt.amount);
+    if (usdt.amount + EPS < cost + fee) throw new TradeError(`Недостаточно USDT: нужно ${(cost + fee).toFixed(2)}`);
+    usdt.amount -= Math.min(cost + fee, usdt.amount);
     writeBal(tx, uRef, usdt, "USDT");
-    tx.set(doc(collection(db, "users", uid, "boxes")), { price: BOX.price, boughtAt: serverTimestamp() });
+    for (let i = 0; i < n; i++) tx.set(doc(collection(db, "users", uid, "boxes")), { price: BOX.price, boughtAt: serverTimestamp() });
     tx.set(doc(collection(db, "users", uid, "trades")), {
-      pair: "NFT", type: "box", side: "buy", price: BOX.price, amount: 1, total: BOX.price,
+      pair: "NFT", type: "box", side: "buy", price: BOX.price, amount: n, total: r8(cost),
       fee: r8(fee), feeAsset: "USDT", nft: "box", time: serverTimestamp(),
     });
   });
 }
+export const buyBox = () => buyBoxes(1);
+
+const loadOwned = async () => new Set((await getDocs(collection(db, "nfts"))).docs.map((d) => d.id));
 
 class Taken extends Error {}
 
 // Открытие: 10 USDT → случайный свободный токен. Если токен успели купить — тянем другой.
-export async function revealBox(boxId) {
+// owned — множество занятых токенов; можно передать общее при массовом открытии.
+export async function revealBox(boxId, owned) {
   const uid = store.uid;
   const nick = getSession().profile?.nick || "Игрок";
-  const owned = new Set((await getDocs(collection(db, "nfts"))).docs.map((d) => d.id));
+  owned = owned || await loadOwned();
   let pool = allItems().filter((it) => !owned.has(it.id) && itemUsd(it) != null);
   if (!pool.length) throw new TradeError("Свободных токенов не осталось или нет курса — попробуй позже");
 
@@ -111,11 +119,52 @@ export async function revealBox(boxId) {
           fee: 0, feeAsset: "USDT", nft: item.id, time: serverTimestamp(),
         });
       });
+      owned.add(item.id);
       return item;
     } catch (e) {
       if (!(e instanceof Taken)) throw e;
+      owned.add(item.id);
       pool = pool.filter((it) => it !== item);
     }
   }
   throw new TradeError("Не получилось открыть бокс — попробуй ещё раз");
+}
+
+// Открыть несколько боксов подряд. Возвращает { items, error } — при ошибке (например, кончились USDT)
+// уже открытые токены остаются у игрока.
+export async function revealMany(boxIds, onProgress = () => {}) {
+  const owned = await loadOwned();
+  const items = [];
+  for (const id of boxIds) {
+    try {
+      let item;
+      try {
+        item = await revealBox(id, owned);
+      } catch (e) {
+        if (e instanceof TradeError) throw e;
+        item = await revealBox(id, owned); // сетевой/временный сбой — одна повторная попытка
+      }
+      items.push(item);
+      onProgress(items.length, boxIds.length);
+    } catch (e) {
+      return { items, error: e };
+    }
+  }
+  return { items, error: null };
+}
+
+// Продать несколько токенов маркету подряд.
+export async function sellMany(items, onProgress = () => {}) {
+  let total = 0, sold = 0;
+  for (const it of items) {
+    try {
+      const r = await sellNft(it);
+      total += r.price - r.fee;
+      sold++;
+      onProgress(sold, items.length);
+    } catch (e) {
+      console.error(e);
+    }
+  }
+  return { total, sold };
 }

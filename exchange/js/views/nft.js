@@ -6,7 +6,7 @@ import { db } from "../firebase.js";
 import { onPrices } from "../market.js";
 import { store, onStore } from "../store.js";
 import { COLLECTIONS, collectionById, getItems, getItem, nftSvg, floorCoin, floorUsd, itemUsd, floorChange24h, BOX, boxSvg, boxOdds, allItems, nextDropAt } from "../nft-data.js";
-import { buyNft, sellNft, buyBox, revealBox } from "../nft.js";
+import { buyNft, sellNft, buyBoxes, revealBox, revealMany, sellMany, BUY_PACKS, OPEN_PACKS } from "../nft.js";
 import { tradeError, FEE } from "../trade.js";
 import { fmtUsd, fmtPct, fmtAmount, fmtDate } from "../format.js";
 import { $, esc, toast } from "../ui.js";
@@ -41,8 +41,10 @@ function renderOverview(el) {
         <div class="box-odds" id="odds"></div>
         <div class="kv"><span>Средняя цена токена из бокса</span><span id="ev">—</span></div>
         <div class="box-actions">
-          <button class="btn btn-primary" id="buyBox">Купить бокс · ${fmtUsd(BOX.price * (1 + FEE))} USDT</button>
-          <button class="btn" id="openBox" disabled>Открыть · ${BOX.reveal} USDT</button>
+          <div class="pack-row"><span class="muted small">Купить боксы · ${fmtUsd(BOX.price * (1 + FEE))} USDT за штуку</span>
+            <div class="packs" id="buyPacks">${BUY_PACKS.map((n) => `<button class="pack buy" data-n="${n}"><b>×${n}</b><small>${fmtUsd(n * BOX.price * (1 + FEE))}</small></button>`).join("")}</div></div>
+          <div class="pack-row"><span class="muted small">Открыть · ${BOX.reveal} USDT за штуку · у тебя <b id="boxCount">0</b></span>
+            <div class="packs" id="openPacks">${OPEN_PACKS.map((n) => `<button class="pack" data-n="${n}" disabled><b>×${n}</b><small>${fmtUsd(n * BOX.reveal)}</small></button>`).join("")}</div></div>
         </div>
       </div>
     </section>
@@ -100,26 +102,28 @@ function renderOverview(el) {
     const dd = Math.floor(left / 86400e3), hh = Math.floor((left % 86400e3) / 3600e3), mm = Math.floor((left % 3600e3) / 60e3);
     $("#dropIn", el).textContent = dd ? `${dd} д ${hh} ч` : `${hh} ч ${mm} мин`;
     const n = store.boxes.length;
-    const ob = $("#openBox", el);
-    if (!ob.dataset.busy) {
-      ob.disabled = !n;
-      ob.textContent = n ? `Открыть · ${BOX.reveal} USDT · у тебя ${n}` : "Боксов нет";
-    }
+    $("#boxCount", el).textContent = String(n);
+    el.querySelectorAll("#openPacks .pack").forEach((b) => (b.disabled = +b.dataset.n > n));
   };
 
-  $("#buyBox", el).onclick = async (e) => {
-    const b = e.currentTarget;
-    b.disabled = true;
+  $("#buyPacks", el).onclick = async (e) => {
+    const b = e.target.closest(".pack");
+    if (!b) return;
+    const n = +b.dataset.n;
+    el.querySelectorAll("#buyPacks .pack").forEach((x) => (x.disabled = true));
     try {
-      await buyBox();
-      toast("Мистери-бокс куплен — открывай, когда захочешь", "ok");
+      await buyBoxes(n);
+      toast(n === 1 ? "Мистери-бокс куплен" : `Куплено боксов: ${n}`, "ok");
     } catch (e2) {
       toast(tradeError(e2), "err");
     } finally {
-      b.disabled = false;
+      el.querySelectorAll("#buyPacks .pack").forEach((x) => (x.disabled = false));
     }
   };
-  $("#openBox", el).onclick = () => openReveal();
+  $("#openPacks", el).onclick = (e) => {
+    const b = e.target.closest(".pack");
+    if (b && !b.disabled) openReveal(+b.dataset.n);
+  };
 
   const draw = () => {
     for (const c of COLLECTIONS) {
@@ -136,8 +140,9 @@ function renderOverview(el) {
 }
 
 // ═════════ открытие бокса ═════════
-export async function openReveal() {
+export async function openReveal(count = 1) {
   if (!store.boxes.length) return;
+  if (count > 1) return openRevealMany(Math.min(count, store.boxes.length));
   const back = document.createElement("div");
   back.className = "modal-back";
   back.innerHTML = `<div class="modal glass reveal">
@@ -441,4 +446,73 @@ function renderItem(el, it) {
   const t = setInterval(draw, 3000);
   stops.push(() => clearInterval(t));
   return () => stops.forEach((s) => s());
+}
+
+// ═════════ массовое открытие ═════════
+const TIER_ORDER = ["t-leg", "t-epic", "t-rare", "t-unc", "t-com"];
+async function openRevealMany(count) {
+  const ids = store.boxes.slice(0, count).map((b) => b.id);
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  back.innerHTML = `<div class="modal glass reveal wide">
+    <div class="reveal-stage"><div class="reveal-box shaking">${boxSvg("nft-art")}</div></div>
+    <p class="muted" id="rvText">Открываем 0 / ${count}…</p>
+    <div class="progress"><i id="rvBar"></i></div>
+    <div class="reveal-actions" id="rvActions"></div>
+  </div>`;
+  document.body.append(back);
+  let done = false;
+  const close = () => back.remove();
+  back.addEventListener("click", (e) => { if (done && e.target === back) close(); });
+  const prog = (k, n, word = "Открываем") => {
+    $("#rvText", back).textContent = `${word} ${k} / ${n}…`;
+    $("#rvBar", back).style.width = `${(k / n) * 100}%`;
+  };
+
+  const [{ items, error }] = await Promise.all([revealMany(ids, (k, n) => prog(k, n)), new Promise((r) => setTimeout(r, 1200))]);
+  done = true;
+  if (!items.length) {
+    $("#rvText", back).textContent = tradeError(error);
+    $("#rvActions", back).innerHTML = '<button class="btn btn-block" id="rvClose">Закрыть</button>';
+    $("#rvClose", back).onclick = close;
+    return;
+  }
+  items.sort((a, b) => TIER_ORDER.indexOf(a.tier.cls) - TIER_ORDER.indexOf(b.tier.cls) || (itemUsd(b) || 0) - (itemUsd(a) || 0));
+  const value = items.reduce((s, it) => s + (itemUsd(it) || 0), 0);
+  const spent = items.length * (BOX.price * (1 + FEE) + BOX.reveal);
+  const commons = items.filter((it) => it.tier.cls === "t-com");
+  const commonsValue = commons.reduce((s, it) => s + (itemUsd(it) || 0), 0) * (1 - FEE);
+  const counts = TIER_ORDER.map((c) => [c, items.filter((it) => it.tier.cls === c)]).filter(([, a]) => a.length);
+  const best = items[0];
+  const diff = value - spent;
+
+  back.querySelector(".reveal-stage").outerHTML = `<div class="reveal-grid">${items.map((it, i) => `
+    <a class="rg-item ${it.tier.cls} ${i === 0 ? "best" : ""}" href="#/nft/${it.col.id}/${it.n}" style="animation-delay:${Math.min(i, 30) * 40}ms" title="${esc(it.name)}">${nftSvg(it, "nft-art")}</a>`).join("")}</div>`;
+  $("#rvText", back).innerHTML = `
+    <b class="rv-name">Открыто ${items.length}${error ? ` из ${count}` : ""}</b>
+    <span class="rv-tiers">${counts.map(([c, a]) => `<span class="tier ${c}">${a[0].tier.name} ×${a.length}</span>`).join("")}</span>
+    <span class="muted">Лучший: <b class="rv-price">${esc(best.name)}</b> · ≈ ${fmtUsd(itemUsd(best) || 0)} USDT</span>
+    <span class="muted">Стоимость всего ≈ <b class="rv-price">${fmtUsd(value)} USDT</b> · потрачено ${fmtUsd(spent)}
+      · <span class="${diff >= 0 ? "up" : "down"}">${diff >= 0 ? "+" : "−"}${fmtUsd(Math.abs(diff))}</span></span>
+    ${error ? `<span class="down small">${esc(tradeError(error))}</span>` : ""}`;
+  back.querySelector(".progress").remove();
+  const left = store.boxes.filter((b) => !ids.includes(b.id)).length;
+  $("#rvActions", back).innerHTML = `
+    ${commons.length && commons.length < items.length ? `<button class="btn btn-sell btn-block" id="rvSellCommon">Продать обычные (${commons.length}) · ≈ ${fmtUsd(commonsValue)} USDT</button>` : ""}
+    <button class="btn btn-block" id="rvSellAll">Продать всё · ≈ ${fmtUsd(value * (1 - FEE))} USDT</button>
+    <a class="btn btn-primary btn-block" href="#/wallet" id="rvWallet">Оставить и открыть кошелёк</a>
+    ${left > 0 ? `<button class="btn btn-block" id="rvMore">Открыть ещё ${Math.min(left, count)} · осталось ${left}</button>` : ""}
+    <button class="btn btn-block" id="rvClose">Закрыть</button>`;
+  $("#rvClose", back).onclick = close;
+  $("#rvWallet", back).onclick = close;
+  back.querySelectorAll(".rg-item").forEach((a) => (a.onclick = close));
+  if (left > 0) $("#rvMore", back).onclick = () => { close(); openReveal(Math.min(left, count)); };
+  const sell = async (list, btn) => {
+    back.querySelectorAll("#rvActions button").forEach((b) => (b.disabled = true));
+    const r = await sellMany(list, (k, n) => (btn.textContent = `Продаём ${k} / ${n}…`));
+    toast(`Продано ${r.sold} шт. за ${fmtUsd(r.total)} USDT`, "ok");
+    close();
+  };
+  $("#rvSellAll", back).onclick = (e) => sell(items, e.currentTarget);
+  if ($("#rvSellCommon", back)) $("#rvSellCommon", back).onclick = (e) => sell(commons, e.currentTarget);
 }
