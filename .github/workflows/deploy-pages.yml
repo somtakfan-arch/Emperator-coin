@@ -39,6 +39,7 @@ jobs:
           cp -r stickman _site/
           cp -r games _site/
           cp -r exchange _site/
+          python3 scripts/version_assets.py _site/exchange "${GITHUB_SHA::8}"
       - name: Upload site
         uses: actions/upload-pages-artifact@v3
         with:
