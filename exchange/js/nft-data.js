@@ -479,7 +479,7 @@ export const COLLECTIONS = [
 ];
 export const collectionById = (id) => COLLECTIONS.find((c) => c.id === id);
 
-const TIERS = [
+export const TIERS = [
   { name: "Легендарный", top: 0.01, mult: 12, cls: "t-leg" },
   { name: "Эпический", top: 0.05, mult: 5, cls: "t-epic" },
   { name: "Редкий", top: 0.15, mult: 2.2, cls: "t-rare" },

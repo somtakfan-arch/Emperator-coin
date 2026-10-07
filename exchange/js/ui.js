@@ -40,3 +40,23 @@ export function sourceBadge(source) {
   const [cls, text] = map[source] || map.connecting;
   return `<span class="src-badge ${cls}"><i></i>${text}</span>`;
 }
+
+// Конфетти — на эпик/легендарку.
+export function confetti(n = 90) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const box = document.createElement("div");
+  box.className = "confetti";
+  const colors = ["#f4f6f8", "#c9ced6", "#d9a634", "#c9a2ff", "#8fbfff", "#5fae8f"];
+  for (let i = 0; i < n; i++) {
+    const p = document.createElement("i");
+    p.style.left = `${Math.random() * 100}%`;
+    p.style.background = colors[i % colors.length];
+    p.style.animationDelay = `${Math.random() * 0.4}s`;
+    p.style.animationDuration = `${1.6 + Math.random() * 1.4}s`;
+    p.style.setProperty("--dx", `${(Math.random() - 0.5) * 160}px`);
+    p.style.setProperty("--r", `${Math.random() * 720 - 360}deg`);
+    box.append(p);
+  }
+  document.body.append(box);
+  setTimeout(() => box.remove(), 3500);
+}

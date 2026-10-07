@@ -46,6 +46,7 @@ export default {
             ${TFS.map(([v, l], i) => `<button type="button" data-tf="${v}" class="${i === 0 ? "active" : ""}">${l}</button>`).join("")}
           </div>
           <span class="muted small" id="ohlc"></span>
+          <span class="ma-legend small"><i class="ma7"></i>MA7 <i class="ma25"></i>MA25</span>
         </div>
         <div class="chart-box" id="chart"><div class="chart-msg" id="chartMsg"><div class="spinner"></div></div></div>
       </div>
@@ -129,6 +130,13 @@ export default {
       });
       volume = chart.addSeries(LWC.HistogramSeries, { priceFormat: { type: "volume" }, priceScaleId: "", lastValueVisible: false, priceLineVisible: false });
       volume.priceScale().applyOptions({ scaleMargins: { top: 0.82, bottom: 0 } });
+      // скользящие средние MA7 и MA25
+      const maOpts = (color) => ({ color, lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
+      const ma7 = chart.addSeries(LWC.LineSeries, maOpts("rgba(233,236,240,0.75)"));
+      const ma25 = chart.addSeries(LWC.LineSeries, maOpts("rgba(201,162,255,0.7)"));
+      let closes = [];
+      const maAt = (arr, n, i) => { if (i + 1 < n) return null; let s = 0; for (let k = i - n + 1; k <= i; k++) s += arr[k].close; return s / n; };
+      const maData = (arr, n) => arr.map((c, i) => ({ time: c.time, value: maAt(arr, n, i) })).filter((p) => p.value != null);
       const volBar = (c) => ({ time: c.time, value: c.volume, color: c.close >= c.open ? "rgba(95,174,143,0.28)" : "rgba(201,116,116,0.28)" });
 
       chart.subscribeCrosshairMove((p) => {
@@ -147,6 +155,9 @@ export default {
           candles.applyOptions({ priceFormat: { type: "price", precision: dd, minMove: 1 / 10 ** dd } });
           candles.setData(data);
           volume.setData(data.map(volBar));
+          closes = data.slice();
+          ma7.setData(maData(closes, 7));
+          ma25.setData(maData(closes, 25));
           chart.timeScale().fitContent();
           chart.timeScale().scrollToRealTime();
           chartMsg("");
@@ -156,6 +167,10 @@ export default {
             lastTime = c.time;
             candles.update(c);
             volume.update(volBar(c));
+            if (closes.at(-1)?.time === c.time) closes[closes.length - 1] = c; else closes.push(c);
+            const i = closes.length - 1;
+            if (i >= 6) ma7.update({ time: c.time, value: maAt(closes, 7, i) });
+            if (i >= 24) ma25.update({ time: c.time, value: maAt(closes, 25, i) });
           };
           klineStop = liveStream(
             [`${symbol.toLowerCase()}@kline_${tf}`],

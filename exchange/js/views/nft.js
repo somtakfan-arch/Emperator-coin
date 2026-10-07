@@ -5,11 +5,12 @@ import {
 import { db } from "../firebase.js";
 import { onPrices } from "../market.js";
 import { store, onStore } from "../store.js";
-import { COLLECTIONS, collectionById, getItems, getItem, nftSvg, floorCoin, floorUsd, itemUsd, floorChange24h, BOX, boxSvg, boxOdds, allItems, nextDropAt } from "../nft-data.js";
-import { buyNft, sellNft, buyBoxes, revealBox, revealMany, sellMany, BUY_PACKS, OPEN_PACKS } from "../nft.js";
+import { TIERS, COLLECTIONS, collectionById, getItems, getItem, nftSvg, floorCoin, floorUsd, itemUsd, floorChange24h, BOX, boxSvg, boxOdds, allItems, nextDropAt } from "../nft-data.js";
+import { buyNft, sellNft, buyBoxes, revealBox, revealMany, sellMany, BUY_PACKS, OPEN_PACKS, craft, craftTarget, CRAFT_COST } from "../nft.js";
 import { tradeError, FEE } from "../trade.js";
 import { fmtUsd, fmtPct, fmtAmount, fmtDate } from "../format.js";
-import { $, esc, toast } from "../ui.js";
+import { $, esc, toast, confetti } from "../ui.js";
+import { loadDaily, claimFreeBox, claimQuest, nextDayAt } from "../bonus.js";
 import { openSend } from "./send.js";
 
 const fmtCoin = (v) => fmtAmount(v, v >= 100 ? 1 : v >= 1 ? 3 : 4);
@@ -33,6 +34,13 @@ function renderOverview(el) {
       <div><h1 class="page-title">NFT</h1><p class="page-sub">${COLLECTIONS.length} коллекций · ${total} уникальных токенов · цены по живому курсу</p></div>
       <a class="btn btn-sm" href="#/wallet" id="myNft">Мои NFT</a>
     </section>
+    <section class="glass card daily" id="daily">
+      <div class="daily-head"><p class="card-title">Ежедневное</p><span class="muted small">Обновится через <b id="dailyIn">—</b></span></div>
+      <div class="daily-grid">
+        <div class="daily-box">${boxSvg("nft-art")}<div><b>Бесплатный бокс</b><small class="muted">Раз в сутки</small></div><button class="btn btn-primary btn-sm" id="freeBox" disabled>…</button></div>
+        <div class="quests" id="quests"><div class="boot"><div class="spinner"></div></div></div>
+      </div>
+    </section>
     <section class="glass box-hero">
       <div class="box-art">${boxSvg("nft-art box-float")}</div>
       <div class="box-info">
@@ -47,6 +55,10 @@ function renderOverview(el) {
             <div class="packs" id="openPacks">${OPEN_PACKS.map((n) => `<button class="pack" data-n="${n}" disabled><b>×${n}</b><small>${fmtUsd(n * BOX.reveal)}</small></button>`).join("")}</div></div>
         </div>
       </div>
+    </section>
+    <section class="glass card craft-card">
+      <div class="daily-head"><p class="card-title">Крафт</p><span class="muted small">${CRAFT_COST} токена одной редкости → 1 случайный следующей редкости</span></div>
+      <div class="craft-rows" id="craftRows"></div>
     </section>
     <div class="drop-bar glass"><span>Новый дроп <b>Sigils</b> выходит каждый понедельник и сразу попадает в бокс.</span><span class="muted">Следующий через <b id="dropIn">—</b></span></div>
     <h2 class="section-title">Коллекции</h2>
@@ -101,9 +113,80 @@ function renderOverview(el) {
     const left = Math.max(0, nextDropAt() - Date.now());
     const dd = Math.floor(left / 86400e3), hh = Math.floor((left % 86400e3) / 3600e3), mm = Math.floor((left % 3600e3) / 60e3);
     $("#dropIn", el).textContent = dd ? `${dd} д ${hh} ч` : `${hh} ч ${mm} мин`;
+    const left2 = Math.max(0, nextDayAt() - Date.now());
+    $("#dailyIn", el).textContent = `${Math.floor(left2 / 3600e3)} ч ${Math.floor((left2 % 3600e3) / 60e3)} мин`;
+    drawCraft();
     const n = store.boxes.length;
     $("#boxCount", el).textContent = String(n);
     el.querySelectorAll("#openPacks .pack").forEach((b) => (b.disabled = +b.dataset.n > n));
+  };
+
+  // ── ежедневное ──
+  let daily = null;
+  const drawDaily = () => {
+    if (!alive || !daily) return;
+    const fb = $("#freeBox", el);
+    fb.disabled = daily.freeBoxClaimed;
+    fb.textContent = daily.freeBoxClaimed ? "Получен ✓" : "Забрать";
+    $("#quests", el).innerHTML = daily.quests.map((q) => `
+      <div class="quest ${q.claimed ? "done" : ""}">
+        <div class="q-main"><b>${q.title}</b>
+          <div class="q-bar"><i style="width:${(q.progress / q.goal) * 100}%"></i></div>
+          <small class="muted">${q.progress} / ${q.goal} · награда ${q.reward} USDT</small></div>
+        <button class="btn btn-sm ${q.progress >= q.goal && !q.claimed ? "btn-primary" : ""}" data-q="${q.id}" ${q.progress < q.goal || q.claimed ? "disabled" : ""}>${q.claimed ? "✓" : "Забрать"}</button>
+      </div>`).join("");
+  };
+  const refreshDaily = async () => {
+    try { daily = await loadDaily(); drawDaily(); } catch (e) { console.error(e); }
+  };
+  $("#freeBox", el).onclick = async (e) => {
+    e.currentTarget.disabled = true;
+    try { await claimFreeBox(); toast("Бесплатный бокс твой — открывай!", "ok"); } catch (e2) { toast(tradeError(e2), "err"); }
+    refreshDaily();
+  };
+  $("#quests", el).onclick = async (e) => {
+    const b = e.target.closest("button[data-q]");
+    if (!b) return;
+    b.disabled = true;
+    const q = daily.quests.find((x) => x.id === b.dataset.q);
+    try { await claimQuest(q); toast(`+${q.reward} USDT за задание`, "ok"); } catch (e2) { toast(tradeError(e2), "err"); }
+    refreshDaily();
+  };
+  refreshDaily();
+  const dailyT = setInterval(refreshDaily, 60000);
+
+  // ── крафт ──
+  const drawCraft = () => {
+    if (!alive) return;
+    const rows = TIERS.slice(1).reverse().map((t) => {
+      const mine = store.nfts.filter((n) => n.item.tier === t);
+      const target = craftTarget(t.name);
+      const can = mine.length >= CRAFT_COST;
+      return `<div class="craft-row">
+        <span><span class="tier ${t.cls}">${t.name}</span> ×${CRAFT_COST} → <span class="tier ${target.cls}">${target.name}</span></span>
+        <span class="muted small">у тебя ${mine.length}</span>
+        <button class="btn btn-sm ${can ? "btn-primary" : ""}" data-craft="${t.name}" ${can ? "" : "disabled"}>Скрафтить</button>
+      </div>`;
+    });
+    $("#craftRows", el).innerHTML = rows.join("");
+  };
+  $("#craftRows", el).onclick = async (e) => {
+    const b = e.target.closest("button[data-craft]");
+    if (!b) return;
+    const tierName = b.dataset.craft;
+    // берём 3 самых дешёвых токена этой редкости
+    const pickList = store.nfts.filter((n) => n.item.tier.name === tierName)
+      .sort((x, y) => (itemUsd(x.item) || 0) - (itemUsd(y.item) || 0)).slice(0, CRAFT_COST).map((n) => n.item);
+    if (!confirm(`Сжечь ${pickList.map((it) => it.name).join(", ")} и получить случайный токен редкости «${craftTarget(tierName).name}»?`)) return;
+    b.disabled = true;
+    try {
+      const it = await craft(pickList);
+      showResult(it, "Скрафчено!");
+      refreshDaily();
+    } catch (e2) {
+      toast(tradeError(e2), "err");
+      b.disabled = false;
+    }
   };
 
   $("#buyPacks", el).onclick = async (e) => {
@@ -136,7 +219,7 @@ function renderOverview(el) {
   };
   const s1 = onPrices(() => { draw(); drawBox(); }), s2 = onStore(() => { draw(); drawBox(); });
   const t = setInterval(drawBox, 5000);
-  return () => { alive = false; s1(); s2(); unsubOwned(); clearInterval(t); };
+  return () => { alive = false; s1(); s2(); unsubOwned(); clearInterval(t); clearInterval(dailyT); };
 }
 
 // ═════════ открытие бокса ═════════
@@ -167,6 +250,7 @@ export async function openReveal(count = 1) {
     return;
   }
   const price = itemUsd(item);
+  if (item.tier.cls === "t-epic" || item.tier.cls === "t-leg") confetti();
   back.querySelector(".reveal-stage").innerHTML = `<div class="reveal-item ${item.tier.cls}">${nftSvg(item, "nft-art")}</div>`;
   $("#rvText", back).innerHTML = `
     <span class="tier ${item.tier.cls}">${item.tier.name}</span>
@@ -484,6 +568,7 @@ async function openRevealMany(count) {
   const commonsValue = commons.reduce((s, it) => s + (itemUsd(it) || 0), 0) * (1 - FEE);
   const counts = TIER_ORDER.map((c) => [c, items.filter((it) => it.tier.cls === c)]).filter(([, a]) => a.length);
   const best = items[0];
+  if (best.tier.cls === "t-epic" || best.tier.cls === "t-leg") confetti();
   const diff = value - spent;
 
   back.querySelector(".reveal-stage").outerHTML = `<div class="reveal-grid">${items.map((it, i) => `
@@ -515,4 +600,20 @@ async function openRevealMany(count) {
   };
   $("#rvSellAll", back).onclick = (e) => sell(items, e.currentTarget);
   if ($("#rvSellCommon", back)) $("#rvSellCommon", back).onclick = (e) => sell(commons, e.currentTarget);
+}
+
+// Простое окно результата (крафт).
+function showResult(item, title) {
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  const price = itemUsd(item);
+  back.innerHTML = `<div class="modal glass reveal">
+    <div class="reveal-stage"><div class="reveal-item ${item.tier.cls}">${nftSvg(item, "nft-art")}</div></div>
+    <p id="rvText"><b class="rv-name">${title}</b><span class="tier ${item.tier.cls}">${item.tier.name}</span>
+      <b class="rv-name">${esc(item.name)}</b><span class="muted">${item.col.name} · ≈ <b class="rv-price">${price != null ? fmtUsd(price) : "—"} USDT</b></span></p>
+    <div class="reveal-actions"><a class="btn btn-primary btn-block" href="#/nft/${item.col.id}/${item.n}" data-close>Смотреть токен</a><button class="btn btn-block" data-close>Закрыть</button></div>
+  </div>`;
+  document.body.append(back);
+  back.addEventListener("click", (e) => { if (e.target === back || e.target.closest("[data-close]")) back.remove(); });
+  if (item.tier.cls === "t-epic" || item.tier.cls === "t-leg" || item.tier.cls === "t-rare") confetti(item.tier.cls === "t-rare" ? 40 : 90);
 }
