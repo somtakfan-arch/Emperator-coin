@@ -1,5 +1,5 @@
 // 2. Торговля — график, стакан, форма купить/продать, открытые ордера.
-import { PAIRS, pairBySymbol, onPrices, tickers, getPrice, fetchKlines, fetchDepth, fetchTrades, wsKline, liveStream } from "../market.js";
+import { PAIRS, pairBySymbol, onPrices, tickers, getPrice, fetchKlines, fetchDepth, fetchTrades, wsKline, pairStream, usMarketOpen } from "../market.js";
 import { isFav, toggleFav, prefs, onPrefs } from "../prefs.js";
 import { addAlert, removeAlert } from "../alerts.js";
 import { sfx } from "../sound.js";
@@ -26,7 +26,8 @@ export default {
           ${coinIcon(pair, "lg")}
           <label class="pair-select">
             <select id="pairSel" aria-label="Пара">
-              ${PAIRS.map((p) => `<option value="${p.symbol}" ${p.symbol === symbol ? "selected" : ""}>${p.base}/USDT</option>`).join("")}
+              <optgroup label="Крипта">${PAIRS.filter((p) => !p.stock).map((p) => `<option value="${p.symbol}" ${p.symbol === symbol ? "selected" : ""}>${p.base}/USDT</option>`).join("")}</optgroup>
+              <optgroup label="Акции">${PAIRS.filter((p) => p.stock).map((p) => `<option value="${p.symbol}" ${p.symbol === symbol ? "selected" : ""}>${p.ticker} · ${p.name}</option>`).join("")}</optgroup>
             </select>
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="m6 9 6 6 6-6"/></svg>
           </label>
@@ -143,7 +144,7 @@ export default {
       $("#bookPane", el).hidden = feedOn;
       $("#tradesPane", el).hidden = !feedOn;
       if (feedOn && !feedStop) {
-        feedStop = liveStream([`${symbol.toLowerCase()}@trade`],
+        feedStop = pairStream(symbol, [`${symbol.toLowerCase()}@trade`],
           (_, d) => pushTrades([{ price: +d.p, qty: +d.q, time: d.T, buyerMaker: d.m }]),
           async () => pushTrades(await fetchTrades(symbol, 30)), { pollMs: 2500, timeoutMs: 4000 });
         stops.push(() => feedStop?.());
@@ -250,7 +251,7 @@ export default {
             if (i >= 24) ma25.update({ time: c.time, value: maAt(closes, 25, i) });
             if (rsi && i >= 15) { const r = rsiData(closes.slice(-200)).at(-1); if (r) rsi.update(r); }
           };
-          klineStop = liveStream(
+          klineStop = pairStream(symbol, 
             [`${symbol.toLowerCase()}@kline_${tf}`],
             (_, m) => m.k && push(wsKline(m.k)),
             async () => (await fetchKlines(symbol, tf, { limit: 2 })).forEach(push),
@@ -304,7 +305,7 @@ export default {
       book = d;
       if (!bookQueued) { bookQueued = true; setTimeout(drawBook, 250); }
     };
-    stops.push(liveStream([`${symbol.toLowerCase()}@depth20@100ms`], (_, d) => onBook(d), async () => onBook(await fetchDepth(symbol)), { pollMs: 2000, timeoutMs: 5000 }));
+    stops.push(pairStream(symbol, [`${symbol.toLowerCase()}@depth20@100ms`], (_, d) => onBook(d), async () => onBook(await fetchDepth(symbol)), { pollMs: 2000, timeoutMs: 5000 }));
     const bookEmptyTimer = setTimeout(() => {
       if (!book) $("#asks", el).innerHTML = '<div class="empty">Стакан недоступен — нет связи с Binance</div>';
     }, 10000);
@@ -478,7 +479,9 @@ export default {
     // подписка на цены — в конце, когда всё выше уже объявлено
     let lastPriceShown = null;
     stops.push(onPrices((all, source) => {
-      $("#src", el).innerHTML = sourceBadge(source);
+      $("#src", el).innerHTML = pair.stock
+        ? `<span class="src-badge ${usMarketOpen() ? "live" : "warn"}"><i></i>${usMarketOpen() ? "Биржа США открыта" : "Биржа США закрыта — цена почти не меняется"}</span>`
+        : sourceBadge(source);
       const t = all[symbol];
       if (!t) return;
       const lp = $("#lastPrice", el);

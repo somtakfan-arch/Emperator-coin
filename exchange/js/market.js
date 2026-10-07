@@ -1,7 +1,7 @@
 // Рыночные данные: живые цены (Binance WebSocket), стакан, свечи.
-// Запасной источник цен — CoinGecko.
+// Запасной источник цен — CoinGecko. Акции — токенизированные (Ondo / xStocks) с биржи Gate.
 
-export const PAIRS = [
+const CRYPTO = [
   { symbol: "BTCUSDT", base: "BTC", name: "Bitcoin", glyph: "₿", cg: "bitcoin" },
   { symbol: "ETHUSDT", base: "ETH", name: "Ethereum", glyph: "Ξ", cg: "ethereum" },
   { symbol: "SOLUSDT", base: "SOL", name: "Solana", glyph: "S", cg: "solana" },
@@ -31,6 +31,25 @@ export const PAIRS = [
   { symbol: "ICPUSDT", base: "ICP", name: "Internet Computer", glyph: "∞", cg: "internet-computer" },
   { symbol: "HBARUSDT", base: "HBAR", name: "Hedera", glyph: "ħ", cg: "hedera-hashgraph" },
 ];
+
+// Акции: цена токена 1:1 повторяет настоящую акцию. gate — пара на Gate, ticker — биржевой тикер.
+const S = (base, name, gate, ticker = base) => ({ symbol: `${base}USDT`, base, name, ticker, glyph: ticker.slice(0, 2), gate, stock: true });
+const STOCKS = [
+  S("AAPL", "Apple", "AAPLON_USDT"), S("MSFT", "Microsoft", "MSFTON_USDT"), S("NVDA", "NVIDIA", "NVDAON_USDT"),
+  S("TSLA", "Tesla", "TSLAON_USDT"), S("AMZN", "Amazon", "AMZNON_USDT"), S("GOOGL", "Alphabet (Google)", "GOOGLON_USDT"),
+  S("META", "Meta (Facebook)", "METAON_USDT"), S("NFLX", "Netflix", "NFLXON_USDT"), S("AMD", "AMD", "AMDON_USDT"),
+  S("PLTR", "Palantir", "PLTRON_USDT"), S("ORCL", "Oracle", "ORCLG_USDT"), S("AVGO", "Broadcom", "AVGOON_USDT"),
+  S("INTC", "Intel", "INTCG_USDT"), S("CSCO", "Cisco", "CSCOON_USDT"), S("COIN", "Coinbase", "COINON_USDT"),
+  S("HOOD", "Robinhood", "HOODON_USDT"), S("MSTR", "MicroStrategy", "MSTRON_USDT"), S("CRCL", "Circle", "CRCLON_USDT"),
+  S("JPM", "JPMorgan", "JPMON_USDT"), S("VISA", "Visa", "VG_USDT", "V"), S("MA", "Mastercard", "MAON_USDT"),
+  S("WMT", "Walmart", "WMTG_USDT"), S("KO", "Coca-Cola", "KOON_USDT"), S("PEP", "PepsiCo", "PEPON_USDT"),
+  S("MCD", "McDonald's", "MCDON_USDT"), S("XOM", "Exxon Mobil", "XOMG_USDT"), S("LLY", "Eli Lilly", "LLYON_USDT"),
+  S("UNH", "UnitedHealth", "UNHON_USDT"), S("BABA", "Alibaba", "BABAON_USDT"),
+  S("SPY", "S&P 500 (фонд)", "SPYON_USDT"), S("QQQ", "Nasdaq 100 (фонд)", "QQQON_USDT"), S("GLD", "Золото (фонд)", "GLDX_USDT"),
+];
+
+export const PAIRS = [...CRYPTO, ...STOCKS];
+export const isStock = (symbol) => !!pairBySymbol(symbol)?.stock;
 export const pairBySymbol = (s) => PAIRS.find((p) => p.symbol === s);
 export const pairByBase = (b) => PAIRS.find((p) => p.base === b);
 
@@ -54,6 +73,7 @@ async function binanceGet(path) {
 // Свечи: [{time(сек, локальное время), open, high, low, close, volume}]
 const TZ_SHIFT = -new Date().getTimezoneOffset() * 60;
 export async function fetchKlines(symbol, interval, { limit = 500, startTime } = {}) {
+  if (isStock(symbol)) return gateKlines(pairBySymbol(symbol).gate, interval, { limit, startTime });
   const q = new URLSearchParams({ symbol, interval, limit: String(limit) });
   if (startTime) q.set("startTime", String(startTime));
   const rows = await binanceGet(`/api/v3/klines?${q}`);
@@ -125,8 +145,9 @@ export async function fetchSpark(symbol) {
 }
 
 // Последние сделки на бирже (лента).
-export const fetchTrades = async (symbol, limit = 30) =>
-  (await binanceGet(`/api/v3/trades?symbol=${symbol}&limit=${limit}`)).map((t) => ({ price: +t.price, qty: +t.qty, time: t.time, buyerMaker: t.isBuyerMaker }));
+export const fetchTrades = async (symbol, limit = 30) => isStock(symbol)
+  ? (await gateGet(`/spot/trades?currency_pair=${pairBySymbol(symbol).gate}&limit=${limit}`)).map((t) => ({ price: +t.price, qty: +t.amount, time: +t.create_time_ms, buyerMaker: t.side === "sell" }))
+  : (await binanceGet(`/api/v3/trades?symbol=${symbol}&limit=${limit}`)).map((t) => ({ price: +t.price, qty: +t.qty, time: t.time, buyerMaker: t.isBuyerMaker }));
 
 // Индекс страха и жадности (alternative.me), кэш на час.
 let fng = null;
@@ -139,7 +160,30 @@ export async function fetchFearGreed() {
   return data;
 }
 
-export const fetchDepth = (symbol, limit = 20) => binanceGet(`/api/v3/depth?symbol=${symbol}&limit=${limit}`);
+export const fetchDepth = (symbol, limit = 20) => isStock(symbol)
+  ? gateGet(`/spot/order_book?currency_pair=${pairBySymbol(symbol).gate}&limit=${limit}`)
+  : binanceGet(`/api/v3/depth?symbol=${symbol}&limit=${limit}`);
+
+// ───────── Gate (акции) ─────────
+const GATE = "https://api.gateio.ws/api/v4";
+async function gateGet(path) {
+  const r = await fetch(GATE + path);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+const GATE_TF = { "1m": "1m", "5m": "5m", "15m": "15m", "1h": "1h", "4h": "4h", "1d": "1d", "1w": "7d" };
+const GATE_SEC = { "1m": 60, "5m": 300, "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400, "7d": 604800 };
+async function gateKlines(pair, interval, { limit = 500, startTime } = {}) {
+  const iv = GATE_TF[interval] || interval;
+  const q = new URLSearchParams({ currency_pair: pair, interval: iv });
+  if (startTime) {
+    q.set("from", String(Math.floor(startTime / 1000)));
+    q.set("to", String(Math.min(Math.floor(Date.now() / 1000), Math.floor(startTime / 1000) + GATE_SEC[iv] * Math.min(limit, 999))));
+  } else q.set("limit", String(Math.min(limit, 1000)));
+  // [t(сек), объём в USDT, close, high, low, open, объём, закрыта]
+  const rows = await gateGet(`/spot/candlesticks?${q}`);
+  return rows.map((k) => ({ openTime: +k[0] * 1000, time: +k[0] + TZ_SHIFT, open: +k[5], high: +k[3], low: +k[4], close: +k[2], volume: +k[6] }));
+}
 
 // ───────── тикеры (цены всех пар) ─────────
 // tickers[symbol] = { price, open, high, low, change, quoteVolume, ts }
@@ -154,7 +198,8 @@ let emitQueued = false;
 export const getSource = () => source;
 export const getPrice = (symbol) => {
   const t = tickers[symbol];
-  return t && Date.now() - t.ts < STALE_MS * 4 ? t.price : null;
+  // у акций сделки реже — цена считается актуальной дольше
+  return t && Date.now() - t.ts < (t.stock ? 900e3 : STALE_MS * 4) ? t.price : null;
 };
 
 export function onPrices(cb) {
@@ -172,10 +217,11 @@ function emit() {
 }
 function setSource(s) { if (source !== s) { source = s; emit(); } }
 
-function applyTicker(symbol, price, open, high, low, quoteVolume) {
+function applyTicker(symbol, price, open, high, low, quoteVolume, stock = false) {
+  if (!(price > 0)) return;
   const change = open ? ((price - open) / open) * 100 : 0;
   const prev = tickers[symbol]?.price;
-  tickers[symbol] = { price, open, high, low, change, quoteVolume, prev, ts: Date.now() };
+  tickers[symbol] = { price, open, high, low, change, quoteVolume, prev, stock, ts: Date.now() };
 }
 
 export function startPrices() {
@@ -185,7 +231,7 @@ export function startPrices() {
 
   // Живые цены: WebSocket, при его недоступности — опрос REST Binance раз в 3 с.
   liveStream(
-    PAIRS.map((p) => `${p.symbol.toLowerCase()}@miniTicker`),
+    CRYPTO.map((p) => `${p.symbol.toLowerCase()}@miniTicker`),
     (_, d) => {
       lastBinanceMsg = Date.now();
       applyTicker(d.s, +d.c, +d.o, +d.h, +d.l, +d.q);
@@ -194,7 +240,7 @@ export function startPrices() {
       emit();
     },
     async () => {
-      const rows = await binanceGet(`/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(PAIRS.map((p) => p.symbol)))}`);
+      const rows = await binanceGet(`/api/v3/ticker/24hr?symbols=${encodeURIComponent(JSON.stringify(CRYPTO.map((p) => p.symbol)))}`);
       lastBinanceMsg = Date.now();
       rows.forEach((r) => applyTicker(r.symbol, +r.lastPrice, +r.openPrice, +r.highPrice, +r.lowPrice, +r.quoteVolume));
       stopCoinGecko();
@@ -203,6 +249,8 @@ export function startPrices() {
     },
     { pollMs: 3000, timeoutMs: 4000 },
   );
+
+  startStocks();
 
   // Сторож: если Binance недоступен совсем — переключаемся на CoinGecko.
   setInterval(() => {
@@ -219,12 +267,12 @@ function stopCoinGecko() {
 
 async function pollCoinGecko() {
   try {
-    const ids = PAIRS.map((p) => p.cg).join(",");
+    const ids = CRYPTO.map((p) => p.cg).join(",");
     const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`);
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
     const data = await r.json();
     if (Date.now() - lastBinanceMsg < STALE_MS) return; // Binance ожил
-    PAIRS.forEach((p) => {
+    CRYPTO.forEach((p) => {
       const d = data[p.cg];
       if (!d?.usd) return;
       const change = d.usd_24h_change ?? 0;
@@ -237,4 +285,79 @@ async function pollCoinGecko() {
   } catch {
     if (!Object.keys(tickers).length || Date.now() - lastBinanceMsg > STALE_MS * 4) setSource("offline");
   }
+}
+
+// ───────── акции: WebSocket Gate + запасной опрос REST ─────────
+const gateTick = (r) => {
+  const p = STOCKS.find((x) => x.gate === r.currency_pair);
+  if (!p) return;
+  const last = +r.last, ch = +r.change_percentage || 0;
+  applyTicker(p.symbol, last, last / (1 + ch / 100), +r.high_24h || null, +r.low_24h || null, +r.quote_volume || null, true);
+};
+let lastGateMsg = 0;
+function startStocks() {
+  const ids = STOCKS.map((p) => p.gate);
+  let ws = null, ping = null, attempt = 0;
+  const connect = () => {
+    try { ws = new WebSocket("wss://api.gateio.ws/ws/v4/"); } catch { return; }
+    ws.onopen = () => {
+      attempt = 0;
+      ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: "spot.tickers", event: "subscribe", payload: ids }));
+      ping = setInterval(() => ws.readyState === 1 && ws.send(JSON.stringify({ time: Math.floor(Date.now() / 1000), channel: "spot.ping" })), 20000);
+    };
+    ws.onmessage = (e) => {
+      try {
+        const m = JSON.parse(e.data);
+        if (m.channel === "spot.tickers" && m.event === "update" && m.result) { lastGateMsg = Date.now(); gateTick(m.result); emit(); }
+      } catch { /* ignore */ }
+    };
+    ws.onclose = () => { clearInterval(ping); attempt++; setTimeout(connect, Math.min(1000 * 2 ** Math.min(attempt, 5), 60000)); };
+    ws.onerror = () => ws.close();
+  };
+  connect();
+  // REST: сразу при старте и затем раз в 15 с (если WebSocket молчит) / раз в 60 с (обновить «тихие» акции)
+  let lastPoll = 0;
+  const poll = async () => {
+    lastPoll = Date.now();
+    await Promise.all(ids.map(async (id) => {
+      try { const [r] = await gateGet(`/spot/tickers?currency_pair=${id}`); if (r) gateTick(r); } catch { /* сеть */ }
+    }));
+    emit();
+  };
+  poll();
+  setInterval(() => {
+    const wsAlive = Date.now() - lastGateMsg < 30000;
+    if (Date.now() - lastPoll > (wsAlive ? 60000 : 15000)) poll();
+  }, 5000);
+}
+
+// Для акций нет живого потока Binance — только опрос REST.
+export function pollStream(poll, ms = 3000) {
+  let stopped = false;
+  const tick = () => poll().catch(() => {});
+  tick();
+  const t = setInterval(() => !stopped && tick(), ms);
+  return () => { stopped = true; clearInterval(t); };
+}
+// Универсально: крипта — WebSocket Binance с подстраховкой, акции — опрос Gate.
+export function pairStream(symbol, streams, onWs, poll, opts = {}) {
+  return isStock(symbol) ? pollStream(poll, opts.pollMs || 3000) : liveStream(streams, onWs, poll, opts);
+}
+
+// Биржа США (NYSE/Nasdaq): пн–пт 9:30–16:00 по Нью-Йорку.
+export function usMarketOpen(t = new Date()) {
+  const ny = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", weekday: "short", hour: "numeric", minute: "numeric", hour12: false }).formatToParts(t);
+  const get = (k) => ny.find((x) => x.type === k)?.value;
+  const wd = get("weekday"), mins = (+get("hour") % 24) * 60 + +get("minute");
+  return !["Sat", "Sun"].includes(wd) && mins >= 570 && mins < 960;
+}
+
+// Часы работы биржи США в местном времени пользователя (учитывает летнее/зимнее время).
+export function usMarketHoursLocal(t = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", year: "numeric", month: "numeric", day: "numeric", hour: "numeric", minute: "numeric", hour12: false }).formatToParts(t);
+  const g = (k) => +parts.find((x) => x.type === k).value;
+  const nyAsUtc = Date.UTC(g("year"), g("month") - 1, g("day"), g("hour") % 24, g("minute"));
+  const offset = Math.round((nyAsUtc - t.getTime()) / 900e3) * 900e3; // NY − UTC
+  const at = (h, m) => new Date(Date.UTC(g("year"), g("month") - 1, g("day"), h, m) - offset).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" });
+  return `с ${at(9, 30)} до ${at(16, 0)}`;
 }

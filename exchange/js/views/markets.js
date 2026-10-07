@@ -1,5 +1,5 @@
 // 1. Рынки — список пар, цена, изменение за 24ч, поиск.
-import { PAIRS, onPrices, tickers, fetchSpark, fetchFearGreed } from "../market.js";
+import { PAIRS, onPrices, tickers, fetchSpark, fetchFearGreed, usMarketOpen, usMarketHoursLocal } from "../market.js";
 import { isFav, toggleFav, prefs } from "../prefs.js";
 import { fmtPrice, fmtPct, fmtCompact } from "../format.js";
 import { $, coinIcon, sourceBadge } from "../ui.js";
@@ -10,13 +10,15 @@ export default {
       <section class="page-head">
         <div>
           <h1 class="page-title">Рынки</h1>
-          <p class="page-sub">Спот · пары к USDT <span id="src"></span></p>
+          <p class="page-sub" id="mkSub"><span id="mkSubText">Спот · пары к USDT</span> <span id="src"></span></p>
         </div>
         <label class="search glass">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-          <input id="q" type="search" placeholder="Поиск монеты" autocomplete="off" />
+          <input id="q" type="search" placeholder="Поиск монеты или акции" autocomplete="off" />
         </label>
       </section>
+      <div class="seg kind-seg" id="kindSeg"><button class="active" data-k="crypto">🪙 Крипта</button><button data-k="stock">📊 Акции</button></div>
+      <div class="stock-note glass" id="stockNote" hidden></div>
       <div class="mk-top">
         <div class="glass fng" id="fng"><small class="muted">Индекс страха и жадности</small><div class="fng-body">…</div></div>
         <div class="seg seg-sm view-seg" id="viewSeg"><button data-v="list" class="active">Список</button><button data-v="map">Карта</button></div>
@@ -36,8 +38,8 @@ export default {
         </div>
         <div id="rows">
           ${PAIRS.map((p) => `
-            <a class="mt-row" href="#/trade/${p.symbol}" data-symbol="${p.symbol}" data-search="${(p.base + " " + p.name).toLowerCase()}">
-              <span class="pair-cell"><button class="fav ${isFav(p.symbol) ? "on" : ""}" data-fav="${p.symbol}" aria-label="В избранное">★</button>${coinIcon(p)}<span><b>${p.base}</b><span class="muted">/USDT</span><small>${p.name}</small></span></span>
+            <a class="mt-row" href="#/trade/${p.symbol}" data-symbol="${p.symbol}" data-kind="${p.stock ? "stock" : "crypto"}" data-search="${(p.base + " " + (p.ticker || "") + " " + p.name).toLowerCase()}">
+              <span class="pair-cell"><button class="fav ${isFav(p.symbol) ? "on" : ""}" data-fav="${p.symbol}" aria-label="В избранное">★</button>${coinIcon(p)}<span><b>${p.stock ? p.ticker : p.base}</b><span class="muted">${p.stock ? "" : "/USDT"}</span><small>${p.name}</small></span></span>
               <span class="r price" data-f="price">—</span>
               <span class="r"><span class="chg" data-f="chg">—</span></span>
               <span class="r hide-m spark" data-f="spark"></span>
@@ -51,12 +53,13 @@ export default {
       <div class="heatmap" id="heatmap" hidden></div>`;
 
     const q = $("#q", el);
-    let onlyFav = false;
+    let onlyFav = false, kind = "crypto";
     const applyFilter = () => {
       const v = q.value.trim().toLowerCase();
       let shown = 0;
       el.querySelectorAll(".mt-row").forEach((r) => {
-        const ok = (!v || r.dataset.search.includes(v)) && (!onlyFav || isFav(r.dataset.symbol));
+        // при поиске показываем и крипту, и акции
+        const ok = (!v || r.dataset.search.includes(v)) && (v || onlyFav || r.dataset.kind === kind) && (!onlyFav || isFav(r.dataset.symbol));
         r.hidden = !ok;
         shown += ok;
       });
@@ -64,6 +67,25 @@ export default {
       $("#empty", el).textContent = onlyFav && !prefs().favs.length ? "Нажми ★ у монеты, чтобы добавить её в избранное" : "Ничего не найдено";
     };
     q.oninput = applyFilter;
+    const drawNote = () => {
+      const open = usMarketOpen();
+      $("#stockNote", el).innerHTML = `<b>${open ? "🟢 Биржа США открыта" : "🌙 Биржа США закрыта"}</b> — работает пн–пт ${usMarketHoursLocal()} по твоему времени.
+        <span class="muted">Здесь — токенизированные акции: цена 1 к 1 повторяет настоящую, купить можно в любое время, но двигается цена в основном когда биржа открыта.</span>`;
+    };
+    $("#kindSeg", el).onclick = (e) => {
+      const b = e.target.closest("button[data-k]");
+      if (!b) return;
+      kind = b.dataset.k;
+      el.querySelectorAll("#kindSeg button").forEach((x) => x.classList.toggle("active", x === b));
+      $("#stockNote", el).hidden = kind !== "stock";
+      $("#mkSubText", el).textContent = kind === "stock" ? "Акции США · токены 1 к 1 · цены в USDT" : "Спот · пары к USDT";
+      $("#src", el).hidden = kind === "stock";
+      $("#fng", el).style.display = kind === "stock" ? "none" : "";
+      drawNote();
+      applyFilter();
+      drawMap();
+    };
+    applyFilter();
 
     // звёздочка — избранное (ссылку при этом не открываем)
     $("#rows", el).addEventListener("click", (e) => {
@@ -104,13 +126,13 @@ export default {
     let view = "list";
     const drawMap = () => {
       if (view !== "map") return;
-      const list = PAIRS.map((p) => ({ p, t: tickers[p.symbol] })).filter((x) => x.t).sort((a, b) => (b.t.quoteVolume || 0) - (a.t.quoteVolume || 0));
+      const list = PAIRS.filter((p) => (kind === "stock") === !!p.stock).map((p) => ({ p, t: tickers[p.symbol] })).filter((x) => x.t).sort((a, b) => (b.t.quoteVolume || 0) - (a.t.quoteVolume || 0));
       const maxV = Math.max(...list.map((x) => x.t.quoteVolume || 1));
       $("#heatmap", el).innerHTML = list.map(({ p, t }) => {
         const c = Math.max(-8, Math.min(8, t.change)) / 8;
         const bg = c >= 0 ? `rgba(95,174,143,${0.12 + c * 0.55})` : `rgba(201,116,116,${0.12 - c * 0.55})`;
         const span = (t.quoteVolume || 0) > maxV * 0.25 ? 2 : 1;
-        return `<a class="hm-tile" href="#/trade/${p.symbol}" style="background:${bg};grid-column:span ${span};grid-row:span ${span}"><b>${p.base}</b><span>${fmtPct(t.change)}</span><small>${fmtPrice(t.price)}</small></a>`;
+        return `<a class="hm-tile" href="#/trade/${p.symbol}" style="background:${bg};grid-column:span ${span};grid-row:span ${span}"><b>${p.stock ? p.ticker : p.base}</b><span>${fmtPct(t.change)}</span><small>${fmtPrice(t.price)}</small></a>`;
       }).join("");
     };
     $("#viewSeg", el).onclick = (e) => {

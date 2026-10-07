@@ -32,7 +32,7 @@ export function icon(name) {
 }
 
 export const coinIcon = (p, size = "") =>
-  `<span class="coin ${size} ${p && p.glyph.length > 1 ? "two" : ""}" aria-hidden="true">${p ? p.glyph : "$"}</span>`;
+  `<span class="coin ${size} ${p && p.glyph.length > 1 ? "two" : ""} ${p?.stock ? "stock" : ""}" aria-hidden="true">${p ? p.glyph : "$"}</span>`;
 
 export function sourceBadge(source) {
   const map = {
