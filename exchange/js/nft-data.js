@@ -361,3 +361,46 @@ export function itemUsd(it, t) {
   return f == null ? null : f * it.tier.mult;
 }
 export const floorChange24h = (col) => (floorCoin(col) / floorCoin(col, Date.now() - DAY) - 1) * 100;
+
+// ───────── мистери-бокс ─────────
+// Бокс покупается за BOX.price, открывается за BOX.reveal и превращается
+// в случайный свободный токен из любой коллекции. Шанс токена ∝ 1 / его цена:
+// дешёвые выпадают часто, легендарные — редко.
+export const BOX = { price: 99, reveal: 10 };
+
+export function boxOdds(items) {
+  const w = items.map((it) => { const p = itemUsd(it); return p ? 1 / p : 0; });
+  const W = w.reduce((a, b) => a + b, 0);
+  return { weights: w, total: W };
+}
+
+export function pickWeighted(items) {
+  const { weights, total } = boxOdds(items);
+  if (!total) return null;
+  let x = Math.random() * total;
+  for (let i = 0; i < items.length; i++) { x -= weights[i]; if (x <= 0) return items[i]; }
+  return items.at(-1);
+}
+
+export const allItems = () => COLLECTIONS.flatMap((c) => getItems(c.id));
+
+export const boxSvg = (cls = "") => `<svg class="${cls}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Мистери-бокс">
+  <defs>
+    <radialGradient id="bxg" cx="50%" cy="45%" r="60%"><stop offset="0" stop-color="#2c3038"/><stop offset="1" stop-color="#08090b"/></radialGradient>
+    <linearGradient id="bxt" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#b9bfc8"/></linearGradient>
+    <linearGradient id="bxl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c9ced6"/><stop offset="1" stop-color="#6d737c"/></linearGradient>
+    <linearGradient id="bxr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9aa0a9"/><stop offset="1" stop-color="#3d4148"/></linearGradient>
+    <radialGradient id="bxh"><stop offset="0" stop-color="#e9edf2" stop-opacity=".45"/><stop offset="1" stop-color="#e9edf2" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="100" height="100" fill="url(#bxg)"/>
+  <circle cx="50" cy="48" r="40" fill="url(#bxh)"/>
+  <ellipse cx="50" cy="86" rx="26" ry="4" fill="#000" opacity=".5"/>
+  <path d="M50 22 L78 36 L50 50 L22 36Z" fill="url(#bxt)"/>
+  <path d="M22 36 L50 50 L50 82 L22 68Z" fill="url(#bxl)"/>
+  <path d="M78 36 L50 50 L50 82 L78 68Z" fill="url(#bxr)"/>
+  <path d="M36 29 L64 43 L64 75" stroke="#3a3d43" stroke-opacity=".55" stroke-width="3" fill="none"/>
+  <path d="M64 29 L36 43 L36 75" stroke="#ffffff" stroke-opacity=".35" stroke-width="3" fill="none"/>
+  <text x="36" y="66" text-anchor="middle" font-size="16" font-weight="700" fill="#1a1c20" opacity=".7" font-family="Inter, sans-serif" transform="skewY(27) translate(0 -18)">?</text>
+  <path d="M50 22 L78 36 L50 50 L22 36Z" fill="none" stroke="#fff" stroke-opacity=".6" stroke-width=".6"/>
+  <circle cx="20" cy="22" r=".9" fill="#fff"/><circle cx="82" cy="18" r=".7" fill="#fff" opacity=".8"/><circle cx="86" cy="58" r=".6" fill="#fff" opacity=".6"/><circle cx="14" cy="60" r=".7" fill="#fff" opacity=".7"/>
+</svg>`;

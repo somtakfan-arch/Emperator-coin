@@ -84,6 +84,17 @@ service cloud.firestore {
         allow delete: if false;
       }
 
+      // Мистери-боксы: купить себе, открыть (удалить) — только свой.
+      match /boxes/{boxId} {
+        allow read: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.keys().hasOnly(['price', 'boughtAt'])
+          && pos(request.resource.data.price)
+          && request.resource.data.boughtAt == request.time;
+        allow delete: if isOwner(uid);
+        allow update: if false;
+      }
+
       // История сделок — только добавлять. pair == 'NFT' — покупка/продажа NFT.
       match /trades/{tradeId} {
         allow read: if isOwner(uid);

@@ -5,9 +5,9 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { db } from "./firebase.js";
 import { PAIRS, getPrice, onPrices } from "./market.js";
-import { getItem, itemUsd } from "./nft-data.js";
+import { getItem, itemUsd, BOX } from "./nft-data.js";
 
-export const store = { uid: null, balances: {}, orders: [], nfts: [], balancesReady: false, ordersReady: false, nftsReady: false };
+export const store = { uid: null, balances: {}, orders: [], nfts: [], boxes: [], balancesReady: false, ordersReady: false, nftsReady: false };
 const listeners = new Set();
 let unsubs = [];
 
@@ -49,6 +49,12 @@ export function startUserData(uid) {
     syncPortfolio(true);
   }, (e) => console.error("nfts", e)));
 
+  unsubs.push(onSnapshot(collection(db, "users", uid, "boxes"), (snap) => {
+    store.boxes = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    emit();
+    syncPortfolio(true);
+  }, (e) => console.error("boxes", e)));
+
   unsubs.push(onPrices(() => syncPortfolio()));
   const t = setInterval(() => syncPortfolio(), 60000);
   unsubs.push(() => clearInterval(t));
@@ -59,15 +65,16 @@ export function stopUserData() {
   unsubs = [];
   lastValue = null;
   lastWrite = 0;
-  Object.assign(store, { uid: null, balances: {}, orders: [], nfts: [], balancesReady: false, ordersReady: false, nftsReady: false });
+  Object.assign(store, { uid: null, balances: {}, orders: [], nfts: [], boxes: [], balancesReady: false, ordersReady: false, nftsReady: false });
 }
 
 // ───────── стоимость портфеля ─────────
 export const total = (b) => (b ? (b.amount || 0) + (b.locked || 0) : 0);
 
 // Возвращает null, если для какой-то монеты нет цены (не пишем заниженную стоимость).
+// Неоткрытый бокс считаем по цене покупки.
 export function nftsValue(nfts = store.nfts) {
-  let sum = 0;
+  let sum = store.boxes.reduce((s, b) => s + (b.price || BOX.price), 0);
   for (const n of nfts) {
     const v = itemUsd(n.item);
     if (v == null) return null;
