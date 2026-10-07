@@ -13,6 +13,12 @@ import nft from "./views/nft.js";
 import wallet from "./views/wallet.js";
 import history from "./views/history.js";
 import leaderboard from "./views/leaderboard.js";
+import player from "./views/player.js";
+import help from "./views/help.js";
+import { startAlerts } from "./alerts.js";
+import { prefs, setPref, onPrefs } from "./prefs.js";
+import { startTour } from "./tour.js";
+import { fmtDate } from "./format.js";
 
 // Подставляется при деплое (scripts/version_assets.py) — видно в меню профиля.
 export const APP_VERSION = "dev";
@@ -26,13 +32,31 @@ const ROUTES = {
   leaderboard: { view: leaderboard, label: "Рейтинг" },
 };
 
+// Страницы без кнопки в навигации.
+const HIDDEN = {
+  player: { view: player, label: "Профиль" },
+  help: { view: help, label: "Справка" },
+};
+const ALL = { ...ROUTES, ...HIDDEN };
+
+export const BACKGROUNDS = [
+  ["night", "Ночные горы", "assets/bg.jpg"], ["dusk", "Закат", "assets/dusk.jpg"],
+  ["ocean", "Океан", "assets/ocean.jpg"], ["city", "Ночной город", "assets/city.jpg"], ["none", "Без картинки", ""],
+];
+function applyBg() {
+  const b = BACKGROUNDS.find((x) => x[0] === prefs().bg) || BACKGROUNDS[0];
+  const el = document.querySelector(".bg");
+  el.style.backgroundImage = b[2] ? `url("${b[2]}")` : "none";
+}
+applyBg();
+
 const viewEl = $("#view");
 let cleanup = null;
 let currentKey = null;
 
 function parseHash() {
   const [, name = "markets", ...params] = location.hash.replace(/^#/, "").split("/");
-  return { name: ROUTES[name] ? name : "markets", params };
+  return { name: ALL[name] ? name : "markets", params };
 }
 
 function mount(view, params) {
@@ -67,13 +91,19 @@ function renderUser(session) {
   if (sig === renderedUser) return; // не перерисовываем (и не закрываем меню) на каждое обновление профиля
   renderedUser = sig;
   slot.innerHTML = `
+    <button class="bell" id="bellBtn" aria-label="Уведомления">🔔<span class="badge" id="bellCount"></span></button>
+    <div class="menu glass notif-menu" id="bellMenu" hidden></div>
     <button class="user-chip" id="userBtn" aria-haspopup="true" aria-expanded="false">
       <span class="nick">${esc(nick)}</span>
       <span class="avatar">${esc(nick[0].toUpperCase())}</span>
     </button>
     <div class="menu glass" id="userMenu" hidden>
       <div class="menu-head">${esc(nick)}<small>${esc(session.user.email || "")}</small></div>
-      <button id="nickBtn">Сменить ник</button>
+      <button id="profileBtn">👤 Мой профиль</button>
+      <button id="helpBtn">❓ Справка и словарик</button>
+      <button id="bgBtn">🖼️ Фон: <span id="bgName"></span></button>
+      <button id="soundBtn">🔊 Звук: <span id="soundState"></span></button>
+      <button id="nickBtn">✏️ Сменить ник</button>
       <div class="menu-ver">Версия ${APP_VERSION}</div>
       <button id="logoutBtn">Выйти</button>
     </div>`;
@@ -83,6 +113,39 @@ function renderUser(session) {
     e.stopPropagation();
     menu.hidden = !menu.hidden;
     btn.setAttribute("aria-expanded", String(!menu.hidden));
+  };
+  const drawPrefs = () => {
+    if (!$("#bgName")) return;
+    $("#bgName").textContent = (BACKGROUNDS.find((x) => x[0] === prefs().bg) || BACKGROUNDS[0])[1];
+    $("#soundState").textContent = prefs().sound ? "вкл" : "выкл";
+    const unread = prefs().notifs.filter((n) => !n.read).length;
+    $("#bellCount").textContent = unread ? (unread > 9 ? "9+" : unread) : "";
+  };
+  drawPrefs();
+  onPrefs(drawPrefs);
+  const keepOpen = (fn) => (e) => { e.stopPropagation(); fn(); };
+  $("#profileBtn").onclick = () => (location.hash = "#/player");
+  $("#helpBtn").onclick = () => (location.hash = "#/help");
+  $("#bgBtn").onclick = keepOpen(() => {
+    const i = BACKGROUNDS.findIndex((x) => x[0] === prefs().bg);
+    setPref("bg", BACKGROUNDS[(i + 1) % BACKGROUNDS.length][0]);
+    applyBg();
+  });
+  $("#soundBtn").onclick = keepOpen(() => setPref("sound", !prefs().sound));
+  $("#bellBtn").onclick = (e) => {
+    e.stopPropagation();
+    const m = $("#bellMenu");
+    $("#userMenu").hidden = true;
+    m.hidden = !m.hidden;
+    if (m.hidden) return;
+    const list = prefs().notifs;
+    m.innerHTML = `<div class="menu-head">Уведомления</div>` + (list.length ? list.map((n) => `
+      <div class="notif ${n.read ? "" : "new"} ${n.kind}"><span>${esc(n.text)}</span><small class="muted">${fmtDate(n.t)}</small></div>`).join("")
+      : '<div class="empty">Пока пусто</div>') + (list.length ? '<button id="clearNotifs">Очистить</button>' : "");
+    setPref("notifs", list.map((n) => ({ ...n, read: true })));
+    const c = $("#clearNotifs");
+    if (c) c.onclick = keepOpen(() => { setPref("notifs", []); m.hidden = true; });
+    m.onclick = (ev) => ev.stopPropagation();
   };
   $("#nickBtn").onclick = async () => {
     const next = prompt("Новый ник (2–20 символов)", nick);
@@ -99,7 +162,7 @@ function renderUser(session) {
     toast("Ты вышел из аккаунта");
   };
 }
-document.addEventListener("click", () => { const m = $("#userMenu"); if (m) m.hidden = true; });
+document.addEventListener("click", () => { ["#userMenu", "#bellMenu"].forEach((id) => { const m = $(id); if (m) m.hidden = true; }); });
 
 // ───────── роутинг ─────────
 let session = null;
@@ -127,8 +190,8 @@ function route() {
   markActive(name);
   if (key === currentKey) return;
   currentKey = key;
-  document.title = `${ROUTES[name].label} · Bed Exchange`;
-  mount(ROUTES[name].view, params);
+  document.title = `${ALL[name].label} · Bed Exchange`;
+  mount(ALL[name].view, params);
 }
 
 window.addEventListener("hashchange", route);
@@ -139,6 +202,7 @@ if (!isConfigured) {
   mount(authView, ["no-config"]);
 } else {
   startPrices();
+  startAlerts();
   initAuth();
   let activeUid = null; // session — один и тот же мутируемый объект, поэтому помним uid отдельно
   onSession((s) => {
@@ -155,5 +219,6 @@ if (!isConfigured) {
     renderUser(s);
     if (s.user && !location.hash) location.replace("#/markets");
     route();
+    if (s.user && s.profile) startTour();
   });
 }

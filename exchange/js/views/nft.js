@@ -10,7 +10,9 @@ import { buyNft, sellNft, buyBoxes, revealBox, revealMany, sellMany, BUY_PACKS, 
 import { tradeError, FEE } from "../trade.js";
 import { fmtUsd, fmtPct, fmtAmount, fmtDate } from "../format.js";
 import { $, esc, toast, confetti } from "../ui.js";
-import { loadDaily, claimFreeBox, claimQuest, nextDayAt } from "../bonus.js";
+import { loadDaily, claimFreeBox, claimQuest, nextDayAt, spinWheel, WHEEL } from "../bonus.js";
+import { sfx } from "../sound.js";
+import { orderBy, limit } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { openSend } from "./send.js";
 
 const fmtCoin = (v) => fmtAmount(v, v >= 100 ? 1 : v >= 1 ? 3 : 4);
@@ -37,7 +39,10 @@ function renderOverview(el) {
     <section class="glass card daily" id="daily">
       <div class="daily-head"><p class="card-title">Ежедневное</p><span class="muted small">Обновится через <b id="dailyIn">—</b></span></div>
       <div class="daily-grid">
-        <div class="daily-box">${boxSvg("nft-art")}<div><b>Бесплатный бокс</b><small class="muted">Раз в сутки</small></div><button class="btn btn-primary btn-sm" id="freeBox" disabled>…</button></div>
+        <div class="daily-col">
+          <div class="daily-box">${boxSvg("nft-art")}<div><b>Бесплатный бокс</b><small class="muted">Раз в сутки</small></div><button class="btn btn-primary btn-sm" id="freeBox" disabled>…</button></div>
+          <div class="daily-box"><span class="wheel-ic">🎡</span><div><b>Колесо фортуны</b><small class="muted">До 1000 USDT, раз в сутки</small></div><button class="btn btn-primary btn-sm" id="wheelBtn" disabled>…</button></div>
+        </div>
         <div class="quests" id="quests"><div class="boot"><div class="spinner"></div></div></div>
       </div>
     </section>
@@ -61,6 +66,7 @@ function renderOverview(el) {
       <div class="craft-rows" id="craftRows"></div>
     </section>
     <div class="drop-bar glass"><span>Новый дроп <b>Sigils</b> выходит каждый понедельник и сразу попадает в бокс.</span><span class="muted">Следующий через <b id="dropIn">—</b></span></div>
+    <section class="glass card activity"><p class="card-title">Что происходит</p><div id="feed"><div class="boot"><div class="spinner"></div></div></div></section>
     <h2 class="section-title">Коллекции</h2>
     <div class="col-grid">
       ${COLLECTIONS.map((c) => {
@@ -128,6 +134,9 @@ function renderOverview(el) {
     const fb = $("#freeBox", el);
     fb.disabled = daily.freeBoxClaimed;
     fb.textContent = daily.freeBoxClaimed ? "Получен ✓" : "Забрать";
+    const wb = $("#wheelBtn", el);
+    wb.disabled = daily.wheelSpun;
+    wb.textContent = daily.wheelSpun ? "Завтра ✓" : "Крутить";
     $("#quests", el).innerHTML = daily.quests.map((q) => `
       <div class="quest ${q.claimed ? "done" : ""}">
         <div class="q-main"><b>${q.title}</b>
@@ -144,6 +153,21 @@ function renderOverview(el) {
     try { await claimFreeBox(); toast("Бесплатный бокс твой — открывай!", "ok"); } catch (e2) { toast(tradeError(e2), "err"); }
     refreshDaily();
   };
+  $("#wheelBtn", el).onclick = async () => { await openWheel(); refreshDaily(); };
+
+  // лента: кто что получил (все NFT публичны)
+  const ago = (ms) => { const m = Math.floor((Date.now() - ms) / 60000); return m < 1 ? "только что" : m < 60 ? `${m} мин назад` : m < 1440 ? `${Math.floor(m / 60)} ч назад` : `${Math.floor(m / 1440)} д назад`; };
+  const unsubFeed = onSnapshot(query(collection(db, "nfts"), orderBy("boughtAt", "desc"), limit(10)), (snap) => {
+    if (!alive) return;
+    const rows = snap.docs.map((d) => ({ it: getItem(d.id), ...d.data() })).filter((x) => x.it);
+    $("#feed", el).innerHTML = rows.length ? rows.map((x) => `
+      <a class="feed-row" href="#/nft/${x.it.col.id}/${x.it.n}">
+        <span class="nft-mini">${nftSvg(x.it)}</span>
+        <span class="feed-text"><b>${esc(x.ownerNick)}</b> получил <b>${esc(x.it.name)}</b> <span class="tier ${x.it.tier.cls}">${x.it.tier.name}</span></span>
+        <small class="muted">${x.boughtAt?.toMillis ? ago(x.boughtAt.toMillis()) : ""}</small>
+      </a>`).join("") : '<div class="empty">Пока тихо — будь первым!</div>';
+  }, (e) => console.error(e));
+
   $("#quests", el).onclick = async (e) => {
     const b = e.target.closest("button[data-q]");
     if (!b) return;
@@ -219,7 +243,7 @@ function renderOverview(el) {
   };
   const s1 = onPrices(() => { draw(); drawBox(); }), s2 = onStore(() => { draw(); drawBox(); });
   const t = setInterval(drawBox, 5000);
-  return () => { alive = false; s1(); s2(); unsubOwned(); clearInterval(t); clearInterval(dailyT); };
+  return () => { alive = false; s1(); s2(); unsubOwned(); unsubFeed(); clearInterval(t); clearInterval(dailyT); };
 }
 
 // ═════════ открытие бокса ═════════
@@ -250,7 +274,7 @@ export async function openReveal(count = 1) {
     return;
   }
   const price = itemUsd(item);
-  if (item.tier.cls === "t-epic" || item.tier.cls === "t-leg") confetti();
+  if (item.tier.cls === "t-epic" || item.tier.cls === "t-leg") { confetti(); sfx.rare(); } else sfx.open();
   back.querySelector(".reveal-stage").innerHTML = `<div class="reveal-item ${item.tier.cls}">${nftSvg(item, "nft-art")}</div>`;
   $("#rvText", back).innerHTML = `
     <span class="tier ${item.tier.cls}">${item.tier.name}</span>
@@ -302,7 +326,10 @@ function renderCollection(el, col) {
         <div class="chart-box sm" id="cChart"></div>
       </div>
     </section>
+    <section class="glass card owners-card" id="ownersCard" hidden><p class="card-title">Топ владельцев</p><div id="owners"></div></section>
     <div class="nft-tools">
+      <label class="search glass nft-search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="nq" type="search" placeholder="Номер или название" autocomplete="off" /></label>
       <div class="chips" id="filter">
         <button class="chip active" data-f="all">Все</button><button class="chip" data-f="free">Свободные</button>
         <button class="chip" data-f="mine">Мои</button><button class="chip" data-f="taken">Куплены</button>
@@ -316,7 +343,7 @@ function renderCollection(el, col) {
     <div class="nft-grid" id="grid"></div>
     <button class="btn btn-block more" id="more" hidden>Показать ещё</button>`;
 
-  let owners = {}, filter = "all", sort = "rank", kind = "", shown = PAGE, alive = true;
+  let owners = {}, filter = "all", sort = "rank", kind = "", search = "", shown = PAGE, alive = true;
   const stops = [() => (alive = false)];
 
   // график флора (детерминированный — считаем сами)
@@ -369,6 +396,7 @@ function renderCollection(el, col) {
   const list = () => {
     let arr = items.filter((it) => {
       if (kind && it.traits["Предмет"] !== kind) return false;
+      if (search && !(String(it.n) === search || it.name.toLowerCase().includes(search) || Object.values(it.traits).some((v) => String(v).toLowerCase().includes(search)))) return false;
       const o = owners[it.id];
       return filter === "all" || (filter === "free" && !o) || (filter === "mine" && o?.owner === store.uid) || (filter === "taken" && o);
     });
@@ -400,6 +428,11 @@ function renderCollection(el, col) {
     snap.forEach((d) => (owners[d.id] = d.data()));
     $("#cSold", el).textContent = `${snap.size} / ${col.size}`;
     $("#cMine", el).textContent = String(Object.values(owners).filter((o) => o.owner === store.uid).length);
+    const top = {};
+    Object.values(owners).forEach((o) => { (top[o.owner] = top[o.owner] || { id: o.owner, nick: o.ownerNick, n: 0 }).n++; });
+    const tl = Object.values(top).sort((a, b) => b.n - a.n).slice(0, 5);
+    $("#ownersCard", el).hidden = !tl.length;
+    $("#owners", el).innerHTML = tl.map((o, i) => `<a class="kv owner-row" href="#/player/${o.id}"><span>${i + 1}. ${esc(o.nick)}${o.id === store.uid ? ' <small class="you">ты</small>' : ""}</span><span>${o.n} шт</span></a>`).join("");
     drawGrid();
   }, (e) => console.error(e)));
 
@@ -413,6 +446,8 @@ function renderCollection(el, col) {
   $("#sort", el).onchange = (e) => { sort = e.target.value; shown = PAGE; drawGrid(); };
   if ($("#kind", el)) $("#kind", el).onchange = (e) => { kind = e.target.value; shown = PAGE; drawGrid(); };
   $("#more", el).onclick = () => { shown += PAGE; drawGrid(); };
+  let sT = null;
+  $("#nq", el).oninput = (e) => { clearTimeout(sT); sT = setTimeout(() => { search = e.target.value.trim().toLowerCase().replace(/^#/, ""); shown = PAGE; drawGrid(); }, 200); };
 
   drawGrid();
   stops.push(onPrices(drawPrices));
@@ -445,6 +480,11 @@ function renderItem(el, it) {
           <div class="form-error" id="iErr"></div>
           <button class="btn btn-block" id="iBtn" disabled>…</button>
           <button class="btn btn-block" id="iSend" hidden style="margin-top:8px">Отправить другу по адресу</button>
+          <button class="btn btn-block" id="iShare" style="margin-top:8px">📤 Поделиться картинкой</button>
+        </div>
+        <div class="glass card">
+          <p class="card-title">Цена токена за 30 дней, ${col.chain}</p>
+          <div class="chart-box sm" id="iChart"></div>
         </div>
         <div class="glass card">
           <p class="card-title">Черты</p>
@@ -457,6 +497,7 @@ function renderItem(el, it) {
     </section>`;
 
   let owner = null, loaded = false, busy = false, alive = true;
+  const stopsLater = [];
   const btn = $("#iBtn", el), err = $("#iErr", el);
 
   const draw = () => {
@@ -468,7 +509,7 @@ function renderItem(el, it) {
     $("#iFee", el).textContent = fu ? `${fmtUsd(price * FEE)} USDT` : "—";
     $("#iAvail", el).textContent = `${fmtUsd(store.balances.USDT?.amount || 0)} USDT`;
     const mine = owner?.owner === store.uid;
-    $("#iOwner", el).innerHTML = !owner ? `<span class="own free">${col.boxOnly ? "Ещё в мистери-боксе" : "Свободен — продаёт маркет"}</span>` : mine ? '<span class="own mine">Ты</span>' : esc(owner.ownerNick);
+    $("#iOwner", el).innerHTML = !owner ? `<span class="own free">${col.boxOnly ? "Ещё в мистери-боксе" : "Свободен — продаёт маркет"}</span>` : mine ? '<span class="own mine">Ты</span>' : `<a class="link-btn" href="#/player/${owner.owner}">${esc(owner.ownerNick)}</a>`;
     $("#iBoughtRow", el).hidden = !mine;
     $("#iSend", el).hidden = !mine;
     $("#iPnlRow", el).hidden = !mine;
@@ -499,6 +540,24 @@ function renderItem(el, it) {
   };
 
   $("#iSend", el).onclick = () => openSend({ nftId: it.id });
+  $("#iShare", el).onclick = () => shareNft(it);
+  // график цены токена (флор × множитель редкости)
+  const LWC = window.LightweightCharts;
+  if (LWC) {
+    const ch = LWC.createChart($("#iChart", el), {
+      autoSize: true, handleScroll: false, handleScale: false, localization: { locale: "ru-RU" },
+      layout: { background: { type: "solid", color: "transparent" }, textColor: "#8b919a", fontFamily: "Inter, system-ui, sans-serif", fontSize: 11 },
+      grid: { vertLines: { visible: false }, horzLines: { color: "rgba(255,255,255,0.035)" } },
+      rightPriceScale: { borderVisible: false }, timeScale: { borderVisible: false },
+    });
+    const ser = ch.addSeries(LWC.AreaSeries, { lineColor: "#c9ced6", lineWidth: 2, topColor: "rgba(201,206,214,0.25)", bottomColor: "rgba(201,206,214,0)",
+      priceFormat: { type: "price", precision: col.base * it.tier.mult >= 10 ? 2 : 4, minMove: col.base * it.tier.mult >= 10 ? 0.01 : 0.0001 } });
+    const tz = -new Date().getTimezoneOffset() * 60, now = Date.now(), pts = [];
+    for (let tt = now - 30 * 86400e3; tt <= now; tt += 3 * 3600e3) pts.push({ time: Math.floor(tt / 1000) + tz, value: floorCoin(col, tt) * it.tier.mult });
+    ser.setData(pts);
+    ch.timeScale().fitContent();
+    stopsLater.push(() => ch.remove());
+  }
   btn.onclick = async () => {
     err.textContent = "";
     const mine = owner?.owner === store.uid;
@@ -526,7 +585,7 @@ function renderItem(el, it) {
     loaded = true;
     draw();
   }, (e) => console.error(e)));
-  stops.push(onPrices(draw), onStore(draw));
+  stops.push(onPrices(draw), onStore(draw), ...stopsLater);
   const t = setInterval(draw, 3000);
   stops.push(() => clearInterval(t));
   return () => stops.forEach((s) => s());
@@ -568,7 +627,7 @@ async function openRevealMany(count) {
   const commonsValue = commons.reduce((s, it) => s + (itemUsd(it) || 0), 0) * (1 - FEE);
   const counts = TIER_ORDER.map((c) => [c, items.filter((it) => it.tier.cls === c)]).filter(([, a]) => a.length);
   const best = items[0];
-  if (best.tier.cls === "t-epic" || best.tier.cls === "t-leg") confetti();
+  if (best.tier.cls === "t-epic" || best.tier.cls === "t-leg") { confetti(); sfx.rare(); } else sfx.open();
   const diff = value - spent;
 
   back.querySelector(".reveal-stage").outerHTML = `<div class="reveal-grid">${items.map((it, i) => `
@@ -616,4 +675,75 @@ function showResult(item, title) {
   document.body.append(back);
   back.addEventListener("click", (e) => { if (e.target === back || e.target.closest("[data-close]")) back.remove(); });
   if (item.tier.cls === "t-epic" || item.tier.cls === "t-leg" || item.tier.cls === "t-rare") confetti(item.tier.cls === "t-rare" ? 40 : 90);
+}
+
+// ═════════ колесо фортуны ═════════
+async function openWheel() {
+  const n = WHEEL.length, seg = 360 / n;
+  const colors = ["#2a2d33", "#3a3d44"];
+  const slices = WHEEL.map((p, i) => {
+    const a0 = (i * seg - 90) * Math.PI / 180, a1 = ((i + 1) * seg - 90) * Math.PI / 180, am = ((i + 0.5) * seg - 90) * Math.PI / 180;
+    const x0 = 50 + 48 * Math.cos(a0), y0 = 50 + 48 * Math.sin(a0), x1 = 50 + 48 * Math.cos(a1), y1 = 50 + 48 * Math.sin(a1);
+    const big = p.usdt >= 250 || p.boxes >= 3;
+    return `<path d="M50 50 L${x0.toFixed(2)} ${y0.toFixed(2)} A48 48 0 0 1 ${x1.toFixed(2)} ${y1.toFixed(2)}Z" fill="${big ? "#c9ced6" : colors[i % 2]}" stroke="#0b0c0f" stroke-width=".6"/>
+      <text x="${(50 + 29 * Math.cos(am)).toFixed(2)}" y="${(50 + 29 * Math.sin(am)).toFixed(2)}" fill="${big ? "#121417" : "#e8eaee"}" font-size="4.6" font-family="Inter, sans-serif" font-weight="700" text-anchor="middle" dominant-baseline="middle" transform="rotate(${((i + 0.5) * seg - 90).toFixed(2)} ${(50 + 29 * Math.cos(am)).toFixed(2)} ${(50 + 29 * Math.sin(am)).toFixed(2)})">${p.label}</text>`;
+  }).join("");
+  const back = document.createElement("div");
+  back.className = "modal-back";
+  back.innerHTML = `<div class="modal glass reveal">
+    <h3 class="modal-title">Колесо фортуны</h3>
+    <div class="wheel-wrap"><div class="wheel-pointer">▼</div>
+      <svg class="wheel" id="wheel" viewBox="0 0 100 100">${slices}<circle cx="50" cy="50" r="6" fill="#c9ced6"/></svg></div>
+    <p id="wText" class="muted">Крутим…</p>
+    <div class="reveal-actions"><button class="btn btn-block" data-close disabled id="wClose">Закрыть</button></div>
+  </div>`;
+  document.body.append(back);
+  back.addEventListener("click", (e) => { if (!$("#wClose", back).disabled && (e.target === back || e.target.closest("[data-close]"))) back.remove(); });
+  try {
+    const { prize, index } = await spinWheel();
+    const turn = 360 * 6 + (360 - (index + 0.5) * seg) + (Math.random() - 0.5) * seg * 0.6;
+    const w = $("#wheel", back);
+    sfx.open();
+    setTimeout(() => { w.style.transform = `rotate(${turn}deg)`; }, 60);
+    await new Promise((r) => setTimeout(r, 4300));
+    $("#wText", back).innerHTML = `Выпало: <b class="rv-price">${prize.label}</b>${prize.boxes ? " — бокс уже в твоём списке" : " — уже на балансе"}`;
+    if (prize.usdt >= 250 || prize.boxes >= 3) { confetti(); sfx.rare(); } else sfx.coin();
+    toast(`Колесо фортуны: ${prize.label}`, "ok");
+  } catch (e) {
+    $("#wText", back).textContent = tradeError(e);
+  }
+  $("#wClose", back).disabled = false;
+}
+
+// ═════════ поделиться NFT картинкой ═════════
+async function shareNft(it) {
+  try {
+    const W = 1080, H = 1350;
+    const c = document.createElement("canvas");
+    c.width = W; c.height = H;
+    const g = c.getContext("2d");
+    const grad = g.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, "#15171b"); grad.addColorStop(1, "#08090b");
+    g.fillStyle = grad; g.fillRect(0, 0, W, H);
+    const svg = nftSvg(it).replace("<svg ", '<svg width="1000" height="1000" ');
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svg); });
+    g.save(); g.beginPath(); g.roundRect(60, 60, 960, 960, 36); g.clip(); g.drawImage(img, 60, 60, 960, 960); g.restore();
+    g.fillStyle = "#e8eaee"; g.font = "600 56px Inter, system-ui, sans-serif"; g.fillText(it.name, 60, 1110);
+    g.fillStyle = "#8b919a"; g.font = "36px Inter, system-ui, sans-serif";
+    const price = itemUsd(it);
+    g.fillText(`${it.col.name} · ${it.tier.name}${price ? ` · ≈ ${fmtUsd(price)} USDT` : ""}`, 60, 1170);
+    g.fillStyle = "#c9ced6"; g.font = "600 44px Georgia, serif"; g.fillText("BED  exchange", 60, 1280);
+    g.fillStyle = "#5d636c"; g.font = "28px Inter, system-ui, sans-serif"; g.fillText("Симулятор · деньги виртуальные", 560, 1275);
+    const blob = await new Promise((r) => c.toBlob(r, "image/png"));
+    const file = new File([blob], `${it.id}.png`, { type: "image/png" });
+    if (navigator.canShare?.({ files: [file] })) await navigator.share({ files: [file], title: it.name });
+    else {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = file.name; a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    }
+  } catch (e) {
+    if (e?.name !== "AbortError") { console.error(e); toast("Не получилось сделать картинку", "err"); }
+  }
 }
