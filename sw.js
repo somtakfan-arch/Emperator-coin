@@ -1,4 +1,4 @@
-const CACHE_VERSION = "remindly-v1";
+const CACHE_VERSION = "remindly-v2";
 const PRECACHE_URLS = [
   "./",
   "./index.html",
@@ -37,6 +37,8 @@ self.addEventListener("fetch", (event) => {
 
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
+  // Биржа, игры и StickAnim — отдельные приложения: их не кэшируем, иначе показывается старая версия.
+  if (/\/(exchange|games|stickman)\//.test(url.pathname)) return;
 
   event.respondWith(
     caches.match(req).then((cached) => {
