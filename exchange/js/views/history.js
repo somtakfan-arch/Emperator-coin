@@ -6,7 +6,8 @@ import { db } from "../firebase.js";
 import { store } from "../store.js";
 import { PAIRS, pairBySymbol } from "../market.js";
 import { fmtPrice, fmtAmount, fmtUsd, fmtDate } from "../format.js";
-import { $, coinIcon } from "../ui.js";
+import { $, esc, coinIcon } from "../ui.js";
+import { getItem, nftSvg } from "../nft-data.js";
 
 const PAGE = 50;
 
@@ -18,6 +19,7 @@ export default {
       </section>
       <div class="chips" id="chips">
         <button class="chip active" data-f="">Все</button>
+        <button class="chip" data-f="NFT">NFT</button>
         ${PAIRS.map((p) => `<button class="chip" data-f="${p.symbol}">${p.base}</button>`).join("")}
       </div>
       <div class="glass card">
@@ -34,6 +36,17 @@ export default {
       $("#hList", el).innerHTML = list.length ? list.map((t) => {
         const p = pairBySymbol(t.pair);
         const buy = t.side === "buy";
+        const it = t.pair === "NFT" ? getItem(t.nft) : null;
+        if (it) return `
+          <div class="hrow">
+            <span class="muted h-time">${fmtDate(t.time?.toMillis?.())}</span>
+            <a class="pair-cell sm" href="#/nft/${it.col.id}/${it.n}"><span class="nft-mini">${nftSvg(it)}</span><b>${esc(it.name)}</b></a>
+            <span class="h-side"><span class="tag ${buy ? "up" : "down"}">${buy ? "Покупка" : "Продажа"}</span><small class="muted">NFT</small></span>
+            <span class="r"><small class="lbl">Цена</small>${fmtUsd(t.price)}</span>
+            <span class="r"><small class="lbl">Кол-во</small>1 шт</span>
+            <span class="r"><small class="lbl">Сумма</small>${fmtUsd(t.total)}</span>
+            <span class="r muted"><small class="lbl">Комиссия</small>${fmtUsd(t.fee)} USDT</span>
+          </div>`;
         return `
           <div class="hrow">
             <span class="muted h-time">${fmtDate(t.time?.toMillis?.())}</span>

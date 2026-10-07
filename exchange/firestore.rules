@@ -11,8 +11,9 @@ service cloud.firestore {
     function isNum(v) { return v is int || v is float; }
     function nonNeg(v) { return isNum(v) && v >= 0; }
     function pos(v) { return isNum(v) && v > 0; }
-    function coins() { return ['USDT', 'BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'TON']; }
-    function pairs() { return ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT', 'DOGEUSDT', 'TONUSDT']; }
+    // Монеты и пары проверяются по шаблону — новые пары не требуют правки правил.
+    function validCoin(c) { return c is string && c.matches('^[A-Z0-9]{2,10}$'); }
+    function validPair(p) { return p is string && p.matches('^[A-Z0-9]{2,10}USDT$'); }
     function validNick(n) { return n is string && n.size() >= 2 && n.size() <= 20; }
 
     // Профиль: ник + стоимость портфеля читают все (рейтинг), пишет только владелец.
@@ -47,7 +48,7 @@ service cloud.firestore {
 
         allow read: if isOwner(uid);
 
-        allow create: if isOwner(uid) && coin in coins() && validBalance()
+        allow create: if isOwner(uid) && validCoin(coin) && validBalance()
           && (coin == 'USDT'
                 // стартовые 10 000 — только при регистрации, вместе с профилем
                 ? (!exists(userPath(uid)) && existsAfter(userPath(uid))
@@ -65,7 +66,7 @@ service cloud.firestore {
 
         allow create: if isOwner(uid)
           && request.resource.data.keys().hasOnly(['pair', 'type', 'side', 'price', 'amount', 'status', 'createdAt'])
-          && request.resource.data.pair in pairs()
+          && validPair(request.resource.data.pair)
           && request.resource.data.type == 'limit'
           && request.resource.data.side in ['buy', 'sell']
           && pos(request.resource.data.price)
@@ -83,13 +84,13 @@ service cloud.firestore {
         allow delete: if false;
       }
 
-      // История сделок — только добавлять.
+      // История сделок — только добавлять. pair == 'NFT' — покупка/продажа NFT.
       match /trades/{tradeId} {
         allow read: if isOwner(uid);
 
         allow create: if isOwner(uid)
-          && request.resource.data.keys().hasOnly(['pair', 'type', 'side', 'price', 'amount', 'total', 'fee', 'feeAsset', 'orderId', 'time'])
-          && request.resource.data.pair in pairs()
+          && request.resource.data.keys().hasOnly(['pair', 'type', 'side', 'price', 'amount', 'total', 'fee', 'feeAsset', 'orderId', 'nft', 'time'])
+          && (validPair(request.resource.data.pair) || request.resource.data.pair == 'NFT')
           && request.resource.data.side in ['buy', 'sell']
           && pos(request.resource.data.price)
           && pos(request.resource.data.amount)
@@ -98,6 +99,25 @@ service cloud.firestore {
 
         allow update, delete: if false;
       }
+    }
+
+    // NFT: каждый токен уникален. Документ есть — у токена есть владелец (видно всем).
+    // Купить можно только свободный токен, продать обратно маркету — только свой.
+    match /nfts/{tokenId} {
+      allow read: if true;
+
+      allow create: if signedIn()
+        && tokenId.matches('^[a-z]{2,12}-[0-9]{1,4}$')
+        && request.resource.data.keys().hasOnly(['owner', 'ownerNick', 'collection', 'price', 'boughtAt'])
+        && request.resource.data.owner == request.auth.uid
+        && validNick(request.resource.data.ownerNick)
+        && request.resource.data.collection == tokenId.split('-')[0]
+        && pos(request.resource.data.price)
+        && request.resource.data.boughtAt == request.time
+        && exists(userPath(request.auth.uid));
+
+      allow delete: if signedIn() && resource.data.owner == request.auth.uid;
+      allow update: if false;
     }
   }
 }

@@ -5,8 +5,9 @@ import {
 } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
 import { db } from "./firebase.js";
 import { PAIRS, getPrice, onPrices } from "./market.js";
+import { getItem, itemUsd } from "./nft-data.js";
 
-export const store = { uid: null, balances: {}, orders: [], balancesReady: false, ordersReady: false };
+export const store = { uid: null, balances: {}, orders: [], nfts: [], balancesReady: false, ordersReady: false, nftsReady: false };
 const listeners = new Set();
 let unsubs = [];
 
@@ -37,6 +38,17 @@ export function startUserData(uid) {
     emit();
   }, (e) => console.error("orders", e)));
 
+  // мои NFT: документ в nfts/{tokenId} с owner == uid
+  unsubs.push(onSnapshot(query(collection(db, "nfts"), where("owner", "==", uid)), (snap) => {
+    store.nfts = snap.docs
+      .map((d) => ({ id: d.id, ...d.data(), item: getItem(d.id) }))
+      .filter((n) => n.item)
+      .sort((a, b) => (b.boughtAt?.toMillis?.() ?? 0) - (a.boughtAt?.toMillis?.() ?? 0));
+    store.nftsReady = true;
+    emit();
+    syncPortfolio(true);
+  }, (e) => console.error("nfts", e)));
+
   unsubs.push(onPrices(() => syncPortfolio()));
   const t = setInterval(() => syncPortfolio(), 60000);
   unsubs.push(() => clearInterval(t));
@@ -47,15 +59,27 @@ export function stopUserData() {
   unsubs = [];
   lastValue = null;
   lastWrite = 0;
-  Object.assign(store, { uid: null, balances: {}, orders: [], balancesReady: false, ordersReady: false });
+  Object.assign(store, { uid: null, balances: {}, orders: [], nfts: [], balancesReady: false, ordersReady: false, nftsReady: false });
 }
 
 // ───────── стоимость портфеля ─────────
 export const total = (b) => (b ? (b.amount || 0) + (b.locked || 0) : 0);
 
 // Возвращает null, если для какой-то монеты нет цены (не пишем заниженную стоимость).
+export function nftsValue(nfts = store.nfts) {
+  let sum = 0;
+  for (const n of nfts) {
+    const v = itemUsd(n.item);
+    if (v == null) return null;
+    sum += v;
+  }
+  return sum;
+}
+
 export function portfolioValue(balances = store.balances) {
-  let sum = total(balances.USDT);
+  const nv = nftsValue();
+  if (nv == null) return null;
+  let sum = total(balances.USDT) + nv;
   for (const p of PAIRS) {
     const qty = total(balances[p.base]);
     if (qty <= 0) continue;
@@ -69,7 +93,7 @@ export function portfolioValue(balances = store.balances) {
 let lastWrite = 0;
 let lastValue = null;
 export async function syncPortfolio(force = false) {
-  if (!store.uid || !store.balancesReady) return;
+  if (!store.uid || !store.balancesReady || !store.nftsReady) return;
   const v = portfolioValue();
   if (v == null) return;
   const value = Math.round(v * 100) / 100;

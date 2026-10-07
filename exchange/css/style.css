@@ -112,7 +112,7 @@ button { cursor: pointer; }
 /* ───────── навигация ───────── */
 .tabbar {
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
-  display: grid; grid-template-columns: repeat(5, 1fr);
+  display: grid; grid-template-columns: repeat(6, 1fr);
   border-width: 1px 0 0;
   padding-bottom: env(safe-area-inset-bottom);
 }
@@ -121,6 +121,7 @@ button { cursor: pointer; }
   color: var(--faint); font-size: 10.5px; letter-spacing: .02em; transition: color .2s;
 }
 .tab svg { width: 22px; height: 22px; }
+.tab span { font-size: 10px; white-space: nowrap; }
 .tab.active { color: var(--text); }
 .tab.active svg { filter: drop-shadow(0 0 6px rgba(220,226,234,.35)); }
 
@@ -255,6 +256,8 @@ button { cursor: pointer; }
 }
 .coin.sm { width: 22px; height: 22px; font-size: 11px; }
 .coin.lg { width: 38px; height: 38px; font-size: 17px; }
+.coin.two { font-size: 10.5px; letter-spacing: -.02em; }
+.coin.lg.two { font-size: 13px; }
 .pair-cell { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .pair-cell b { font-weight: 600; }
 .pair-cell small { display: block; color: var(--muted); font-size: 12px; }
@@ -404,6 +407,76 @@ a.asset:hover { background: var(--glass-hover); margin: 0 -10px; padding: 12px 1
 .medal.m3 { background: linear-gradient(135deg, #9a9fa6, #5c6168); color: #e8eaee; }
 .lb-gap { text-align: center; color: var(--faint); padding: 4px 0; }
 
+/* ───────── NFT ───────── */
+.back { display: inline-block; margin-bottom: 12px; color: var(--muted); font-size: 13px; }
+.back:hover { color: var(--text); }
+.chain { font-size: 10.5px; letter-spacing: .1em; padding: 2px 7px; border-radius: 6px; border: 1px solid var(--border-strong); color: var(--silver); }
+.nft-art { display: block; width: 100%; height: auto; aspect-ratio: 1; border-radius: 12px; background: #0b0c0f; }
+
+.col-grid { display: grid; gap: 12px; grid-template-columns: 1fr; }
+.col-card { display: block; overflow: hidden; transition: border-color .2s, transform .2s; }
+.col-card:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+.col-mosaic { display: grid; grid-template-columns: 2fr 1fr; grid-template-rows: 1fr 1fr; gap: 4px; padding: 4px; }
+.col-mosaic .nft-art { border-radius: 10px; }
+.col-mosaic .nft-art:first-child { grid-row: span 2; }
+.col-body { padding: 12px 14px 14px; }
+.col-body p { margin: 4px 0 10px; }
+.col-title { display: flex; align-items: center; gap: 8px; }
+.col-title b { font-size: 16px; }
+.col-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 13px; }
+.col-stats small { display: block; color: var(--faint); font-size: 11px; }
+.col-stats span small { display: block; font-size: 11px; }
+.col-stats.big { grid-template-columns: repeat(2, 1fr); gap: 12px; margin-top: 12px; font-size: 15px; font-weight: 500; }
+
+.col-head { display: grid; gap: 14px; }
+.col-head-art { width: 96px; }
+.col-head-info p { margin: 6px 0 0; }
+.chart-box.sm { height: 180px; }
+.kv .own.mine { color: #121417; }
+.col-chart .tr-chart-bar { padding: 0 0 6px; }
+
+.nft-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 14px 0 12px; }
+.nft-tools .chips { margin: 0; }
+.sort { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 10px; font-size: 13px; }
+.sort select { border: 0; background: none; outline: none; color: var(--text); }
+.sort select option { background: #15171b; }
+
+.nft-grid { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.nft-card { display: block; padding: 6px; border-radius: 14px; transition: border-color .2s, transform .2s; }
+.nft-card:hover { border-color: var(--border-strong); transform: translateY(-2px); }
+.nft-meta { padding: 8px 4px 2px; }
+.nft-name { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 13px; }
+.nft-name b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.nft-name.big { justify-content: flex-start; flex-wrap: wrap; gap: 10px; }
+.nft-price { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 4px; font-size: 12.5px; font-weight: 500; }
+.nft-price span:first-child::after { content: " USDT"; color: var(--faint); font-size: 10.5px; font-weight: 400; }
+.nft-price small { font-size: 11.5px; }
+.tier { flex: none; font-size: 10px; font-weight: 600; letter-spacing: .03em; padding: 2px 6px; border-radius: 6px; border: 1px solid var(--border); color: var(--muted); }
+.tier.t-unc { color: #b9c7d6; border-color: rgba(185,199,214,.3); }
+.tier.t-rare { color: #8fbfff; border-color: rgba(143,191,255,.35); background: rgba(143,191,255,.06); }
+.tier.t-epic { color: #c9a2ff; border-color: rgba(201,162,255,.4); background: rgba(201,162,255,.08); }
+.tier.t-leg { color: #15171a; background: var(--silver-grad); border-color: transparent; box-shadow: 0 0 10px rgba(220,226,234,.3); }
+.own { font-size: 11px; padding: 1px 6px; border-radius: 6px; white-space: nowrap; max-width: 50%; overflow: hidden; text-overflow: ellipsis; }
+.own.free { color: var(--muted); }
+.own.mine { color: #121417; background: var(--silver-grad); font-weight: 600; }
+.own.taken { color: var(--silver); background: rgba(255,255,255,.06); }
+
+.nft-item { display: grid; gap: 12px; }
+.nft-item-art { padding: 8px; }
+.nft-item-side { display: grid; gap: 12px; align-content: start; }
+.nft-item-side .card + .card { margin-top: 0; }
+.nft-buy { margin: 14px 0 10px; }
+.nft-buy .big-num small { font-size: 15px; color: var(--muted); font-weight: 500; }
+#iBtn { margin-top: 6px; }
+.traits { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.trait { padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: rgba(255,255,255,.025); font-size: 12px; }
+.trait small { display: block; color: var(--faint); font-size: 11px; text-transform: uppercase; letter-spacing: .06em; }
+.trait b { display: block; font-size: 14px; font-weight: 500; margin: 2px 0; }
+.nft-mini { flex: none; width: 24px; height: 24px; border-radius: 6px; overflow: hidden; }
+.nft-mini svg { width: 100%; height: 100%; display: block; }
+.wallet-nft .count { margin-right: 6px; }
+.nft-grid.small { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
 @media (max-width: 899px) { .hide-m { display: none !important; } }
 
 /* ───────── десктоп ───────── */
@@ -443,6 +516,14 @@ a.asset:hover { background: var(--glass-hover); margin: 0 -10px; padding: 12px 1
   .h-time { grid-column: auto; }
   .h-side { justify-content: flex-start; }
   .hrow > :nth-child(n) { text-align: left; }
+  .col-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .col-head { grid-template-columns: 140px minmax(0, 1fr) minmax(0, 1.1fr); align-items: center; }
+  .col-head-art { width: 140px; }
+  .col-stats.big { grid-template-columns: repeat(4, auto); justify-content: start; gap: 24px; }
+  .nft-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+  .nft-grid.small { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .nft-item { grid-template-columns: minmax(0, 1fr) 420px; align-items: start; }
+  .wallet-nft { grid-column: 1 / -1; }
   .hrow > .r, .hlist-head .r { text-align: right; }
 }
 
@@ -450,7 +531,8 @@ a.asset:hover { background: var(--glass-hover); margin: 0 -10px; padding: 12px 1
   .trade { grid-template-columns: minmax(0, 1fr) 300px 320px; grid-template-areas: "head head head" "chart book form" "orders orders form"; }
   .tr-book { align-self: stretch; }
   .tr-chart { align-self: stretch; display: flex; flex-direction: column; }
-  .chart-box { flex: 1; min-height: 440px; height: auto; }
+  .tr-chart .chart-box { flex: 1; min-height: 440px; height: auto; }
+  .col-chart .chart-box.sm { height: 200px; }
 }
 
 @media (prefers-reduced-motion: reduce) {

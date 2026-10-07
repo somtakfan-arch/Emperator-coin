@@ -1,13 +1,14 @@
 // 3. Кошелёк — балансы, общая стоимость в USDT, прибыль/убыток.
 import { PAIRS, onPrices, getPrice } from "../market.js";
-import { store, onStore, total, portfolioValue } from "../store.js";
+import { store, onStore, total, portfolioValue, nftsValue } from "../store.js";
+import { nftSvg, itemUsd } from "../nft-data.js";
 import { START_USDT } from "../auth.js";
 import { fmtUsd, fmtAmount, fmtPrice, fmtPct } from "../format.js";
-import { $, coinIcon } from "../ui.js";
+import { $, esc, coinIcon } from "../ui.js";
 
 const SHADES = ["#e9ecf0", "#c3c8cf", "#9da3ab", "#7c828a", "#61666d", "#4b4f55", "#3a3d42", "#2e3034"];
 const signCls = (v) => (v > 0.005 ? "up" : v < -0.005 ? "down" : "");
-const signed = (v) => `${v > 0 ? "+" : v < 0 ? "−" : ""}${fmtUsd(Math.abs(v))}`;
+const signed = (v) => (Math.abs(v) < 0.005 ? "0.00" : `${v > 0 ? "+" : "−"}${fmtUsd(Math.abs(v))}`);
 
 export default {
   render(el) {
@@ -25,6 +26,10 @@ export default {
           <p class="card-title">Активы</p>
           <div class="asset-head hide-m"><span>Актив</span><span class="r">Баланс</span><span class="r">Цена / средняя покупки</span><span class="r">Прибыль</span></div>
           <div class="assets" id="assets"><div class="boot"><div class="spinner"></div></div></div>
+        </div>
+        <div class="glass card wallet-nft">
+          <p class="card-title">NFT <span class="count" id="nftCount"></span><span class="muted" id="nftTotal"></span></p>
+          <div id="nftList"></div>
         </div>
       </div>`;
 
@@ -46,12 +51,16 @@ export default {
       }
       rows.sort((x, y) => (y.value ?? 0) - (x.value ?? 0));
 
+      const nv = nftsValue();
       const tv = portfolioValue();
       $("#wTotal", el).innerHTML = tv == null ? "—" : `${fmtUsd(tv)} <small>USDT</small>`;
       if (tv != null) {
         const diff = tv - START_USDT;
         $("#wPnl", el).innerHTML = `<span class="${signCls(diff)}">${signed(diff)} USDT · ${fmtPct((diff / START_USDT) * 100)}</span><span class="muted"> с начала игры</span>`;
-        const parts = rows.filter((r) => r.value > 0);
+        let parts = rows.filter((r) => r.value > 0).map((r) => ({ coin: r.coin, value: r.value }));
+        if (nv > 0) parts.push({ coin: "NFT", value: nv });
+        parts.sort((a, b) => b.value - a.value);
+        if (parts.length > 7) parts = [...parts.slice(0, 6), { coin: "Другое", value: parts.slice(6).reduce((x, p) => x + p.value, 0) }];
         $("#alloc", el).innerHTML = parts.map((r, i) => `<i style="width:${(r.value / tv) * 100}%;background:${SHADES[i % SHADES.length]}" title="${r.coin}"></i>`).join("");
         $("#legend", el).innerHTML = parts.map((r, i) => `<span><i style="background:${SHADES[i % SHADES.length]}"></i>${r.coin} ${((r.value / tv) * 100).toFixed(1)}%</span>`).join("");
       }
@@ -67,6 +76,22 @@ export default {
           <span class="r asset-pnl">${r.pnl == null ? '<span class="muted">—</span>'
             : `<span class="${signCls(r.pnl)}">${signed(r.pnl)}</span><small class="${signCls(r.pnl)}">${fmtPct(r.pnlPct)}</small>`}</span>
         </${r.pair ? "a" : "div"}>`).join("");
+
+      // NFT
+      $("#nftCount", el).textContent = store.nfts.length || "";
+      $("#nftTotal", el).textContent = nv ? ` · ${fmtUsd(nv)} USDT` : "";
+      $("#nftList", el).innerHTML = store.nfts.length ? `<div class="nft-grid small">${store.nfts.map((n) => {
+        const v = itemUsd(n.item);
+        const pnl = v != null ? v - n.price : null;
+        return `
+          <a class="nft-card glass" href="#/nft/${n.item.col.id}/${n.item.n}">
+            ${nftSvg(n.item, "nft-art")}
+            <div class="nft-meta">
+              <div class="nft-name"><b>${esc(n.item.name)}</b></div>
+              <div class="nft-price"><span>${v != null ? fmtUsd(v) : "—"}</span>${pnl == null ? "" : `<small class="${signCls(pnl)}">${signed(pnl)}</small>`}</div>
+            </div>
+          </a>`;
+      }).join("")}</div>` : '<div class="empty">NFT пока нет — загляни во вкладку <a class="link-btn" href="#/nft">NFT</a></div>';
     };
 
     let queued = false;
