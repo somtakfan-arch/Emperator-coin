@@ -33,7 +33,42 @@ const CRYPTO = [
 ];
 
 // Акции: цена токена 1:1 повторяет настоящую акцию. gate — пара на Gate, ticker — биржевой тикер.
-const S = (base, name, gate, ticker = base) => ({ symbol: `${base}USDT`, base, name, ticker, glyph: ticker.slice(0, 2), gate, stock: true });
+const S = (base, name, gate, ticker = base) => ({ symbol: `${base}USDT`, base, name, ticker, glyph: ticker.slice(0, 2), gate, cg: STOCK_CG[base], stock: true });
+// Запасной источник для акций — CoinGecko (Ondo-токены тех же акций).
+const STOCK_CG = {
+  AAPL: "apple-ondo-tokenized-stock",
+  MSFT: "microsoft-ondo-tokenized-stock",
+  NVDA: "nvidia-ondo-tokenized-stock",
+  TSLA: "tesla-ondo-tokenized-stock",
+  AMZN: "amazon-ondo-tokenized-stock",
+  GOOGL: "alphabet-class-a-ondo-tokenized-stock",
+  META: "meta-platforms-ondo-tokenized-stock",
+  NFLX: "netflix-ondo-tokenized-stock",
+  AMD: "amd-ondo-tokenized-stock",
+  PLTR: "palantir-technologies-ondo-tokenized-stock",
+  ORCL: "oracle-ondo-tokenized-stock",
+  AVGO: "broadcom-ondo-tokenized-stock",
+  INTC: "intel-ondo-tokenized-stock",
+  CSCO: "cisco-systems-ondo-tokenized-stock",
+  COIN: "coinbase-ondo-tokenized-stock",
+  HOOD: "robinhood-markets-ondo-tokenized-stock",
+  MSTR: "microstrategy-ondo-tokenized-stock",
+  CRCL: "circle-internet-group-ondo-tokenized-stock",
+  JPM: "jpmorgan-chase-ondo-tokenized-stock",
+  VISA: "visa-ondo-tokenized-stock",
+  MA: "mastercard-ondo-tokenized-stock",
+  WMT: "walmart-ondo-tokenized-stock",
+  KO: "coca-cola-ondo-tokenized-stock",
+  PEP: "pepsico-ondo-tokenized-stock",
+  MCD: "mcdonald-s-ondo-tokenized-stock",
+  XOM: "exxon-mobil-ondo-tokenized-stocks",
+  LLY: "eli-lilly-ondo-tokenized-stock",
+  UNH: "unitedhealth-ondo-tokenized-stock",
+  BABA: "alibaba-ondo-tokenized-stock",
+  SPY: "spdr-s-p-500-etf-ondo-tokenized-etf",
+  QQQ: "invesco-qqq-etf-ondo-tokenized-etf",
+  GLD: "spdr-gold-shares-ondo-tokenized",
+};
 const STOCKS = [
   S("AAPL", "Apple", "AAPLON_USDT"), S("MSFT", "Microsoft", "MSFTON_USDT"), S("NVDA", "NVIDIA", "NVDAON_USDT"),
   S("TSLA", "Tesla", "TSLAON_USDT"), S("AMZN", "Amazon", "AMZNON_USDT"), S("GOOGL", "Alphabet (Google)", "GOOGLON_USDT"),
@@ -73,7 +108,11 @@ async function binanceGet(path) {
 // Свечи: [{time(сек, локальное время), open, high, low, close, volume}]
 const TZ_SHIFT = -new Date().getTimezoneOffset() * 60;
 export async function fetchKlines(symbol, interval, { limit = 500, startTime } = {}) {
-  if (isStock(symbol)) return gateKlines(pairBySymbol(symbol).gate, interval, { limit, startTime });
+  if (isStock(symbol)) {
+    const p = pairBySymbol(symbol);
+    try { return await gateKlines(p.gate, interval, { limit, startTime }); }
+    catch { return cgOhlc(p.cg, interval, startTime); }
+  }
   const q = new URLSearchParams({ symbol, interval, limit: String(limit) });
   if (startTime) q.set("startTime", String(startTime));
   const rows = await binanceGet(`/api/v3/klines?${q}`);
@@ -287,14 +326,38 @@ async function pollCoinGecko() {
   }
 }
 
-// ───────── акции: WebSocket Gate + запасной опрос REST ─────────
+// ───────── акции: WebSocket Gate → REST Gate → CoinGecko ─────────
+let lastGateOk = 0, lastCgOk = 0;
+// Откуда сейчас цены акций: gate | coingecko | offline | connecting
+export function getStockSource() {
+  if (Date.now() - lastGateOk < 90e3) return "gate";
+  if (Date.now() - lastCgOk < 120e3) return "coingecko";
+  return lastGateOk || lastCgOk ? "offline" : "connecting";
+}
 const gateTick = (r) => {
   const p = STOCKS.find((x) => x.gate === r.currency_pair);
   if (!p) return;
   const last = +r.last, ch = +r.change_percentage || 0;
+  lastGateOk = Date.now();
   applyTicker(p.symbol, last, last / (1 + ch / 100), +r.high_24h || null, +r.low_24h || null, +r.quote_volume || null, true);
 };
-let lastGateMsg = 0;
+async function pollStocksCoinGecko() {
+  try {
+    const ids = STOCKS.map((p) => p.cg).join(",");
+    const r = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    const data = await r.json();
+    if (Date.now() - lastGateOk < 60e3) return; // Gate ожил — его цены точнее
+    for (const p of STOCKS) {
+      const d = data[p.cg];
+      if (!d?.usd) continue;
+      const ch = d.usd_24h_change ?? 0, old = tickers[p.symbol];
+      applyTicker(p.symbol, d.usd, d.usd / (1 + ch / 100), old?.high ?? null, old?.low ?? null, d.usd_24h_vol ?? old?.quoteVolume ?? null, true);
+    }
+    lastCgOk = Date.now();
+    emit();
+  } catch { /* нет связи */ }
+}
 function startStocks() {
   const ids = STOCKS.map((p) => p.gate);
   let ws = null, ping = null, attempt = 0;
@@ -308,27 +371,56 @@ function startStocks() {
     ws.onmessage = (e) => {
       try {
         const m = JSON.parse(e.data);
-        if (m.channel === "spot.tickers" && m.event === "update" && m.result) { lastGateMsg = Date.now(); gateTick(m.result); emit(); }
+        if (m.channel === "spot.tickers" && m.event === "update" && m.result) { gateTick(m.result); emit(); }
       } catch { /* ignore */ }
     };
     ws.onclose = () => { clearInterval(ping); attempt++; setTimeout(connect, Math.min(1000 * 2 ** Math.min(attempt, 5), 60000)); };
     ws.onerror = () => ws.close();
   };
   connect();
-  // REST: сразу при старте и затем раз в 15 с (если WebSocket молчит) / раз в 60 с (обновить «тихие» акции)
-  let lastPoll = 0;
-  const poll = async () => {
+
+  // REST Gate: сначала проверяем одну пару; если Gate недоступен — не долбим его 32 запросами.
+  let lastPoll = 0, gateDown = false;
+  const pollGate = async () => {
     lastPoll = Date.now();
-    await Promise.all(ids.map(async (id) => {
-      try { const [r] = await gateGet(`/spot/tickers?currency_pair=${id}`); if (r) gateTick(r); } catch { /* сеть */ }
-    }));
+    try {
+      const [first] = await gateGet(`/spot/tickers?currency_pair=${ids[0]}`);
+      if (first) gateTick(first);
+      gateDown = false;
+    } catch { gateDown = true; return; }
+    for (let i = 1; i < ids.length; i += 4) { // по 4 запроса за раз
+      await Promise.all(ids.slice(i, i + 4).map(async (id) => {
+        try { const [r] = await gateGet(`/spot/tickers?currency_pair=${id}`); if (r) gateTick(r); } catch { /* сеть */ }
+      }));
+    }
     emit();
   };
-  poll();
+  pollGate().finally(() => { if (Date.now() - lastGateOk > 5000) pollStocksCoinGecko(); });
+  let lastCg = Date.now();
   setInterval(() => {
-    const wsAlive = Date.now() - lastGateMsg < 30000;
-    if (Date.now() - lastPoll > (wsAlive ? 60000 : 15000)) poll();
+    const wsAlive = Date.now() - lastGateOk < 30e3;
+    if (Date.now() - lastPoll > (gateDown ? 120e3 : wsAlive ? 60e3 : 15e3)) pollGate();
+    // Gate молчит больше 20 с — берём цены с CoinGecko раз в 30 с
+    if (Date.now() - lastGateOk > 20e3 && Date.now() - lastCg > 30e3) { lastCg = Date.now(); pollStocksCoinGecko(); }
   }, 5000);
+}
+
+// Свечи акций с CoinGecko (если Gate недоступен). Кэш на минуту.
+const ohlcCache = new Map();
+async function cgOhlc(id, interval, startTime) {
+  const days = startTime ? Math.min(365, Math.max(1, Math.ceil((Date.now() - startTime) / 86400e3) + 1))
+    : { "1m": 1, "5m": 1, "15m": 1, "1h": 7, "4h": 30, "1d": 180, "1w": 365 }[interval] || 7;
+  const key = `${id}:${days}`;
+  const c = ohlcCache.get(key);
+  let rows = c && Date.now() - c.t < 60e3 ? c.rows : null;
+  if (!rows) {
+    const r = await fetch(`https://api.coingecko.com/api/v3/coins/${id}/ohlc?vs_currency=usd&days=${days}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    rows = await r.json();
+    ohlcCache.set(key, { t: Date.now(), rows });
+  }
+  return rows.filter((k) => !startTime || k[0] >= startTime)
+    .map((k) => ({ openTime: k[0], time: k[0] / 1000 + TZ_SHIFT, open: k[1], high: k[2], low: k[3], close: k[4], volume: 0 }));
 }
 
 // Для акций нет живого потока Binance — только опрос REST.
