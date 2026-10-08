@@ -1,5 +1,5 @@
 // 1. Рынки — список пар, цена, изменение за 24ч, поиск.
-import { PAIRS, onPrices, tickers, fetchSpark, fetchFearGreed, usMarketOpen, usMarketHoursLocal } from "../market.js";
+import { PAIRS, onPrices, tickers, fetchSpark, fetchFearGreed, usMarketOpen, usMarketHoursLocal, getStockSource } from "../market.js";
 import { isFav, toggleFav, prefs } from "../prefs.js";
 import { fmtPrice, fmtPct, fmtCompact } from "../format.js";
 import { $, coinIcon, sourceBadge } from "../ui.js";
@@ -69,7 +69,9 @@ export default {
     q.oninput = applyFilter;
     const drawNote = () => {
       const open = usMarketOpen();
+      const src = { gate: "живые, биржа Gate", coingecko: "CoinGecko, обновление раз в 30 с", offline: "нет связи — проверь интернет", connecting: "загружаются…" }[getStockSource()];
       $("#stockNote", el).innerHTML = `<b>${open ? "🟢 Биржа США открыта" : "🌙 Биржа США закрыта"}</b> — работает пн–пт ${usMarketHoursLocal()} по твоему времени.
+        <span class="muted">Цены: ${src}.</span>
         <span class="muted">Здесь — токенизированные акции: цена 1 к 1 повторяет настоящую, купить можно в любое время, но двигается цена в основном когда биржа открыта.</span>`;
     };
     $("#kindSeg", el).onclick = (e) => {
@@ -178,6 +180,7 @@ export default {
     const stopPrices = onPrices((tickers, source) => {
       if (Date.now() - lastSort > 5000) resort();
       if (view === "map" && Date.now() - lastMap > 3000) { lastMap = Date.now(); drawMap(); }
+      if (kind === "stock") drawNote();
       $("#src", el).innerHTML = sourceBadge(source);
       for (const p of PAIRS) {
         const t = tickers[p.symbol];

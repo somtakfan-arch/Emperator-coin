@@ -1,5 +1,5 @@
 // 2. Торговля — график, стакан, форма купить/продать, открытые ордера.
-import { PAIRS, pairBySymbol, onPrices, tickers, getPrice, fetchKlines, fetchDepth, fetchTrades, wsKline, pairStream, usMarketOpen } from "../market.js";
+import { PAIRS, pairBySymbol, onPrices, tickers, getPrice, fetchKlines, fetchDepth, fetchTrades, wsKline, pairStream, usMarketOpen, getStockSource } from "../market.js";
 import { isFav, toggleFav, prefs, onPrefs } from "../prefs.js";
 import { addAlert, removeAlert } from "../alerts.js";
 import { sfx } from "../sound.js";
@@ -258,7 +258,7 @@ export default {
             { pollMs: 4000 },
           );
         } catch {
-          if (token === tfToken && alive) chartMsg('<span class="muted">График недоступен — нет связи с Binance</span>');
+          if (token === tfToken && alive) chartMsg('<span class="muted">График недоступен — нет связи с биржей</span>');
         }
       };
 
@@ -307,7 +307,7 @@ export default {
     };
     stops.push(pairStream(symbol, [`${symbol.toLowerCase()}@depth20@100ms`], (_, d) => onBook(d), async () => onBook(await fetchDepth(symbol)), { pollMs: 2000, timeoutMs: 5000 }));
     const bookEmptyTimer = setTimeout(() => {
-      if (!book) $("#asks", el).innerHTML = '<div class="empty">Стакан недоступен — нет связи с Binance</div>';
+      if (!book) $("#asks", el).innerHTML = '<div class="empty">Стакан недоступен — нет связи с биржей</div>';
     }, 10000);
     stops.push(() => clearTimeout(bookEmptyTimer));
     // клик по уровню — подставляет цену в лимитку
@@ -480,7 +480,7 @@ export default {
     let lastPriceShown = null;
     stops.push(onPrices((all, source) => {
       $("#src", el).innerHTML = pair.stock
-        ? `<span class="src-badge ${usMarketOpen() ? "live" : "warn"}"><i></i>${usMarketOpen() ? "Биржа США открыта" : "Биржа США закрыта — цена почти не меняется"}</span>`
+        ? `<span class="src-badge ${usMarketOpen() ? "live" : "warn"}"><i></i>${usMarketOpen() ? "Биржа США открыта" : "Биржа США закрыта — цена почти не меняется"}${getStockSource() === "coingecko" ? " · цены CoinGecko" : ""}</span>`
         : sourceBadge(source);
       const t = all[symbol];
       if (!t) return;
