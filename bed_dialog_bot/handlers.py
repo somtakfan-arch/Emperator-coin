@@ -771,6 +771,37 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
         # still visibly works, just without real deletion.
         until_ts = storage.get_ban(bcid, message.chat_id)
         if until_ts and until_ts > time.time():
+            # 🆓 Self-unban: a banned contact can free themselves by writing
+            # "unban" — UNLESS the owner is ULTRA (unbreakable ban is an ULTRA
+            # perk). This is the playful "bot duel" mechanic.
+            _txt = (message.text or "").strip().lower()
+            if _txt in ("unban", ".unban", "/unban", "анбан", "разбан", "разбань"):
+                if storage.is_ultra(owner_id):
+                    # Unbreakable ULTRA ban — delete the attempt and taunt.
+                    storage.delete_message(bcid, message.chat_id, message.message_id)
+                    try:
+                        await context.bot.do_api_request(
+                            "deleteBusinessMessages",
+                            api_kwargs={"business_connection_id": bcid,
+                                        "message_ids": [message.message_id]})
+                    except Exception:
+                        pass
+                    try:
+                        await context.bot.send_message(
+                            chat_id=message.chat_id, business_connection_id=bcid,
+                            text="🔱 Это бан ULTRA PREMIUM — его не снять. Сиди 😈")
+                    except Exception:
+                        pass
+                    return
+                # Free-tier ban — the self-unban works.
+                storage.clear_ban(bcid, message.chat_id)
+                try:
+                    await context.bot.send_message(
+                        chat_id=message.chat_id, business_connection_id=bcid,
+                        text="🔓 Бан снят! Пиши спокойно 😎")
+                except Exception:
+                    pass
+                return
             # Drop it from storage first so the deleted_business_messages update
             # our own deletion triggers finds nothing and won't notify the owner
             # that "the contact deleted a message" — the ban did.
