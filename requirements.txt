@@ -4,3 +4,4 @@ Pillow>=10,<12
 qrcode>=7,<9
 yt-dlp>=2025.1.1
 tonutils==0.3.4
+telethon>=1.37,<2

@@ -609,6 +609,12 @@ async def _post_init(application: Application) -> None:
     application.create_task(_crypto_loop(application))
     application.create_task(_deposit_loop(application))
     application.create_task(_backup_loop(application))
+    # 🎂 Optional userbot: "eternal birthday" on the owner's own account (only
+    # runs when TG_API_ID/TG_API_HASH/USERBOT_SESSION are configured).
+    from . import userbot
+    if userbot.enabled():
+        application.create_task(userbot.birthday_loop())
+        logger.info("🎂 Userbot birthday feature enabled.")
 
 
 def _restore_seed_if_needed() -> None:
