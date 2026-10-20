@@ -36,7 +36,7 @@ function makeBot(t, rng) {
   return new C({ rng, iters: v1 ? 160 : 300 });
 }
 
-function match(first, second, botRng) {
+async function match(first, second, botRng) {
   const players = [first, second].map((tok, i) => {
     const bot = makeBot(tok, botRng);
     bot.id = i;
@@ -46,15 +46,15 @@ function match(first, second, botRng) {
   const net = [];
   for (let h = 0; h < HANDS; h++) {
     for (const p of players) p.stack = STACK;
-    table.playHand();
+    await table.playHand();
     net.push(players[0].stack - STACK); // результат первого места
   }
   return net;
 }
 
 const t0 = Date.now();
-const m1 = match(A, Bname, mulberry32(seed + 1)); // A на месте 0
-const m2 = match(Bname, A, mulberry32(seed + 2)); // B на месте 0 — те же карты
+const m1 = await match(A, Bname, mulberry32(seed + 1)); // A на месте 0
+const m2 = await match(Bname, A, mulberry32(seed + 2)); // B на месте 0 — те же карты
 const pairs = m1.map((x, i) => x - m2[i]); // выигрыш A за пару раздач
 const mean = pairs.reduce((a, b) => a + b, 0) / pairs.length;
 const sd = Math.sqrt(pairs.reduce((a, b) => a + (b - mean) ** 2, 0) / pairs.length);

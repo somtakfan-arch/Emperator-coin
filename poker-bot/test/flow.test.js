@@ -1,0 +1,162 @@
+// Интеграционный тест: сервер в DEV-режиме + фейковые клиенты по WebSocket.
+//   npm test
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import WebSocket from 'ws';
+
+process.env.DEV = '1';
+process.env.SPEED = '0';
+process.env.TURN_SECONDS = '3';
+process.env.PORT = String(4100 + Math.floor(Math.random() * 500));
+process.env.DATA_DIR = mkdtempSync(tmpdir() + '/poker-test-');
+
+let srv, db;
+before(async () => {
+  srv = await import('../server/index.js');
+  ({ db } = await import('../server/db.js'));
+  await new Promise((r) => setTimeout(r, 200));
+});
+after(() => {
+  srv.server.close();
+  setTimeout(() => process.exit(0), 100);
+});
+
+class Client {
+  constructor(id, { autoplay = 'call' } = {}) {
+    this.id = id;
+    this.autoplay = autoplay;
+    this.msgs = [];
+    this.waiters = [];
+    this.rid = 0;
+    this.ws = new WebSocket(`ws://localhost:${process.env.PORT}/ws`);
+    this.ws.on('message', (raw) => {
+      const m = JSON.parse(raw);
+      this.msgs.push(m);
+      if (m.t === 'me' || m.t === 'hello') this.me = m.me;
+      if (m.t === 'table') this.table = m.table;
+      if (m.t === 'turn') this.onTurn(m);
+      this.waiters = this.waiters.filter((w) => !w(m));
+    });
+    this.ready = new Promise((r) => this.ws.on('open', r)).then(() => this.req({ t: 'auth', dev: { id, name: `P${id}` } }));
+  }
+  onTurn(m) {
+    let action;
+    if (this.autoplay === 'shove') action = { type: 'raise', to: m.maxTo };
+    else if (this.autoplay === 'mix') {
+      const r = Math.random();
+      action = r < 0.25 ? { type: 'fold' } : r < 0.7 ? { type: 'call' } : { type: 'raise', to: m.maxTo };
+    } else action = { type: m.toCall > 0 ? 'call' : 'check' };
+    setTimeout(() => this.ws.send(JSON.stringify({ t: 'act', action })), 1);
+  }
+  req(msg) {
+    const rid = ++this.rid;
+    return new Promise((resolve, reject) => {
+      this.waiters.push((m) => {
+        if (m.rid !== rid) return false;
+        m.t === 'error' ? reject(new Error(m.text)) : resolve(m);
+        return true;
+      });
+      this.ws.send(JSON.stringify({ ...msg, rid }));
+    });
+  }
+  waitFor(pred, ms = 60000) {
+    const hit = this.msgs.find(pred);
+    if (hit) return Promise.resolve(hit);
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`таймаут у P${this.id}`)), ms);
+      this.waiters.push((m) => (pred(m) ? (clearTimeout(timer), resolve(m), true) : false));
+    });
+  }
+  close() { this.ws.close(); }
+}
+
+// Сумма движений в ledger должна совпадать с балансом + фишками на столе.
+function assertLedger(id) {
+  const u = db.prepare('SELECT chips, in_play FROM users WHERE id = ?').get(id);
+  const l = db.prepare('SELECT COALESCE(SUM(delta), 0) AS s FROM ledger WHERE user_id = ?').get(id).s;
+  const onBotTable = db.prepare("SELECT COALESCE(SUM(delta), 0) AS s FROM ledger WHERE user_id = ? AND reason IN ('bots_buyin', 'bots_cashout')").get(id).s;
+  assert.equal(u.chips, l, `ledger P${id}`);
+  return { ...u, onBotTable };
+}
+
+test('старт с нулём, пополнение (DEV), стол против бота, выход со стеком', async () => {
+  const c = new Client(1001);
+  await c.ready;
+  assert.equal(c.me.chips, 0);
+  await assert.rejects(c.req({ t: 'sitBots', mode: 'hu', botName: 'Акула', buyin: 500 }), /Не хватает/);
+  await c.req({ t: 'invoice', pack: 'p1' });
+  await c.waitFor((m) => m.t === 'me' && m.me.chips === 5000);
+  await c.req({ t: 'sitBots', mode: 'hu', botName: 'Акула', buyin: 500 });
+  await c.waitFor((m) => m.t === 'table' && (m.table?.handId >= 3 || m.table?.canRebuy));
+  let rebuys = 0;
+  if (c.table.canRebuy) {
+    // колл-станцию Акула обыгрывает быстро — проверим докупку
+    await c.req({ t: 'rebuy' });
+    rebuys = 1;
+  }
+  // чужие карты не видны
+  const opp = c.table.seats.find((s) => !s.me);
+  if (c.table.inHand) assert.equal(opp.cards, null);
+  await assert.rejects(c.req({ t: 'sitBots', mode: 'hu', botName: 'Акула', buyin: 500 }), /уже за столом/);
+  c.ws.send(JSON.stringify({ t: 'leave' }));
+  const left = await c.waitFor((m) => m.t === 'left');
+  await new Promise((r) => setTimeout(r, 50));
+  const u = assertLedger(1001);
+  assert.equal(u.in_play, 0);
+  assert.equal(u.chips, 4500 - rebuys * 500 + left.stack);
+  c.close();
+});
+
+async function playTournament(n, size, autoplay, base) {
+  const cs = [];
+  for (let i = 0; i < n; i++) {
+    const c = new Client(base + i, { autoplay });
+    await c.ready;
+    await c.req({ t: 'invoice', pack: 'p1' });
+    cs.push(c);
+  }
+  const { id } = await cs[0].req({ t: 'createT', tour: { name: 'Тест', maxPlayers: size, buyin: 1000, blindMin: 3, startMode: 'full' } });
+  for (const c of cs.slice(1)) await c.req({ t: 'reg', id });
+  const fin = await Promise.all(cs.map((c) => c.waitFor((m) => m.t === 'finished' && m.tournamentId === id, 180000)));
+  const places = fin.map((f) => f.place).sort((a, b) => a - b);
+  assert.deepEqual(places, Array.from({ length: n }, (_, i) => i + 1), 'места 1..n без повторов');
+  const prizes = fin.reduce((s, f) => s + f.prize, 0);
+  assert.equal(prizes, n * 1000, 'призы = все взносы');
+  await new Promise((r) => setTimeout(r, 50));
+  let total = 0;
+  for (const c of cs) total += assertLedger(c.id).chips;
+  assert.equal(total, n * 5000, 'фишки не появились и не пропали');
+  const t = db.prepare('SELECT status FROM tournaments WHERE id = ?').get(id);
+  assert.equal(t.status, 'done');
+  cs.forEach((c) => c.close());
+  return fin;
+}
+
+test('Sit & Go на 6 игроков доигрывается, призы и рейтинг', async () => {
+  const fin = await playTournament(6, 6, 'mix', 2000);
+  const winner = fin.find((f) => f.place === 1);
+  assert.equal(winner.prize, 3600); // 60% от 6000
+  assert.ok(winner.ratingDelta > 0);
+});
+
+test('турнир на 18 игроков: 3 стола, балансировка, финал', async () => {
+  await playTournament(18, 18, 'shove', 3000);
+});
+
+test('отмена своего турнира возвращает взносы', async () => {
+  const a = new Client(4001);
+  const b = new Client(4002);
+  await a.ready; await b.ready;
+  await a.req({ t: 'invoice', pack: 'p1' });
+  await b.req({ t: 'invoice', pack: 'p1' });
+  const { id } = await a.req({ t: 'createT', tour: { name: 'Отмена', maxPlayers: 6, buyin: 2000, blindMin: 5, startMode: 'full', private: true } });
+  await b.req({ t: 'reg', id });
+  await assert.rejects(b.req({ t: 'cancelT', id }), /Нельзя/);
+  await a.req({ t: 'cancelT', id });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(assertLedger(4001).chips, 5000);
+  assert.equal(assertLedger(4002).chips, 5000);
+  a.close(); b.close();
+});

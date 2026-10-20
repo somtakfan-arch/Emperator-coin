@@ -93,7 +93,7 @@ for (let h = 0; h < HANDS; h++) {
     // кэш-игра: стек ниже 100 бб — докупаемся до 100 бб
     if (p.stack < BUYIN) { p.invested += BUYIN - p.stack; p.stack = BUYIN; }
   }
-  table.playHand();
+  await table.playHand();
 }
 const sec = (Date.now() - t0) / 1000;
 

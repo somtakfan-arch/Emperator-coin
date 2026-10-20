@@ -56,7 +56,7 @@ node duel.js Акула station 1000       # против эксплойт-бо�
 ## Запуск
 
 ```bash
-cd games/poker
+cd poker-bot/core
 node sim.js 2000            # 2000 раздач, итоговая таблица
 node sim.js 300 --log       # с логом первых раздач
 node sim.js 5000 --seed 42  # воспроизводимый прогон

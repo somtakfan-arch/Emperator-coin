@@ -1,18 +1,20 @@
 // Безлимитный Техасский Холдем: блайнды, раунды ставок, сайд-поты, шоудаун.
-// Игрок: { id, name, stack, bot }. Бот: act(state) -> действие, observe(event) — по желанию.
+// Игрок: { id, name, stack, bot }. Бот: act(state) -> действие (можно Promise — так ходит живой игрок),
+// observe(event) и deal(hole) — по желанию.
 // Действия: { type: 'fold' | 'check' | 'call' } или { type: 'raise', to } (to — итоговая ставка на улице).
 import { newDeck, shuffle, evaluate } from './cards.js';
 
 const STREETS = ['preflop', 'flop', 'turn', 'river'];
 
 export class Table {
-  constructor({ players, smallBlind = 5, bigBlind = 10, rng = Math.random, deckRng = rng, onEvent = null }) {
+  constructor({ players, smallBlind = 5, bigBlind = 10, rng = Math.random, deckRng = rng, onEvent = null, pause = null }) {
     this.players = players;
     this.sb = smallBlind;
     this.bb = bigBlind;
     this.rng = rng;
     this.deckRng = deckRng; // отдельный генератор для колоды — нужен для дубликат-матчей
     this.onEvent = onEvent;
+    this.pause = pause; // async (kind) => {} — паузы для живых игроков (после хода, улицы)
     this.button = -1;
     this.handId = 0;
   }
@@ -22,7 +24,7 @@ export class Table {
     this.onEvent?.(e);
   }
 
-  playHand() {
+  async playHand() {
     const seated = this.players.filter((p) => p.stack > 0);
     if (seated.length < 2) return null;
     this.handId++;
@@ -42,6 +44,7 @@ export class Table {
 
     const deck = shuffle(newDeck(), this.deckRng);
     for (const h of hs) h.hole = [deck.pop(), deck.pop()];
+    for (const h of hs) h.p.bot?.deal?.(h.hole.slice());
     const board = [];
     const actions = [];
     const ctx = { hs, board, actions, positions, street: 'preflop', handId: this.handId };
@@ -54,6 +57,11 @@ export class Table {
 
     this.post(hs[sbIdx], this.sb);
     this.post(hs[bbIdx], this.bb);
+    this.emit({
+      type: 'blinds', handId: this.handId,
+      sb: { id: hs[sbIdx].p.id, amount: hs[sbIdx].bet },
+      bb: { id: hs[bbIdx].p.id, amount: hs[bbIdx].bet },
+    });
 
     for (const street of STREETS) {
       ctx.street = street;
@@ -63,9 +71,10 @@ export class Table {
         for (let i = 0; i < k; i++) board.push(deck.pop());
         for (const h of hs) h.bet = 0;
         this.emit({ type: 'street', handId: this.handId, street, board: board.slice() });
+        await this.pause?.('street');
       }
       const first = street === 'preflop' ? (bbIdx + 1) % n : 0;
-      this.bettingRound(ctx, first, street === 'preflop' ? this.bb : 0);
+      await this.bettingRound(ctx, first, street === 'preflop' ? this.bb : 0);
       if (hs.filter((h) => !h.folded).length < 2) break;
     }
 
@@ -81,7 +90,7 @@ export class Table {
     return a;
   }
 
-  bettingRound(ctx, first, startBet) {
+  async bettingRound(ctx, first, startBet) {
     const { hs } = ctx;
     const n = hs.length;
     const canAct = (h) => !h.folded && !h.allIn;
@@ -100,7 +109,7 @@ export class Table {
           const potBefore = hs.reduce((s, x) => s + x.total, 0);
           const state = this.stateFor(ctx, i, currentBet, minRaise);
           let a;
-          try { a = h.p.bot.act(state) || { type: 'fold' }; } catch (err) { a = { type: 'fold' }; }
+          try { a = (await h.p.bot.act(state)) || { type: 'fold' }; } catch (err) { a = { type: 'fold' }; }
           let type = a.type === 'bet' ? 'raise' : a.type;
           let to = Number(a.to ?? a.amount ?? 0);
           if (type === 'raise') {
@@ -128,6 +137,7 @@ export class Table {
           };
           ctx.actions.push(ev);
           this.emit(ev);
+          await this.pause?.('action');
         }
       }
       i = (i + 1) % n;
