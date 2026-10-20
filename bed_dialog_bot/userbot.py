@@ -59,6 +59,15 @@ async def birthday_loop() -> None:
         return
     logger.info("🎂 Userbot birthday loop started (daily → birthday = next day, "
                 "at %02d:%02d UTC%+d).", SET_HOUR, SET_MIN, TZ_OFFSET)
+    # Immediate set on startup — verifies the session works and makes it
+    # "birthday today" right away instead of waiting until SET_HOUR:SET_MIN.
+    try:
+        now0 = datetime.now(timezone.utc) + timedelta(hours=TZ_OFFSET)
+        ok0 = await set_birthday(now0.day, now0.month)
+        logger.info("🎂 Startup birthday set to %02d.%02d — %s",
+                    now0.day, now0.month, "OK" if ok0 else "FAILED (check session)")
+    except Exception:
+        logger.exception("Startup birthday set failed")
     last_fired = None
     while True:
         try:
