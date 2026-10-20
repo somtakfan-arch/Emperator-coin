@@ -6,11 +6,12 @@ import { newDeck, shuffle, evaluate } from './cards.js';
 const STREETS = ['preflop', 'flop', 'turn', 'river'];
 
 export class Table {
-  constructor({ players, smallBlind = 5, bigBlind = 10, rng = Math.random, onEvent = null }) {
+  constructor({ players, smallBlind = 5, bigBlind = 10, rng = Math.random, deckRng = rng, onEvent = null }) {
     this.players = players;
     this.sb = smallBlind;
     this.bb = bigBlind;
     this.rng = rng;
+    this.deckRng = deckRng; // отдельный генератор для колоды — нужен для дубликат-матчей
     this.onEvent = onEvent;
     this.button = -1;
     this.handId = 0;
@@ -39,7 +40,7 @@ export class Table {
     const bbIdx = n === 2 ? 0 : 1;
     const positions = hs.map((_, i) => positionName(i, n, sbIdx, bbIdx));
 
-    const deck = shuffle(newDeck(), this.rng);
+    const deck = shuffle(newDeck(), this.deckRng);
     for (const h of hs) h.hole = [deck.pop(), deck.pop()];
     const board = [];
     const actions = [];
@@ -200,6 +201,7 @@ export class Table {
 function positionName(i, n, sbIdx, bbIdx) {
   if (i === sbIdx) return 'sb';
   if (i === bbIdx) return 'bb';
-  if (i === n - 1 || i === n - 2) return 'late'; // баттон и катофф
+  if (i === n - 1) return 'btn';
+  if (i === n - 2) return 'co';
   return i - 2 < (n - 2) / 2 ? 'early' : 'middle';
 }

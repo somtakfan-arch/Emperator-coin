@@ -70,3 +70,66 @@ export class OpponentModel {
     };
   }
 }
+
+// ---------- Модель частот для элитных ботов ----------
+// Для каждого соперника и каждой ситуации считаем: как часто он агрессирует (A),
+// продолжает пассивно (C) и фолдит (F). Плюс доля блефа в его поздней агрессии.
+//   open    — префлоп, рейзов ещё не было
+//   vsRaise — префлоп против одного рейза
+//   vs3bet  — префлоп против двух и более рейзов
+//   first   — постфлоп, ставки нет (бет или чек)
+//   facing  — постфлоп, против ставки
+export const CONTEXT_PRIOR = {
+  open: { agg: 0.2, call: 0.06, fold: 0.74 },
+  vsRaise: { agg: 0.08, call: 0.16, fold: 0.76 },
+  vs3bet: { agg: 0.2, call: 0.3, fold: 0.5 },
+  first: { agg: 0.45, call: 0.55, fold: 0 },
+  facing: { agg: 0.1, call: 0.45, fold: 0.45 },
+};
+const BLUFF_PRIOR = 0.3;
+
+export class FreqModel {
+  constructor(priorN = 10) {
+    this.priorN = priorN;
+    this.data = new Map();
+  }
+
+  raw(id) {
+    if (!this.data.has(id)) {
+      const ctx = {};
+      for (const k in CONTEXT_PRIOR) ctx[k] = { agg: 0, call: 0, fold: 0 };
+      this.data.set(id, { hands: 0, ctx, sdAggr: 0, sdBluff: 0 });
+    }
+    return this.data.get(id);
+  }
+
+  count(id, ctx, action) {
+    const c = this.raw(id).ctx[ctx];
+    if (action === 'raise') c.agg++;
+    else if (action === 'fold') c.fold++;
+    else c.call++; // колл или чек
+  }
+
+  freq(id, ctx) {
+    const c = this.raw(id).ctx[ctx];
+    const p = CONTEXT_PRIOR[ctx];
+    const n = c.agg + c.call + c.fold + this.priorN;
+    return {
+      A: (c.agg + p.agg * this.priorN) / n,
+      C: (c.call + p.call * this.priorN) / n,
+      F: (c.fold + p.fold * this.priorN) / n,
+      n: n - this.priorN,
+    };
+  }
+
+  bluffShare(id) {
+    const d = this.raw(id);
+    return (d.sdBluff + BLUFF_PRIOR * 4) / (d.sdAggr + 4);
+  }
+
+  // VPIP-подобная «лузовость» для отчёта
+  looseness(id) {
+    const f = this.freq(id, 'open');
+    return f.A + f.C;
+  }
+}

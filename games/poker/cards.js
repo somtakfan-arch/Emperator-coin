@@ -96,46 +96,72 @@ export const handCategory = (v) => Math.floor(v / CAT_BASE);
 export const handName = (v) => HAND_NAMES[handCategory(v)];
 const topRankOf = (v) => Math.floor(v / B ** 4) % B;
 
-// ---------- Префлоп: перцентиль руки (1 = AA, 0 = 72o) ----------
+// ---------- Все 1326 стартовых комбинаций ----------
 
-function chen(r1, r2, suited) {
-  const hi = Math.max(r1, r2), lo = Math.min(r1, r2);
-  const pts = (r) => (r === 12 ? 10 : r === 11 ? 8 : r === 10 ? 7 : r === 9 ? 6 : (r + 2) / 2);
-  let s;
-  if (hi === lo) s = Math.max(5, pts(hi) * 2);
-  else {
-    s = pts(hi) + (suited ? 2 : 0);
-    const gap = hi - lo - 1;
-    s -= [0, 1, 2, 4][gap] ?? 5;
-    if (gap <= 1 && hi < 10) s += 1;
+export const COMBOS = [];
+const COMBO_IDX = new Int16Array(52 * 52).fill(-1);
+for (let a = 0; a < 52; a++)
+  for (let b = a + 1; b < 52; b++) {
+    COMBO_IDX[a * 52 + b] = COMBO_IDX[b * 52 + a] = COMBOS.length;
+    COMBOS.push([a, b]);
   }
-  return Math.ceil(s) + hi * 0.01 + lo * 0.001;
-}
+export const comboIndex = (a, b) => COMBO_IDX[a * 52 + b];
 
+// ---------- Префлоп: перцентиль руки по реальному эквити (1 = AA, 0 = 32o) ----------
+// Эквити каждой из 169 рук против случайной считается один раз при загрузке
+// (Монте-Карло с фиксированным сидом — результат всегда одинаковый).
+
+const classKey = (a, b) => {
+  const r1 = a >> 2, r2 = b >> 2;
+  const hi = Math.max(r1, r2), lo = Math.min(r1, r2);
+  return hi * 26 + lo * 2 + (hi !== lo && (a & 3) === (b & 3) ? 1 : 0);
+};
+
+export const PRE_STRENGTH = new Float32Array(COMBOS.length);
 const PRE_PCT = new Map();
 (() => {
-  const vals = [];
-  for (let a = 0; a < 52; a++)
-    for (let b = a + 1; b < 52; b++)
-      vals.push(chen(a >> 2, b >> 2, (a & 3) === (b & 3)));
-  const sorted = vals.slice().sort((x, y) => x - y);
+  let seed;
+  const rnd = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x80000000;
+  };
+  const eqByClass = new Map();
+  const ITERS = 900;
+  for (const [a, b] of COMBOS) {
+    const k = classKey(a, b);
+    if (eqByClass.has(k)) continue;
+    seed = 12345; // одинаковые случайные раздачи для всех рук — порядок не скачет от шума
+    let win = 0;
+    const cards = new Array(7), opp = new Array(7);
+    for (let it = 0; it < ITERS; it++) {
+      const used = new Set([a, b]);
+      const draw = () => {
+        let c;
+        do c = (rnd() * 52) | 0; while (used.has(c));
+        used.add(c);
+        return c;
+      };
+      const o1 = draw(), o2 = draw();
+      for (let i = 0; i < 5; i++) cards[i] = opp[i] = draw();
+      cards[5] = a; cards[6] = b; opp[5] = o1; opp[6] = o2;
+      const x = evaluate(cards), y = evaluate(opp);
+      win += x > y ? 1 : x === y ? 0.5 : 0;
+    }
+    eqByClass.set(k, win / ITERS);
+  }
+  const eqs = COMBOS.map(([a, b]) => eqByClass.get(classKey(a, b)));
+  const sorted = eqs.slice().sort((x, y) => x - y);
   const n = sorted.length;
-  for (let hi = 0; hi < 13; hi++)
-    for (let lo = 0; lo <= hi; lo++)
-      for (const s of [0, 1]) {
-        if (hi === lo && s) continue;
-        const v = chen(hi, lo, !!s);
-        let below = 0, eq = 0;
-        for (const x of sorted) { if (x < v) below++; else if (x === v) eq++; }
-        PRE_PCT.set(hi * 100 + lo * 2 + s, (below + eq / 2) / n);
-      }
+  for (const [k, v] of eqByClass) {
+    let below = 0, eq = 0;
+    for (const x of sorted) { if (x < v) below++; else if (x === v) eq++; }
+    PRE_PCT.set(k, (below + eq / 2) / n);
+  }
+  COMBOS.forEach(([a, b], i) => { PRE_STRENGTH[i] = PRE_PCT.get(classKey(a, b)); });
 })();
 
 export function preflopPct(hole) {
-  const r1 = hole[0] >> 2, r2 = hole[1] >> 2;
-  const hi = Math.max(r1, r2), lo = Math.min(r1, r2);
-  const s = hi !== lo && (hole[0] & 3) === (hole[1] & 3) ? 1 : 0;
-  return PRE_PCT.get(hi * 100 + lo * 2 + s);
+  return PRE_PCT.get(classKey(hole[0], hole[1]));
 }
 
 // ---------- Постфлоп: быстрая оценка силы + дро ----------
@@ -169,8 +195,15 @@ export function postflopStrength(hole, board, ctx = boardContext(board)) {
   else if (cat === 1) made = bc === 1 ? 0.12 : pairScore(hole, ctx, v, false);
   else made = 0.04 + (topRankOf(v) / 12) * 0.08;
 
+  const draw = drawScore(hole, ctx, cat);
+  const s = made >= 0.7 ? made : Math.min(0.68, made + draw);
+  return { s, made, draw, cat };
+}
+
+// Бонус за дро: флеш-дро 0.2, двусторонний стрит 0.16, гатшот 0.08.
+export function drawScore(hole, ctx, cat) {
   let draw = 0;
-  if (board.length < 5 && cat < 5) {
+  if (ctx.board.length < 5 && cat < 5) {
     for (let s = 0; s < 4; s++) {
       const holeS = (hole[0] & 3) === s ? 1 : 0;
       const holeS2 = (hole[1] & 3) === s ? 1 : 0;
@@ -189,8 +222,7 @@ export function postflopStrength(hole, board, ctx = boardContext(board)) {
       if (lo <= 9 && popcount(ext & w5) === 4 && ext & hm & w5) draw = Math.max(draw, 0.08);
     }
   }
-  const s = made >= 0.7 ? made : Math.min(0.68, made + draw);
-  return { s, made, draw, cat };
+  return draw;
 }
 
 function pairScore(hole, ctx, v, boardPaired) {

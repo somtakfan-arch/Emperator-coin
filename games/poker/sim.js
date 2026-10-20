@@ -1,16 +1,26 @@
 // Прогон ботов друг против друга.
-//   node sim.js            — 2000 раздач, итоговая таблица
-//   node sim.js 500 --log  — 500 раздач + лог первых раздач
-//   node sim.js 2000 --seed 42
+//   node sim.js                         — 5 элитных ботов, 2000 раздач
+//   node sim.js 500 --log               — с логом первых раздач
+//   node sim.js 3000 --seed 42          — воспроизводимый прогон
+//   node sim.js 3000 --lineup Акула,Охотник,v1:Акула,v1:Маньяк,station
+//
+// В составе: имена элиты (Скала, Акула, Маньяк, Охотник, Хамелеон),
+// v1:<имя> — первая версия, station / aggro / nit / random — эксплойт-боты.
 import { Table } from './engine.js';
-import { createBots } from './bots.js';
+import { BOT_CLASSES } from './bots.js';
+import { V1_CLASSES, CallingStation, Aggressor, Nit, RandomBot } from './benchmarks.js';
 import { cardStr, handName } from './cards.js';
 
 const args = process.argv.slice(2);
+const flag = (name) => {
+  const i = args.indexOf(name);
+  return i >= 0 ? args[i + 1] : null;
+};
 const HANDS = Number(args.find((a) => /^\d+$/.test(a))) || 2000;
 const LOG = args.includes('--log');
-const seedArg = args.indexOf('--seed');
-const seed = seedArg >= 0 ? Number(args[seedArg + 1]) : Date.now() % 1e9;
+const seed = flag('--seed') != null ? Number(flag('--seed')) : Date.now() % 1e9;
+const ITERS = Number(flag('--iters')) || 300;
+const lineup = (flag('--lineup') || 'Скала,Акула,Маньяк,Охотник,Хамелеон').split(',');
 
 function mulberry32(a) {
   return () => {
@@ -22,9 +32,28 @@ function mulberry32(a) {
 }
 const rng = mulberry32(seed);
 
+function makeBot(token) {
+  const opts = { rng, iters: ITERS };
+  const t = token.trim();
+  if (t === 'station') return new CallingStation();
+  if (t === 'aggro') return new Aggressor();
+  if (t === 'nit') return new Nit();
+  if (t === 'random') return new RandomBot(rng);
+  if (t.startsWith('v1:')) {
+    const C = V1_CLASSES.find((C) => new C(opts).name === t.slice(3));
+    if (!C) throw new Error(`нет v1-бота ${t}`);
+    const b = new C({ rng, iters: 160 });
+    b.name += ' v1';
+    return b;
+  }
+  const C = BOT_CLASSES.find((C) => new C(opts).name === t);
+  if (!C) throw new Error(`нет бота ${t}`);
+  return new C(opts);
+}
+
 const BB = 10, BUYIN = 1000;
-const bots = createBots({ rng, iters: 160 });
-const players = bots.map((bot, i) => {
+const players = lineup.map((tok, i) => {
+  const bot = makeBot(tok);
   bot.id = i;
   return { id: i, name: bot.name, stack: BUYIN, bot, invested: BUYIN, vpip: 0, pfr: 0 };
 });
@@ -46,10 +75,10 @@ const table = new Table({
     if (e.type === 'action') {
       const p = byId(e.id);
       const what = e.action === 'raise' ? `рейз до ${e.to}` : e.action === 'call' ? `колл ${e.added}` : e.action === 'check' ? 'чек' : 'фолд';
-      console.log(`  ${p.name.padEnd(9)} ${what}${e.allIn ? ' (олл-ин)' : ''}`);
+      console.log(`  ${p.name.padEnd(12)} ${what}${e.allIn ? ' (олл-ин)' : ''}`);
     }
     if (e.type === 'showdown') {
-      for (const r of e.reveals) console.log(`  ${byId(r.id).name.padEnd(9)} показывает ${r.cards.map(cardStr).join(' ')} — ${handName(r.score)}`);
+      for (const r of e.reveals) console.log(`  ${byId(r.id).name.padEnd(12)} показывает ${r.cards.map(cardStr).join(' ')} — ${handName(r.score)}`);
     }
     if (e.type === 'handEnd') {
       for (const w of e.winners) console.log(`  >> ${byId(w.id).name} забирает ${w.amount}`);
@@ -61,8 +90,8 @@ const table = new Table({
 const t0 = Date.now();
 for (let h = 0; h < HANDS; h++) {
   for (const p of players) {
-    // кэш-игра: вылетел — докупился на 100 бб
-    if (p.stack < BB * 2) { p.stack += BUYIN; p.invested += BUYIN; }
+    // кэш-игра: стек ниже 100 бб — докупаемся до 100 бб
+    if (p.stack < BUYIN) { p.invested += BUYIN - p.stack; p.stack = BUYIN; }
   }
   table.playHand();
 }
@@ -74,13 +103,12 @@ const rows = players
     const s = p.bot.stats;
     return {
       Бот: p.name,
-      'бб/100': (((p.stack - p.invested) / BB / HANDS) * 100).toFixed(1),
+      'бб/100': +(((p.stack - p.invested) / BB / HANDS) * 100).toFixed(1),
       VPIP: pct(p.vpip / HANDS),
       PFR: pct(p.pfr / HANDS),
       Блефов: s.bluffs,
       'Блеф прошёл': s.bluffs ? pct(s.bluffWins / s.bluffs) : '-',
-      'Колл-ловля': `${s.heroWins}/${s.heroCalls}`,
-      Ловушек: s.traps,
+      'Поймал блеф': `${s.heroWins}/${s.heroCalls}`,
     };
   })
   .sort((a, b) => b['бб/100'] - a['бб/100']);
