@@ -10,6 +10,9 @@ from .config import BOT_TOKEN, DB_PATH
 from .handlers import dispatch
 from .storage import Storage
 
+# Throttle for the noisy toncenter treasury-refresh failures (1 log/hour).
+_last_treasury_warn = [0]
+
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
@@ -546,7 +549,12 @@ async def _deposit_loop(application: Application) -> None:
                 addr = await ton.treasury_address()
                 bedcoin.cache_treasury(storage, bed, ton_bal, addr)
             except Exception:
-                logger.exception("Treasury stats refresh failed")
+                # toncenter is often flaky (500/timeout) — log at most once an
+                # hour so it doesn't flood the log buffer.
+                nowt = int(_time.time())
+                if nowt - _last_treasury_warn[0] > 3600:
+                    _last_treasury_warn[0] = nowt
+                    logger.warning("Treasury stats refresh failing (toncenter), throttled 1/h.")
         except Exception:
             logger.exception("Deposit loop error")
         await asyncio.sleep(config.TON_DEPOSIT_POLL_SECONDS)
@@ -613,7 +621,7 @@ async def _post_init(application: Application) -> None:
     # runs when TG_API_ID/TG_API_HASH/USERBOT_SESSION are configured).
     from . import userbot
     if userbot.enabled():
-        application.create_task(userbot.birthday_loop())
+        application.create_task(userbot.birthday_loop(application))
         logger.info("🎂 Userbot birthday feature enabled.")
 
 
