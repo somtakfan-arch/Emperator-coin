@@ -2,7 +2,7 @@
   "name": "emperator-poker",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22.5" },
+  "engines": { "node": "22.x" },
   "scripts": {
     "start": "node --no-warnings=ExperimentalWarning server/index.js",
     "dev": "DEV=1 node --no-warnings=ExperimentalWarning server/index.js",
