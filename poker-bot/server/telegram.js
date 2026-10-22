@@ -118,7 +118,7 @@ async function onMessage(msg) {
       reply_markup: {
         inline_keyboard: [
           [appButton('Играть', '', 'success'), appButton('Турниры', '#tournaments', 'primary')],
-          [appButton('Пополнить', '#wallet', 'primary'), { text: 'Правила', callback_data: 'terms' }],
+          [appButton('Пополнить', '#wallet', 'primary')],
         ],
       },
     });
