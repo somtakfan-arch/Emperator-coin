@@ -13,7 +13,7 @@ export const config = {
 
   startChips: num(env.START_CHIPS, 0),
   dailyBonus: num(env.DAILY_BONUS, 0),      // 0 — бонуса нет, карточка в кошельке скрыта
-  turnSeconds: num(env.TURN_SECONDS, 25),
+  turnSeconds: num(env.TURN_SECONDS, 20),
 
   // пакеты: звёзды → фишки
   packs: [

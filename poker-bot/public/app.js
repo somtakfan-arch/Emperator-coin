@@ -345,7 +345,7 @@ function pcard(c, size = '') {
 
 // места вокруг стола (в % от области стола); я всегда снизу
 const SPOTS = {
-  bottom: [50, 79], bl: [15, 64], tl: [15, 26], top: [50, 8], tr: [85, 26], br: [85, 64],
+  bottom: [50, 74], bl: [15, 64], tl: [15, 26], top: [50, 8], tr: [85, 26], br: [85, 64],
 };
 const LAYOUT = { 1: ['top'], 2: ['tl', 'tr'], 3: ['tl', 'top', 'tr'], 4: ['bl', 'tl', 'tr', 'br'], 5: ['bl', 'tl', 'top', 'tr', 'br'] };
 
@@ -429,6 +429,10 @@ function actionPanel(T, me, myTurn) {
     };
     const callAmt = Math.min(t.toCall, t.maxTo - t.myBet);
     return h('div', { class: 'panel' },
+      t.deadline > 0 && h('div', { class: 'countdown', 'data-countdown': t.deadline },
+        h('span', { class: 'cd-label' }, 'Твой ход'),
+        h('span', { class: 'cd-sec' }, ''),
+        h('div', { class: 'cd-bar' }, h('div', { 'data-deadline': t.deadline }))),
       canRaise && h('div', { class: 'presets' }, preset('½ банка', 0.5), preset('¾ банка', 0.75), preset('Банк', 1), preset('Олл-ин', 'all')),
       canRaise && t.maxTo > t.minRaiseTo && h('input', {
         type: 'range', min: t.minRaiseTo, max: t.maxTo, step: Math.max(1, Math.floor(t.bb / 2)), value: S.raiseTo,
@@ -740,12 +744,27 @@ function render() {
   // таймер хода
   for (const bar of app.querySelectorAll('[data-deadline]')) {
     const left = Number(bar.dataset.deadline) - Date.now();
-    const total = (S.lobby?.turnSeconds || 25) * 1000;
+    const total = (S.lobby?.turnSeconds || 20) * 1000;
     bar.style.width = `${Math.max(0, Math.min(100, (left / total) * 100))}%`;
     requestAnimationFrame(() => { bar.style.transition = `width ${Math.max(0, left)}ms linear`; bar.style.width = '0%'; });
   }
   if (tg) S.screen === 'lobby' ? tg.BackButton.hide() : tg.BackButton.show();
 }
+
+// Обратный отсчёт хода: обновляем только цифры, без перерисовки (не сбивает слайдер)
+let buzzed = 0;
+setInterval(() => {
+  const el = document.querySelector('[data-countdown]');
+  if (!el) return;
+  const deadline = Number(el.dataset.countdown);
+  const sec = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+  el.querySelector('.cd-sec').textContent = `${sec} с`;
+  el.classList.toggle('hurry', sec <= 5);
+  if (sec <= 5 && sec > 0 && buzzed !== deadline) {
+    buzzed = deadline;
+    tg?.HapticFeedback?.notificationOccurred('warning');
+  }
+}, 200);
 
 tg?.ready();
 tg?.expand();

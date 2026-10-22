@@ -165,3 +165,11 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
 .combo .pcard.sm { width: 40px; height: 56px; }
 .combo .pcard.sm .r { font-size: 16px; } .combo .pcard.sm .s { font-size: 14px; }
 .pcard.dim { opacity: 0.35; }
+
+.countdown { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px 10px; }
+.countdown .cd-label { font-size: 13px; font-weight: 600; color: var(--soft); }
+.countdown .cd-sec { font-size: 18px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.countdown .cd-bar { grid-column: 1 / -1; height: 5px; border-radius: 3px; background: rgba(255,255,255,0.15); overflow: hidden; }
+.countdown .cd-bar > div { height: 100%; background: var(--silver); }
+.countdown.hurry .cd-sec, .countdown.hurry .cd-label { color: #ff6b5e; }
+.countdown.hurry .cd-bar > div { background: #ff6b5e; }
