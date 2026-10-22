@@ -179,12 +179,17 @@ function leaveTableScreen(tournamentId) {
 const BACK = { bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
 
 function go(screen) {
-  if (screen !== 'table') S.tableHidden = S.screen === 'table' && !!S.table;
+  if (screen !== 'table' && S.screen === 'table' && S.table) S.tableHidden = true;
   if (screen === 'table') S.tableHidden = false;
   S.screen = screen;
   if (screen === 'profile') send({ t: 'top' });
   window.scrollTo(0, 0);
   render();
+}
+
+function openCombos() {
+  S.comboBack = S.screen;
+  go('combos');
 }
 
 function openTour(id) {
@@ -205,6 +210,7 @@ function openStart(startParam) {
 tg?.BackButton.onClick(() => back());
 window.addEventListener('hashchange', () => S.me && openStart(null));
 function back() {
+  if (S.screen === 'combos') return go(S.comboBack || 'lobby');
   if (S.screen === 'table' && S.table?.kind === 'bots') return leaveBots();
   go(BACK[S.screen] || 'lobby');
 }
@@ -272,6 +278,9 @@ function lobbyScreen() {
       h('div', { class: 'row between' }, h('div', { class: 'card-title' }, 'Против людей'), icon('chev', 22)),
       h('div', { class: 'soft', style: 'font-size:14px;line-height:1.45' }, 'Турниры от 2 до 60 игроков. Создай свой и позови друзей по ссылке.'),
       h('div', { class: 'row', style: 'font-size:13px' }, h('span', { class: 'dot' }), `Сейчас онлайн: ${fmt(S.lobby?.online)}`)),
+    h('button', { class: 'item', onclick: openCombos },
+      h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, 'Справочник комбинаций'), h('div', { class: 'small muted' }, 'Какие бывают руки и что сильнее')),
+      icon('chev')),
     upcoming.length > 0 && h('div', { class: 'col', style: 'gap:10px' },
       h('div', { class: 'label' }, 'Ближайшие турниры'),
       upcoming.map((t) => h('button', { class: 'item', onclick: () => openTour(t.id) },
@@ -336,7 +345,7 @@ function pcard(c, size = '') {
 
 // места вокруг стола (в % от области стола); я всегда снизу
 const SPOTS = {
-  bottom: [50, 86], bl: [15, 64], tl: [15, 26], top: [50, 8], tr: [85, 26], br: [85, 64],
+  bottom: [50, 79], bl: [15, 64], tl: [15, 26], top: [50, 8], tr: [85, 26], br: [85, 64],
 };
 const LAYOUT = { 1: ['top'], 2: ['tl', 'tr'], 3: ['tl', 'top', 'tr'], 4: ['bl', 'tl', 'tr', 'br'], 5: ['bl', 'tl', 'top', 'tr', 'br'] };
 
@@ -373,7 +382,10 @@ function tableScreen() {
     const timer = T.actor === s.id && T.deadline ? h('div', { class: 'timer' }, h('div', { 'data-deadline': T.deadline })) : null;
     return h('div', { class: `seat ${s.me ? 'me' : ''}`, style: `left:${x}%;top:${y}%` },
       top ? [cards.length ? h('div', { class: 'cards' }, cards) : null, plate, s.hand && h('div', { class: 'hand-name' }, s.hand), timer, extras]
-        : [extras, h('div', { class: 'cards' }, cards), plate, s.hand && h('div', { class: 'hand-name' }, s.hand), timer]);
+        : s.me
+          ? [(s.hand || s.myHand) && h('button', { class: 'my-hand', onclick: openCombos, 'aria-label': 'Моя комбинация — открыть справочник' }, s.hand || s.myHand),
+            extras, h('div', { class: 'cards' }, cards), plate, timer]
+          : [extras, h('div', { class: 'cards' }, cards), plate, s.hand && h('div', { class: 'hand-name' }, s.hand), timer]);
   };
 
   const board = [];
@@ -391,7 +403,7 @@ function tableScreen() {
     h('div', { class: 'table-top' },
       h('button', { class: 'icon-btn', 'aria-label': T.kind === 'bots' ? 'Встать из-за стола' : 'В лобби', onclick: back }, icon('back', 18)),
       h('div', { class: 'title' }, info),
-      h('div', { style: 'width:40px' })),
+      h('button', { class: 'icon-btn', 'aria-label': 'Справочник комбинаций', onclick: openCombos, style: 'font-weight:800;font-size:17px' }, '?')),
     h('div', { class: 'felt-wrap' },
       h('div', { class: 'felt' }),
       h('div', { class: 'center' },
@@ -667,9 +679,52 @@ function profileScreen() {
     nav());
 }
 
+// ---------- Справочник комбинаций ----------
+
+const C = (str) => str.split(' ').map((x) => {
+  const r = '23456789TJQKA'.indexOf(x[0]);
+  return { c: r * 4 + 'shdc'.indexOf(x[1]), dim: x[2] === '-' };
+});
+// от сильной к слабой; номер = категория оценщика (8 — стрит-флеш … 0 — старшая карта)
+const COMBOS = [
+  { cat: 9, name: 'Роял-флеш', text: 'Туз, король, дама, валет, десятка одной масти. Сильнее не бывает.', cards: C('As Ks Qs Js Ts') },
+  { cat: 8, name: 'Стрит-флеш', text: 'Пять карт подряд одной масти.', cards: C('9h 8h 7h 6h 5h') },
+  { cat: 7, name: 'Каре', text: 'Четыре карты одного достоинства.', cards: C('Kc Kd Kh Ks 7d-') },
+  { cat: 6, name: 'Фулл-хаус', text: 'Сет и пара вместе.', cards: C('Qs Qh Qd 9c 9s') },
+  { cat: 5, name: 'Флеш', text: 'Пять карт одной масти, не подряд.', cards: C('Ad Jd 8d 6d 2d') },
+  { cat: 4, name: 'Стрит', text: 'Пять карт подряд любых мастей. Туз может быть и младшим: A-2-3-4-5.', cards: C('Tc 9d 8s 7h 6c') },
+  { cat: 3, name: 'Сет (тройка)', text: 'Три карты одного достоинства.', cards: C('8s 8h 8d Kc- 3s-') },
+  { cat: 2, name: 'Две пары', text: 'Две разные пары.', cards: C('Jh Jc 4s 4d Ac-') },
+  { cat: 1, name: 'Пара', text: 'Две карты одного достоинства.', cards: C('As Ad Kc- 9h- 5s-') },
+  { cat: 0, name: 'Старшая карта', text: 'Ничего не собрано — решает самая старшая карта.', cards: C('Ac Qd- 9s- 6h- 3c-') },
+];
+
+function combosScreen() {
+  const me = S.table?.seats.find((s) => s.me);
+  // роял-флеш — тоже категория 8, но с тузом во главе
+  const myCat = me?.myHandCat == null ? null : me.myHandCat === 8 && me.myHand === 'Роял-флеш' ? 9 : me.myHandCat;
+  const myTurn = S.turn && S.table && S.table.actor === S.me.id;
+  return h('div', { class: 'screen' },
+    header('Комбинации'),
+    myTurn && h('button', { class: 'btn', onclick: () => go('table') }, 'Твой ход — к столу'),
+    h('div', { class: 'small soft', style: 'line-height:1.5' },
+      'Из семи карт — двух твоих и пяти на столе — берутся лучшие пять. Сверху самая сильная. Масти равны; при одинаковой комбинации решают старшие карты (кикеры).'),
+    COMBOS.map((k, i) => h('div', { class: `combo ${myCat === k.cat ? 'mine' : ''}` },
+      h('div', { class: 'row between' },
+        h('div', { class: 'row', style: 'gap:8px' }, h('span', { class: 'combo-n' }, i + 1), h('span', { class: 'b', style: 'font-size:16px' }, k.name)),
+        myCat === k.cat && h('span', { class: 'tag', style: 'background:var(--silver);color:var(--ink);font-weight:700' }, 'у тебя')),
+      h('div', { class: 'board', style: 'gap:4px' }, k.cards.map(({ c, dim }) => {
+        const el = pcard(c, 'sm');
+        if (dim) el.classList.add('dim');
+        return el;
+      })),
+      h('div', { class: 'small soft', style: 'line-height:1.45' }, k.text))),
+    h('div', { style: 'height:20px' }));
+}
+
 // ---------- Рендер ----------
 
-const SCREENS = { lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
+const SCREENS = { combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
 
 function render() {
   const app = document.getElementById('app');

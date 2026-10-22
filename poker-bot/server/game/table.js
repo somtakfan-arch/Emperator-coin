@@ -4,7 +4,7 @@
 //  • делает паузы, чтобы за игрой можно было следить.
 import { randomInt } from 'node:crypto';
 import { Table } from '../../core/engine.js';
-import { handName } from '../../core/cards.js';
+import { describeHand, evaluate, handCategory } from '../../core/cards.js';
 import { config } from '../config.js';
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms * config.speed));
@@ -191,7 +191,7 @@ export class GameTable {
       v.bets = {};
       for (const id of Object.keys(v.last)) if (v.last[id] !== 'Фолд') delete v.last[id];
     } else if (e.type === 'showdown') {
-      for (const r of e.reveals) v.shown[r.id] = { cards: r.cards, hand: handName(r.score) };
+      for (const r of e.reveals) v.shown[r.id] = { cards: r.cards, hand: describeHand(r.score) };
     } else if (e.type === 'handEnd') {
       v.actor = null;
       v.bets = {};
@@ -221,10 +221,17 @@ export class GameTable {
           last: v.last[p.id] || null,
           cards: v.shown[p.id]?.cards ?? (mine && dealt ? p.bot.hole : null),
           hand: v.shown[p.id]?.hand ?? null,
+          // твоя текущая комбинация (только тебе)
+          ...(mine && dealt && p.bot.hole && !v.folded.has(p.id) ? this.myHand(p.bot.hole) : {}),
           away: !p.isBot && p.bot.sittingOut,
         };
       }),
     };
+  }
+
+  myHand(hole) {
+    const score = evaluate(hole.concat(this.v.board));
+    return { myHand: describeHand(score), myHandCat: handCategory(score) };
   }
 
   broadcast() {
