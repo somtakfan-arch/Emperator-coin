@@ -173,3 +173,20 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
 .countdown .cd-bar > div { height: 100%; background: var(--silver); }
 .countdown.hurry .cd-sec, .countdown.hurry .cd-label { color: #ff6b5e; }
 .countdown.hurry .cd-bar > div { background: #ff6b5e; }
+
+/* ---------- Фишки ---------- */
+.c-white { --chip: #e9edf0; --edge: #9aa6ad; }
+.c-red { --chip: #c8423a; --edge: #f2d0cc; }
+.c-green { --chip: #2f8f5b; --edge: #c9ead6; }
+.c-black { --chip: #23272a; --edge: #9aa6ad; }
+.c-purple { --chip: #6b4bb8; --edge: #d9cdf5; }
+.c-gold { --chip: #c9a227; --edge: #fff1bf; }
+.pot-chips { display: flex; align-items: flex-end; justify-content: center; gap: 5px; min-height: 30px; }
+.stack { display: flex; flex-direction: column-reverse; align-items: center; }
+.chip { width: 24px; height: 7px; border-radius: 50%; background: var(--chip); border: 1px solid rgba(0,0,0,0.35); box-shadow: inset 0 0 0 2px var(--edge), 0 1px 0 rgba(0,0,0,0.35); margin-top: -3px; }
+.chip-ico { width: 13px; height: 13px; border-radius: 50%; background: var(--chip); box-shadow: inset 0 0 0 2px var(--edge); border: 1px solid rgba(0,0,0,0.3); display: inline-block; flex-shrink: 0; }
+.chip-bet { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 4px; }
+#fx { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
+.fly-chip { position: fixed; width: 18px; height: 18px; border-radius: 50%; background: var(--chip); box-shadow: inset 0 0 0 3px var(--edge), 0 3px 8px rgba(0,0,0,0.45); border: 1px dashed rgba(255,255,255,0.55); }
+.plate.win { border-color: #f2c94c; box-shadow: 0 0 0 2px rgba(242,201,76,0.45), 0 0 18px rgba(242,201,76,0.45); animation: winPulse 1.2s ease-in-out 2; }
+@keyframes winPulse { 50% { transform: scale(1.06); } }

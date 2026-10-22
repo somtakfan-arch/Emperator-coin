@@ -131,6 +131,8 @@ function onMessage(m) {
       break;
     case 'table':
       if (m.table && S.table?.id !== m.table.id) S.turn = null;
+      // запоминаем, где были фишки до перерисовки, — для анимации
+      if (S.screen === 'table') S.pendingFx = { prev: S.table, before: measureChips() };
       S.table = m.table;
       if (m.table && S.screen !== 'table' && !S.tableHidden) go('table');
       if (S.turn && m.table && m.table.actor !== S.me?.id) S.turn = null;
@@ -371,14 +373,16 @@ function tableScreen() {
     const cards = s.me
       ? (s.cards ? s.cards.map((c) => pcard(c, 'lg')) : [])
       : s.cards ? s.cards.map((c) => pcard(c, 'sm')) : s.inHand && T.inHand ? [pcard(null, 'sm'), pcard(null, 'sm')] : [];
-    const plate = h('div', { class: `plate ${T.actor === s.id ? 'turn' : ''} ${s.folded || s.away ? 'out' : ''}` },
+    const won = !T.inHand && T.result?.some((w) => w.id === s.id);
+    const plate = h('div', { 'data-seat': s.id, class: `plate ${T.actor === s.id ? 'turn' : ''} ${s.folded || s.away ? 'out' : ''} ${won ? 'win' : ''}` },
       s.me ? h('div', { class: 'avatar', style: 'width:24px;height:24px;font-size:11px' }, initial(s.name)) : h('div', { class: 'ini' }, initial(s.name)),
       h('div', { class: 'col', style: 'gap:0;min-width:0' },
         h('div', { class: 'nm' }, s.me ? 'Ты' : s.name),
         h('div', { class: 'st' }, s.allIn ? 'олл-ин' : fmt(s.stack))));
     const extras = h('div', { class: 'row', style: 'gap:4px;min-height:20px' },
       T.buttonId === s.id && h('div', { class: 'dealer', title: 'Баттон' }, 'D'),
-      s.bet > 0 ? h('div', { class: 'chip-bet' }, fmt(s.bet)) : s.last ? h('div', { class: 'chip-last' }, s.last) : null);
+      s.bet > 0 ? h('div', { class: 'chip-bet', 'data-bet': s.id }, h('span', { class: `chip-ico ${chipColor(s.bet, T.bb)}` }), fmt(s.bet))
+        : s.last ? h('div', { class: 'chip-last' }, s.last) : null);
     const timer = T.actor === s.id && T.deadline ? h('div', { class: 'timer' }, h('div', { 'data-deadline': T.deadline })) : null;
     return h('div', { class: `seat ${s.me ? 'me' : ''}`, style: `left:${x}%;top:${y}%` },
       top ? [cards.length ? h('div', { class: 'cards' }, cards) : null, plate, s.hand && h('div', { class: 'hand-name' }, s.hand), timer, extras]
@@ -407,12 +411,107 @@ function tableScreen() {
     h('div', { class: 'felt-wrap' },
       h('div', { class: 'felt' }),
       h('div', { class: 'center' },
+        h('div', { class: 'pot-chips', id: 'pot-chips' }, !(T.result && !T.inHand) && chipStacks(T.pot - T.seats.reduce((a, x) => a + x.bet, 0), T.bb)),
         h('div', { class: 'pot' }, 'Банк ', h('b', {}, fmt(T.pot))),
         h('div', { class: 'board' }, board)),
       others.map((s, i) => seatEl(s, spots[i])),
       mySeat && seatEl(mySeat, 'bottom')),
     result,
     actionPanel(T, mySeat, myTurn));
+}
+
+// ---------- Фишки и анимации ----------
+
+const CHIP_COLORS = ['c-white', 'c-red', 'c-green', 'c-black', 'c-purple', 'c-gold'];
+function chipColor(amount, bb) {
+  const x = amount / Math.max(1, bb);
+  return CHIP_COLORS[x < 2 ? 0 : x < 6 ? 1 : x < 20 ? 2 : x < 60 ? 3 : x < 200 ? 4 : 5];
+}
+
+// Стопки фишек в банке: чем больше банк (в больших блайндах), тем выше и больше стопок
+function chipStacks(amount, bb) {
+  if (amount <= 0) return null;
+  const units = amount / Math.max(1, bb);
+  const total = Math.min(30, Math.max(2, Math.round(Math.log2(units + 1) * 3)));
+  const nStacks = Math.min(4, Math.ceil(total / 8));
+  const stacks = [];
+  for (let i = 0; i < nStacks; i++) {
+    const n = Math.ceil((total - i * 2) / nStacks);
+    const color = CHIP_COLORS[(CHIP_COLORS.indexOf(chipColor(amount, bb)) + i) % CHIP_COLORS.length];
+    const chips = [];
+    for (let k = 0; k < Math.max(1, n); k++) chips.push(h('div', { class: `chip ${color}` }));
+    stacks.push(h('div', { class: 'stack' }, chips));
+  }
+  return stacks;
+}
+
+function centerOf(el) {
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+}
+
+function measureChips() {
+  const bets = {};
+  for (const el of document.querySelectorAll('[data-bet]')) bets[el.dataset.bet] = centerOf(el);
+  return { bets, pot: centerOf(document.getElementById('pot-chips')) };
+}
+
+function fxLayer() {
+  let el = document.getElementById('fx');
+  if (!el) {
+    el = h('div', { id: 'fx', 'aria-hidden': 'true' });
+    document.body.append(el);
+  }
+  return el;
+}
+
+function flyChips(from, to, { n = 3, delay = 0, color = 'c-red' } = {}) {
+  if (!from || !to || document.hidden) return;
+  const layer = fxLayer();
+  for (let i = 0; i < n; i++) {
+    const c = h('div', { class: `fly-chip ${color}`, style: `left:${from.x}px;top:${from.y}px` });
+    layer.append(c);
+    const dx = to.x - from.x + (i - (n - 1) / 2) * 4;
+    const dy = to.y - from.y - i * 2;
+    const a = c.animate([
+      { transform: 'translate(-50%, -50%) scale(0.9)', opacity: 0.9 },
+      { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(1)`, opacity: 1 },
+    ], { duration: 460, delay: delay + i * 70, easing: 'cubic-bezier(.2,.75,.3,1)', fill: 'backwards' });
+    a.onfinish = () => c.remove();
+    a.oncancel = () => c.remove();
+  }
+}
+
+function runFx({ prev, before }, next) {
+  if (!prev || !next || prev.id !== next.id || prev.handId !== next.handId || S.screen !== 'table') return;
+  const seatPos = (id) => centerOf(document.querySelector(`[data-seat="${id}"]`));
+  const potPos = centerOf(document.getElementById('pot-chips'));
+  const prevBet = Object.fromEntries(prev.seats.map((x) => [x.id, x.bet]));
+  const sameStreet = next.board.length === prev.board.length && !next.result;
+
+  // ставка: от игрока к его фишкам на столе
+  if (sameStreet) {
+    for (const s of next.seats) {
+      if (s.bet > (prevBet[s.id] || 0)) {
+        flyChips(seatPos(s.id), centerOf(document.querySelector(`[data-bet="${s.id}"]`)), { color: chipColor(s.bet - (prevBet[s.id] || 0), next.bb) });
+      }
+    }
+    return;
+  }
+  // конец улицы или раздачи: ставки съезжают в банк
+  let delay = 0;
+  for (const [id, pos] of Object.entries(before.bets)) {
+    flyChips(pos, potPos || before.pot, { n: 2, color: chipColor(prevBet[id] || 0, next.bb) });
+    delay = 380;
+  }
+  // выигрыш: банк летит победителю
+  if (next.result && !prev.result) {
+    for (const w of next.result) {
+      flyChips(before.pot || potPos, seatPos(w.id), { n: 6, delay, color: chipColor(w.amount, next.bb) });
+      if (w.id === S.me.id) setTimeout(() => tg?.HapticFeedback?.notificationOccurred('success'), delay + 500);
+    }
+  }
 }
 
 function actionPanel(T, me, myTurn) {
@@ -740,6 +839,11 @@ function render() {
   if (focusId) {
     const el = document.getElementById(focusId);
     if (el) { el.focus(); if (el.setSelectionRange && el.type === 'text') el.setSelectionRange(el.value.length, el.value.length); }
+  }
+  if (S.pendingFx) {
+    const fx = S.pendingFx;
+    S.pendingFx = null;
+    try { runFx(fx, S.table); } catch {}
   }
   // таймер хода
   for (const bar of app.querySelectorAll('[data-deadline]')) {
