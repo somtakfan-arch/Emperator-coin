@@ -1,4 +1,4 @@
-// Emperator Poker — мини-апп. Все данные приходят с сервера по WebSocket;
+// Покер — мини-апп. Все данные приходят с сервера по WebSocket;
 // пользовательский текст всегда вставляется через textContent (без innerHTML).
 const tg = window.Telegram?.WebApp;
 const fmt = (n) => Number(n || 0).toLocaleString('ru-RU');
@@ -262,7 +262,7 @@ function lobbyScreen() {
       h('div', { class: 'row between' }, h('div', { class: 'b' }, 'Ты за столом'), icon('chev')),
       h('div', { class: 'small soft' }, 'Вернуться к игре')),
     h('div', { class: 'col', style: 'padding-top:8px' },
-      h('div', { class: 'small muted b', style: 'letter-spacing:3px' }, 'EMPERATOR'),
+      h('div', { class: 'small muted b', style: 'letter-spacing:3px' }, 'ТЕХАССКИЙ ХОЛДЕМ'),
       h('div', { style: 'font-size:32px;font-weight:800;letter-spacing:-0.5px' }, 'Покер')),
     h('button', { class: 'glass card', onclick: () => go('bots') },
       h('div', { class: 'row between' }, h('div', { class: 'card-title' }, 'Против ботов'), icon('chev', 22)),
@@ -675,7 +675,7 @@ function render() {
   const app = document.getElementById('app');
   const active = document.activeElement;
   const focusId = active?.id && active.tagName !== 'BUTTON' ? active.id : null;
-  if (S.error) return app.replaceChildren(h('div', { class: 'screen' }, h('div', { class: 'center-msg' }, h('div', { class: 'h2' }, 'Emperator Poker'), h('div', { class: 'muted' }, S.error))));
+  if (S.error) return app.replaceChildren(h('div', { class: 'screen' }, h('div', { class: 'center-msg' }, h('div', { class: 'h2' }, 'Покер'), h('div', { class: 'muted' }, S.error))));
   if (!S.me || S.screen === 'loading') return app.replaceChildren(h('div', { class: 'screen' }, h('div', { class: 'center-msg muted' }, S.connected ? 'Входим…' : 'Подключаемся…')));
   app.replaceChildren(SCREENS[S.screen]());
   if (focusId) {

@@ -1,5 +1,5 @@
 {
-  "name": "emperator-poker",
+  "name": "poker-bot",
   "private": true,
   "type": "module",
   "engines": { "node": "22.x" },

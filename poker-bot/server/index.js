@@ -216,7 +216,7 @@ setInterval(() => {
 }, 5000);
 
 server.listen(config.port, () => {
-  console.log(`Emperator Poker: http://localhost:${config.port}${config.dev ? '  (DEV — без Telegram)' : ''}`);
+  console.log(`Poker: http://localhost:${config.port}${config.dev ? '  (DEV — без Telegram)' : ''}`);
 });
 if (config.botToken && !config.dev) startBot().catch((e) => console.error('Бот не запустился:', e.message));
 else if (!config.dev) console.warn('BOT_TOKEN не задан — бот не запущен');

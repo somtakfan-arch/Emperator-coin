@@ -158,7 +158,7 @@ export class Tournaments {
     const run = new RunningTournament(this, T.get.get(id), T.regs.all(id));
     this.running.set(id, run);
     run.start();
-    for (const r of T.regs.all(id)) notify(r.user_id, `«${escapeHtml(t.name)}» начался! Садись за стол.`, openButton('За стол', `#t=${id}`));
+    for (const r of T.regs.all(id)) notify(r.user_id, `«${escapeHtml(t.name)}» начался! Садись за стол.`, openButton('За стол', `#t=${id}`, 'success'));
     this.hub.lobbyChanged();
   }
 
