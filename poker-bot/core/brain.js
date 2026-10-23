@@ -8,7 +8,7 @@
 //    матожидание: фолд-эквити × банк + эквити против диапазона, который продолжит.
 // 3. СМЕШАННАЯ СТРАТЕГИЯ. Близкие по EV действия выбираются случайно (softmax) —
 //    бота невозможно прочитать по паттерну.
-import { COMBOS, comboIndex, preflopPct, evaluate, postflopStrength } from './cards.js';
+import { COMBOS, comboIndex, preflopPct, evaluate, postflopStrength, handCategory, boardContext, drawScore } from './cards.js';
 import { strengths } from './strength.js';
 import { FreqModel } from './model.js';
 
@@ -313,8 +313,56 @@ export class EliteBot {
   // ==================== ПОСТФЛОП ====================
 
   postflop(s, opps) {
-    const P = this.p;
     const sim = this.simulate(s, opps, this.iters);
+    const cands = this.postflopCands(s, opps, sim);
+    const eq = sim.eq;
+    const river = s.street === 'river';
+    const pick = this.choose(cands, s.pot);
+    if (pick.a.type === 'raise' && eq < 0.35) {
+      this.intent = 'bluff';
+      this.stats.bluffs++;
+    }
+    if (pick.trap) this.stats.traps++;
+    if (pick.a.type === 'call' && river && postflopStrength(s.hole, s.board).made < 0.5) {
+      this.heroCall = true;
+      this.stats.heroCalls++;
+    }
+    return pick.a;
+  }
+
+  // ==================== ПОДСКАЗКА ИГРОКУ ====================
+  // Тот же расчёт, что у бота, но без случайности: лучшее по EV действие,
+  // шансы против вероятного диапазона соперника и сам диапазон. Чужие карты не используются.
+  analyze(s) {
+    this.board = s.board;
+    const opps = s.players.filter((p) => !p.me && !p.folded);
+    for (const o of opps) if (!this.ranges.has(o.id)) this.ranges.set(o.id, new Float64Array(N).fill(1));
+    this.p = { ...this.base };
+    const sim = this.simulate(s, opps, 1500);
+    let action;
+    if (s.street === 'preflop') {
+      const rng = this.rng;
+      this.rng = () => 0.99; // без блефов «по монетке» — только основная линия
+      action = this.preflop(s, opps);
+      this.rng = rng;
+    } else {
+      const cands = this.postflopCands(s, opps, sim);
+      action = cands.reduce((a, b) => (b.ev > a.ev ? b : a)).a;
+    }
+    // главный соперник — последний, кто ставил; иначе первый в раздаче
+    const lastRaise = [...s.actions].reverse().find((a) => a.action === 'raise' && opps.some((o) => o.id === a.id));
+    const main = sim.R.find((x) => x.o.id === lastRaise?.id) || sim.R[0];
+    return {
+      eq: sim.eq,
+      potOdds: s.toCall > 0 ? s.toCall / (s.pot + s.toCall) : 0,
+      action,
+      opp: main?.o.name ?? null,
+      range: main ? rangeSummary(main.w, main.tot, s.board) : [],
+    };
+  }
+
+  postflopCands(s, opps, sim) {
+    const P = this.p;
     const eq = sim.eq;
     const pot = s.pot;
     const river = s.street === 'river';
@@ -347,17 +395,7 @@ export class EliteBot {
         cands.push({ a: { type: 'raise', to }, ev, eq });
       }
     }
-    const pick = this.choose(cands, pot);
-    if (pick.a.type === 'raise' && eq < 0.35) {
-      this.intent = 'bluff';
-      this.stats.bluffs++;
-    }
-    if (pick.trap) this.stats.traps++;
-    if (pick.a.type === 'call' && river && postflopStrength(s.hole, s.board).made < 0.5) {
-      this.heroCall = true;
-      this.stats.heroCalls++;
-    }
-    return pick.a;
+    return cands;
   }
 
   // ==================== ПРЕФЛОП ====================
@@ -528,6 +566,38 @@ function likelihood(action, u, ctx, f, bl, pre) {
   else if (ctx === 'first' || (ctx === 'open' && action === 'check')) L = 1 - 0.85 * aggr - 0.85 * bluff;
   else L = sig((u - f.F) / sg) * (1 - 0.8 * aggr);
   return Math.max(0.01, L); // никогда не вычёркиваем руку полностью — защита от ошибок модели
+}
+
+// Из чего состоит вероятный диапазон соперника (по весам байесовского чтения рук).
+// Префлоп — группы стартовых рук, постфлоп — готовые комбинации на этой доске плюс дро.
+const RANGE_NAMES = ['Старшая карта', 'Пара', 'Две пары', 'Сет', 'Стрит', 'Флеш', 'Фулл-хаус', 'Каре', 'Стрит-флеш'];
+
+function rangeSummary(w, tot, board) {
+  if (!tot) return [];
+  const buckets = new Map();
+  const add = (name, x) => buckets.set(name, (buckets.get(name) || 0) + x);
+  const ctx = board.length ? boardContext(board) : null;
+  const cards = board.slice();
+  for (let i = 0; i < N; i++) {
+    if (w[i] <= 0) continue;
+    const [a, b] = COMBOS[i];
+    const r1 = a >> 2, r2 = b >> 2;
+    if (!ctx) {
+      const suited = (a & 3) === (b & 3);
+      add(r1 === r2 ? (r1 >= 8 ? 'Старшая пара (10+)' : 'Младшая пара')
+        : Math.min(r1, r2) >= 8 ? 'Две старшие карты'
+          : Math.max(r1, r2) === 12 ? 'Туз с кикером'
+            : suited ? 'Одномастные' : 'Слабые руки', w[i]);
+      continue;
+    }
+    cards[board.length] = a;
+    cards[board.length + 1] = b;
+    const cat = handCategory(evaluate(cards));
+    if (cat === 0 && board.length < 5 && drawScore([a, b], ctx, cat) >= 0.16) add('Дро (флеш/стрит)', w[i]);
+    else add(RANGE_NAMES[cat], w[i]);
+  }
+  return [...buckets].map(([name, x]) => ({ name, pct: Math.round((x / tot) * 100) }))
+    .filter((r) => r.pct >= 3).sort((a, b) => b.pct - a.pct).slice(0, 4);
 }
 
 function bsearch(cum, x) {

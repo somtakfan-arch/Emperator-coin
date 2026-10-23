@@ -1,6 +1,13 @@
 // Стол против ботов (кэш-игра): бай-ин списывается с баланса, при выходе стек возвращается.
 // Два режима: свободный (встать можно в любой момент) и на время (встать нельзя, пока не кончится время).
-import { BOT_CLASSES } from '../../core/bots.js';
+import { BOT_CLASSES, Hunter } from '../../core/bots.js';
+
+// Советник для подсказок: смотрит на стол с места игрока — видит только его карты и чужие ходы
+function makeAdvisor(userId) {
+  const a = new Hunter({ iters: 600 });
+  a.id = userId;
+  return a;
+}
 import { GameTable, HumanSeat, botSeat } from './table.js';
 import { config } from '../config.js';
 import { db, debit, credit } from '../db.js';
@@ -25,6 +32,7 @@ export class BotRoom {
       title: `${mode === 'hu' ? '1 на 1' : 'Стол на 6'} · ${sb}/${bb}${minutes ? ` · ${minutes} мин` : ''}`,
     });
     this.bots = [];
+    this.advisor = makeAdvisor(user.id);
     this.hands = 0;
     this.seat = new HumanSeat(user.id, hub);
     this.me = { id: user.id, name: user.name, stack: buyin, bot: this.seat, isBot: false };
@@ -87,6 +95,7 @@ export class BotRoom {
   // Эло за раздачу: играл (колл/рейз или вскрытие) — выиграл/проиграл против ботов в раздаче.
   // Чем крупнее банк, тем больше изменение (2..8). Сбросил блайнд без игры — без изменений.
   onTableEvent(e) {
+    this.advisor.observe(e);
     if (e.type === 'handStart') {
       this.lastElo = null;
       this.played = false;
@@ -183,6 +192,8 @@ export class DemoRoom {
     });
     this.table.extra = () => ({ demo: true, plan: this.plan, canRebuy: this.me.stack === 0 });
     this.table.engine.demoDeck = (deck, ids) => this.applyPlan(deck, ids);
+    this.advisor = makeAdvisor(user.id);
+    this.table.eventHook = (e) => this.advisor.observe(e);
     this.table.beforeHand = () => {
       if (this.leaving) return this.close();
       for (const p of this.table.players) if (p.isBot && p.stack < DEMO_STACK) p.stack = DEMO_STACK;

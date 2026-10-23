@@ -55,16 +55,24 @@ export const inviteLink = (tId) => `https://t.me/${bot.username}?start=t_${tId}`
 
 // ---------- Платежи звёздами ----------
 
+// Пакет фишек или подсказок по id
+export function findPack(id) {
+  return config.packs.find((p) => p.id === id) || config.hintPacks.find((p) => p.id === id) || null;
+}
+
 export async function createInvoice(userId, packId) {
-  const pack = config.packs.find((p) => p.id === packId);
+  const pack = findPack(packId);
   if (!pack) throw new Error('нет такого пакета');
+  const hints = !!pack.hints;
   return api('createInvoiceLink', {
-    title: `${pack.chips.toLocaleString('ru')} фишек`,
-    description: 'Игровые фишки для покера. Фишки нельзя вывести или обменять на деньги.',
+    title: hints ? `Подсказки: ${pack.hints} шт.` : `${pack.chips.toLocaleString('ru')} фишек`,
+    description: hints
+      ? 'Подсказка за столом с ботами: шансы, вероятные карты соперника и лучший ход.'
+      : 'Игровые фишки для покера. Фишки нельзя вывести или обменять на деньги.',
     payload: JSON.stringify({ u: userId, p: pack.id }),
     provider_token: '',
     currency: 'XTR',
-    prices: [{ label: 'Фишки', amount: pack.stars }],
+    prices: [{ label: hints ? 'Подсказки' : 'Фишки', amount: pack.stars }],
   });
 }
 
@@ -72,16 +80,21 @@ function onPayment(msg) {
   const sp = msg.successful_payment;
   let payload;
   try { payload = JSON.parse(sp.invoice_payload); } catch { return; }
-  const pack = config.packs.find((p) => p.id === payload.p);
+  const pack = findPack(payload.p);
   if (!pack || sp.currency !== 'XTR') return;
   const userId = msg.from.id;
   upsertUser(msg.from);
   const done = tx(() => {
     const r = db.prepare('INSERT OR IGNORE INTO payments (charge_id, user_id, stars, chips, pack, at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(sp.telegram_payment_charge_id, userId, sp.total_amount, pack.chips, pack.id, Date.now());
+      .run(sp.telegram_payment_charge_id, userId, sp.total_amount, pack.chips || 0, pack.id, Date.now());
     return r.changes > 0;
   });
   if (!done) return; // повтор того же платежа
+  if (pack.hints) {
+    db.prepare('UPDATE users SET hints = hints + ? WHERE id = ?').run(pack.hints, userId);
+    hooks.onBalance?.(userId);
+    return notify(userId, `Зачислено подсказок: <b>${pack.hints}</b>. Жми «Подсказка» за столом в свой ход.`, appButton('Играть', '', 'success'));
+  }
   credit(userId, pack.chips, 'stars', sp.telegram_payment_charge_id);
   hooks.onBalance?.(userId);
   notify(userId, `Зачислено <b>${pack.chips.toLocaleString('ru')}</b> фишек. Удачной игры!`, appButton('Играть', '', 'success'));
@@ -191,6 +204,9 @@ async function onAdmin(msg) {
       const take = Math.min(u.chips, pay.chips);
       db.prepare('UPDATE users SET chips = chips - ? WHERE id = ?').run(take, pay.user_id);
       db.prepare('INSERT INTO ledger (user_id, delta, reason, ref, at) VALUES (?, ?, ?, ?, ?)').run(pay.user_id, -take, 'refund', arg, Date.now());
+      // возврат за подсказки — забираем неиспользованные
+      const hp = findPack(pay.pack);
+      if (hp?.hints) db.prepare('UPDATE users SET hints = MAX(0, hints - ?) WHERE id = ?').run(hp.hints, pay.user_id);
     });
     hooks.onBalance?.(pay.user_id);
     return reply(`Возвращено ${pay.stars} звёзд, списано до ${pay.chips} фишек`);
@@ -258,7 +274,7 @@ async function onPreCheckout(pq) {
   let ok = false;
   try {
     const p = JSON.parse(pq.invoice_payload);
-    const pack = config.packs.find((x) => x.id === p.p);
+    const pack = findPack(p.p);
     ok = !!pack && pq.currency === 'XTR' && pq.total_amount === pack.stars && p.u === pq.from.id;
   } catch {}
   await api('answerPreCheckoutQuery', ok

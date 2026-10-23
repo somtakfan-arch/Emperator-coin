@@ -257,3 +257,23 @@ test('награды Эло за чистый выигрыш: 5 000 → +100, 10
   assert.equal(rating(), r0 + 350);
   assert.deepEqual(addWinnings(8001, 50000), []);
 });
+
+test('подсказка: без покупки нельзя, после покупки — совет в свой ход и списание', async () => {
+  const c = new Client(9001, { autoplay: 'idle' });
+  await c.ready;
+  await c.req({ t: 'invoice', pack: 'p1' });
+  await c.req({ t: 'sitBots', mode: 'hu', botName: 'Акула', buyin: 500 });
+  await c.waitFor((m) => m.t === 'turn');
+  await assert.rejects(c.req({ t: 'hint' }), /Подсказок нет/);
+  await c.req({ t: 'invoice', pack: 'h5' });
+  await c.waitFor((m) => m.t === 'me' && m.me.hints === 5);
+  const hnt = await c.req({ t: 'hint' });
+  assert.ok(['fold', 'check', 'call', 'raise'].includes(hnt.action.type));
+  assert.ok(hnt.eq >= 0 && hnt.eq <= 1);
+  assert.ok(Array.isArray(hnt.range));
+  assert.equal(db.prepare('SELECT hints FROM users WHERE id = 9001').get().hints, 4);
+  c.ws.send(JSON.stringify({ t: 'act', action: hnt.action }));
+  c.ws.send(JSON.stringify({ t: 'leave' }));
+  await c.waitFor((m) => m.t === 'left', 30000);
+  c.close();
+});

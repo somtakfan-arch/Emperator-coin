@@ -4,8 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { WebSocketServer } from 'ws';
 import { config } from './config.js';
-import { db, upsertUser, getUser, ranks, credit, recoverAfterRestart, addWinnings, WIN_REWARDS } from './db.js';
-import { verifyInitData, startBot, createInvoice, hooks, inviteLink, bot, notify, openButton } from './telegram.js';
+import { db, upsertUser, getUser, ranks, credit, recoverAfterRestart, addWinnings, WIN_REWARDS, useHint } from './db.js';
+import { verifyInitData, startBot, createInvoice, hooks, inviteLink, bot, notify, openButton, findPack } from './telegram.js';
 import { BotRoom, DemoRoom } from './game/botroom.js';
 import { Tournaments } from './game/tournament.js';
 import { BOT_CLASSES } from '../core/bots.js';
@@ -75,7 +75,7 @@ function meView(uid) {
   return {
     id: u.id, name: u.name, chips: u.chips, inPlay: u.in_play, rating: Math.round(u.rating),
     isAdmin: config.adminIds.includes(u.id),
-    won: u.won, winRewards: WIN_REWARDS.map((r, i) => ({ ...r, done: i < u.won_rewards })),
+    won: u.won, winRewards: WIN_REWARDS.map((r, i) => ({ ...r, done: i < u.won_rewards })), hints: u.hints,
     games: u.games, wins: u.wins, ...ranks(uid),
     bonus: config.dailyBonus > 0 ? { amount: config.dailyBonus, readyAt: u.bonus_at + 86400000 } : null,
     table: act ? { id: act.table.id, kind: act.table.kind } : null,
@@ -86,7 +86,7 @@ function lobbyView(uid) {
   return {
     tournaments: tournaments.list(uid),
     online: sockets.size,
-    packs: config.packs, bots: BOTS, buyins: config.botBuyins,
+    packs: config.packs, hintPacks: config.hintPacks, bots: BOTS, buyins: config.botBuyins,
     sizes: config.tournament.sizes, blindOptions: config.tournament.blindOptions, turnSeconds: config.turnSeconds, timedMinutes: config.timedMinutes,
   };
 }
@@ -149,15 +149,28 @@ const handlers = {
     return { t: 'ok' };
   },
   async invoice(uid, m) {
-    const pack = config.packs.find((p) => p.id === m.pack);
+    const pack = findPack(m.pack);
     if (!pack) throw new Error('Нет такого пакета');
     if (config.dev) {
       // локально оплаты нет — сразу зачисляем, чтобы можно было тестировать
-      credit(uid, pack.chips, 'dev_topup');
+      if (pack.hints) db.prepare('UPDATE users SET hints = hints + ? WHERE id = ?').run(pack.hints, uid);
+      else credit(uid, pack.chips, 'dev_topup');
       hub.sendMe(uid);
       return { t: 'paid' };
     }
     return { t: 'invoice', link: await createInvoice(uid, pack.id) };
+  },
+  // Подсказка в свой ход за столом с ботами (в турнирах с людьми выключена)
+  hint(uid) {
+    const room = botRooms.get(uid);
+    if (!room?.advisor || room.table.closed) throw new Error('Подсказки работают за столами с ботами');
+    const pending = room.seat.pending;
+    if (!pending) throw new Error('Подсказка доступна в твой ход');
+    const free = room instanceof DemoRoom; // на демо-столе админа — бесплатно
+    if (!free && !useHint(uid)) throw new Error('Подсказок нет — купи в кошельке');
+    const a = room.advisor.analyze(pending.state);
+    hub.sendMe(uid);
+    return { t: 'hint', ...a };
   },
   bonus(uid) {
     const u = getUser(uid);

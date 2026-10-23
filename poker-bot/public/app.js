@@ -144,6 +144,7 @@ function onMessage(m) {
       break;
     case 'turn':
       S.turn = m;
+      S.hint = null;
       S.raiseTo = clampRaise(m.currentBet + 0.66 * (m.pot + m.toCall), m);
       tg?.HapticFeedback?.impactOccurred('medium');
       break;
@@ -617,6 +618,41 @@ function runFx({ prev, before }, next) {
   }
 }
 
+// ---------- Подсказка ----------
+
+async function askHint() {
+  if (!S.table?.demo && !S.me.hints) {
+    toast('Подсказки закончились — купи в кошельке');
+    return go('wallet');
+  }
+  const r = await run({ t: 'hint' });
+  if (r && S.turn) {
+    S.hint = r;
+    render();
+  }
+}
+
+const pct = (x) => `${Math.round(x * 100)}%`;
+
+function hintCard(hnt, t, act) {
+  const a = hnt.action;
+  const label = a.type === 'fold' ? 'Фолд'
+    : a.type === 'check' ? 'Чек'
+    : a.type === 'call' ? `Колл ${fmt(Math.min(t.toCall, t.maxTo - t.myBet))}`
+    : a.to >= t.maxTo ? 'Олл-ин' : `${t.currentBet > 0 ? 'Рейз' : 'Бет'} до ${fmt(a.to)}`;
+  const why = t.toCall > 0
+    ? `Твои шансы ${pct(hnt.eq)} · чтобы колл окупался, нужно ${pct(hnt.potOdds)}`
+    : `Твои шансы выиграть раздачу ${pct(hnt.eq)}`;
+  return h('div', { class: 'hint-card' },
+    h('div', { class: 'row between' },
+      h('div', {}, h('span', { class: 'small soft' }, 'Совет: '), h('span', { class: 'b', style: 'font-size:16px' }, label)),
+      h('button', { class: 'btn-sm', onclick: () => act(a.type === 'raise' ? { type: 'raise', to: a.to } : { type: a.type }) }, 'Сделать')),
+    h('div', { class: 'small' }, why),
+    hnt.range?.length > 0 && h('div', { class: 'small soft', style: 'line-height:1.45' },
+      `${hnt.opp || 'Соперник'} скорее всего держит: `, hnt.range.map((r) => `${r.name.toLowerCase()} ${r.pct}%`).join(' · ')),
+    h('div', { class: 'small muted', style: 'font-size:11px' }, 'Это расчёт по его ставкам, а не его настоящие карты.'));
+}
+
 function actionPanel(T, me, myTurn) {
   if (myTurn) {
     const t = S.turn;
@@ -627,14 +663,20 @@ function actionPanel(T, me, myTurn) {
     const act = (action) => {
       send({ t: 'act', action });
       S.turn = null;
+      S.hint = null;
       render();
     };
     const callAmt = Math.min(t.toCall, t.maxTo - t.myBet);
+    const hintsOn = T.kind === 'bots'; // в турнирах с людьми подсказок нет
     return h('div', { class: 'panel' },
       t.deadline > 0 && h('div', { class: 'countdown', 'data-countdown': t.deadline },
         h('span', { class: 'cd-label' }, 'Твой ход'),
         h('span', { class: 'cd-sec' }, ''),
         h('div', { class: 'cd-bar' }, h('div', { 'data-deadline': t.deadline }))),
+      hintsOn && !S.hint && h('button', { class: 'hint-btn', onclick: askHint },
+        h('span', {}, 'Подсказка'),
+        h('span', { class: 'hint-count' }, T.demo ? 'бесплатно' : S.me.hints ? `осталось ${S.me.hints}` : '5⭐')),
+      S.hint && hintCard(S.hint, t, act),
       canRaise && h('div', { class: 'presets' }, preset('½ банка', 0.5), preset('¾ банка', 0.75), preset('Банк', 1), preset('Олл-ин', 'all')),
       canRaise && t.maxTo > t.minRaiseTo && h('input', {
         type: 'range', min: t.minRaiseTo, max: t.maxTo, step: Math.max(1, Math.floor(t.bb / 2)), value: S.raiseTo,
@@ -861,6 +903,13 @@ function walletScreen() {
       h('span', { class: 'small soft' }, `фишек ${p.bonus ? `· ${p.bonus}` : ''}`),
       h('span', { class: 'row b', style: 'gap:6px;font-size:15px' }, icon('star', 16), fmt(p.stars))))),
     h('div', { class: 'small muted', style: 'line-height:1.5' }, 'Фишки — игровая валюта: на них играют, их выигрывают, но вывести или обменять их нельзя. Оплата звёздами проходит внутри Telegram.'),
+    h('div', { class: 'label', id: 'hints-section', style: 'padding-top:6px' }, `Подсказки · у тебя ${me.hints || 0}`),
+    h('div', { class: 'small soft', style: 'line-height:1.45' }, 'За столом с ботами в свой ход: твои шансы, что вероятно у соперника и лучший ход. В турнирах с людьми не работают.'),
+    h('div', { class: 'grid3' }, (S.lobby?.hintPacks || []).map((p) => h('button', { class: 'pack', onclick: () => run({ t: 'invoice', pack: p.id }) },
+      h('span', { class: 'chips' }, p.hints),
+      h('span', { class: 'small soft' }, p.hints === 1 ? 'подсказка' : p.hints < 5 ? 'подсказки' : 'подсказок'),
+      h('span', { class: 'row b', style: 'gap:6px;font-size:15px' }, icon('star', 16), fmt(p.stars))))),
+    h('div', { style: 'height:80px' }),
     nav());
 }
 

@@ -158,6 +158,9 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
 .toast.show { transform: translateX(-50%) translateY(0); }
 .center-msg { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; min-height: 60vh; }
 
+.hint-btn { display: flex; align-items: center; justify-content: space-between; height: 38px; padding: 0 14px; border-radius: 12px; border: 1px solid rgba(242,201,76,0.6); background: rgba(242,201,76,0.12); color: #f7dd8a; font-weight: 700; font-size: 14px; }
+.hint-count { font-size: 12px; font-weight: 600; color: var(--soft); }
+.hint-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 14px; border: 1px solid rgba(242,201,76,0.6); background: rgba(242,201,76,0.1); }
 .my-hand { margin-top: 2px; padding: 5px 12px; border-radius: 12px; border: 1px solid var(--silver); background: rgba(230,235,238,0.14); color: #fff; font-size: 12px; font-weight: 700; white-space: nowrap; backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); }
 .combo { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); }
 .combo.mine { background: rgba(255,255,255,0.13); border-color: var(--silver); }

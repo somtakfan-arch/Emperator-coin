@@ -44,6 +44,12 @@ CREATE INDEX IF NOT EXISTS t_status ON tournaments(status);
 const userCols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
 if (!userCols.has('won')) db.exec('ALTER TABLE users ADD COLUMN won INTEGER NOT NULL DEFAULT 0'); // чистый выигрыш в играх
 if (!userCols.has('won_rewards')) db.exec('ALTER TABLE users ADD COLUMN won_rewards INTEGER NOT NULL DEFAULT 0'); // сколько наград выдано
+if (!userCols.has('hints')) db.exec('ALTER TABLE users ADD COLUMN hints INTEGER NOT NULL DEFAULT 0'); // купленные подсказки
+
+// Списать одну подсказку. false — подсказок нет.
+export function useHint(id) {
+  return db.prepare('UPDATE users SET hints = hints - 1 WHERE id = ? AND hints > 0').run(id).changes > 0;
+}
 
 // Награды Эло за чистый выигрыш (разовые)
 export const WIN_REWARDS = [
