@@ -34,6 +34,8 @@ const DEFAULTS = {
   bluff3: 0.35,        // частота 3бет-блефа подходящими руками
   bluff4: 0.12,
   callTax: 0.02,       // запас при колле — страховка от ошибок модели
+  jam: 0.15,           // любовь к олл-инам: 0 — только по расчёту, 1 — давит олл-инами при любой возможности
+  deepJam: false,      // пушить и при глубоком стеке (минус к силе, плюс к давлению)
 };
 
 export class EliteBot {
@@ -337,9 +339,11 @@ export class EliteBot {
     if (s.stack > s.toCall && opps.some((o) => !o.allIn)) {
       const tos = new Set();
       for (const f of s.toCall === 0 ? P.sizes : P.raiseSizes) tos.add(this.raiseTo(s, f));
-      if (s.stack <= pot * 3) tos.add(maxTo);
+      // олл-ин в вариантах: при небольшом стеке — всем; при глубоком — только «пушерам» (Маньяк)
+      if (s.stack <= pot * 3 || P.deepJam) tos.add(maxTo);
       for (const to of tos) {
-        const ev = this.betEV(s, sim, to, facingCtx) + P.aggr * pot;
+        // давление: олл-ин получает бонус по характеру бота
+        const ev = this.betEV(s, sim, to, facingCtx) + P.aggr * pot + (to === maxTo ? P.jam * 0.015 * pot : 0);
         cands.push({ a: { type: 'raise', to }, ev, eq });
       }
     }
@@ -390,6 +394,8 @@ export class EliteBot {
           w *= clamp(1 + (fb - 0.76) * 2.5, 0.7, 1.7);
         }
       }
+      // короткий стек: иногда сразу пушим
+      if (eff <= 20 && pct >= 1 - w * 0.6 && r < P.jam * 0.6) return this.jam(s);
       if (pct >= 1 - w) {
         const size = s.position === 'sb' ? 3 : s.position === 'early' ? 2.5 : 2.3;
         return this.open(s, bb * (size + limpers));
@@ -415,7 +421,14 @@ export class EliteBot {
       const defend = clamp(openW * 1.25 + (s.position === 'bb' ? 0.15 : 0), 0.3, 0.9) * P.wide;
       const fr = this.model.freq(raiser, 'vs3bet').F;
       const to3 = s.currentBet * (ip ? 3 : 3.8) + callers * s.currentBet;
-      if (pct >= 1 - vw) return this.open(s, to3);
+      // рестил олл-ином: против широких опенов давим пушем, особенно при стеке до 40 бб
+      // и только против тех, кто часто сбрасывает на 3бет (иначе это слив)
+      const jamW = clamp(openW * 0.3, 0.04, 0.25) * (0.5 + P.jam);
+      if (pct >= 1 - vw) return eff <= 30 ? this.jam(s) : this.open(s, to3);
+      if (eff <= 35 && fr >= 0.55 && pct >= 1 - jamW && r < 0.2 + P.jam * 0.6) {
+        this.markBluff();
+        return this.jam(s);
+      }
       if (bluffy && pct >= 0.5 && r < P.bluff3 * clamp(fr / 0.5, 0.4, 1.8) * (late ? 1.3 : 0.7)) {
         this.markBluff();
         return this.open(s, to3);
@@ -428,7 +441,12 @@ export class EliteBot {
       const vw = 0.022 * P.wide * clamp(a3 / 0.08, 0.7, 2.2);
       // чем чаще он 3бетит, тем шире продолжаем
       const cont = clamp(a3 * 2.2, 0.16, 0.6) * P.wide;
-      if (pct >= 1 - vw) return this.open(s, s.currentBet * 2.3);
+      if (pct >= 1 - vw) return eff <= 110 && (pct >= 0.98 || r < 0.4 + P.jam) ? this.jam(s) : this.open(s, s.currentBet * 2.3);
+      // 4бет-олл-ин блефом/полублефом: тузы и пары против частых 3бетов
+      if ((hi === 12 || lo === hi) && pct > 0.8 && eff <= 60 && a3 > 0.12 && r < P.jam * 0.4 * clamp(a3 / 0.08, 0.5, 2)) {
+        this.markBluff();
+        return this.jam(s);
+      }
       if (suited && hi === 12 && pct > 0.75 && r < P.bluff4) {
         this.markBluff();
         return this.open(s, s.currentBet * 2.3);
@@ -437,8 +455,8 @@ export class EliteBot {
       return this.passive(s);
     }
     // 4бет и выше
-    if (pct >= 0.985) return { type: 'raise', to: s.myBet + s.stack };
-    if (eq * R >= potOdds) return { type: 'call' };
+    if (pct >= 0.985) return this.jam(s);
+    if (eq * R >= potOdds) return pct >= 0.95 && r < P.jam ? this.jam(s) : { type: 'call' };
     return this.passive(s);
   }
 
@@ -460,6 +478,10 @@ export class EliteBot {
     to = Math.max(to, s.minRaiseTo);
     if (to > maxTo * 0.4) to = maxTo;
     return { type: 'raise', to: Math.round(Math.min(to, maxTo)) };
+  }
+
+  jam(s) {
+    return { type: 'raise', to: s.myBet + s.stack };
   }
 
   passive(s) {

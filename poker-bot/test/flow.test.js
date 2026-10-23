@@ -108,6 +108,9 @@ test('старт с нулём, пополнение (DEV), стол проти�
   const u = assertLedger(1001);
   assert.equal(u.in_play, 0);
   assert.equal(u.chips, 4500 - rebuys * 500 + left.stack);
+  // бот запомнил игрока для следующих столов
+  const mem = db.prepare("SELECT data FROM bot_memory WHERE user_id = 1001 AND bot = 'Акула'").get();
+  assert.ok(mem && JSON.parse(mem.data).hands > 0, 'память бота о игроке сохранена');
   c.close();
 });
 

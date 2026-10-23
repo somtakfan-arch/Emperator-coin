@@ -32,6 +32,10 @@ CREATE TABLE IF NOT EXISTS regs (
   t_id TEXT NOT NULL, user_id INTEGER NOT NULL, at INTEGER NOT NULL, place INTEGER, prize INTEGER,
   PRIMARY KEY (t_id, user_id)
 );
+CREATE TABLE IF NOT EXISTS bot_memory (
+  user_id INTEGER NOT NULL, bot TEXT NOT NULL, data TEXT NOT NULL, at INTEGER NOT NULL,
+  PRIMARY KEY (user_id, bot)
+);
 CREATE INDEX IF NOT EXISTS ledger_user ON ledger(user_id);
 CREATE INDEX IF NOT EXISTS t_status ON tournaments(status);
 `);

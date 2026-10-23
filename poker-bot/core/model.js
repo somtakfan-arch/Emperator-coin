@@ -122,6 +122,18 @@ export class FreqModel {
     };
   }
 
+  // Сохранить / загрузить досье на одного игрока (боты помнят человека между столами)
+  exportPlayer(id) {
+    return this.data.has(id) ? JSON.stringify(this.data.get(id)) : null;
+  }
+
+  importPlayer(id, json) {
+    try {
+      const d = JSON.parse(json);
+      if (d && d.ctx) this.data.set(id, { ...this.raw(id), ...d });
+    } catch {}
+  }
+
   bluffShare(id) {
     const d = this.raw(id);
     return (d.sdBluff + BLUFF_PRIOR * 4) / (d.sdAggr + 4);

@@ -9,7 +9,7 @@ export class Rock extends EliteBot {
   constructor(opts) {
     super('Скала', 'аккуратный: узкие диапазоны, минимум риска, точечные блефы', {
       wide: 0.8, aggr: -0.015, trap: 0.06, sizes: [0.33, 0.66], raiseSizes: [0.8],
-      temp: 0.015, priorN: 12, bluff3: 0.15, bluff4: 0.04,
+      temp: 0.015, priorN: 12, bluff3: 0.15, bluff4: 0.04, jam: 0.05,
     }, opts);
   }
 }
@@ -20,7 +20,7 @@ export class Shark extends EliteBot {
   constructor(opts) {
     super('Акула', 'баланс (GTO): много сайзингов, смешанные частоты, нечитаемая', {
       wide: 1, aggr: 0, trap: 0.05, sizes: [0.25, 0.5, 0.75, 1.25], raiseSizes: [0.7, 1.1],
-      temp: 0.04, priorN: 25, readSkill: 0.5, bluff3: 0.35, bluff4: 0.12,
+      temp: 0.04, priorN: 25, readSkill: 0.5, bluff3: 0.35, bluff4: 0.12, jam: 0.2,
     }, opts);
   }
 }
@@ -31,7 +31,7 @@ export class Maniac extends EliteBot {
   constructor(opts) {
     super('Маньяк', 'борзый: широкие диапазоны, овербеты, давление', {
       wide: 1.35, aggr: 0.03, trap: 0, sizes: [0.5, 1, 1.6], raiseSizes: [1, 1.6],
-      temp: 0.035, priorN: 10, bluff3: 0.6, bluff4: 0.3,
+      temp: 0.035, priorN: 10, bluff3: 0.6, bluff4: 0.3, jam: 0.4, deepJam: true,
     }, opts);
   }
 }
@@ -42,7 +42,7 @@ export class Hunter extends EliteBot {
   constructor(opts) {
     super('Охотник', 'эксплойт: быстро учит каждого и бьёт по его дырам', {
       wide: 1.05, aggr: 0, trap: 0.06, sizes: [0.33, 0.66, 1, 1.5], raiseSizes: [0.75, 1.2],
-      temp: 0.015, priorN: 4, readSkill: 1, bluff3: 0.35, bluff4: 0.12,
+      temp: 0.015, priorN: 4, readSkill: 1, bluff3: 0.35, bluff4: 0.12, jam: 0.25,
     }, opts);
   }
 }
@@ -50,9 +50,9 @@ export class Hunter extends EliteBot {
 // 5. ХАМЕЛЕОН — меняет передачу каждые 15–40 раздач: тайт / луз-агрессив / ловушки.
 // Статистика, собранная на него, всё время устаревает.
 const GEARS = {
-  тайт: { wide: 0.8, aggr: -0.01, trap: 0.04, bluff3: 0.15, sizes: [0.33, 0.66] },
-  луз: { wide: 1.35, aggr: 0.03, trap: 0, bluff3: 0.6, bluff4: 0.25, sizes: [0.5, 1, 1.5], raiseSizes: [1, 1.5] },
-  ловушка: { wide: 1, aggr: -0.02, trap: 0.2, bluff3: 0.3, sizes: [0.33, 0.75, 1.25] },
+  тайт: { wide: 0.8, aggr: -0.01, trap: 0.04, bluff3: 0.15, sizes: [0.33, 0.66], jam: 0.05 },
+  луз: { wide: 1.35, aggr: 0.03, trap: 0, bluff3: 0.6, bluff4: 0.25, sizes: [0.5, 1, 1.5], raiseSizes: [1, 1.5], jam: 0.55 },
+  ловушка: { wide: 1, aggr: -0.02, trap: 0.2, bluff3: 0.3, sizes: [0.33, 0.75, 1.25], jam: 0.2 },
 };
 export class Chameleon extends EliteBot {
   constructor(opts) {

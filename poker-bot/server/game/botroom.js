@@ -6,6 +6,9 @@ import { config } from '../config.js';
 import { db, debit, credit } from '../db.js';
 
 const setInPlay = db.prepare('UPDATE users SET in_play = ? WHERE id = ?');
+const loadMemory = db.prepare('SELECT data FROM bot_memory WHERE user_id = ? AND bot = ?');
+const saveMemory = db.prepare(`INSERT INTO bot_memory (user_id, bot, data, at) VALUES (?, ?, ?, ?)
+  ON CONFLICT (user_id, bot) DO UPDATE SET data = excluded.data, at = excluded.at`);
 
 export class BotRoom {
   constructor(hub, user, { mode, botName, buyin, minutes = 0 }) {
@@ -21,6 +24,8 @@ export class BotRoom {
       id: `b${user.id}`, kind: 'bots', hub, sb, bb,
       title: `${mode === 'hu' ? '1 на 1' : 'Стол на 6'} · ${sb}/${bb}${minutes ? ` · ${minutes} мин` : ''}`,
     });
+    this.bots = [];
+    this.hands = 0;
     this.seat = new HumanSeat(user.id, hub);
     this.me = { id: user.id, name: user.name, stack: buyin, bot: this.seat, isBot: false };
     this.table.addPlayer(this.me);
@@ -28,6 +33,10 @@ export class BotRoom {
       const C = BOT_CLASSES.find((K) => new K({}).name === name);
       const bot = new C({ iters: 300 });
       bot.id = -(i + 1); // у ботов отрицательные id — не пересекаются с Telegram
+      // бот помнит этого игрока с прошлых столов: как часто он рейзит, фолдит, блефует
+      const mem = loadMemory.get(user.id, bot.name);
+      if (mem) bot.model.importPlayer(user.id, mem.data);
+      this.bots.push(bot);
       this.table.addPlayer({ id: bot.id, name: bot.name, stack: buyin, bot: botSeat(bot, this.table), isBot: true });
     });
     this.table.extra = () => ({
@@ -70,7 +79,15 @@ export class BotRoom {
       this.kicked = true;
     }
     setInPlay.run(this.me.stack, this.userId);
+    if (++this.hands % 10 === 0) this.saveMemory();
     this.hub.sendMe(this.userId);
+  }
+
+  saveMemory() {
+    for (const bot of this.bots) {
+      const data = bot.model.exportPlayer(this.userId);
+      if (data) saveMemory.run(this.userId, bot.name, data, Date.now());
+    }
   }
 
   rebuy() {
@@ -102,6 +119,7 @@ export class BotRoom {
   close() {
     if (this.table.closed) return;
     this.table.closed = true;
+    this.saveMemory();
     const stack = this.me.stack;
     this.me.stack = 0;
     setInPlay.run(0, this.userId);
