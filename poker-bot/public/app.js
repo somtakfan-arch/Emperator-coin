@@ -215,6 +215,7 @@ function openStart(startParam) {
   if (tId) return openTour(tId);
   if (hash === 'tournaments') return go('tours');
   if (hash === 'wallet') return go('wallet');
+  if (hash === 'profile') return go('profile');
   go('lobby');
 }
 
@@ -865,6 +866,23 @@ function walletScreen() {
 
 // ---------- Профиль ----------
 
+// Награды Эло за чистый выигрыш (выигрыши минус проигрыши в играх)
+function winRewardsCard(me) {
+  const rewards = me.winRewards || [];
+  if (!rewards.length) return null;
+  const next = rewards.find((r) => !r.done);
+  const won = me.won || 0;
+  return h('div', { class: 'glass card', style: 'gap:12px' },
+    h('div', { class: 'row between' },
+      h('div', { class: 'b' }, 'Награды за выигрыш'),
+      h('div', { class: 'small soft' }, `чистый выигрыш ${won < 0 ? '−' : ''}${fmt(Math.abs(won))}`)),
+    next && h('div', { class: 'progress' }, h('div', { style: `width:${Math.max(0, Math.min(100, (won / next.at) * 100))}%;background:#f2c94c` })),
+    rewards.map((r) => h('div', { class: 'row between', style: 'font-size:14px' },
+      h('span', { class: r.done ? 'soft' : '' }, `${fmt(r.at)} фишек`),
+      h('span', { class: 'b', style: `color:${r.done ? '#7fd1a8' : '#f2c94c'}` }, r.done ? `+${r.elo} Эло — получено` : `+${r.elo} Эло`))),
+    h('div', { class: 'small muted', style: 'line-height:1.45' }, 'Считаются итоги столов с ботами и турниров: выигрыши минус проигрыши. Покупка фишек не в счёт.'));
+}
+
 function profileScreen() {
   const me = S.me;
   return h('div', { class: 'screen' },
@@ -874,6 +892,7 @@ function profileScreen() {
     h('div', { class: 'glass card' },
       h('div', { class: 'grid3' }, stat('Место', fmt(me.ratingPlace)), stat('Турниров', me.games), stat('Побед', me.wins)),
       h('div', { class: 'grid3' }, stat('Фишки', fmt(me.chips)), stat('В игре', fmt(me.inPlay)), stat('По фишкам', fmt(me.chipsPlace)))),
+    winRewardsCard(me),
     h('div', { class: 'label' }, 'Топ игроков по рейтингу'),
     S.top == null ? h('div', { class: 'muted small' }, 'Загрузка…')
       : S.top.length ? S.top.map((p, i) => h('div', { class: 'item' },

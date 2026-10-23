@@ -40,6 +40,37 @@ CREATE INDEX IF NOT EXISTS ledger_user ON ledger(user_id);
 CREATE INDEX IF NOT EXISTS t_status ON tournaments(status);
 `);
 
+// Новые колонки для уже существующих баз
+const userCols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
+if (!userCols.has('won')) db.exec('ALTER TABLE users ADD COLUMN won INTEGER NOT NULL DEFAULT 0'); // чистый выигрыш в играх
+if (!userCols.has('won_rewards')) db.exec('ALTER TABLE users ADD COLUMN won_rewards INTEGER NOT NULL DEFAULT 0'); // сколько наград выдано
+
+// Награды Эло за чистый выигрыш (разовые)
+export const WIN_REWARDS = [
+  { at: 5000, elo: 100 },
+  { at: 10000, elo: 250 },
+];
+
+// Учесть результат игровой сессии (стол против ботов или турнир). Возвращает выданные награды.
+export function addWinnings(id, net) {
+  if (!net) return [];
+  return tx(() => {
+    db.prepare('UPDATE users SET won = won + ? WHERE id = ?').run(Math.round(net), id);
+    const u = db.prepare('SELECT won, won_rewards FROM users WHERE id = ?').get(id);
+    const granted = [];
+    let claimed = u.won_rewards;
+    while (claimed < WIN_REWARDS.length && u.won >= WIN_REWARDS[claimed].at) {
+      granted.push(WIN_REWARDS[claimed]);
+      claimed++;
+    }
+    if (granted.length) {
+      const elo = granted.reduce((a, r) => a + r.elo, 0);
+      db.prepare('UPDATE users SET rating = rating + ?, won_rewards = ? WHERE id = ?').run(elo, claimed, id);
+    }
+    return granted;
+  });
+}
+
 export function tx(fn) {
   db.exec('BEGIN');
   try {

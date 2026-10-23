@@ -322,6 +322,7 @@ class RunningTournament {
       this.hub.send(r.user_id, { t: 'finished', tournamentId: this.t.id, place: r.place, prize, total: this.n, ratingDelta: d });
       this.hub.sendMe(r.user_id);
       notify(r.user_id, text, openButton('Открыть', `#t=${this.t.id}`));
+      this.hub.onWinnings?.(r.user_id, prize - this.t.buyin); // в счёт наград за выигрыш
     }
     this.hub.lobbyChanged();
   }

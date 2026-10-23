@@ -241,3 +241,19 @@ test('демо-стол: только админ, заданные карты п
   assert.equal(after.in_play, 0);
   a.close();
 });
+
+test('награды Эло за чистый выигрыш: 5 000 → +100, 10 000 → +250, по одному разу', async () => {
+  const { addWinnings, upsertUser } = await import('../server/db.js');
+  upsertUser({ id: 8001, first_name: 'W' });
+  const rating = () => db.prepare('SELECT rating FROM users WHERE id = 8001').get().rating;
+  const r0 = rating();
+  assert.deepEqual(addWinnings(8001, 3000), []);
+  assert.deepEqual(addWinnings(8001, -1000), []); // проигрыш уменьшает прогресс
+  assert.equal(addWinnings(8001, 3500).length, 1); // 5 500 ≥ 5 000
+  assert.equal(rating(), r0 + 100);
+  assert.deepEqual(addWinnings(8001, -2000), []);
+  assert.deepEqual(addWinnings(8001, 2000), []); // снова 5 500 — повторно не даётся
+  assert.equal(addWinnings(8001, 6000).length, 1); // 11 500 ≥ 10 000
+  assert.equal(rating(), r0 + 350);
+  assert.deepEqual(addWinnings(8001, 50000), []);
+});

@@ -4,8 +4,8 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { WebSocketServer } from 'ws';
 import { config } from './config.js';
-import { db, upsertUser, getUser, ranks, credit, recoverAfterRestart } from './db.js';
-import { verifyInitData, startBot, createInvoice, hooks, inviteLink, bot } from './telegram.js';
+import { db, upsertUser, getUser, ranks, credit, recoverAfterRestart, addWinnings, WIN_REWARDS } from './db.js';
+import { verifyInitData, startBot, createInvoice, hooks, inviteLink, bot, notify, openButton } from './telegram.js';
 import { BotRoom, DemoRoom } from './game/botroom.js';
 import { Tournaments } from './game/tournament.js';
 import { BOT_CLASSES } from '../core/bots.js';
@@ -42,6 +42,15 @@ const hub = {
       for (const uid of sockets.keys()) hub.send(uid, { t: 'lobby', ...lobbyView(uid) });
     }, 300);
   },
+  // Чистый выигрыш за сессию → награды Эло на 5 000 и 10 000
+  onWinnings(uid, net) {
+    for (const r of addWinnings(uid, net)) {
+      const text = `Награда: чистый выигрыш ${r.at.toLocaleString('ru')} фишек — +${r.elo} Эло!`;
+      hub.send(uid, { t: 'toast', text });
+      notify(uid, text, openButton('Профиль', '', 'success'));
+    }
+    hub.sendMe(uid);
+  },
   onRoomClosed(uid, room, stack, net = null, kicked = false) {
     if (botRooms.get(uid) === room) botRooms.delete(uid);
     hub.send(uid, { t: 'left', stack, net, kicked });
@@ -66,6 +75,7 @@ function meView(uid) {
   return {
     id: u.id, name: u.name, chips: u.chips, inPlay: u.in_play, rating: Math.round(u.rating),
     isAdmin: config.adminIds.includes(u.id),
+    won: u.won, winRewards: WIN_REWARDS.map((r, i) => ({ ...r, done: i < u.won_rewards })),
     games: u.games, wins: u.wins, ...ranks(uid),
     bonus: config.dailyBonus > 0 ? { amount: config.dailyBonus, readyAt: u.bonus_at + 86400000 } : null,
     table: act ? { id: act.table.id, kind: act.table.kind } : null,

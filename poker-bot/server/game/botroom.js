@@ -153,6 +153,7 @@ export class BotRoom {
     this.me.stack = 0;
     setInPlay.run(0, this.userId);
     credit(this.userId, stack, 'bots_cashout');
+    this.hub.onWinnings?.(this.userId, stack - this.invested); // в счёт наград за выигрыш
     this.hub.onRoomClosed(this.userId, this, stack, this.endsAt ? stack - this.invested : null, !!this.kicked);
   }
 }
