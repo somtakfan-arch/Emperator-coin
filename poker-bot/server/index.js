@@ -218,7 +218,14 @@ setInterval(() => {
 server.listen(config.port, () => {
   console.log(`Poker: http://localhost:${config.port}${config.dev ? '  (DEV — без Telegram)' : ''}`);
 });
-if (config.botToken && !config.dev) startBot().catch((e) => console.error('Бот не запустился:', e.message));
+if (config.botToken && !config.dev) {
+  // Telegram может не ответить при старте (сеть) — пробуем снова, пока не получится
+  const launch = (delay = 3000) => startBot().catch((e) => {
+    console.error(`Бот не запустился: ${e.message}. Повтор через ${delay / 1000} с`);
+    setTimeout(() => launch(Math.min(delay * 2, 60000)), delay);
+  });
+  launch();
+}
 else if (!config.dev) console.warn('BOT_TOKEN не задан — бот не запущен');
 
 export { server, hub, tournaments };
