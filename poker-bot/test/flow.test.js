@@ -313,3 +313,27 @@ test('стол с друзьями: двое людей + боты, чужие �
   assert.equal(closed.room, null, 'стол закрылся, когда люди ушли');
   host.close(); friend.close();
 });
+
+test('стол с друзьями не закрывается, пока хост вышел звать друзей', async () => {
+  const host = new Client(9103);
+  await host.ready;
+  await host.req({ t: 'invoice', pack: 'p1' });
+  const created = await host.req({ t: 'createMixed', buyin: 500, bots: 2 });
+  host.close(); // свернул приложение — отправляет ссылку
+  await new Promise((r) => setTimeout(r, 4000));
+  const friend = new Client(9104);
+  await friend.ready;
+  await friend.req({ t: 'invoice', pack: 'p1' });
+  const info = await friend.req({ t: 'mixedInfo', id: created.id });
+  assert.ok(info.room, 'стол живой');
+  assert.ok(info.room.players.some((p) => p.name && !p.bot), 'хост за столом');
+  await friend.req({ t: 'joinMixed', id: created.id });
+  friend.ws.send(JSON.stringify({ t: 'leave' }));
+  await friend.waitFor((m) => m.t === 'left', 30000);
+  const back = new Client(9103);
+  await back.ready;
+  back.ws.send(JSON.stringify({ t: 'leave' }));
+  await back.waitFor((m) => m.t === 'left', 30000);
+  assertLedger(9103); assertLedger(9104);
+  friend.close(); back.close();
+});

@@ -8,6 +8,7 @@ import { config } from '../config.js';
 import { db, debit, credit } from '../db.js';
 
 const MAX_SEATS = 6;
+const AWAY_MS = 10 * 60 * 1000;
 const setInPlay = db.prepare('UPDATE users SET in_play = ? WHERE id = ?');
 
 export class MixedRoom {
@@ -119,10 +120,26 @@ export class MixedRoom {
     else this.table.broadcast();
   }
 
-  beforeHand() {
+  // Кто вышел из приложения (например, пошёл звать друзей) — не выкидываем сразу:
+  // встаёт только тот, кого нет дольше 10 минут
+  dropAway() {
     for (const [uid, h] of [...this.humans]) {
-      const away = !this.hub.isOnline(uid) && Date.now() - this.hub.lastSeen(uid) > 120000;
-      if (h.leaving || away) this.cashOut(uid);
+      const away = !this.hub.isOnline(uid) && Date.now() - this.hub.lastSeen(uid) > AWAY_MS;
+      if (h.leaving || away) this.cashOut(uid, !h.leaving);
+    }
+  }
+
+  // за столом есть хоть один человек, который играет, а не «отошёл»
+  someoneHere() {
+    return [...this.humans].some(([uid, h]) => this.hub.isOnline(uid) && !h.seat.sittingOut);
+  }
+
+  async beforeHand() {
+    this.dropAway();
+    // все люди отошли — боты между собой не играют, стол ждёт
+    while (this.humans.size && !this.table.closed && !this.someoneHere()) {
+      await new Promise((r) => setTimeout(r, 1000));
+      this.dropAway();
     }
     if (!this.humans.size) {
       this.table.closed = true;
@@ -132,16 +149,10 @@ export class MixedRoom {
   }
 
   afterHand() {
-    for (const [uid, h] of [...this.humans]) {
-      // пропустил 2 хода подряд — встаёт из-за стола
-      if (h.seat.sittingOut && !h.leaving) {
-        h.leaving = true;
-        h.kicked = true;
-      }
+    for (const [uid, h] of this.humans) {
       setInPlay.run(h.player.stack, uid);
       this.hub.sendMe(uid);
     }
-    for (const [uid, h] of [...this.humans]) if (h.kicked) this.cashOut(uid, true);
   }
 
   // Эло: как за столом с ботами — только против ботов, которые были в банке
