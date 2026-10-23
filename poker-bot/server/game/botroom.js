@@ -1,4 +1,5 @@
 // Стол против ботов (кэш-игра): бай-ин списывается с баланса, при выходе стек возвращается.
+// Два режима: свободный (встать можно в любой момент) и на время (встать нельзя, пока не кончится время).
 import { BOT_CLASSES } from '../../core/bots.js';
 import { GameTable, HumanSeat, botSeat } from './table.js';
 import { config } from '../config.js';
@@ -7,16 +8,18 @@ import { db, debit, credit } from '../db.js';
 const setInPlay = db.prepare('UPDATE users SET in_play = ? WHERE id = ?');
 
 export class BotRoom {
-  constructor(hub, user, { mode, botName, buyin }) {
+  constructor(hub, user, { mode, botName, buyin, minutes = 0 }) {
     this.hub = hub;
     this.userId = user.id;
     this.buyin = buyin;
+    this.invested = buyin;
+    this.endsAt = minutes ? Date.now() + minutes * 60000 : 0;
     const bb = buyin / 100;
     const sb = Math.max(1, Math.floor(bb / 2));
     const names = mode === 'hu' ? [botName] : BOT_CLASSES.map((C) => new C({}).name);
     this.table = new GameTable({
       id: `b${user.id}`, kind: 'bots', hub, sb, bb,
-      title: mode === 'hu' ? `1 на 1 · ${sb}/${bb}` : `Стол на 6 · ${sb}/${bb}`,
+      title: `${mode === 'hu' ? '1 на 1' : 'Стол на 6'} · ${sb}/${bb}${minutes ? ` · ${minutes} мин` : ''}`,
     });
     this.seat = new HumanSeat(user.id, hub);
     this.me = { id: user.id, name: user.name, stack: buyin, bot: this.seat, isBot: false };
@@ -27,7 +30,10 @@ export class BotRoom {
       bot.id = -(i + 1); // у ботов отрицательные id — не пересекаются с Telegram
       this.table.addPlayer({ id: bot.id, name: bot.name, stack: buyin, bot: botSeat(bot, this.table), isBot: true });
     });
-    this.table.extra = () => ({ buyin, canRebuy: this.me.stack === 0, leaving: !!this.leaving });
+    this.table.extra = () => ({
+      buyin, canRebuy: this.me.stack === 0, leaving: !!this.leaving,
+      endsAt: this.endsAt || null, locked: this.locked(),
+    });
     this.table.beforeHand = () => this.beforeHand();
     this.table.afterHand = () => this.afterHand();
     setInPlay.run(this.me.stack, this.userId);
@@ -35,6 +41,7 @@ export class BotRoom {
 
   static open(hub, user, opts) {
     if (!config.botBuyins.includes(opts.buyin)) throw new Error('Неверный бай-ин');
+    if (opts.minutes && !config.timedMinutes.includes(opts.minutes)) throw new Error('Неверное время стола');
     if (opts.mode === 'hu' && !BOT_CLASSES.some((C) => new C({}).name === opts.botName)) throw new Error('Нет такого бота');
     if (!debit(user.id, opts.buyin, 'bots_buyin')) throw new Error('Не хватает фишек — пополни кошелёк');
     const room = new BotRoom(hub, user, opts);
@@ -43,8 +50,13 @@ export class BotRoom {
   }
 
   async beforeHand() {
-    // игрок закрыл приложение больше 2 минут назад — встаём из-за стола
-    if (!this.hub.isOnline(this.userId) && Date.now() - this.hub.lastSeen(this.userId) > 120000) this.leaving = true;
+    if (this.endsAt) {
+      // стол на время: закрываемся только когда время вышло (раздача уже доиграна)
+      if (Date.now() >= this.endsAt) this.leaving = true;
+    } else if (!this.hub.isOnline(this.userId) && Date.now() - this.hub.lastSeen(this.userId) > 120000) {
+      // игрок закрыл приложение больше 2 минут назад — встаём из-за стола
+      this.leaving = true;
+    }
     if (this.leaving) return this.close();
     // боты докупаются до бай-ина
     for (const p of this.table.players) if (p.isBot && p.stack < this.buyin) p.stack = this.buyin;
@@ -60,11 +72,21 @@ export class BotRoom {
     if (this.me.stack > 0) return;
     if (!debit(this.userId, this.buyin, 'bots_buyin')) throw new Error('Не хватает фишек');
     this.me.stack = this.buyin;
+    this.invested += this.buyin;
     setInPlay.run(this.me.stack, this.userId);
     this.table.broadcast();
   }
 
+  // на столе на время встать нельзя, пока идёт время и есть фишки
+  locked() {
+    return !!this.endsAt && Date.now() < this.endsAt && this.me.stack > 0;
+  }
+
   leave() {
+    if (this.locked()) {
+      const min = Math.ceil((this.endsAt - Date.now()) / 60000);
+      throw new Error(`Это стол на время — встать можно через ${min} мин`);
+    }
     this.leaving = true;
     this.seat.sittingOut = true;
     this.seat.forceFold();
@@ -79,6 +101,6 @@ export class BotRoom {
     this.me.stack = 0;
     setInPlay.run(0, this.userId);
     credit(this.userId, stack, 'bots_cashout');
-    this.hub.onRoomClosed(this.userId, this, stack);
+    this.hub.onRoomClosed(this.userId, this, stack, this.endsAt ? stack - this.invested : null);
   }
 }

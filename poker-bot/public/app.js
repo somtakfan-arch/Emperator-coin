@@ -5,7 +5,7 @@ const fmt = (n) => Number(n || 0).toLocaleString('ru-RU');
 
 const S = {
   me: null, lobby: null, table: null, turn: null, tour: null, invite: null, top: null,
-  screen: 'loading', tab: 'all', botMode: 'hu', botName: 'Охотник', buyin: 500, raiseTo: 0,
+  screen: 'loading', tab: 'all', botMode: 'hu', botName: 'Охотник', buyin: 500, botMinutes: 0, raiseTo: 0,
   create: { name: '', maxPlayers: 6, buyin: 1000, customBuyin: '', minRating: '', blindMin: 5, startMode: 'full', startIn: 60, private: false },
   connected: false, error: null,
 };
@@ -155,7 +155,9 @@ function onMessage(m) {
     case 'left':
       S.table = null;
       S.turn = null;
-      toast(m.stack ? `Со стола на баланс: ${fmt(m.stack)}` : 'Ты встал из-за стола');
+      toast(m.net != null
+        ? `Время вышло! Итог: ${m.net >= 0 ? '+' : '−'}${fmt(Math.abs(m.net))} фишек`
+        : m.stack ? `Со стола на баланс: ${fmt(m.stack)}` : 'Ты встал из-за стола');
       go('lobby');
       break;
     case 'invoice':
@@ -213,9 +215,22 @@ tg?.BackButton.onClick(() => back());
 window.addEventListener('hashchange', () => S.me && openStart(null));
 function back() {
   if (S.screen === 'combos') return go(S.comboBack || 'lobby');
+  if (S.screen === 'table' && S.table?.kind === 'bots' && S.table.locked) return leaveLocked();
   if (S.screen === 'table' && S.table?.kind === 'bots') return leaveBots();
   go(BACK[S.screen] || 'lobby');
 }
+
+// стол на время: встать нельзя, можно только уйти в лобби — игра продолжится без тебя
+function leaveLocked() {
+  const text = `Это стол на время — встать можно через ${clockLeft(S.table.endsAt)}. Уйти в лобби? Пока тебя нет, за тебя будут чек/фолд.`;
+  if (tg?.showConfirm) tg.showConfirm(text, (ok) => ok && go('lobby'));
+  else if (confirm(text)) go('lobby');
+}
+
+const clockLeft = (ts) => {
+  const sec = Math.max(0, Math.ceil((ts - Date.now()) / 1000));
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+};
 
 function leaveBots() {
   const doLeave = () => send({ t: 'leave' });
@@ -319,6 +334,16 @@ function botsScreen() {
         h('div', { class: 'small muted', style: 'font-size:11px' }, 'агрессия'),
         h('div', { class: 'meter' }, h('div', { style: `width:${info.aggr}%` })))))),
     h('div', { class: 'field' },
+      h('div', { class: 'label' }, 'Режим'),
+      h('div', { class: 'seg' },
+        h('button', { class: !S.botMinutes ? 'on' : '', onclick: () => { S.botMinutes = 0; render(); } }, 'Свободный'),
+        h('button', { class: S.botMinutes ? 'on' : '', onclick: () => { S.botMinutes = S.botMinutes || (S.lobby?.timedMinutes || [10])[0]; render(); } }, 'На время')),
+      S.botMinutes > 0 && h('div', { class: 'choices' }, (S.lobby?.timedMinutes || [10, 20, 30]).map((m) =>
+        h('button', { class: S.botMinutes === m ? 'on' : '', onclick: () => { S.botMinutes = m; render(); } }, `${m} мин`))),
+      h('div', { class: 'small muted', style: 'line-height:1.45' }, S.botMinutes
+        ? `Встать нельзя ${S.botMinutes} минут. Закроешь приложение — за тебя будут чек/фолд. Когда время выйдет, стек вернётся на баланс.`
+        : 'Встать можно в любой момент — стек сразу вернётся на баланс.')),
+    h('div', { class: 'field', style: 'padding-bottom:70px' },
       h('div', { class: 'label' }, 'Бай-ин (100 больших блайндов)'),
       h('div', { class: 'choices' }, (S.lobby?.buyins || [200, 500, 1000, 5000]).map((b) =>
         h('button', { class: S.buyin === b ? 'on' : '', onclick: () => { S.buyin = b; render(); } }, fmt(b)))),
@@ -329,7 +354,7 @@ function botsScreen() {
 }
 
 async function sitBots() {
-  const r = await run({ t: 'sitBots', mode: S.botMode, botName: S.botName, buyin: S.buyin });
+  const r = await run({ t: 'sitBots', mode: S.botMode, botName: S.botName, buyin: S.buyin, minutes: S.botMinutes });
   if (r) go('table');
 }
 
@@ -397,6 +422,7 @@ function tableScreen() {
 
   const info = T.kind === 'tour'
     ? [T.title, h('br'), `Уровень ${T.level} · ${T.sb}/${T.bb} · осталось ${T.alive} из ${T.total}`]
+    : T.endsAt ? [T.title, h('br'), h('span', { class: 'ends', 'data-ends': T.endsAt }, `осталось ${clockLeft(T.endsAt)}`)]
     : [T.title];
 
   const result = !T.inHand && T.result
@@ -858,6 +884,10 @@ function render() {
 // Обратный отсчёт хода: обновляем только цифры, без перерисовки (не сбивает слайдер)
 let buzzed = 0;
 setInterval(() => {
+  for (const e of document.querySelectorAll('[data-ends]')) {
+    const left = Number(e.dataset.ends) - Date.now();
+    e.textContent = left > 0 ? `осталось ${clockLeft(Number(e.dataset.ends))}` : 'время вышло — доигрываем раздачу';
+  }
   const el = document.querySelector('[data-countdown]');
   if (!el) return;
   const deadline = Number(el.dataset.countdown);

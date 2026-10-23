@@ -42,9 +42,9 @@ const hub = {
       for (const uid of sockets.keys()) hub.send(uid, { t: 'lobby', ...lobbyView(uid) });
     }, 300);
   },
-  onRoomClosed(uid, room, stack) {
+  onRoomClosed(uid, room, stack, net = null) {
     if (botRooms.get(uid) === room) botRooms.delete(uid);
-    hub.send(uid, { t: 'left', stack });
+    hub.send(uid, { t: 'left', stack, net });
     hub.sendMe(uid);
   },
 };
@@ -76,7 +76,7 @@ function lobbyView(uid) {
     tournaments: tournaments.list(uid),
     online: sockets.size,
     packs: config.packs, bots: BOTS, buyins: config.botBuyins,
-    sizes: config.tournament.sizes, blindOptions: config.tournament.blindOptions, turnSeconds: config.turnSeconds,
+    sizes: config.tournament.sizes, blindOptions: config.tournament.blindOptions, turnSeconds: config.turnSeconds, timedMinutes: config.timedMinutes,
   };
 }
 
@@ -97,7 +97,7 @@ const handlers = {
   cancelT: (uid, m) => (tournaments.cancel(getUser(uid), m.id), { t: 'ok' }),
   sitBots(uid, m) {
     if (activeTable(uid)) throw new Error('Ты уже за столом');
-    botRooms.set(uid, BotRoom.open(hub, getUser(uid), { mode: m.mode === '6' ? '6' : 'hu', botName: m.botName, buyin: Number(m.buyin) }));
+    botRooms.set(uid, BotRoom.open(hub, getUser(uid), { mode: m.mode === '6' ? '6' : 'hu', botName: m.botName, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0 }));
     hub.sendMe(uid);
     return { t: 'ok' };
   },
@@ -121,7 +121,7 @@ const handlers = {
     }
     return null;
   },
-  leave: (uid) => (botRooms.get(uid)?.leave(), null),
+  leave: (uid) => (botRooms.get(uid)?.leave(), { t: 'ok' }),
   rebuy: (uid) => (botRooms.get(uid)?.rebuy(), { t: 'ok' }),
   async invoice(uid, m) {
     const pack = config.packs.find((p) => p.id === m.pack);

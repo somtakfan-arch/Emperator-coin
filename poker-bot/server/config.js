@@ -25,6 +25,7 @@ export const config = {
 
   // столы против ботов: бай-ин = 100 больших блайндов
   botBuyins: [200, 500, 1000, 5000],
+  timedMinutes: (env.TIMED_MINUTES || '10,20,30').split(',').map(Number), // столы на время
 
   // Большой турнир — каждый день
   big: {

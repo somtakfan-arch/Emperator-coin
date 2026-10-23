@@ -9,6 +9,7 @@ import WebSocket from 'ws';
 process.env.DEV = '1';
 process.env.SPEED = '0';
 process.env.TURN_SECONDS = '3';
+process.env.TIMED_MINUTES = '0.05,10'; // 3 секунды — для теста
 process.env.PORT = String(4100 + Math.floor(Math.random() * 500));
 process.env.DATA_DIR = mkdtempSync(tmpdir() + '/poker-test-');
 
@@ -159,4 +160,31 @@ test('отмена своего турнира возвращает взносы
   assert.equal(assertLedger(4001).chips, 5000);
   assert.equal(assertLedger(4002).chips, 5000);
   a.close(); b.close();
+});
+
+test('стол на время: встать нельзя, по окончании закрывается сам с итогом', async () => {
+  const c = new Client(5001);
+  await c.ready;
+  await c.req({ t: 'invoice', pack: 'p1' });
+  await assert.rejects(c.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 500, minutes: 7 }), /Неверное время/);
+  await c.req({ t: 'sitBots', mode: '6', buyin: 500, minutes: 10 });
+  await c.waitFor((m) => m.t === 'table' && m.table?.locked);
+  await assert.rejects(c.req({ t: 'leave' }), /стол на время/);
+  // свободного выхода нет — проверим, что стол всё ещё идёт
+  await new Promise((r) => setTimeout(r, 200));
+  assert.ok(c.table && !c.msgs.some((m) => m.t === 'left'));
+  c.close();
+
+  // короткий стол (3 с): закрывается сам и присылает итог
+  const d = new Client(5002);
+  await d.ready;
+  await d.req({ t: 'invoice', pack: 'p1' });
+  await d.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 500, minutes: 0.05 });
+  const left = await d.waitFor((m) => m.t === 'left', 30000);
+  assert.equal(typeof left.net, 'number');
+  await new Promise((r) => setTimeout(r, 50));
+  const u = assertLedger(5002);
+  assert.equal(u.in_play, 0);
+  assert.equal(u.chips, 5000 + left.net);
+  d.close();
 });
