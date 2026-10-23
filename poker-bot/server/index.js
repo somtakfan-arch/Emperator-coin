@@ -216,6 +216,8 @@ function authenticate(m) {
 
 // ---------- HTTP + WebSocket ----------
 
+const BUILD = Date.now().toString(36); // версия файлов мини-аппа — новая при каждом запуске
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/health') return res.end('ok');
@@ -224,8 +226,15 @@ const server = createServer(async (req, res) => {
   const file = join(PUBLIC, path);
   if (!file.startsWith(PUBLIC)) return res.writeHead(403).end();
   try {
-    const data = await readFile(file);
-    res.writeHead(200, { 'content-type': TYPES[extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache' });
+    let data = await readFile(file);
+    const isPage = extname(file) === '.html';
+    // Telegram любит кэшировать мини-апп: у каждого запуска сервера свои адреса app.js/app.css,
+    // поэтому после деплоя телефон обязан скачать свежие файлы
+    if (isPage) data = data.toString().replace(/(app\.(?:js|css))"/g, `$1?v=${BUILD}"`);
+    res.writeHead(200, {
+      'content-type': TYPES[extname(file)] || 'application/octet-stream',
+      'cache-control': isPage ? 'no-store, max-age=0' : 'no-cache',
+    });
     res.end(data);
   } catch {
     res.writeHead(404).end('not found');
