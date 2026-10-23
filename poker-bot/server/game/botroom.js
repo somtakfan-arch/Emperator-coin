@@ -9,6 +9,7 @@ function makeAdvisor(userId) {
   return a;
 }
 import { GameTable, HumanSeat, botSeat } from './table.js';
+import { handElo } from './elo.js';
 import { config } from '../config.js';
 import { db, debit, credit } from '../db.js';
 
@@ -92,8 +93,8 @@ export class BotRoom {
     this.hub.sendMe(this.userId);
   }
 
-  // Эло за раздачу: играл (колл/рейз или вскрытие) — выиграл/проиграл против ботов в раздаче.
-  // Чем крупнее банк, тем больше изменение (2..8). Сбросил блайнд без игры — без изменений.
+  // Эло за раздачу: играл (колл/рейз или вскрытие) — выиграл/проиграл против ботов в раздаче
+  // (сколько — в elo.js). Сбросил блайнд без игры — без изменений.
   onTableEvent(e) {
     this.advisor.observe(e);
     if (e.type === 'handStart') {
@@ -113,9 +114,8 @@ export class BotRoom {
       if (!opps.length) return;
       const oppElo = opps.reduce((a, b) => a + b, 0) / opps.length;
       const u = db.prepare('SELECT rating FROM users WHERE id = ?').get(this.userId);
-      const expected = 1 / (1 + 10 ** ((oppElo - u.rating) / 400));
-      const k = Math.min(8, 2 + Math.abs(net) / this.table.bb / 10);
-      const delta = k * ((net > 0 ? 1 : 0) - expected);
+      const delta = handElo({ rating: u.rating, oppElo, net, bb: this.table.bb });
+      if (!delta) return;
       db.prepare('UPDATE users SET rating = rating + ? WHERE id = ?').run(delta, this.userId);
       this.lastElo = Math.round(delta * 10) / 10;
     }

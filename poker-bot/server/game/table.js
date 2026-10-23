@@ -69,6 +69,10 @@ export class HumanSeat {
 export function botSeat(bot, table) {
   return {
     id: bot.id,
+    hole: null,
+    deal(hole) {
+      this.hole = hole; // нужно подсказке за столом с ботами
+    },
     act: async (state) => {
       table.setActor(bot.id, state);
       await sleep(500 + Math.random() * 900);

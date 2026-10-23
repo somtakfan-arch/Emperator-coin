@@ -195,7 +195,10 @@ const handlers = {
     if (!pending) throw new Error('Подсказка доступна в твой ход');
     const free = room instanceof DemoRoom; // на демо-столе админа — бесплатно
     if (!free && !useHint(uid)) throw new Error('Подсказок нет — купи в кошельке');
-    const a = room.advisor.analyze(pending.state);
+    // за столом только ты и боты — подсказка видит их настоящие карты
+    const known = {};
+    for (const p of room.table.players) if (p.isBot && p.bot.hole) known[p.id] = p.bot.hole;
+    const a = room.advisor.analyze(pending.state, known);
     hub.sendMe(uid);
     return { t: 'hint', ...a };
   },

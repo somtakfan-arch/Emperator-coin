@@ -36,7 +36,25 @@ const DEFAULTS = {
   callTax: 0.02,       // запас при колле — страховка от ошибок модели
   jam: 0.15,           // любовь к олл-инам: 0 — только по расчёту, 1 — давит олл-инами при любой возможности
   deepJam: false,      // пушить и при глубоком стеке (минус к силе, плюс к давлению)
+  fear: 0.5,           // страх, как у человека: боится больших ставок, страшных досок и чек-рейзов
 };
+
+// Насколько доска «страшная»: три в масть, пара, четыре карты к стриту.
+function scaryBoard(board) {
+  if (board.length < 3) return 0;
+  const ctx = boardContext(board);
+  let x = 0;
+  const flush = Math.max(...ctx.suits);
+  if (flush >= 4) x += 0.8; else if (flush === 3) x += 0.4;
+  if (ctx.cat >= 1) x += 0.3; // спаренная доска — фулл-хаус где-то рядом
+  const m = (ctx.mask << 1) | ((ctx.mask >> 12) & 1); // бит 0 — туз внизу для стрита A-5
+  for (let lo = 0; lo <= 9; lo++) {
+    let n = 0;
+    for (let r = lo; r < lo + 5; r++) if (m & (1 << r)) n++;
+    if (n >= 4) { x += 0.5; break; }
+  }
+  return Math.min(x, 1.3);
+}
 
 export class EliteBot {
   constructor(name, style, params = {}, { rng = Math.random, iters = 400 } = {}) {
@@ -332,15 +350,36 @@ export class EliteBot {
 
   // ==================== ПОДСКАЗКА ИГРОКУ ====================
   // Тот же расчёт, что у бота, но без случайности: лучшее по EV действие,
-  // шансы против вероятного диапазона соперника и сам диапазон. Чужие карты не используются.
-  analyze(s) {
+  // шансы против вероятного диапазона соперника и сам диапазон.
+  // known: { id: [карта, карта] } — настоящие карты ботов (только за столом с ботами):
+  // тогда шансы считаются против их реальных рук.
+  analyze(s, known = null) {
     this.board = s.board;
     const opps = s.players.filter((p) => !p.me && !p.folded);
     for (const o of opps) if (!this.ranges.has(o.id)) this.ranges.set(o.id, new Float64Array(N).fill(1));
-    this.p = { ...this.base };
+    this.p = { ...this.base, fear: 0, jam: 0 }; // советник без страха и без «любви к пушам» — чистый расчёт
+    const saved = this.ranges;
+    if (known) {
+      this.ranges = new Map(saved);
+      for (const o of opps) {
+        const h = known[o.id];
+        if (!h) continue;
+        const w = new Float64Array(N);
+        w[comboIndex(h[0], h[1])] = 1;
+        this.ranges.set(o.id, w);
+      }
+    }
     const sim = this.simulate(s, opps, 1500);
     let action;
-    if (s.street === 'preflop') {
+    const allKnown = known && opps.every((o) => known[o.id]);
+    if (allKnown && s.street === 'preflop') {
+      // карты соперников видны — решаем прямо по шансам против них
+      const potOdds = s.toCall / (s.pot + s.toCall);
+      const canRaise = s.stack > s.toCall;
+      if (sim.eq > 0.62 && canRaise) action = this.open(s, Math.max(s.currentBet * 3, s.bigBlind * 3));
+      else if (s.toCall === 0) action = { type: 'check' };
+      else action = sim.eq >= potOdds ? { type: 'call' } : { type: 'fold' };
+    } else if (s.street === 'preflop') {
       const rng = this.rng;
       this.rng = () => 0.99; // без блефов «по монетке» — только основная линия
       action = this.preflop(s, opps);
@@ -349,6 +388,7 @@ export class EliteBot {
       const cands = this.postflopCands(s, opps, sim);
       action = cands.reduce((a, b) => (b.ev > a.ev ? b : a)).a;
     }
+    this.ranges = saved;
     // главный соперник — последний, кто ставил; иначе первый в раздаче
     const lastRaise = [...s.actions].reverse().find((a) => a.action === 'raise' && opps.some((o) => o.id === a.id));
     const main = sim.R.find((x) => x.o.id === lastRaise?.id) || sim.R[0];
@@ -357,8 +397,27 @@ export class EliteBot {
       potOdds: s.toCall > 0 ? s.toCall / (s.pot + s.toCall) : 0,
       action,
       opp: main?.o.name ?? null,
-      range: main ? rangeSummary(main.w, main.tot, s.board) : [],
+      range: main && !known ? rangeSummary(main.w, main.tot, s.board) : [],
+      cards: known ? opps.filter((o) => known[o.id]).map((o) => ({ name: o.name, cards: known[o.id] })) : null,
     };
+  }
+
+  // «Страх» при колле (в фишках): чем больше доля стека под угрозой, крупнее ставка,
+  // страшнее доска и если это чек-рейз на его ставку — тем охотнее бот сбрасывает.
+  // С монстром не боится.
+  fearTax(s, eq) {
+    const P = this.p;
+    if (!P.fear || s.toCall <= 0 || eq > 0.8) return 0;
+    const risk = Math.min(1, s.toCall / Math.max(1, s.stack + s.myBet));
+    const size = Math.min(2, s.toCall / Math.max(1, s.pot));
+    const raisedBack = s.actions.some((a) => a.street === s.street && a.id === this.id && a.action === 'raise') ? 0.6 : 0;
+    const scare = 1 + scaryBoard(s.board) + raisedBack;
+    return P.fear * (0.5 * risk + 0.25 * size) * scare * 0.3 * (1 - eq) * (s.pot + s.toCall);
+  }
+
+  // то же для префлопа — в долях банка (поправка к шансам)
+  preFear(s) {
+    return this.p.fear * 0.1 * Math.min(1, s.toCall / Math.max(1, s.stack + s.myBet));
   }
 
   postflopCands(s, opps, sim) {
@@ -380,7 +439,7 @@ export class EliteBot {
       cands.push({
         a: { type: 'call' },
         ev: eq * (callAll ? 1 : Rz) * (pot + s.toCall) - s.toCall - P.callTax * (pot + s.toCall)
-          + (monster ? P.trap * pot * 0.5 : 0),
+          + (monster ? P.trap * pot * 0.5 : 0) - this.fearTax(s, eq),
         trap: monster,
       });
     }
@@ -388,10 +447,10 @@ export class EliteBot {
       const tos = new Set();
       for (const f of s.toCall === 0 ? P.sizes : P.raiseSizes) tos.add(this.raiseTo(s, f));
       // олл-ин в вариантах: при небольшом стеке — всем; при глубоком — только «пушерам» (Маньяк)
-      if (s.stack <= pot * 3 || P.deepJam) tos.add(maxTo);
+      if (s.stack <= pot * 5 || P.deepJam) tos.add(maxTo);
       for (const to of tos) {
         // давление: олл-ин получает бонус по характеру бота
-        const ev = this.betEV(s, sim, to, facingCtx) + P.aggr * pot + (to === maxTo ? P.jam * 0.015 * pot : 0);
+        const ev = this.betEV(s, sim, to, facingCtx) + P.aggr * pot + (to === maxTo ? P.jam * 0.03 * pot : 0);
         cands.push({ a: { type: 'raise', to }, ev, eq });
       }
     }
@@ -471,7 +530,9 @@ export class EliteBot {
         this.markBluff();
         return this.open(s, to3);
       }
-      if (eq * R + implied >= potOdds && pct >= 1 - defend) return { type: 'call' };
+      // не хочет мучиться с рукой после флопа — сразу олл-ин
+      if (eff <= 30 && pct >= 0.88 && r < P.jam) return this.jam(s);
+      if (eq * R + implied >= potOdds + this.preFear(s) && pct >= 1 - defend) return { type: 'call' };
       return this.passive(s);
     }
     if (raises === 2) {
@@ -489,12 +550,12 @@ export class EliteBot {
         this.markBluff();
         return this.open(s, s.currentBet * 2.3);
       }
-      if (eq * R + implied >= potOdds && pct >= 1 - cont) return { type: 'call' };
+      if (eq * R + implied >= potOdds + this.preFear(s) && pct >= 1 - cont) return { type: 'call' };
       return this.passive(s);
     }
     // 4бет и выше
     if (pct >= 0.985) return this.jam(s);
-    if (eq * R >= potOdds) return pct >= 0.95 && r < P.jam ? this.jam(s) : { type: 'call' };
+    if (eq * R >= potOdds + this.preFear(s)) return pct >= 0.95 && r < P.jam ? this.jam(s) : { type: 'call' };
     return this.passive(s);
   }
 

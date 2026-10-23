@@ -99,9 +99,9 @@ test('старт с нулём, пополнение (DEV), стол проти�
     await c.req({ t: 'rebuy' });
     rebuys = 1;
   }
-  // чужие карты не видны
+  // чужие карты не видны (кроме вскрытия — там их показывают всем)
   const opp = c.table.seats.find((s) => !s.me);
-  if (c.table.inHand) assert.equal(opp.cards, null);
+  if (c.table.inHand && !opp.hand) assert.equal(opp.cards, null);
   await assert.rejects(c.req({ t: 'sitBots', mode: 'hu', botName: 'Акула', buyin: 500 }), /уже за столом/);
   c.ws.send(JSON.stringify({ t: 'leave' }));
   const left = await c.waitFor((m) => m.t === 'left');
@@ -270,7 +270,9 @@ test('подсказка: без покупки нельзя, после пок�
   const hnt = await c.req({ t: 'hint' });
   assert.ok(['fold', 'check', 'call', 'raise'].includes(hnt.action.type));
   assert.ok(hnt.eq >= 0 && hnt.eq <= 1);
-  assert.ok(Array.isArray(hnt.range));
+  assert.equal(hnt.cards.length, 1, 'видны карты бота');
+  assert.equal(hnt.cards[0].name, 'Акула');
+  assert.equal(hnt.cards[0].cards.length, 2);
   assert.equal(db.prepare('SELECT hints FROM users WHERE id = 9001').get().hints, 4);
   c.ws.send(JSON.stringify({ t: 'act', action: hnt.action }));
   c.ws.send(JSON.stringify({ t: 'leave' }));
@@ -336,4 +338,19 @@ test('стол с друзьями не закрывается, пока хос�
   await back.waitFor((m) => m.t === 'left', 30000);
   assertLedger(9103); assertLedger(9104);
   friend.close(); back.close();
+});
+
+test('Эло за выигрыш раздачи: шкала и не круглые числа', async () => {
+  const { handElo } = await import('../server/game/elo.js');
+  const base = { rating: 1500, oppElo: 1600, bb: 5 };
+  for (let i = 0; i < 200; i++) {
+    for (const [net, elo] of [[50, 10], [150, 50], [300, 100], [700, 250], [3000, 250]]) {
+      const d = handElo({ ...base, net });
+      assert.ok(d >= elo * 0.8 - 1 && d <= elo * 1.2 + 1, `${net} → ${d}`);
+      assert.notEqual(d % 5, 0, `${d} круглое`);
+    }
+    assert.equal(handElo({ ...base, net: 5 }), 0);
+    const loss = handElo({ ...base, net: -300 });
+    assert.ok(loss < 0 && loss >= -8);
+  }
 });

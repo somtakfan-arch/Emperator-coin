@@ -67,7 +67,7 @@ export async function createInvoice(userId, packId) {
   return api('createInvoiceLink', {
     title: hints ? `Подсказки: ${pack.hints} шт.` : `${pack.chips.toLocaleString('ru')} фишек`,
     description: hints
-      ? 'Подсказка за столом с ботами: шансы, вероятные карты соперника и лучший ход.'
+      ? 'Подсказка за столом с ботами: карты ботов, твои шансы против них и лучший ход.'
       : 'Игровые фишки для покера. Фишки нельзя вывести или обменять на деньги.',
     payload: JSON.stringify({ u: userId, p: pack.id }),
     provider_token: '',

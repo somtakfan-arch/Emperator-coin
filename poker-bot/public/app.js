@@ -700,9 +700,12 @@ function hintCard(hnt, t, act) {
       h('div', {}, h('span', { class: 'small soft' }, 'Совет: '), h('span', { class: 'b', style: 'font-size:16px' }, label)),
       h('button', { class: 'btn-sm', onclick: () => act(a.type === 'raise' ? { type: 'raise', to: a.to } : { type: a.type }) }, 'Сделать')),
     h('div', { class: 'small' }, why),
+    hnt.cards?.length > 0 && h('div', { class: 'row', style: 'flex-wrap:wrap;gap:10px' },
+      hnt.cards.map((o) => h('div', { class: 'row', style: 'gap:4px;align-items:center' },
+        h('span', { class: 'small soft' }, `${o.name}:`), pcard(o.cards[0], 'sm'), pcard(o.cards[1], 'sm')))),
     hnt.range?.length > 0 && h('div', { class: 'small soft', style: 'line-height:1.45' },
       `${hnt.opp || 'Соперник'} скорее всего держит: `, hnt.range.map((r) => `${r.name.toLowerCase()} ${r.pct}%`).join(' · ')),
-    h('div', { class: 'small muted', style: 'font-size:11px' }, 'Это расчёт по его ставкам, а не его настоящие карты.'));
+    !hnt.cards?.length && h('div', { class: 'small muted', style: 'font-size:11px' }, 'Это расчёт по его ставкам, а не его настоящие карты.'));
 }
 
 function actionPanel(T, me, myTurn) {
@@ -956,7 +959,7 @@ function walletScreen() {
       h('span', { class: 'row b', style: 'gap:6px;font-size:15px' }, icon('star', 16), fmt(p.stars))))),
     h('div', { class: 'small muted', style: 'line-height:1.5' }, 'Фишки — игровая валюта: на них играют, их выигрывают, но вывести или обменять их нельзя. Оплата звёздами проходит внутри Telegram.'),
     h('div', { class: 'label', id: 'hints-section', style: 'padding-top:6px' }, `Подсказки · у тебя ${me.hints || 0}`),
-    h('div', { class: 'small soft', style: 'line-height:1.45' }, 'За столом с ботами в свой ход: твои шансы, что вероятно у соперника и лучший ход. В турнирах с людьми не работают.'),
+    h('div', { class: 'small soft', style: 'line-height:1.45' }, 'За столом с ботами в свой ход: показывает карты ботов, твои шансы против них и лучший ход. За столами с людьми не работают.'),
     h('div', { class: 'grid3' }, (S.lobby?.hintPacks || []).map((p) => h('button', { class: 'pack', onclick: () => run({ t: 'invoice', pack: p.id }) },
       h('span', { class: 'chips' }, p.hints),
       h('span', { class: 'small soft' }, p.hints === 1 ? 'подсказка' : p.hints < 5 ? 'подсказки' : 'подсказок'),

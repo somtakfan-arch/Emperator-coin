@@ -4,6 +4,7 @@
 import { randomBytes } from 'node:crypto';
 import { BOT_CLASSES } from '../../core/bots.js';
 import { GameTable, HumanSeat, botSeat } from './table.js';
+import { handElo } from './elo.js';
 import { config } from '../config.js';
 import { db, debit, credit } from '../db.js';
 
@@ -175,9 +176,8 @@ export class MixedRoom {
         const net = won - mine;
         if (!net) continue;
         const u = db.prepare('SELECT rating FROM users WHERE id = ?').get(uid);
-        const expected = 1 / (1 + 10 ** ((oppElo - u.rating) / 400));
-        const k = Math.min(8, 2 + Math.abs(net) / this.table.bb / 10);
-        db.prepare('UPDATE users SET rating = rating + ? WHERE id = ?').run(k * ((net > 0 ? 1 : 0) - expected), uid);
+        const delta = handElo({ rating: u.rating, oppElo, net, bb: this.table.bb });
+        if (delta) db.prepare('UPDATE users SET rating = rating + ? WHERE id = ?').run(delta, uid);
       }
     }
   }
