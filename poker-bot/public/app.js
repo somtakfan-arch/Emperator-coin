@@ -1,6 +1,10 @@
 // Покер — мини-апп. Все данные приходят с сервера по WebSocket;
 // пользовательский текст всегда вставляется через textContent (без innerHTML).
 const tg = window.Telegram?.WebApp;
+// Часы сервера: сдвиг считается по каждому сообщению, чтобы таймеры не врали,
+// если часы телефона спешат или отстают
+let skew = 0;
+const nowSrv = () => Date.now() + skew;
 const fmt = (n) => Number(n || 0).toLocaleString('ru-RU');
 
 const S = {
@@ -112,6 +116,7 @@ async function run(msg) {
 }
 
 function onMessage(m) {
+  if (m.now) skew = m.now - Date.now();
   if (m.rid && waiting.has(m.rid)) {
     const w = waiting.get(m.rid);
     waiting.delete(m.rid);
@@ -155,7 +160,9 @@ function onMessage(m) {
     case 'left':
       S.table = null;
       S.turn = null;
-      toast(m.net != null
+      toast(m.kicked
+        ? `Тебя убрали со стола: пропущено 2 хода подряд. На баланс: ${fmt(m.stack)}`
+        : m.net != null
         ? `Время вышло! Итог: ${m.net >= 0 ? '+' : '−'}${fmt(Math.abs(m.net))} фишек`
         : m.stack ? `Со стола на баланс: ${fmt(m.stack)}` : 'Ты встал из-за стола');
       go('lobby');
@@ -228,7 +235,7 @@ function leaveLocked() {
 }
 
 const clockLeft = (ts) => {
-  const sec = Math.max(0, Math.ceil((ts - Date.now()) / 1000));
+  const sec = Math.max(0, Math.ceil((ts - nowSrv()) / 1000));
   return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 };
 
@@ -261,7 +268,7 @@ function balancePill() {
 }
 
 function timeLeft(ts) {
-  const min = Math.max(0, Math.round((ts - Date.now()) / 60000));
+  const min = Math.max(0, Math.round((ts - nowSrv()) / 60000));
   if (min < 60) return `${min} мин`;
   const hh = Math.floor(min / 60);
   return hh < 24 ? `${hh} ч ${min % 60} мин` : `${Math.floor(hh / 24)} д`;
@@ -776,8 +783,8 @@ function walletScreen() {
       h('div', { class: 'small muted' }, `В игре: ${fmt(me.inPlay)} · место по фишкам: ${fmt(me.chipsPlace)}`)),
     bonus && h('div', { class: 'item', style: 'padding:14px;border-radius:16px' },
       h('div', { class: 'col' }, h('div', { style: 'font-size:15px;font-weight:600' }, 'Ежедневный бонус'), h('div', { class: 'small soft' }, `+${fmt(bonus.amount)} фишек раз в сутки`)),
-      h('button', { class: 'btn-sm', disabled: Date.now() < bonus.readyAt, onclick: () => run({ t: 'bonus' }) },
-        Date.now() < bonus.readyAt ? `через ${timeLeft(bonus.readyAt)}` : 'Забрать')),
+      h('button', { class: 'btn-sm', disabled: nowSrv() < bonus.readyAt, onclick: () => run({ t: 'bonus' }) },
+        nowSrv() < bonus.readyAt ? `через ${timeLeft(bonus.readyAt)}` : 'Забрать')),
     h('div', { class: 'label' }, 'Пополнить звёздами'),
     h('div', { class: 'grid2' }, (S.lobby?.packs || []).map((p) => h('button', { class: `pack`, onclick: () => run({ t: 'invoice', pack: p.id }) },
       h('span', { class: 'chips' }, fmt(p.chips)),
@@ -873,7 +880,7 @@ function render() {
   }
   // таймер хода
   for (const bar of app.querySelectorAll('[data-deadline]')) {
-    const left = Number(bar.dataset.deadline) - Date.now();
+    const left = Number(bar.dataset.deadline) - nowSrv();
     const total = (S.lobby?.turnSeconds || 20) * 1000;
     bar.style.width = `${Math.max(0, Math.min(100, (left / total) * 100))}%`;
     requestAnimationFrame(() => { bar.style.transition = `width ${Math.max(0, left)}ms linear`; bar.style.width = '0%'; });
@@ -885,13 +892,13 @@ function render() {
 let buzzed = 0;
 setInterval(() => {
   for (const e of document.querySelectorAll('[data-ends]')) {
-    const left = Number(e.dataset.ends) - Date.now();
+    const left = Number(e.dataset.ends) - nowSrv();
     e.textContent = left > 0 ? `осталось ${clockLeft(Number(e.dataset.ends))}` : 'время вышло — доигрываем раздачу';
   }
   const el = document.querySelector('[data-countdown]');
   if (!el) return;
   const deadline = Number(el.dataset.countdown);
-  const sec = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
+  const sec = Math.max(0, Math.ceil((deadline - nowSrv()) / 1000));
   el.querySelector('.cd-sec').textContent = `${sec} с`;
   el.classList.toggle('hurry', sec <= 5);
   if (sec <= 5 && sec > 0 && buzzed !== deadline) {

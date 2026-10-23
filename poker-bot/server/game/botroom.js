@@ -64,6 +64,11 @@ export class BotRoom {
   }
 
   afterHand() {
+    // свободный стол: пропустил 2 хода подряд — убираем из-за стола, стек на баланс
+    if (!this.endsAt && this.seat.sittingOut && !this.leaving) {
+      this.leaving = true;
+      this.kicked = true;
+    }
     setInPlay.run(this.me.stack, this.userId);
     this.hub.sendMe(this.userId);
   }
@@ -101,6 +106,6 @@ export class BotRoom {
     this.me.stack = 0;
     setInPlay.run(0, this.userId);
     credit(this.userId, stack, 'bots_cashout');
-    this.hub.onRoomClosed(this.userId, this, stack, this.endsAt ? stack - this.invested : null);
+    this.hub.onRoomClosed(this.userId, this, stack, this.endsAt ? stack - this.invested : null, !!this.kicked);
   }
 }

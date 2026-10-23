@@ -27,7 +27,7 @@ const hub = {
   send(uid, msg) {
     const set = sockets.get(uid);
     if (!set) return;
-    const data = JSON.stringify(msg);
+    const data = JSON.stringify({ ...msg, now: Date.now() }); // время сервера — клиент сверяет часы
     for (const ws of set) if (ws.readyState === 1) ws.send(data);
   },
   isOnline: (uid) => (sockets.get(uid)?.size ?? 0) > 0,
@@ -42,9 +42,9 @@ const hub = {
       for (const uid of sockets.keys()) hub.send(uid, { t: 'lobby', ...lobbyView(uid) });
     }, 300);
   },
-  onRoomClosed(uid, room, stack, net = null) {
+  onRoomClosed(uid, room, stack, net = null, kicked = false) {
     if (botRooms.get(uid) === room) botRooms.delete(uid);
-    hub.send(uid, { t: 'left', stack, net });
+    hub.send(uid, { t: 'left', stack, net, kicked });
     hub.sendMe(uid);
   },
 };
@@ -173,7 +173,7 @@ wss.on('connection', (ws) => {
   ws.on('message', async (raw) => {
     let m;
     try { m = JSON.parse(raw); } catch { return; }
-    const reply = (msg) => msg && ws.readyState === 1 && ws.send(JSON.stringify({ ...msg, rid: m.rid }));
+    const reply = (msg) => msg && ws.readyState === 1 && ws.send(JSON.stringify({ ...msg, rid: m.rid, now: Date.now() }));
     try {
       if (m.t === 'auth') {
         const auth = authenticate(m);

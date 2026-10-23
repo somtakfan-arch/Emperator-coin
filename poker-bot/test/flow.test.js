@@ -43,6 +43,7 @@ class Client {
     this.ready = new Promise((r) => this.ws.on('open', r)).then(() => this.req({ t: 'auth', dev: { id, name: `P${id}` } }));
   }
   onTurn(m) {
+    if (this.autoplay === 'idle') return; // игрок отошёл и не ходит
     let action;
     if (this.autoplay === 'shove') action = { type: 'raise', to: m.maxTo };
     else if (this.autoplay === 'mix') {
@@ -187,4 +188,19 @@ test('стол на время: встать нельзя, по окончани
   assert.equal(u.in_play, 0);
   assert.equal(u.chips, 5000 + left.net);
   d.close();
+});
+
+test('свободный стол: 2 пропущенных хода подряд — кик со стеком на баланс', async () => {
+  const c = new Client(6001, { autoplay: 'idle' });
+  await c.ready;
+  await c.req({ t: 'invoice', pack: 'p1' });
+  await c.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 500 });
+  const left = await c.waitFor((m) => m.t === 'left', 40000);
+  assert.equal(left.kicked, true);
+  await new Promise((r) => setTimeout(r, 50));
+  const u = assertLedger(6001);
+  assert.equal(u.in_play, 0);
+  assert.equal(u.chips, 4500 + left.stack);
+  assert.ok(c.msgs.some((m) => typeof m.now === 'number'), 'сервер присылает своё время');
+  c.close();
 });
