@@ -115,6 +115,13 @@ async function onMessage(msg) {
   if (msg.from) upsertUser(msg.from);
   if (text.startsWith('/start')) {
     const arg = text.split(' ')[1] || '';
+    const mId = arg.startsWith('m_') ? arg.slice(2).replace(/[^a-zA-Z0-9]/g, '') : '';
+    if (mId) {
+      return api('sendMessage', {
+        chat_id: chat, text: 'Тебя позвали за стол с друзьями 🃏',
+        reply_markup: { inline_keyboard: [[appButton('Сесть за стол', `#m=${mId}`, 'success')]] },
+      });
+    }
     const tId = arg.startsWith('t_') ? arg.slice(2).replace(/[^a-zA-Z0-9]/g, '') : '';
     if (tId) {
       const t = db.prepare('SELECT name FROM tournaments WHERE id = ?').get(tId);
@@ -152,6 +159,7 @@ const ADMIN_HELP = [
   'Команды админа:',
   '/give <id или @ник> <фишки> — выдать фишки (минус — забрать)',
   '/elo <id или @ник> <число> — поставить Эло; +50 / -30 — изменить',
+  '/hints <id или @ник> <число> — выдать подсказки (минус — забрать)',
   '/user <id или @ник> — инфо об игроке',
   '/stats — общая статистика',
   '/refund <id платежа> — вернуть звёзды',
@@ -161,12 +169,21 @@ async function onAdmin(msg) {
   const [cmd, arg, arg2] = (msg.text || '').split(/\s+/);
   const reply = (text) => api('sendMessage', { chat_id: msg.chat.id, text });
   if (cmd === '/admin' || cmd === '/help') return reply(ADMIN_HELP);
-  if (cmd === '/give' || cmd === '/elo' || cmd === '/user') {
+  if (cmd === '/give' || cmd === '/elo' || cmd === '/user' || cmd === '/hints') {
     const u = findUser(arg);
     if (!u) return reply('Игрок не найден. Он должен хотя бы раз нажать /start или открыть приложение.');
     const who = `${u.name}${u.username ? ` (@${u.username})` : ''}, id ${u.id}`;
     if (cmd === '/user') {
-      return reply(`${who}\nФишки: ${u.chips} (в игре ${u.in_play})\nЭло: ${Math.round(u.rating)}\nТурниров: ${u.games}, побед: ${u.wins}`);
+      return reply(`${who}\nФишки: ${u.chips} (в игре ${u.in_play})\nЭло: ${Math.round(u.rating)}\nПодсказок: ${u.hints}\nТурниров: ${u.games}, побед: ${u.wins}`);
+    }
+    if (cmd === '/hints') {
+      const amount = Math.trunc(Number(arg2));
+      if (!amount) return reply('Пример: /hints @nick 10 или /hints 123456 -5');
+      const next = Math.max(0, u.hints + amount);
+      db.prepare('UPDATE users SET hints = ? WHERE id = ?').run(next, u.id);
+      hooks.onBalance?.(u.id);
+      if (next > u.hints) notify(u.id, `Тебе выдано подсказок: <b>${next - u.hints}</b>. Жми «Подсказка» за столом с ботами.`, appButton('Играть', '', 'success'));
+      return reply(`${who}: подсказок ${u.hints} → ${next}`);
     }
     if (cmd === '/give') {
       const amount = Math.trunc(Number(arg2));
@@ -234,6 +251,7 @@ export async function startBot() {
         { command: 'start', description: 'Открыть покер' },
         { command: 'give', description: 'Выдать фишки: /give @ник 5000' },
         { command: 'elo', description: 'Эло: /elo @ник 1800 или +50' },
+        { command: 'hints', description: 'Подсказки: /hints @ник 10' },
         { command: 'user', description: 'Инфо об игроке' },
         { command: 'stats', description: 'Статистика' },
         { command: 'admin', description: 'Все команды админа' },

@@ -188,7 +188,7 @@ function leaveTableScreen(tournamentId) {
 
 // ---------- Навигация ----------
 
-const BACK = { bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
+const BACK = { mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
 
 function go(screen) {
   if (screen !== 'table' && S.screen === 'table' && S.table) S.tableHidden = true;
@@ -214,6 +214,8 @@ function openStart(startParam) {
   const hash = location.hash.slice(1);
   const tId = (startParam?.startsWith('t_') && startParam.slice(2)) || (hash.startsWith('t=') && hash.slice(2));
   if (tId) return openTour(tId);
+  const mId = (startParam?.startsWith('m_') && startParam.slice(2)) || (hash.startsWith('m=') && hash.slice(2));
+  if (mId) return openMixed(mId);
   if (hash === 'tournaments') return go('tours');
   if (hash === 'wallet') return go('wallet');
   if (hash === 'profile') return go('profile');
@@ -225,7 +227,7 @@ window.addEventListener('hashchange', () => S.me && openStart(null));
 function back() {
   if (S.screen === 'combos') return go(S.comboBack || 'lobby');
   if (S.screen === 'table' && S.table?.kind === 'bots' && S.table.locked) return leaveLocked();
-  if (S.screen === 'table' && S.table?.kind === 'bots') return leaveBots();
+  if (S.screen === 'table' && (S.table?.kind === 'bots' || S.table?.kind === 'mixed')) return leaveBots();
   go(BACK[S.screen] || 'lobby');
 }
 
@@ -330,8 +332,15 @@ function botsScreen() {
       h('div', { class: 'label' }, 'Стол'),
       h('div', { class: 'seg' },
         h('button', { class: S.botMode === 'hu' ? 'on' : '', onclick: () => { S.botMode = 'hu'; render(); } }, '1 на 1'),
-        h('button', { class: S.botMode === '6' ? 'on' : '', onclick: () => { S.botMode = '6'; render(); } }, 'Стол на 6'))),
-    h('div', { class: 'field' },
+        h('button', { class: S.botMode === '6' ? 'on' : '', onclick: () => { S.botMode = '6'; render(); } }, 'Стол на 6'),
+        h('button', { class: S.botMode === 'mixed' ? 'on' : '', onclick: () => { S.botMode = 'mixed'; render(); } }, 'С друзьями'))),
+    S.botMode === 'mixed' && h('div', { class: 'field' },
+      h('div', { class: 'label' }, 'Ботов за столом'),
+      h('div', { class: 'choices' }, [0, 1, 2, 3, 4].map((n) =>
+        h('button', { class: (S.mixedBots ?? 2) === n ? 'on' : '', onclick: () => { S.mixedBots = n; render(); } }, n))),
+      h('div', { class: 'small muted', style: 'line-height:1.45' },
+        'Создаёшь стол и зовёшь друзей по ссылке — каждый садится со своими фишками. Боты занимают свободные места (всего до 6). Встать можно в любой момент. Подсказок здесь нет — за столом живые люди.')),
+    S.botMode !== 'mixed' && h('div', { class: 'field' },
       h('div', { class: 'label' }, S.botMode === 'hu' ? 'Соперник' : 'За столом все пятеро'),
       Object.entries(BOT_INFO).map(([name, info]) => h('button', {
         class: `bot ${S.botMode === 'hu' && S.botName === name ? 'on' : ''}`,
@@ -342,7 +351,7 @@ function botsScreen() {
       h('div', { class: 'col', style: 'align-items:flex-end' },
         h('div', { class: 'small muted', style: 'font-size:11px' }, 'агрессия'),
         h('div', { class: 'meter' }, h('div', { style: `width:${info.aggr}%` })))))),
-    h('div', { class: 'field' },
+    S.botMode !== 'mixed' && h('div', { class: 'field' },
       h('div', { class: 'label' }, 'Режим'),
       h('div', { class: 'seg' },
         h('button', { class: !S.botMinutes ? 'on' : '', onclick: () => { S.botMinutes = 0; render(); } }, 'Свободный'),
@@ -357,10 +366,51 @@ function botsScreen() {
       h('div', { class: 'choices' }, (S.lobby?.buyins || [200, 500, 1000, 5000]).map((b) =>
         h('button', { class: S.buyin === b ? 'on' : '', onclick: () => { S.buyin = b; render(); } }, fmt(b)))),
       h('div', { class: 'small muted' }, `Блайнды ${sb} / ${bb} · на балансе ${fmt(S.me.chips)} фишек`)),
-    S.me.isAdmin && h('button', { class: 'btn-ghost', style: 'margin-bottom:70px', onclick: sitDemo }, 'Демо-стол для видео — без фишек, карты выбираешь сам'),
+    S.me.isAdmin && S.botMode !== 'mixed' && h('button', { class: 'btn-ghost', style: 'margin-bottom:70px', onclick: sitDemo }, 'Демо-стол для видео — без фишек, карты выбираешь сам'),
+    !enough ? h('button', { class: 'btn cta', onclick: () => go('wallet') }, 'Пополнить фишки')
+      : S.botMode === 'mixed' ? h('button', { class: 'btn cta', onclick: createMixed }, 'Создать стол и позвать друзей')
+      : h('button', { class: 'btn cta', onclick: sitBots }, 'Сесть за стол'));
+}
+
+// ---------- Стол с друзьями ----------
+
+async function createMixed() {
+  const r = await run({ t: 'createMixed', buyin: S.buyin, bots: S.mixedBots ?? 2 });
+  if (!r) return;
+  go('table');
+  if (r.invite) shareMixed(r.invite);
+}
+
+function shareMixed(invite) {
+  const url = `https://t.me/share/url?url=${encodeURIComponent(invite)}&text=${encodeURIComponent('Го за мой покерный стол!')}`;
+  if (tg?.openTelegramLink) tg.openTelegramLink(url);
+  else navigator.clipboard?.writeText(invite).then(() => toast('Ссылка скопирована'));
+}
+
+function openMixed(id) {
+  S.mixed = null;
+  S.mixedId = id;
+  run({ t: 'mixedInfo', id }).then((r) => {
+    S.mixed = r?.room || false;
+    render();
+  });
+  go('mixed');
+}
+
+function mixedScreen() {
+  const r = S.mixed;
+  if (r === null) return h('div', { class: 'screen' }, header('Стол с друзьями'), h('div', { class: 'center-msg muted' }, 'Загрузка…'));
+  if (!r) return h('div', { class: 'screen' }, header('Стол с друзьями'), h('div', { class: 'center-msg' }, h('div', { class: 'muted' }, 'Этот стол уже закрыт')));
+  const enough = S.me.chips >= r.buyin;
+  return h('div', { class: 'screen' },
+    header('Стол с друзьями'),
+    h('div', { class: 'glass card' },
+      h('div', { class: 'b', style: 'font-size:18px' }, `Стол ${r.host}`),
+      h('div', { class: 'grid3' }, stat('Бай-ин', fmt(r.buyin)), stat('Блайнды', `${Math.max(1, Math.floor(r.bb / 2))}/${r.bb}`), stat('Мест', `${r.seats} из ${r.max}`)),
+      h('div', { class: 'row', style: 'flex-wrap:wrap;gap:6px' }, r.players.map((p) => h('span', { class: 'tag' }, p.bot ? `${p.name} (бот)` : p.name)))),
     enough
-      ? h('button', { class: 'btn cta', onclick: sitBots }, 'Сесть за стол')
-      : h('button', { class: 'btn cta', onclick: () => go('wallet') }, 'Пополнить фишки'));
+      ? h('button', { class: 'btn', onclick: async () => { if (await run({ t: 'joinMixed', id: r.id })) go('table'); } }, `Сесть · бай-ин ${fmt(r.buyin)}`)
+      : h('button', { class: 'btn', onclick: () => go('wallet') }, `Пополнить — бай-ин ${fmt(r.buyin)}`));
 }
 
 async function sitBots() {
@@ -494,6 +544,8 @@ function tableScreen() {
   const info = T.kind === 'tour'
     ? [T.title, h('br'), `Уровень ${T.level} · ${T.sb}/${T.bb} · осталось ${T.alive} из ${T.total}`]
     : T.endsAt ? [T.title, h('br'), h('span', { class: 'ends', 'data-ends': T.endsAt }, `осталось ${clockLeft(T.endsAt)}`)]
+    : T.kind === 'mixed' ? [T.title, h('br'),
+      T.invite ? h('button', { class: 'invite-pill', onclick: () => shareMixed(T.invite) }, `Позвать друзей · мест ${T.seatsFree}`) : `мест свободно: ${T.seatsFree}`]
     : [T.title];
 
   const elo = !T.inHand && T.eloDelta ? Math.round(T.eloDelta) || (T.eloDelta > 0 ? 1 : -1) : 0;
@@ -505,7 +557,7 @@ function tableScreen() {
 
   return h('div', { class: 'table-screen' },
     h('div', { class: 'table-top' },
-      h('button', { class: 'icon-btn', 'aria-label': T.kind === 'bots' ? 'Встать из-за стола' : 'В лобби', onclick: back }, icon('back', 18)),
+      h('button', { class: 'icon-btn', 'aria-label': T.kind === 'tour' ? 'В лобби' : 'Встать из-за стола', onclick: back }, icon('back', 18)),
       h('div', { class: 'title' }, info),
       h('button', { class: 'icon-btn', 'aria-label': 'Справочник комбинаций', onclick: openCombos, style: 'font-weight:800;font-size:17px' }, '?')),
     h('div', { class: 'felt-wrap' },
@@ -997,7 +1049,7 @@ function combosScreen() {
 
 // ---------- Рендер ----------
 
-const SCREENS = { combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
+const SCREENS = { mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
 
 function render() {
   const app = document.getElementById('app');

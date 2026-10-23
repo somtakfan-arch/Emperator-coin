@@ -7,6 +7,7 @@ import { config } from './config.js';
 import { db, upsertUser, getUser, ranks, credit, recoverAfterRestart, addWinnings, WIN_REWARDS, useHint } from './db.js';
 import { verifyInitData, startBot, createInvoice, hooks, inviteLink, bot, notify, openButton, findPack } from './telegram.js';
 import { BotRoom, DemoRoom } from './game/botroom.js';
+import { MixedRoom } from './game/mixedroom.js';
 import { Tournaments } from './game/tournament.js';
 import { BOT_CLASSES } from '../core/bots.js';
 
@@ -21,7 +22,8 @@ const BOTS = BOT_CLASSES.map((C) => {
 
 const sockets = new Map(); // userId -> Set<ws>
 const seen = new Map();
-const botRooms = new Map(); // userId -> BotRoom
+const botRooms = new Map(); // userId -> BotRoom | DemoRoom | MixedRoom (за которым он сидит)
+const mixedRooms = new Map(); // roomId -> MixedRoom (столы с друзьями)
 
 const hub = {
   send(uid, msg) {
@@ -42,6 +44,7 @@ const hub = {
       for (const uid of sockets.keys()) hub.send(uid, { t: 'lobby', ...lobbyView(uid) });
     }, 300);
   },
+  mixedInvite: (id) => (bot.username ? `https://t.me/${bot.username}?start=m_${id}` : null),
   // Чистый выигрыш за сессию → награды Эло на 5 000 и 10 000
   onWinnings(uid, net) {
     for (const r of addWinnings(uid, net)) {
@@ -62,7 +65,7 @@ const tournaments = new Tournaments(hub);
 
 function activeTable(uid) {
   const room = botRooms.get(uid);
-  if (room && !room.table.closed) return { table: room.table, seat: room.seat };
+  if (room && !room.table.closed) return { table: room.table, seat: room.seatOf ? room.seatOf(uid) : room.seat };
   const t = tournaments.tableOf(uid);
   if (t) return { table: t.table, seat: t.table.players.find((p) => p.id === uid).bot };
   return null;
@@ -132,8 +135,32 @@ const handlers = {
     }
     return null;
   },
-  leave: (uid) => (botRooms.get(uid)?.leave(), { t: 'ok' }),
-  rebuy: (uid) => (botRooms.get(uid)?.rebuy(), { t: 'ok' }),
+  leave: (uid) => (botRooms.get(uid)?.leave(uid), { t: 'ok' }),
+  rebuy: (uid) => (botRooms.get(uid)?.rebuy(uid), { t: 'ok' }),
+  // стол с друзьями: создать, посмотреть по ссылке, сесть
+  createMixed(uid, m) {
+    if (activeTable(uid)) throw new Error('Ты уже за столом');
+    const room = MixedRoom.open(hub, getUser(uid), { buyin: Number(m.buyin), bots: Number(m.bots) });
+    mixedRooms.set(room.id, room);
+    botRooms.set(uid, room);
+    hub.sendMe(uid);
+    return { t: 'mixedCreated', id: room.id, invite: bot.username ? `https://t.me/${bot.username}?start=m_${room.id}` : null };
+  },
+  mixedInfo(uid, m) {
+    const room = mixedRooms.get(String(m.id));
+    if (!room || room.table.closed) return { t: 'mixedInfo', room: null };
+    return { t: 'mixedInfo', room: room.info(), invite: bot.username ? `https://t.me/${bot.username}?start=m_${room.id}` : null };
+  },
+  joinMixed(uid, m) {
+    const room = mixedRooms.get(String(m.id));
+    if (!room || room.table.closed) throw new Error('Стол уже закрыт');
+    if (botRooms.get(uid) === room) return { t: 'ok' };
+    if (activeTable(uid)) throw new Error('Ты уже за другим столом');
+    room.join(getUser(uid));
+    botRooms.set(uid, room);
+    hub.sendMe(uid);
+    return { t: 'ok' };
+  },
   // демо-стол для видео — только админ, без фишек и Эло
   sitDemo(uid, m) {
     if (!config.adminIds.includes(uid)) throw new Error('Нет доступа');
@@ -251,6 +278,7 @@ recoverAfterRestart();
 tournaments.ensureBig();
 setInterval(() => {
   try { tournaments.tick(); } catch (e) { console.error('tick', e); }
+  for (const [id, room] of mixedRooms) if (room.table.closed) mixedRooms.delete(id);
 }, 5000);
 
 server.listen(config.port, () => {

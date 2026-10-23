@@ -158,6 +158,7 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
 .toast.show { transform: translateX(-50%) translateY(0); }
 .center-msg { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; min-height: 60vh; }
 
+.invite-pill { margin-top: 4px; height: 26px; padding: 0 12px; border-radius: 13px; border: 1px solid rgba(127,209,168,0.6); background: rgba(127,209,168,0.15); color: #bff0d6; font-size: 12px; font-weight: 700; }
 .hint-btn { display: flex; align-items: center; justify-content: space-between; height: 38px; padding: 0 14px; border-radius: 12px; border: 1px solid rgba(242,201,76,0.6); background: rgba(242,201,76,0.12); color: #f7dd8a; font-weight: 700; font-size: 14px; }
 .hint-count { font-size: 12px; font-weight: 600; color: var(--soft); }
 .hint-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 14px; border: 1px solid rgba(242,201,76,0.6); background: rgba(242,201,76,0.1); }

@@ -196,7 +196,8 @@ export class DemoRoom {
     this.table.eventHook = (e) => this.advisor.observe(e);
     this.table.beforeHand = () => {
       if (this.leaving) return this.close();
-      for (const p of this.table.players) if (p.isBot && p.stack < DEMO_STACK) p.stack = DEMO_STACK;
+      // демо: у всех, включая тебя, стек пополняется сам — раздачи не останавливаются
+      for (const p of this.table.players) if (p.stack < DEMO_STACK) p.stack = DEMO_STACK;
     };
   }
 

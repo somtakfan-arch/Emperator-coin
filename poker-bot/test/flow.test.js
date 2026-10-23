@@ -277,3 +277,39 @@ test('подсказка: без покупки нельзя, после пок�
   await c.waitFor((m) => m.t === 'left', 30000);
   c.close();
 });
+
+test('стол с друзьями: двое людей + боты, чужие карты скрыты, фишки сходятся', async () => {
+  const host = new Client(9101);
+  const friend = new Client(9102);
+  await host.ready; await friend.ready;
+  await host.req({ t: 'invoice', pack: 'p1' });
+  await friend.req({ t: 'invoice', pack: 'p1' });
+  const created = await host.req({ t: 'createMixed', buyin: 500, bots: 2 });
+  const info = await friend.req({ t: 'mixedInfo', id: created.id });
+  assert.equal(info.room.buyin, 500);
+  await friend.req({ t: 'joinMixed', id: created.id });
+  // ждём раздачу, где оба человека получили карты
+  const snap = await friend.waitFor((m) => m.t === 'table' && m.table?.kind === 'mixed'
+    && m.table.seats.filter((s) => !s.isBot).length === 2 && m.table.inHand
+    && m.table.seats.find((s) => s.me)?.cards, 60000);
+  const hostSeat = snap.table.seats.find((s) => s.id === 9101);
+  if (!hostSeat.hand) assert.equal(hostSeat.cards, null, 'карты хоста другу не видны');
+  assert.equal(snap.table.seats.filter((s) => s.isBot).length, 2);
+  await host.waitFor((m) => m.t === 'turn', 60000);
+  await assert.rejects(host.req({ t: 'hint' }), /только с ботами|с ботами/);
+  // играем пару раздач и встаём
+  await friend.waitFor((m) => m.t === 'table' && m.table?.handId >= snap.table.handId + 2, 60000).catch(() => {});
+  host.ws.send(JSON.stringify({ t: 'leave' }));
+  const hl = await host.waitFor((m) => m.t === 'left', 30000);
+  friend.ws.send(JSON.stringify({ t: 'leave' }));
+  const fl = await friend.waitFor((m) => m.t === 'left', 30000);
+  await new Promise((r) => setTimeout(r, 50));
+  const h = assertLedger(9101), f = assertLedger(9102);
+  assert.equal(h.in_play + f.in_play, 0);
+  assert.ok(h.chips + f.chips >= 0);
+  assert.equal(h.chips, 4500 + hl.stack);
+  assert.equal(f.chips, 4500 + fl.stack);
+  const closed = await friend.req({ t: 'mixedInfo', id: created.id });
+  assert.equal(closed.room, null, 'стол закрылся, когда люди ушли');
+  host.close(); friend.close();
+});
