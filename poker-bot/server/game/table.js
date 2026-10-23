@@ -201,6 +201,7 @@ export class GameTable {
         hand: v.shown[w.id]?.hand ?? null,
       }));
     }
+    this.eventHook?.(e);
     this.broadcast();
   }
 

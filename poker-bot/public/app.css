@@ -192,3 +192,7 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
 @keyframes winPulse { 50% { transform: scale(1.06); } }
 
 .ends { font-weight: 700; color: #fff; font-variant-numeric: tabular-nums; }
+
+.elo { font-weight: 800; margin-left: 4px; }
+.elo.up { color: #7fd1a8; }
+.elo.down { color: #ff8a80; }

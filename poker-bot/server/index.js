@@ -88,7 +88,7 @@ const handlers = {
   tour: (uid, m) => ({ t: 'tour', tour: tournaments.one(m.id, uid), invite: bot.username ? inviteLink(m.id) : null }),
   top: () => ({
     t: 'top',
-    rating: db.prepare('SELECT name, rating, games FROM users WHERE games > 0 ORDER BY rating DESC LIMIT 20').all()
+    rating: db.prepare('SELECT name, rating, games FROM users WHERE games > 0 OR rating <> 1500 ORDER BY rating DESC LIMIT 20').all()
       .map((r) => ({ ...r, rating: Math.round(r.rating) })),
   }),
   createT: (uid, m) => ({ t: 'created', id: tournaments.create(getUser(uid), m.tour || {}) }),

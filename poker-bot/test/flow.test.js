@@ -111,6 +111,10 @@ test('старт с нулём, пополнение (DEV), стол проти�
   // бот запомнил игрока для следующих столов
   const mem = db.prepare("SELECT data FROM bot_memory WHERE user_id = 1001 AND bot = 'Акула'").get();
   assert.ok(mem && JSON.parse(mem.data).hands > 0, 'память бота о игроке сохранена');
+  // Эло меняется за раздачи с ботами
+  const r = db.prepare('SELECT rating FROM users WHERE id = 1001').get().rating;
+  assert.notEqual(r, 1500, 'Эло изменилось за игру с ботами');
+  assert.ok(c.msgs.some((m) => m.t === 'table' && m.table?.eloDelta), 'стол показывает изменение Эло');
   c.close();
 });
 

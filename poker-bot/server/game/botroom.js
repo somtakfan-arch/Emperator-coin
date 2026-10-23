@@ -41,8 +41,9 @@ export class BotRoom {
     });
     this.table.extra = () => ({
       buyin, canRebuy: this.me.stack === 0, leaving: !!this.leaving,
-      endsAt: this.endsAt || null, locked: this.locked(),
+      endsAt: this.endsAt || null, locked: this.locked(), eloDelta: this.lastElo ?? null,
     });
+    this.table.eventHook = (e) => this.onTableEvent(e);
     this.table.beforeHand = () => this.beforeHand();
     this.table.afterHand = () => this.afterHand();
     setInPlay.run(this.me.stack, this.userId);
@@ -81,6 +82,34 @@ export class BotRoom {
     setInPlay.run(this.me.stack, this.userId);
     if (++this.hands % 10 === 0) this.saveMemory();
     this.hub.sendMe(this.userId);
+  }
+
+  // Эло за раздачу: играл (колл/рейз или вскрытие) — выиграл/проиграл против ботов в раздаче.
+  // Чем крупнее банк, тем больше изменение (2..8). Сбросил блайнд без игры — без изменений.
+  onTableEvent(e) {
+    if (e.type === 'handStart') {
+      this.lastElo = null;
+      this.played = false;
+    } else if (e.type === 'action' && e.id === this.userId && (e.action === 'call' || e.action === 'raise')) {
+      this.played = true;
+    } else if (e.type === 'showdown' && e.reveals.some((r) => r.id === this.userId)) {
+      this.played = true;
+    } else if (e.type === 'handEnd' && this.played) {
+      const mine = e.contributions.find((c) => c.id === this.userId)?.total ?? 0;
+      const won = e.winners.find((w) => w.id === this.userId)?.amount ?? 0;
+      const net = won - mine;
+      if (net === 0) return;
+      const opps = e.contributions.filter((c) => c.id < 0 && c.total > 0)
+        .map((c) => config.botElo[this.bots.find((b) => b.id === c.id)?.name] ?? 1600);
+      if (!opps.length) return;
+      const oppElo = opps.reduce((a, b) => a + b, 0) / opps.length;
+      const u = db.prepare('SELECT rating FROM users WHERE id = ?').get(this.userId);
+      const expected = 1 / (1 + 10 ** ((oppElo - u.rating) / 400));
+      const k = Math.min(8, 2 + Math.abs(net) / this.table.bb / 10);
+      const delta = k * ((net > 0 ? 1 : 0) - expected);
+      db.prepare('UPDATE users SET rating = rating + ? WHERE id = ?').run(delta, this.userId);
+      this.lastElo = Math.round(delta * 10) / 10;
+    }
   }
 
   saveMemory() {
