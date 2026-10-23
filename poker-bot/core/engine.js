@@ -42,7 +42,9 @@ export class Table {
     const bbIdx = n === 2 ? 0 : 1;
     const positions = hs.map((_, i) => positionName(i, n, sbIdx, bbIdx));
 
-    const deck = shuffle(newDeck(), this.deckRng);
+    let deck = shuffle(newDeck(), this.deckRng);
+    // только демо-стол админа задаёт этот хук; на обычных столах и в турнирах его нет
+    if (this.demoDeck) deck = this.demoDeck(deck, ps.map((p) => p.id));
     for (const h of hs) h.hole = [deck.pop(), deck.pop()];
     for (const h of hs) h.p.bot?.deal?.(h.hole.slice());
     const board = [];

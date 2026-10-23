@@ -196,3 +196,15 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
 .elo { font-weight: 800; margin-left: 4px; }
 .elo.up { color: #7fd1a8; }
 .elo.down { color: #ff8a80; }
+
+/* ---------- Демо-стол: выбор карт ---------- */
+.pick-btn { width: 22px; height: 22px; border-radius: 50%; border: 1px solid var(--line); background: rgba(10,20,22,0.8); color: #fff; font-size: 12px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.planned { font-size: 11px; font-weight: 700; padding: 2px 6px; border-radius: 8px; background: rgba(242,201,76,0.9); color: var(--ink); white-space: nowrap; }
+.picker-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 60; display: flex; align-items: flex-end; justify-content: center; }
+.picker { width: 100%; max-width: 520px; padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); border-radius: 22px 22px 0 0; display: flex; flex-direction: column; gap: 10px; background: rgba(12,24,26,0.96); }
+.pk-grid { display: grid; grid-template-columns: repeat(13, minmax(0, 1fr)); gap: 3px; }
+.pk { height: 38px; padding: 0; border-radius: 6px; border: 1px solid rgba(0,0,0,0.2); background: #f4f6f7; color: var(--ink); font-size: 11px; font-weight: 800; position: relative; }
+.pk.red { color: var(--red); }
+.pk.on { outline: 3px solid #f2c94c; outline-offset: -1px; }
+.pk:disabled { opacity: 0.2; }
+.pk sup { position: absolute; top: 1px; right: 2px; font-size: 8px; color: var(--ink); }

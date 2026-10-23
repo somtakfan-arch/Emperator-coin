@@ -156,3 +156,100 @@ export class BotRoom {
     this.hub.onRoomClosed(this.userId, this, stack, this.endsAt ? stack - this.invested : null, !!this.kicked);
   }
 }
+
+// Демо-стол — только для админа (для видео). Фишки ненастоящие: баланс, Эло и память ботов
+// не трогаются, стол видит только сам админ. Можно задать карты на следующую раздачу.
+const DEMO_STACK = 1000;
+
+export class DemoRoom {
+  constructor(hub, user, { mode, botName }) {
+    this.hub = hub;
+    this.userId = user.id;
+    this.plan = null;
+    const names = mode === 'hu' ? [botName] : BOT_CLASSES.map((C) => new C({}).name);
+    this.table = new GameTable({
+      id: `d${user.id}`, kind: 'bots', hub, sb: 5, bb: 10,
+      title: `Демо · ${mode === 'hu' ? '1 на 1' : 'стол на 6'} · 5/10`,
+    });
+    this.seat = new HumanSeat(user.id, hub);
+    this.me = { id: user.id, name: user.name, stack: DEMO_STACK, bot: this.seat, isBot: false };
+    this.table.addPlayer(this.me);
+    names.forEach((name, i) => {
+      const C = BOT_CLASSES.find((K) => new K({}).name === name);
+      const bot = new C({ iters: 300 });
+      bot.id = -(i + 1);
+      this.table.addPlayer({ id: bot.id, name: bot.name, stack: DEMO_STACK, bot: botSeat(bot, this.table), isBot: true });
+    });
+    this.table.extra = () => ({ demo: true, plan: this.plan, canRebuy: this.me.stack === 0 });
+    this.table.engine.demoDeck = (deck, ids) => this.applyPlan(deck, ids);
+    this.table.beforeHand = () => {
+      if (this.leaving) return this.close();
+      for (const p of this.table.players) if (p.isBot && p.stack < DEMO_STACK) p.stack = DEMO_STACK;
+    };
+  }
+
+  static open(hub, user, opts) {
+    if (opts.mode === 'hu' && !BOT_CLASSES.some((C) => new C({}).name === opts.botName)) throw new Error('Нет такого бота');
+    const room = new DemoRoom(hub, user, opts);
+    room.table.run();
+    return room;
+  }
+
+  // План на следующую раздачу: { holes: { [id]: [c1, c2] }, board: [до 5 карт] }
+  setPlan(plan) {
+    const ids = new Set(this.table.players.map((p) => p.id));
+    const holes = {};
+    const all = [];
+    for (const [id, cards] of Object.entries(plan?.holes || {})) {
+      if (!ids.has(Number(id))) throw new Error('Нет такого игрока');
+      if (!Array.isArray(cards) || cards.length !== 2) throw new Error('Игроку нужно ровно 2 карты');
+      holes[Number(id)] = cards.map(Number);
+      all.push(...holes[Number(id)]);
+    }
+    const board = (plan?.board || []).map(Number);
+    if (board.length > 5) throw new Error('На столе максимум 5 карт');
+    all.push(...board);
+    if (all.some((c) => !Number.isInteger(c) || c < 0 || c > 51)) throw new Error('Неверная карта');
+    if (new Set(all).size !== all.length) throw new Error('Одна карта выбрана дважды');
+    this.plan = all.length ? { holes, board } : null;
+    this.table.broadcast();
+  }
+
+  // Колода раскладывается в порядке раздачи движка: карты игроков, сжиг, флоп, сжиг, тёрн, сжиг, ривер
+  applyPlan(deck, ids) {
+    const plan = this.plan;
+    if (!plan) return deck;
+    this.plan = null;
+    const fixed = new Set([...Object.values(plan.holes).flat(), ...plan.board]);
+    const rest = deck.filter((c) => !fixed.has(c));
+    const seq = [];
+    for (const id of ids) {
+      const h = plan.holes[id];
+      seq.push(h ? h[0] : rest.pop(), h ? h[1] : rest.pop());
+    }
+    const b = plan.board;
+    seq.push(rest.pop(), b[0] ?? rest.pop(), b[1] ?? rest.pop(), b[2] ?? rest.pop());
+    seq.push(rest.pop(), b[3] ?? rest.pop());
+    seq.push(rest.pop(), b[4] ?? rest.pop());
+    return rest.concat(seq.reverse()); // движок берёт с конца
+  }
+
+  rebuy() {
+    if (this.me.stack === 0) this.me.stack = DEMO_STACK;
+    this.table.broadcast();
+  }
+
+  leave() {
+    this.leaving = true;
+    this.seat.sittingOut = true;
+    this.seat.forceFold();
+    if (!this.table.inHand) this.close();
+    else this.table.broadcast();
+  }
+
+  close() {
+    if (this.table.closed) return;
+    this.table.closed = true;
+    this.hub.onRoomClosed(this.userId, this, 0);
+  }
+}

@@ -355,6 +355,7 @@ function botsScreen() {
       h('div', { class: 'choices' }, (S.lobby?.buyins || [200, 500, 1000, 5000]).map((b) =>
         h('button', { class: S.buyin === b ? 'on' : '', onclick: () => { S.buyin = b; render(); } }, fmt(b)))),
       h('div', { class: 'small muted' }, `Блайнды ${sb} / ${bb} · на балансе ${fmt(S.me.chips)} фишек`)),
+    S.me.isAdmin && h('button', { class: 'btn-ghost', style: 'margin-bottom:70px', onclick: sitDemo }, 'Демо-стол для видео — без фишек, карты выбираешь сам'),
     enough
       ? h('button', { class: 'btn cta', onclick: sitBots }, 'Сесть за стол')
       : h('button', { class: 'btn cta', onclick: () => go('wallet') }, 'Пополнить фишки'));
@@ -363,6 +364,64 @@ function botsScreen() {
 async function sitBots() {
   const r = await run({ t: 'sitBots', mode: S.botMode, botName: S.botName, buyin: S.buyin, minutes: S.botMinutes });
   if (r) go('table');
+}
+
+async function sitDemo() {
+  const r = await run({ t: 'sitDemo', mode: S.botMode, botName: S.botName });
+  if (r) go('table');
+}
+
+// ---------- Демо-стол: выбор карт на следующую раздачу (только админ) ----------
+
+const cardText = (c) => (RANKS[c >> 2] === 'T' ? '10' : RANKS[c >> 2]) + SUITS[c & 3];
+
+function openPicker(target) {
+  const plan = S.table?.plan || { holes: {}, board: [] };
+  const sel = target.board ? [...(plan.board || [])] : [...(plan.holes?.[target.hole] || [])];
+  S.pick = { target, sel };
+  render();
+}
+
+function pickerModal(T) {
+  const p = S.pick;
+  const plan = T.plan || { holes: {}, board: [] };
+  const max = p.target.board ? 5 : 2;
+  // карты, уже занятые другими местами плана
+  const taken = new Set([
+    ...Object.entries(plan.holes || {}).filter(([id]) => p.target.board || Number(id) !== p.target.hole).flatMap(([, cs]) => cs),
+    ...(p.target.board ? [] : plan.board || []),
+  ]);
+  const who = p.target.board ? 'Карты стола: флоп, тёрн, ривер (по порядку)'
+    : `Карты: ${T.seats.find((s) => s.id === p.target.hole)?.me ? 'тебе' : T.seats.find((s) => s.id === p.target.hole)?.name}`;
+  const save = (sel) => {
+    const next = { holes: { ...(plan.holes || {}) }, board: [...(plan.board || [])] };
+    if (p.target.board) next.board = sel;
+    else if (sel.length === 2) next.holes[p.target.hole] = sel;
+    else delete next.holes[p.target.hole];
+    S.pick = null;
+    run({ t: 'demoPlan', plan: next });
+    render();
+  };
+  const grid = [];
+  for (let s = 0; s < 4; s++)
+    for (let r = 12; r >= 0; r--) {
+      const c = r * 4 + s;
+      const i = p.sel.indexOf(c);
+      grid.push(h('button', {
+        class: `pk ${(s === 1 || s === 2) ? 'red' : ''} ${i >= 0 ? 'on' : ''}`,
+        disabled: taken.has(c) || (i < 0 && p.sel.length >= max),
+        onclick: () => { i >= 0 ? p.sel.splice(i, 1) : p.sel.push(c); render(); },
+      }, cardText(c), i >= 0 && p.target.board ? h('sup', {}, i + 1) : null));
+    }
+  return h('div', { class: 'picker-bg' },
+    h('div', { class: 'picker glass' },
+      h('div', { class: 'b' }, who),
+      h('div', { class: 'small muted' }, `Выбрано ${p.sel.length} из ${max}. Сработает на следующей раздаче, остальное — случайно.`),
+      h('div', { class: 'pk-grid' }, grid),
+      h('div', { class: 'grid2' },
+        h('button', { class: 'btn-ghost', onclick: () => save([]) }, 'Очистить'),
+        h('button', { class: 'btn', style: 'height:46px;font-size:14px', disabled: !p.target.board && p.sel.length === 1, onclick: () => save(p.sel) }, 'Готово')),
+      h('button', { class: 'btn-ghost', onclick: () => { S.pick = null; render(); } }, 'Отмена')));
 }
 
 // ---------- Стол ----------
@@ -411,7 +470,10 @@ function tableScreen() {
       h('div', { class: 'col', style: 'gap:0;min-width:0' },
         h('div', { class: 'nm' }, s.me ? 'Ты' : s.name),
         h('div', { class: 'st' }, s.allIn ? 'олл-ин' : fmt(s.stack))));
+    const planned = T.demo && T.plan?.holes?.[s.id];
     const extras = h('div', { class: 'row', style: 'gap:4px;min-height:20px' },
+      T.demo && h('button', { class: 'pick-btn', 'aria-label': `Выбрать карты: ${s.me ? 'мне' : s.name}`, onclick: () => openPicker({ hole: s.id }) }, '✎'),
+      planned && h('span', { class: 'planned' }, planned.map(cardText).join(' ')),
       T.buttonId === s.id && h('div', { class: 'dealer', title: 'Баттон' }, 'D'),
       s.bet > 0 ? h('div', { class: 'chip-bet', 'data-bet': s.id }, h('span', { class: `chip-ico ${chipColor(s.bet, T.bb)}` }), fmt(s.bet))
         : s.last ? h('div', { class: 'chip-last' }, s.last) : null);
@@ -448,12 +510,16 @@ function tableScreen() {
       h('div', { class: 'felt' }),
       h('div', { class: 'center' },
         h('div', { class: 'pot-chips', id: 'pot-chips' }, !(T.result && !T.inHand) && chipStacks(T.pot - T.seats.reduce((a, x) => a + x.bet, 0), T.bb)),
-        h('div', { class: 'pot' }, 'Банк ', h('b', {}, fmt(T.pot))),
-        h('div', { class: 'board' }, board)),
+        h('div', { class: 'pot' }, 'Банк ', h('b', {}, fmt(T.pot)),
+          T.demo && T.plan?.board?.length ? h('span', { class: 'planned', style: 'margin-left:6px' }, T.plan.board.map(cardText).join(' ')) : null),
+        h('div', { class: 'board', style: 'align-items:center' },
+          T.demo && h('button', { class: 'pick-btn', 'aria-label': 'Выбрать карты стола', onclick: () => openPicker({ board: true }) }, '✎'),
+          board)),
       others.map((s, i) => seatEl(s, spots[i])),
       mySeat && seatEl(mySeat, 'bottom')),
     result,
-    actionPanel(T, mySeat, myTurn));
+    actionPanel(T, mySeat, myTurn),
+    T.demo && S.pick && pickerModal(T));
 }
 
 // ---------- Фишки и анимации ----------

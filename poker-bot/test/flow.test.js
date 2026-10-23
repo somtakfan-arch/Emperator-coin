@@ -10,6 +10,7 @@ process.env.DEV = '1';
 process.env.SPEED = '0';
 process.env.TURN_SECONDS = '3';
 process.env.TIMED_MINUTES = '0.05,10'; // 3 секунды — для теста
+process.env.ADMIN_IDS = '7001';
 process.env.PORT = String(4100 + Math.floor(Math.random() * 500));
 process.env.DATA_DIR = mkdtempSync(tmpdir() + '/poker-test-');
 
@@ -210,4 +211,33 @@ test('свободный стол: 2 пропущенных хода подря�
   assert.equal(u.chips, 4500 + left.stack);
   assert.ok(c.msgs.some((m) => typeof m.now === 'number'), 'сервер присылает своё время');
   c.close();
+});
+
+test('демо-стол: только админ, заданные карты приходят, баланс и Эло не трогаются', async () => {
+  const x = new Client(7002);
+  await x.ready;
+  await assert.rejects(x.req({ t: 'sitDemo', mode: 'hu', botName: 'Скала' }), /Нет доступа/);
+  x.close();
+
+  const a = new Client(7001);
+  await a.ready;
+  const before = db.prepare('SELECT chips, rating FROM users WHERE id = 7001').get();
+  await a.req({ t: 'sitDemo', mode: 'hu', botName: 'Скала' });
+  await a.waitFor((m) => m.t === 'table' && m.table?.demo);
+  const AS = 12 * 4, AH = 12 * 4 + 1, KS = 11 * 4, KH = 11 * 4 + 1; // тузы и короли
+  const board = [12 * 4 + 2, 12 * 4 + 3, 2 * 4, 3 * 4 + 1, 7 * 4 + 2];
+  await assert.rejects(a.req({ t: 'demoPlan', plan: { holes: { 7001: [AS, AS] } } }), /дважды/);
+  await a.req({ t: 'demoPlan', plan: { holes: { 7001: [AS, AH], '-1': [KS, KH] }, board } });
+  // ждём раздачу, где у нас AA и на столе заданный борд
+  const hand = await a.waitFor((m) => m.t === 'table' && m.table?.board?.length === 5
+    && m.table.seats.find((s) => s.me)?.cards?.join() === [AS, AH].join(), 60000);
+  assert.deepEqual(hand.table.board, board);
+  a.ws.send(JSON.stringify({ t: 'leave' }));
+  await a.waitFor((m) => m.t === 'left');
+  await new Promise((r) => setTimeout(r, 50));
+  const after = db.prepare('SELECT chips, rating, in_play FROM users WHERE id = 7001').get();
+  assert.equal(after.chips, before.chips);
+  assert.equal(after.rating, before.rating);
+  assert.equal(after.in_play, 0);
+  a.close();
 });

@@ -6,7 +6,7 @@ import { WebSocketServer } from 'ws';
 import { config } from './config.js';
 import { db, upsertUser, getUser, ranks, credit, recoverAfterRestart } from './db.js';
 import { verifyInitData, startBot, createInvoice, hooks, inviteLink, bot } from './telegram.js';
-import { BotRoom } from './game/botroom.js';
+import { BotRoom, DemoRoom } from './game/botroom.js';
 import { Tournaments } from './game/tournament.js';
 import { BOT_CLASSES } from '../core/bots.js';
 
@@ -65,6 +65,7 @@ function meView(uid) {
   const act = activeTable(uid);
   return {
     id: u.id, name: u.name, chips: u.chips, inPlay: u.in_play, rating: Math.round(u.rating),
+    isAdmin: config.adminIds.includes(u.id),
     games: u.games, wins: u.wins, ...ranks(uid),
     bonus: config.dailyBonus > 0 ? { amount: config.dailyBonus, readyAt: u.bonus_at + 86400000 } : null,
     table: act ? { id: act.table.id, kind: act.table.kind } : null,
@@ -123,6 +124,20 @@ const handlers = {
   },
   leave: (uid) => (botRooms.get(uid)?.leave(), { t: 'ok' }),
   rebuy: (uid) => (botRooms.get(uid)?.rebuy(), { t: 'ok' }),
+  // демо-стол для видео — только админ, без фишек и Эло
+  sitDemo(uid, m) {
+    if (!config.adminIds.includes(uid)) throw new Error('Нет доступа');
+    if (activeTable(uid)) throw new Error('Ты уже за столом');
+    botRooms.set(uid, DemoRoom.open(hub, getUser(uid), { mode: m.mode === '6' ? '6' : 'hu', botName: m.botName }));
+    hub.sendMe(uid);
+    return { t: 'ok' };
+  },
+  demoPlan(uid, m) {
+    const room = botRooms.get(uid);
+    if (!config.adminIds.includes(uid) || !(room instanceof DemoRoom)) throw new Error('Только на демо-столе');
+    room.setPlan(m.plan);
+    return { t: 'ok' };
+  },
   async invoice(uid, m) {
     const pack = config.packs.find((p) => p.id === m.pack);
     if (!pack) throw new Error('Нет такого пакета');
