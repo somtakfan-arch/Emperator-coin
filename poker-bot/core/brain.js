@@ -353,11 +353,14 @@ export class EliteBot {
   // шансы против вероятного диапазона соперника и сам диапазон.
   // known: { id: [карта, карта] } — настоящие карты ботов (только за столом с ботами):
   // тогда шансы считаются против их реальных рук.
-  analyze(s, known = null) {
+  // next: карты, которые ещё выйдут на стол (тёрн, ривер…).
+  analyze(s, known = null, next = null) {
     this.board = s.board;
     const opps = s.players.filter((p) => !p.me && !p.folded);
     for (const o of opps) if (!this.ranges.has(o.id)) this.ranges.set(o.id, new Float64Array(N).fill(1));
     this.p = { ...this.base, fear: 0, jam: 0 }; // советник без страха и без «любви к пушам» — чистый расчёт
+    // известно всё: карты соперников и будущие карты стола — исход раздачи уже решён
+    if (known && next && opps.every((o) => known[o.id])) return this.sureAdvice(s, opps, known, next);
     const saved = this.ranges;
     if (known) {
       this.ranges = new Map(saved);
@@ -399,6 +402,30 @@ export class EliteBot {
       opp: main?.o.name ?? null,
       range: main && !known ? rangeSummary(main.w, main.tot, s.board) : [],
       cards: known ? opps.filter((o) => known[o.id]).map((o) => ({ name: o.name, cards: known[o.id] })) : null,
+    };
+  }
+
+  // Совет, когда видно всё: сравниваем итоговые руки на полной доске.
+  // Выигрываешь — ставишь/повышаешь, чтобы забрать больше; проигрываешь — чек или фолд.
+  sureAdvice(s, opps, known, next) {
+    const board = s.board.concat(next).slice(0, 5);
+    const mine = evaluate(s.hole.concat(board));
+    const best = Math.max(...opps.map((o) => evaluate(known[o.id].concat(board))));
+    const eq = mine > best ? 1 : mine === best ? 0.5 : 0;
+    const canRaise = s.stack > s.toCall && opps.some((o) => !o.allIn);
+    let action;
+    if (eq === 1 && canRaise) action = { type: 'raise', to: this.raiseTo(s, s.toCall > 0 ? 1 : 0.66) };
+    else if (eq > 0 && s.toCall > 0) action = { type: 'call' };
+    else action = s.toCall > 0 ? { type: 'fold' } : { type: 'check' };
+    return {
+      eq,
+      potOdds: s.toCall > 0 ? s.toCall / (s.pot + s.toCall) : 0,
+      action,
+      opp: null,
+      range: [],
+      cards: opps.map((o) => ({ name: o.name, cards: known[o.id] })),
+      next,
+      sure: eq === 1 ? 'win' : eq === 0.5 ? 'tie' : 'lose',
     };
   }
 

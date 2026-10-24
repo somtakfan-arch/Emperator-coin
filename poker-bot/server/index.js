@@ -198,7 +198,14 @@ const handlers = {
     // за столом только ты и боты — подсказка видит их настоящие карты
     const known = {};
     for (const p of room.table.players) if (p.isBot && p.bot.hole) known[p.id] = p.bot.hole;
-    const a = room.advisor.analyze(pending.state, known);
+    // и карты, которые ещё выйдут на стол (перед каждой улицей одна сжигается)
+    const deck = room.table.engine.deck?.slice() ?? [];
+    const next = [];
+    for (const k of [3, 1, 1].slice({ 0: 0, 3: 1, 4: 2, 5: 3 }[pending.state.board.length])) {
+      deck.pop();
+      for (let i = 0; i < k; i++) next.push(deck.pop());
+    }
+    const a = room.advisor.analyze(pending.state, known, next);
     hub.sendMe(uid);
     return { t: 'hint', ...a };
   },

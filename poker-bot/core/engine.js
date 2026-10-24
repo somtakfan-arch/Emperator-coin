@@ -47,6 +47,7 @@ export class Table {
     if (this.demoDeck) deck = this.demoDeck(deck, ps.map((p) => p.id));
     for (const h of hs) h.hole = [deck.pop(), deck.pop()];
     for (const h of hs) h.p.bot?.deal?.(h.hole.slice());
+    this.deck = deck; // остаток колоды — его видит только подсказка за столом с ботами
     const board = [];
     const actions = [];
     const ctx = { hs, board, actions, positions, street: 'preflop', handId: this.handId };

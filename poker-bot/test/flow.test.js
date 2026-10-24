@@ -273,6 +273,9 @@ test('подсказка: без покупки нельзя, после пок�
   assert.equal(hnt.cards.length, 1, 'видны карты бота');
   assert.equal(hnt.cards[0].name, 'Акула');
   assert.equal(hnt.cards[0].cards.length, 2);
+  assert.equal(hnt.next.length, 5 - c.table.board.length, 'видны будущие карты стола');
+  const seen = new Set([...hnt.cards[0].cards, ...hnt.next]);
+  assert.equal(seen.size, 2 + hnt.next.length, 'карты не повторяются');
   assert.equal(db.prepare('SELECT hints FROM users WHERE id = 9001').get().hints, 4);
   c.ws.send(JSON.stringify({ t: 'act', action: hnt.action }));
   c.ws.send(JSON.stringify({ t: 'leave' }));
