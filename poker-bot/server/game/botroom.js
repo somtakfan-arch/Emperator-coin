@@ -59,7 +59,7 @@ export class BotRoom {
   }
 
   static open(hub, user, opts) {
-    if (!(Number.isInteger(opts.buyin) && opts.buyin >= config.buyinMin && opts.buyin <= config.buyinMax)) throw new Error(`Бай-ин — от ${config.buyinMin} до ${config.buyinMax.toLocaleString('ru')}`);
+    if (!(Number.isSafeInteger(opts.buyin) && opts.buyin >= config.buyinMin)) throw new Error(`Бай-ин — от ${config.buyinMin} фишек`); // сверху — сколько есть на балансе
     if (opts.minutes && !config.timedMinutes.includes(opts.minutes)) throw new Error('Неверное время стола');
     if (opts.mode === 'hu' && !BOT_CLASSES.some((C) => new C({}).name === opts.botName)) throw new Error('Нет такого бота');
     if (!debit(user.id, opts.buyin, 'bots_buyin')) throw new Error('Не хватает фишек — пополни кошелёк');

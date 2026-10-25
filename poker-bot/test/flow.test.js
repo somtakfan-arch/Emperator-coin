@@ -364,6 +364,7 @@ test('свой бай-ин: любая сумма в пределах, блай�
   await c.req({ t: 'invoice', pack: 'p2' });
   await c.waitFor((m) => m.t === 'me' && m.me.chips > 0);
   await assert.rejects(c.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 50 }), /Бай-ин — от/);
+  await assert.rejects(c.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 10_000_000 }), /Не хватает/);
   await c.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 1234 });
   const snap = await c.waitFor((m) => m.t === 'table' && m.table?.buyin === 1234);
   assert.equal(snap.table.bb, 12);

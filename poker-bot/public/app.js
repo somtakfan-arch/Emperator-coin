@@ -329,7 +329,7 @@ function botsScreen() {
     return `Блайнды ${Math.max(1, Math.floor(bb / 2))} / ${bb} · на балансе ${fmt(S.me.chips)} фишек`;
   };
   const presets = S.lobby?.buyins || [200, 500, 1000, 5000];
-  const min = S.lobby?.buyinMin || 100, max = S.lobby?.buyinMax || 1000000;
+  const min = S.lobby?.buyinMin || 100, max = Math.max(min, S.me.chips); // сверху — весь баланс
   const enough = S.me.chips >= S.buyin;
   return h('div', { class: 'screen' },
     header('Против ботов'),
@@ -369,11 +369,12 @@ function botsScreen() {
     h('div', { class: 'field', style: 'padding-bottom:70px' },
       h('div', { class: 'label' }, 'Бай-ин (100 больших блайндов)'),
       h('div', { class: 'choices' }, presets.map((b) =>
-        h('button', { class: S.buyin === b ? 'on' : '', onclick: () => { S.buyin = b; render(); } }, fmt(b)))),
+        h('button', { class: S.buyin === b ? 'on' : '', onclick: () => { S.buyin = b; render(); } }, fmt(b))),
+        S.me.chips >= min && h('button', { class: S.buyin === S.me.chips ? 'on' : '', onclick: () => { S.buyin = S.me.chips; render(); } }, 'Всё')),
       // своя сумма
       h('input', {
         class: `buyin-input ${presets.includes(S.buyin) ? '' : 'on'}`, type: 'number', inputmode: 'numeric', min, max, step: 100,
-        placeholder: `Своя сумма: от ${fmt(min)} до ${fmt(max)}`, 'aria-label': 'Своя сумма бай-ина',
+        placeholder: `Своя сумма: от ${fmt(min)} до ${fmt(max)} (весь баланс)`, 'aria-label': 'Своя сумма бай-ина',
         value: presets.includes(S.buyin) ? '' : S.buyin,
         oninput: (e) => {
           const v = Math.floor(Number(e.target.value));

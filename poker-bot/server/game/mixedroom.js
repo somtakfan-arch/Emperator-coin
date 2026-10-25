@@ -47,7 +47,7 @@ export class MixedRoom {
   }
 
   static open(hub, host, opts) {
-    if (!(Number.isInteger(opts.buyin) && opts.buyin >= config.buyinMin && opts.buyin <= config.buyinMax)) throw new Error(`Бай-ин — от ${config.buyinMin} до ${config.buyinMax.toLocaleString('ru')}`);
+    if (!(Number.isSafeInteger(opts.buyin) && opts.buyin >= config.buyinMin)) throw new Error(`Бай-ин — от ${config.buyinMin} фишек`); // сверху — сколько есть на балансе
     const bots = Math.floor(Number(opts.bots));
     if (!(bots >= 0 && bots <= 4)) throw new Error('Ботов — от 0 до 4');
     const room = new MixedRoom(hub, host, { buyin: opts.buyin, bots });
