@@ -1,6 +1,7 @@
 // Стол против ботов (кэш-игра): бай-ин списывается с баланса, при выходе стек возвращается.
 // Два режима: свободный (встать можно в любой момент) и на время (встать нельзя, пока не кончится время).
 import { BOT_CLASSES, Hunter } from '../../core/bots.js';
+import { makeBot, isBotName } from '../../core/crowd.js';
 
 // Советник для подсказок: смотрит на стол с места игрока — видит только его карты и чужие ходы
 function makeAdvisor(userId) {
@@ -9,7 +10,7 @@ function makeAdvisor(userId) {
   return a;
 }
 import { GameTable, HumanSeat, botSeat } from './table.js';
-import { handElo } from './elo.js';
+import { handElo, botRating } from './elo.js';
 import { config } from '../config.js';
 import { db, debit, credit } from '../db.js';
 
@@ -39,8 +40,7 @@ export class BotRoom {
     this.me = { id: user.id, name: user.name, stack: buyin, bot: this.seat, isBot: false };
     this.table.addPlayer(this.me);
     names.forEach((name, i) => {
-      const C = BOT_CLASSES.find((K) => new K({}).name === name);
-      const bot = new C({ iters: 300 });
+      const bot = makeBot(name, { iters: 300 });
       bot.id = -(i + 1); // у ботов отрицательные id — не пересекаются с Telegram
       // бот помнит этого игрока с прошлых столов: как часто он рейзит, фолдит, блефует
       const mem = loadMemory.get(user.id, bot.name);
@@ -61,7 +61,7 @@ export class BotRoom {
   static open(hub, user, opts) {
     if (!(Number.isSafeInteger(opts.buyin) && opts.buyin >= config.buyinMin)) throw new Error(`Бай-ин — от ${config.buyinMin} фишек`); // сверху — сколько есть на балансе
     if (opts.minutes && !config.timedMinutes.includes(opts.minutes)) throw new Error('Неверное время стола');
-    if (opts.mode === 'hu' && !BOT_CLASSES.some((C) => new C({}).name === opts.botName)) throw new Error('Нет такого бота');
+    if (opts.mode === 'hu' && !isBotName(opts.botName)) throw new Error('Нет такого бота');
     if (!debit(user.id, opts.buyin, 'bots_buyin')) throw new Error('Не хватает фишек — пополни кошелёк');
     const room = new BotRoom(hub, user, opts);
     room.table.run();
@@ -114,7 +114,7 @@ export class BotRoom {
       const net = won - mine;
       if (net === 0) return;
       const opps = e.contributions.filter((c) => c.id < 0 && c.total > 0)
-        .map((c) => config.botElo[this.bots.find((b) => b.id === c.id)?.name] ?? 1600);
+        .map((c) => botRating(this.bots.find((b) => b.id === c.id)?.name));
       if (!opps.length) return;
       const oppElo = opps.reduce((a, b) => a + b, 0) / opps.length;
       const u = db.prepare('SELECT rating FROM users WHERE id = ?').get(this.userId);
@@ -189,8 +189,7 @@ export class DemoRoom {
     this.me = { id: user.id, name: user.name, stack: DEMO_STACK, bot: this.seat, isBot: false };
     this.table.addPlayer(this.me);
     names.forEach((name, i) => {
-      const C = BOT_CLASSES.find((K) => new K({}).name === name);
-      const bot = new C({ iters: 300 });
+      const bot = makeBot(name, { iters: 300 });
       bot.id = -(i + 1);
       this.table.addPlayer({ id: bot.id, name: bot.name, stack: DEMO_STACK, bot: botSeat(bot, this.table), isBot: true });
     });
@@ -206,7 +205,7 @@ export class DemoRoom {
   }
 
   static open(hub, user, opts) {
-    if (opts.mode === 'hu' && !BOT_CLASSES.some((C) => new C({}).name === opts.botName)) throw new Error('Нет такого бота');
+    if (opts.mode === 'hu' && !isBotName(opts.botName)) throw new Error('Нет такого бота');
     const room = new DemoRoom(hub, user, opts);
     room.table.run();
     return room;

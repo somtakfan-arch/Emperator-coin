@@ -156,7 +156,11 @@ function onMessage(m) {
       break;
     case 'finished':
       toast(m.prize ? `${m.place} место! Приз ${fmt(m.prize)} фишек` : `${m.place} место из ${m.total}`);
-      leaveTableScreen(m.tournamentId);
+      if (m.solo) {
+        S.table = null;
+        S.turn = null;
+        go('tours');
+      } else leaveTableScreen(m.tournamentId);
       break;
     case 'left':
       S.table = null;
@@ -190,7 +194,7 @@ function leaveTableScreen(tournamentId) {
 
 // ---------- Навигация ----------
 
-const BACK = { mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
+const BACK = { solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
 
 function go(screen) {
   if (screen !== 'table' && S.screen === 'table' && S.table) S.tableHidden = true;
@@ -357,7 +361,14 @@ function botsScreen() {
       h('div', { class: 'col', style: 'flex:1' }, h('div', { class: 'b', style: 'font-size:15px' }, name), h('div', { class: 'small soft' }, info.text)),
       h('div', { class: 'col', style: 'align-items:flex-end' },
         h('div', { class: 'small muted', style: 'font-size:11px' }, 'агрессия'),
-        h('div', { class: 'meter' }, h('div', { style: `width:${info.aggr}%` })))))),
+        h('div', { class: 'meter' }, h('div', { style: `width:${info.aggr}%` }))))),
+      // ещё 60 ботов попроще — только для игры 1 на 1
+      S.lobby?.crowd?.length > 0 && h('button', { class: 'btn-ghost', onclick: () => { S.showCrowd = !S.showCrowd; render(); } },
+        S.showCrowd ? 'Скрыть остальных ботов' : `Ещё ${S.lobby.crowd.length} ботов попроще`),
+      S.showCrowd && h('div', { class: 'crowd' }, S.lobby.crowd.map((c) => h('button', {
+        class: `crowd-bot ${S.botMode === 'hu' && S.botName === c.name ? 'on' : ''}`,
+        onclick: () => { S.botName = c.name; S.botMode = 'hu'; render(); },
+      }, h('div', { class: 'b' }, c.name), h('div', { class: 'small muted' }, `${c.kind} · ${c.elo}`))))),
     S.botMode !== 'mixed' && h('div', { class: 'field' },
       h('div', { class: 'label' }, 'Режим'),
       h('div', { class: 'seg' },
@@ -828,6 +839,9 @@ function toursScreen() {
     h('div', { class: 'seg' },
       h('button', { class: S.tab === 'all' ? 'on' : '', onclick: () => { S.tab = 'all'; render(); } }, 'Все'),
       h('button', { class: S.tab === 'mine' ? 'on' : '', onclick: () => { S.tab = 'mine'; render(); } }, 'Мои')),
+    h('button', { class: 'glass card', style: 'background:rgba(127,209,168,0.08)', onclick: () => go('solo') },
+      h('div', { class: 'row between' }, h('div', { style: 'font-size:18px;font-weight:800' }, 'Сольный турнир с ботами'), icon('chev')),
+      h('div', { class: 'small soft', style: 'line-height:1.45' }, 'Старт сразу, в любое время. Ты и боты: 6, 18 или 60 мест, взнос — любой.')),
     big.map(bigCard),
     rest.length > 0 && h('div', { class: 'label', style: 'padding-top:4px' }, 'Турниры игроков'),
     rest.map(sngCard),
@@ -835,6 +849,61 @@ function toursScreen() {
     h('div', { class: 'statbar' },
       h('b', {}, `${me.name}:`), ` Эло `, h('b', {}, me.rating), ` · место `, h('b', {}, fmt(me.ratingPlace)), ` · игр `, h('b', {}, me.games), h('br'),
       `фишки `, h('b', {}, fmt(me.chips)), ` · место по фишкам `, h('b', {}, fmt(me.chipsPlace))));
+}
+
+// ---------- Сольный турнир ----------
+
+function soloScreen() {
+  const cfg = S.lobby?.solo || { sizes: [6, 18, 60], blinds: [2, 3, 6], shares: {} };
+  const size = S.soloSize ?? 18;
+  const blind = S.soloBlind ?? 3;
+  const min = S.lobby?.buyinMin || 100;
+  const buyin = S.soloBuyin ?? 1000;
+  const presets = [500, 1000, 5000, 10000];
+  const pool = size * buyin;
+  const shares = cfg.shares[size] || [1];
+  const prizeText = () => shares.map((s, i) => `${i + 1} место — ${fmt(Math.floor((size * (S.soloBuyin ?? 1000)) * s))}`).join(' · ');
+  const enough = S.me.chips >= buyin;
+  return h('div', { class: 'screen' },
+    header('Сольный турнир'),
+    h('div', { class: 'small soft', style: 'line-height:1.5' },
+      'Ты и боты. Старт сразу. Столы по 6, блайнды растут, вылетевших пересаживают — как в Большом турнире. Вылетел — турнир для тебя закончен, приз по месту.'),
+    h('div', { class: 'field' },
+      h('div', { class: 'label' }, 'Мест'),
+      h('div', { class: 'choices' }, cfg.sizes.map((n) => h('button', { class: size === n ? 'on' : '', onclick: () => { S.soloSize = n; render(); } }, n)))),
+    h('div', { class: 'field' },
+      h('div', { class: 'label' }, 'Блайнды растут каждые'),
+      h('div', { class: 'choices' }, cfg.blinds.map((n) => h('button', { class: blind === n ? 'on' : '', onclick: () => { S.soloBlind = n; render(); } }, `${n} мин`)))),
+    h('div', { class: 'field' },
+      h('div', { class: 'label' }, 'Взнос'),
+      h('div', { class: 'choices' }, presets.map((b) => h('button', { class: buyin === b ? 'on' : '', onclick: () => { S.soloBuyin = b; render(); } }, fmt(b))),
+        S.me.chips >= min && h('button', { class: buyin === S.me.chips ? 'on' : '', onclick: () => { S.soloBuyin = S.me.chips; render(); } }, 'Всё')),
+      h('input', {
+        class: `buyin-input ${presets.includes(buyin) ? '' : 'on'}`, type: 'number', inputmode: 'numeric', min, step: 100,
+        placeholder: `Своя сумма: от ${fmt(min)} до ${fmt(Math.max(min, S.me.chips))}`, 'aria-label': 'Свой взнос',
+        value: presets.includes(buyin) ? '' : buyin,
+        oninput: (e) => {
+          const v = Math.floor(Number(e.target.value));
+          if (v >= min) {
+            S.soloBuyin = v;
+            document.getElementById('solo-pool').textContent = `Призовой фонд ${fmt(size * v)}`;
+            document.getElementById('solo-prizes').textContent = prizeText();
+          }
+        },
+        onchange: () => render(),
+      }),
+      h('div', { class: 'small muted' }, `на балансе ${fmt(S.me.chips)} фишек`)),
+    h('div', { class: 'glass card' },
+      h('div', { class: 'b', id: 'solo-pool' }, `Призовой фонд ${fmt(pool)}`),
+      h('div', { class: 'small soft', id: 'solo-prizes', style: 'line-height:1.5' }, prizeText())),
+    h('div', { style: 'height:70px' }),
+    !enough ? h('button', { class: 'btn cta', onclick: () => go('wallet') }, 'Пополнить фишки')
+      : h('button', { class: 'btn cta', onclick: startSolo }, `Начать · взнос ${fmt(buyin)}`));
+}
+
+async function startSolo() {
+  const r = await run({ t: 'startSolo', buyin: S.soloBuyin ?? 1000, size: S.soloSize ?? 18, blindMin: S.soloBlind ?? 3 });
+  if (r) go('table');
 }
 
 function statusText(t) {
@@ -1095,7 +1164,7 @@ function combosScreen() {
 
 // ---------- Рендер ----------
 
-const SCREENS = { mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
+const SCREENS = { solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
 
 function render() {
   const app = document.getElementById('app');

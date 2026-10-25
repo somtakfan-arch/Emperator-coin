@@ -373,3 +373,25 @@ test('свой бай-ин: любая сумма в пределах, блай�
   assertLedger(9201);
   c.close();
 });
+
+test('сольный турнир с ботами: старт сразу, доигрывается, приз и баланс сходятся', async () => {
+  const c = new Client(9301);
+  await c.ready;
+  await c.req({ t: 'invoice', pack: 'p1' });
+  await c.waitFor((m) => m.t === 'me' && m.me.chips === 5000);
+  await assert.rejects(c.req({ t: 'startSolo', buyin: 1000, size: 7, blindMin: 3 }), /мест/);
+  await c.req({ t: 'startSolo', buyin: 1000, size: 6, blindMin: 2 });
+  const snap = await c.waitFor((m) => m.t === 'table' && m.table?.solo);
+  assert.equal(snap.table.kind, 'tour');
+  assert.equal(snap.table.total, 6);
+  assert.equal(db.prepare('SELECT in_play FROM users WHERE id = 9301').get().in_play, 1000);
+  await assert.rejects(c.req({ t: 'startSolo', buyin: 1000, size: 6, blindMin: 2 }), /уже за столом/);
+  const fin = await c.waitFor((m) => m.t === 'finished' && m.solo, 120000);
+  assert.ok(fin.place >= 1 && fin.place <= 6);
+  await new Promise((r) => setTimeout(r, 50));
+  const u = assertLedger(9301);
+  assert.equal(u.in_play, 0);
+  assert.equal(u.chips, 4000 + fin.prize);
+  assert.equal(fin.prize, [3600, 1800, 600][fin.place - 1] ?? 0); // 6 мест: 60% / 30% / 10% от 6000
+  c.close();
+});

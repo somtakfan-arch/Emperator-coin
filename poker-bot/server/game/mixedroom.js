@@ -2,9 +2,9 @@
 // Каждый садится со своими фишками и может встать в любой момент — стек уходит на баланс.
 // Стол закрывается, когда за ним не осталось людей. Подсказок нет — за столом живые соперники.
 import { randomBytes } from 'node:crypto';
-import { BOT_CLASSES } from '../../core/bots.js';
+import { makeBot } from '../../core/crowd.js';
 import { GameTable, HumanSeat, botSeat } from './table.js';
-import { handElo } from './elo.js';
+import { handElo, botRating } from './elo.js';
 import { config } from '../config.js';
 import { db, debit, credit } from '../db.js';
 
@@ -27,8 +27,7 @@ export class MixedRoom {
     // боты на свободные места: от сильного к слабому, без повторов
     const order = ['Акула', 'Охотник', 'Хамелеон', 'Маньяк', 'Скала'];
     order.slice(0, Math.max(0, Math.min(bots, MAX_SEATS - 1))).forEach((name, i) => {
-      const C = BOT_CLASSES.find((K) => new K({}).name === name);
-      const bot = new C({ iters: 300 });
+      const bot = makeBot(name, { iters: 300 });
       bot.id = -(i + 1);
       this.bots.push(bot);
       this.table.addPlayer({ id: bot.id, name: bot.name, stack: buyin, bot: botSeat(bot, this.table), isBot: true });
@@ -167,7 +166,7 @@ export class MixedRoom {
       for (const r of e.reveals) if (this.humans.has(r.id)) this.humans.get(r.id).played = true;
     } else if (e.type === 'handEnd') {
       const opps = e.contributions.filter((c) => c.id < 0 && c.total > 0)
-        .map((c) => config.botElo[this.bots.find((b) => b.id === c.id)?.name] ?? 1600);
+        .map((c) => botRating(this.bots.find((b) => b.id === c.id)?.name));
       if (!opps.length) return;
       const oppElo = opps.reduce((a, b) => a + b, 0) / opps.length;
       for (const [uid, h] of this.humans) {

@@ -226,3 +226,7 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
 .buyin-input { width: 100%; height: 42px; margin-top: 8px; padding: 0 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); color: #fff; font-size: 15px; font-weight: 600; }
 .buyin-input.on { border-color: rgba(127,209,168,0.8); }
 .buyin-input::placeholder { color: rgba(255,255,255,0.45); font-weight: 500; }
+.crowd { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.crowd-bot { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: #fff; font-size: 13px; text-align: left; min-width: 0; }
+.crowd-bot .b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.crowd-bot.on { border-color: rgba(127,209,168,0.9); background: rgba(127,209,168,0.12); }

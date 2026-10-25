@@ -3,13 +3,15 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { WebSocketServer } from 'ws';
-import { config } from './config.js';
+import { config, payoutShares } from './config.js';
 import { db, upsertUser, getUser, ranks, credit, recoverAfterRestart, addWinnings, WIN_REWARDS, useHint } from './db.js';
 import { verifyInitData, startBot, createInvoice, hooks, inviteLink, bot, notify, openButton, findPack } from './telegram.js';
 import { BotRoom, DemoRoom } from './game/botroom.js';
 import { MixedRoom } from './game/mixedroom.js';
 import { Tournaments } from './game/tournament.js';
+import { SoloTour, SOLO_SIZES, SOLO_BLINDS } from './game/solotour.js';
 import { BOT_CLASSES, Hunter } from '../core/bots.js';
+import { CROWD } from '../core/crowd.js';
 
 const PUBLIC = new URL('../public/', import.meta.url).pathname;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json' };
@@ -18,12 +20,16 @@ const BOTS = BOT_CLASSES.map((C) => {
   return { name: b.name, style: b.style };
 });
 
+const SOLO_VIEW = { sizes: SOLO_SIZES, blinds: SOLO_BLINDS, shares: Object.fromEntries(SOLO_SIZES.map((n) => [n, payoutShares(n)])) };
+const CROWD_VIEW = CROWD.map((c) => ({ name: c.name, kind: c.kind, style: c.style, elo: c.elo }));
+
 // ---------- Хаб: кто онлайн, рассылка ----------
 
 const sockets = new Map(); // userId -> Set<ws>
 const seen = new Map();
 const botRooms = new Map(); // userId -> BotRoom | DemoRoom | MixedRoom (за которым он сидит)
 const mixedRooms = new Map(); // roomId -> MixedRoom (столы с друзьями)
+const solos = new Map(); // userId -> SoloTour (сольный турнир с ботами)
 
 const hub = {
   send(uid, msg) {
@@ -54,6 +60,9 @@ const hub = {
     }
     hub.sendMe(uid);
   },
+  onSoloDone(tour) {
+    if (solos.get(tour.userId) === tour) solos.delete(tour.userId);
+  },
   onRoomClosed(uid, room, stack, net = null, kicked = false) {
     if (botRooms.get(uid) === room) botRooms.delete(uid);
     hub.send(uid, { t: 'left', stack, net, kicked, beatAll: !!room.beatAll });
@@ -66,6 +75,9 @@ const tournaments = new Tournaments(hub);
 function activeTable(uid) {
   const room = botRooms.get(uid);
   if (room && !room.table.closed) return { table: room.table, seat: room.seatOf ? room.seatOf(uid) : room.seat };
+  const solo = solos.get(uid);
+  const st = solo && !solo.done && solo.tableOf(uid);
+  if (st) return { table: st, seat: st.players.find((p) => p.id === uid).bot };
   const t = tournaments.tableOf(uid);
   if (t) return { table: t.table, seat: t.table.players.find((p) => p.id === uid).bot };
   return null;
@@ -89,7 +101,7 @@ function lobbyView(uid) {
   return {
     tournaments: tournaments.list(uid),
     online: sockets.size,
-    packs: config.packs, hintPacks: config.hintPacks, bots: BOTS, buyins: config.botBuyins, buyinMin: config.buyinMin,
+    packs: config.packs, hintPacks: config.hintPacks, bots: BOTS, crowd: CROWD_VIEW, solo: SOLO_VIEW, buyins: config.botBuyins, buyinMin: config.buyinMin,
     sizes: config.tournament.sizes, blindOptions: config.tournament.blindOptions, turnSeconds: config.turnSeconds, timedMinutes: config.timedMinutes,
   };
 }
@@ -160,6 +172,14 @@ const handlers = {
     botRooms.set(uid, room);
     hub.sendMe(uid);
     return { t: 'ok' };
+  },
+  // сольный турнир с ботами — старт сразу
+  startSolo(uid, m) {
+    if (activeTable(uid) || solos.get(uid)) throw new Error('Ты уже за столом');
+    const tour = SoloTour.open(hub, getUser(uid), { buyin: m.buyin, size: m.size, blindMin: m.blindMin });
+    solos.set(uid, tour);
+    hub.sendMe(uid);
+    return { t: 'ok', id: tour.id };
   },
   // демо-стол для видео — только админ, без фишек и Эло
   sitDemo(uid, m) {
