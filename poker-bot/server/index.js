@@ -56,7 +56,7 @@ const hub = {
   },
   onRoomClosed(uid, room, stack, net = null, kicked = false) {
     if (botRooms.get(uid) === room) botRooms.delete(uid);
-    hub.send(uid, { t: 'left', stack, net, kicked });
+    hub.send(uid, { t: 'left', stack, net, kicked, beatAll: !!room.beatAll });
     hub.sendMe(uid);
   },
 };

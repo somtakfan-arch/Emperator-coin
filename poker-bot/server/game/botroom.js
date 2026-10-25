@@ -77,8 +77,12 @@ export class BotRoom {
       this.leaving = true;
     }
     if (this.leaving) return this.close();
-    // боты докупаются до бай-ина
-    for (const p of this.table.players) if (p.isBot && p.stack < this.buyin) p.stack = this.buyin;
+    // боты не докупаются: проиграл весь стек — выбывает
+    for (const p of [...this.table.players]) if (p.isBot && p.stack === 0) this.table.removePlayer(p.id);
+    if (!this.table.players.some((p) => p.isBot)) {
+      this.beatAll = true; // обыграл всех ботов — стол закрывается, стек на баланс
+      return this.close();
+    }
     if (this.me.stack === 0) this.table.broadcast();
   }
 

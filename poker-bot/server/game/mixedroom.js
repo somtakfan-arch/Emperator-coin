@@ -146,7 +146,8 @@ export class MixedRoom {
       this.table.closed = true;
       return;
     }
-    for (const p of this.table.players) if (p.isBot && p.stack < this.buyin) p.stack = this.buyin;
+    // боты не докупаются: проиграл весь стек — выбывает, место свободно для друга
+    for (const p of [...this.table.players]) if (p.isBot && p.stack === 0) this.table.removePlayer(p.id);
   }
 
   afterHand() {

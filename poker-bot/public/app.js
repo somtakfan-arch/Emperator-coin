@@ -161,7 +161,9 @@ function onMessage(m) {
     case 'left':
       S.table = null;
       S.turn = null;
-      toast(m.kicked
+      toast(m.beatAll
+        ? `Ты обыграл всех ботов! На баланс: ${fmt(m.stack)}`
+        : m.kicked
         ? `Тебя убрали со стола: пропущено 2 хода подряд. На баланс: ${fmt(m.stack)}`
         : m.net != null
         ? `Время вышло! Итог: ${m.net >= 0 ? '+' : '−'}${fmt(Math.abs(m.net))} фишек`
