@@ -20,7 +20,7 @@ export class MixedRoom {
     this.hostName = host.name;
     this.buyin = buyin;
     this.humans = new Map(); // uid -> { seat, player, invested, leaving, played }
-    const bb = buyin / 100;
+    const bb = Math.max(2, Math.floor(buyin / 100));
     const sb = Math.max(1, Math.floor(bb / 2));
     this.table = new GameTable({ id: `m${this.id}`, kind: 'mixed', hub, sb, bb, title: `Стол ${host.name} · ${sb}/${bb}` });
     this.bots = [];
@@ -47,7 +47,7 @@ export class MixedRoom {
   }
 
   static open(hub, host, opts) {
-    if (!config.botBuyins.includes(opts.buyin)) throw new Error('Неверный бай-ин');
+    if (!(Number.isInteger(opts.buyin) && opts.buyin >= config.buyinMin && opts.buyin <= config.buyinMax)) throw new Error(`Бай-ин — от ${config.buyinMin} до ${config.buyinMax.toLocaleString('ru')}`);
     const bots = Math.floor(Number(opts.bots));
     if (!(bots >= 0 && bots <= 4)) throw new Error('Ботов — от 0 до 4');
     const room = new MixedRoom(hub, host, { buyin: opts.buyin, bots });

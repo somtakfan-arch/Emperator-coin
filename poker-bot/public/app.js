@@ -324,7 +324,12 @@ function lobbyScreen() {
 // ---------- Против ботов ----------
 
 function botsScreen() {
-  const bb = S.buyin / 100, sb = Math.max(1, Math.floor(bb / 2));
+  const blinds = (b) => {
+    const bb = Math.max(2, Math.floor(b / 100));
+    return `Блайнды ${Math.max(1, Math.floor(bb / 2))} / ${bb} · на балансе ${fmt(S.me.chips)} фишек`;
+  };
+  const presets = S.lobby?.buyins || [200, 500, 1000, 5000];
+  const min = S.lobby?.buyinMin || 100, max = S.lobby?.buyinMax || 1000000;
   const enough = S.me.chips >= S.buyin;
   return h('div', { class: 'screen' },
     header('Против ботов'),
@@ -339,7 +344,7 @@ function botsScreen() {
       h('div', { class: 'choices' }, [0, 1, 2, 3, 4].map((n) =>
         h('button', { class: (S.mixedBots ?? 2) === n ? 'on' : '', onclick: () => { S.mixedBots = n; render(); } }, n))),
       h('div', { class: 'small muted', style: 'line-height:1.45' },
-        'Создаёшь стол и зовёшь друзей по ссылке — каждый садится со своими фишками. Боты занимают свободные места (всего до 6). Встать можно в любой момент. Подсказок здесь нет — за столом живые люди.')),
+        'Создаёшь стол и зовёшь друзей по ссылке — каждый садится со своими фишками. Боты занимают свободные места (всего до 6). Встать можно в любой момент.')),
     S.botMode !== 'mixed' && h('div', { class: 'field' },
       h('div', { class: 'label' }, S.botMode === 'hu' ? 'Соперник' : 'За столом все пятеро'),
       Object.entries(BOT_INFO).map(([name, info]) => h('button', {
@@ -363,9 +368,23 @@ function botsScreen() {
         : 'Встать можно в любой момент — стек сразу вернётся на баланс.')),
     h('div', { class: 'field', style: 'padding-bottom:70px' },
       h('div', { class: 'label' }, 'Бай-ин (100 больших блайндов)'),
-      h('div', { class: 'choices' }, (S.lobby?.buyins || [200, 500, 1000, 5000]).map((b) =>
+      h('div', { class: 'choices' }, presets.map((b) =>
         h('button', { class: S.buyin === b ? 'on' : '', onclick: () => { S.buyin = b; render(); } }, fmt(b)))),
-      h('div', { class: 'small muted' }, `Блайнды ${sb} / ${bb} · на балансе ${fmt(S.me.chips)} фишек`)),
+      // своя сумма
+      h('input', {
+        class: `buyin-input ${presets.includes(S.buyin) ? '' : 'on'}`, type: 'number', inputmode: 'numeric', min, max, step: 100,
+        placeholder: `Своя сумма: от ${fmt(min)} до ${fmt(max)}`, 'aria-label': 'Своя сумма бай-ина',
+        value: presets.includes(S.buyin) ? '' : S.buyin,
+        oninput: (e) => {
+          const v = Math.floor(Number(e.target.value));
+          if (v >= min && v <= max) {
+            S.buyin = v;
+            document.getElementById('blinds-info').textContent = blinds(v);
+          }
+        },
+        onchange: () => render(),
+      }),
+      h('div', { class: 'small muted', id: 'blinds-info' }, blinds(S.buyin))),
     S.me.isAdmin && S.botMode !== 'mixed' && h('button', { class: 'btn-ghost', style: 'margin-bottom:70px', onclick: sitDemo }, 'Демо-стол для видео — без фишек, карты выбираешь сам'),
     !enough ? h('button', { class: 'btn cta', onclick: () => go('wallet') }, 'Пополнить фишки')
       : S.botMode === 'mixed' ? h('button', { class: 'btn cta', onclick: createMixed }, 'Создать стол и позвать друзей')

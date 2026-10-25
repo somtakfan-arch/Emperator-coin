@@ -25,7 +25,7 @@ export class BotRoom {
     this.buyin = buyin;
     this.invested = buyin;
     this.endsAt = minutes ? Date.now() + minutes * 60000 : 0;
-    const bb = buyin / 100;
+    const bb = Math.max(2, Math.floor(buyin / 100));
     const sb = Math.max(1, Math.floor(bb / 2));
     const names = mode === 'hu' ? [botName] : BOT_CLASSES.map((C) => new C({}).name);
     this.table = new GameTable({
@@ -59,7 +59,7 @@ export class BotRoom {
   }
 
   static open(hub, user, opts) {
-    if (!config.botBuyins.includes(opts.buyin)) throw new Error('Неверный бай-ин');
+    if (!(Number.isInteger(opts.buyin) && opts.buyin >= config.buyinMin && opts.buyin <= config.buyinMax)) throw new Error(`Бай-ин — от ${config.buyinMin} до ${config.buyinMax.toLocaleString('ru')}`);
     if (opts.minutes && !config.timedMinutes.includes(opts.minutes)) throw new Error('Неверное время стола');
     if (opts.mode === 'hu' && !BOT_CLASSES.some((C) => new C({}).name === opts.botName)) throw new Error('Нет такого бота');
     if (!debit(user.id, opts.buyin, 'bots_buyin')) throw new Error('Не хватает фишек — пополни кошелёк');

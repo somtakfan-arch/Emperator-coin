@@ -89,7 +89,7 @@ function lobbyView(uid) {
   return {
     tournaments: tournaments.list(uid),
     online: sockets.size,
-    packs: config.packs, hintPacks: config.hintPacks, bots: BOTS, buyins: config.botBuyins,
+    packs: config.packs, hintPacks: config.hintPacks, bots: BOTS, buyins: config.botBuyins, buyinMin: config.buyinMin, buyinMax: config.buyinMax,
     sizes: config.tournament.sizes, blindOptions: config.tournament.blindOptions, turnSeconds: config.turnSeconds, timedMinutes: config.timedMinutes,
   };
 }
