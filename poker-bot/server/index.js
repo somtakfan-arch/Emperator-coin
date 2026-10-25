@@ -188,7 +188,7 @@ const handlers = {
     return { t: 'invoice', link: await createInvoice(uid, pack.id) };
   },
   // Подсказка в свой ход: видит карты всех соперников и будущие карты стола.
-  // Если за столом есть другие люди — им приходит уведомление, что ты взял подсказку (всё открыто).
+  // За столами с людьми это правило написано в шапке стола — его видят все.
   hint(uid) {
     const at = activeTable(uid);
     if (!at) throw new Error('Ты не за столом');
@@ -208,11 +208,6 @@ const handlers = {
     // карты соперников (ботов и людей)
     const known = {};
     for (const p of table.players) if (p.id !== uid && p.bot.hole) known[p.id] = p.bot.hole;
-    const me = table.players.find((p) => p.id === uid);
-    for (const p of table.players) {
-      if (p.isBot || p.id === uid) continue;
-      hub.send(p.id, { t: 'toast', text: `${me?.name || 'Соперник'} взял подсказку — видит карты стола` });
-    }
     // и карты, которые ещё выйдут на стол (перед каждой улицей одна сжигается)
     const deck = table.engine.deck?.slice() ?? [];
     const next = [];

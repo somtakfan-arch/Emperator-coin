@@ -222,3 +222,4 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
 .hint-x { background: none; border: 0; color: var(--soft); font-size: 14px; padding: 0 2px; }
 .pcard.xs { width: 22px; height: 31px; border-radius: 4px; box-shadow: none; }
 .pcard.xs .r { font-size: 10px; } .pcard.xs .s { font-size: 9px; }
+.hint-rule { font-size: 11px; color: #e8cf7a; opacity: 0.85; }

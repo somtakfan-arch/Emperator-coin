@@ -547,6 +547,9 @@ function tableScreen() {
     : T.kind === 'mixed' ? [T.title, h('br'),
       T.invite ? h('button', { class: 'invite-pill', onclick: () => shareMixed(T.invite) }, `Позвать друзей · мест ${T.seatsFree}`) : `мест свободно: ${T.seatsFree}`]
     : [T.title];
+  // за столами с людьми правило про подсказки видно всем
+  const hintRule = T.kind === 'tour' || T.kind === 'mixed'
+    ? [h('br'), h('span', { class: 'hint-rule' }, 'Здесь работают подсказки — они видят карты')] : [];
 
   const elo = !T.inHand && T.eloDelta ? Math.round(T.eloDelta) || (T.eloDelta > 0 ? 1 : -1) : 0;
   const result = !T.inHand && T.result
@@ -558,7 +561,7 @@ function tableScreen() {
   return h('div', { class: 'table-screen' },
     h('div', { class: 'table-top' },
       h('button', { class: 'icon-btn', 'aria-label': T.kind === 'tour' ? 'В лобби' : 'Встать из-за стола', onclick: back }, icon('back', 18)),
-      h('div', { class: 'title' }, info),
+      h('div', { class: 'title' }, info, hintRule),
       h('button', { class: 'icon-btn', 'aria-label': 'Справочник комбинаций', onclick: openCombos, style: 'font-weight:800;font-size:17px' }, '?')),
     h('div', { class: 'felt-wrap' },
       h('div', { class: 'felt' }),
