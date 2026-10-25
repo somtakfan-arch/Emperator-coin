@@ -9,7 +9,7 @@ import { verifyInitData, startBot, createInvoice, hooks, inviteLink, bot, notify
 import { BotRoom, DemoRoom } from './game/botroom.js';
 import { MixedRoom } from './game/mixedroom.js';
 import { Tournaments } from './game/tournament.js';
-import { BOT_CLASSES } from '../core/bots.js';
+import { BOT_CLASSES, Hunter } from '../core/bots.js';
 
 const PUBLIC = new URL('../public/', import.meta.url).pathname;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json' };
@@ -187,25 +187,40 @@ const handlers = {
     }
     return { t: 'invoice', link: await createInvoice(uid, pack.id) };
   },
-  // Подсказка в свой ход за столом с ботами (в турнирах с людьми выключена)
+  // Подсказка в свой ход: видит карты всех соперников и будущие карты стола.
+  // Если за столом есть другие люди — им приходит уведомление, что ты взял подсказку (всё открыто).
   hint(uid) {
-    const room = botRooms.get(uid);
-    if (!room?.advisor || room.table.closed) throw new Error('Подсказки работают за столами с ботами');
-    const pending = room.seat.pending;
+    const at = activeTable(uid);
+    if (!at) throw new Error('Ты не за столом');
+    const pending = at.seat.pending;
     if (!pending) throw new Error('Подсказка доступна в твой ход');
+    const room = botRooms.get(uid);
     const free = room instanceof DemoRoom; // на демо-столе админа — бесплатно
     if (!free && !useHint(uid)) throw new Error('Подсказок нет — купи в кошельке');
-    // за столом только ты и боты — подсказка видит их настоящие карты
+    const table = at.table;
+    let adv = room?.table === table ? room.advisor : null;
+    if (!adv) {
+      // стол с людьми: советник с нуля, «досматривает» ходы этой раздачи
+      adv = new Hunter({ iters: 600 });
+      adv.id = uid;
+      for (const e of table.handLog || []) adv.observe(e);
+    }
+    // карты соперников (ботов и людей)
     const known = {};
-    for (const p of room.table.players) if (p.isBot && p.bot.hole) known[p.id] = p.bot.hole;
+    for (const p of table.players) if (p.id !== uid && p.bot.hole) known[p.id] = p.bot.hole;
+    const me = table.players.find((p) => p.id === uid);
+    for (const p of table.players) {
+      if (p.isBot || p.id === uid) continue;
+      hub.send(p.id, { t: 'toast', text: `${me?.name || 'Соперник'} взял подсказку — видит карты стола` });
+    }
     // и карты, которые ещё выйдут на стол (перед каждой улицей одна сжигается)
-    const deck = room.table.engine.deck?.slice() ?? [];
+    const deck = table.engine.deck?.slice() ?? [];
     const next = [];
     for (const k of [3, 1, 1].slice({ 0: 0, 3: 1, 4: 2, 5: 3 }[pending.state.board.length])) {
       deck.pop();
       for (let i = 0; i < k; i++) next.push(deck.pop());
     }
-    const a = room.advisor.analyze(pending.state, known, next);
+    const a = adv.analyze(pending.state, known, next);
     hub.sendMe(uid);
     return { t: 'hint', ...a };
   },

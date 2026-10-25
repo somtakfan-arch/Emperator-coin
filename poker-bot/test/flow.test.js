@@ -301,7 +301,7 @@ test('стол с друзьями: двое людей + боты, чужие �
   if (!hostSeat.hand) assert.equal(hostSeat.cards, null, 'карты хоста другу не видны');
   assert.equal(snap.table.seats.filter((s) => s.isBot).length, 2);
   await host.waitFor((m) => m.t === 'turn', 60000);
-  await assert.rejects(host.req({ t: 'hint' }), /только с ботами|с ботами/);
+  await assert.rejects(host.req({ t: 'hint' }), /Подсказок нет|в твой ход/); // с людьми работает, но нужна купленная подсказка
   // играем пару раздач и встаём
   await friend.waitFor((m) => m.t === 'table' && m.table?.handId >= snap.table.handId + 2, 60000).catch(() => {});
   host.ws.send(JSON.stringify({ t: 'leave' }));

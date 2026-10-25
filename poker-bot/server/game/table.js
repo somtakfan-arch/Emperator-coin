@@ -172,6 +172,9 @@ export class GameTable {
 
   onEvent(e) {
     if (e.type === 'handStart') this.resetView();
+    // ходы текущей раздачи — по ним честная подсказка оценивает руки соперников
+    if (e.type === 'handStart') this.handLog = [];
+    this.handLog?.push(e);
     const v = this.v;
     if (e.type === 'handStart') {
       v.handId = e.handId;
