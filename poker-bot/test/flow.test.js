@@ -395,3 +395,33 @@ test('сольный турнир с ботами: старт сразу, дои
   assert.equal(fin.prize, [3600, 1800, 600][fin.place - 1] ?? 0); // 6 мест: 60% / 30% / 10% от 6000
   c.close();
 });
+
+test('демо-турнир на 60: только админ, свои карты приходят, баланс и Эло не трогаются', async () => {
+  const x = new Client(7003);
+  await x.ready;
+  await assert.rejects(x.req({ t: 'startSolo', demo: true, size: 60 }), /Нет доступа/);
+  x.close();
+
+  const a = new Client(7001);
+  await a.ready;
+  const before = db.prepare('SELECT chips, rating, games FROM users WHERE id = 7001').get();
+  await a.req({ t: 'startSolo', demo: true, size: 60, blindMin: 6 });
+  const snap = await a.waitFor((m) => m.t === 'table' && m.table?.solo && m.table.demo);
+  assert.equal(snap.table.total, 60);
+  const QS = 10 * 4, QH = 10 * 4 + 1;
+  const bot = snap.table.seats.find((s) => s.isBot);
+  await a.req({ t: 'demoPlan', plan: { holes: { 7001: [QS, QH], [bot.id]: [0, 1] } } });
+  // в тестах блайнды растут мгновенно — могут выбить раньше, чем придёт раздача с планом
+  const got = await a.waitFor((m) => (m.t === 'finished' && m.demo)
+    || (m.t === 'table' && m.table?.seats.find((s) => s.me)?.cards?.join() === [QS, QH].join()), 60000);
+  if (got.t === 'table') a.ws.send(JSON.stringify({ t: 'leave' }));
+  const fin = got.t === 'finished' ? got : await a.waitFor((m) => m.t === 'finished' && m.demo, 30000);
+  assert.equal(fin.prize, 0);
+  await new Promise((r) => setTimeout(r, 50));
+  const after = db.prepare('SELECT chips, rating, games, in_play FROM users WHERE id = 7001').get();
+  assert.equal(after.chips, before.chips);
+  assert.equal(after.rating, before.rating);
+  assert.equal(after.games, before.games);
+  assert.equal(after.in_play, 0);
+  a.close();
+});

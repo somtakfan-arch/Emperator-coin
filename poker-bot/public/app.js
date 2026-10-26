@@ -156,7 +156,7 @@ function onMessage(m) {
       leaveTableScreen(m.tournamentId);
       break;
     case 'finished':
-      toast(m.prize ? `${m.place} место! Приз ${fmt(m.prize)} фишек` : `${m.place} место из ${m.total}`);
+      toast(m.demo ? `Демо-турнир окончен: ${m.place} место из ${m.total}` : m.prize ? `${m.place} место! Приз ${fmt(m.prize)} фишек` : `${m.place} место из ${m.total}`);
       if (m.solo) {
         S.table = null;
         S.turn = null;
@@ -233,6 +233,11 @@ tg?.BackButton.onClick(() => back());
 window.addEventListener('hashchange', () => S.me && openStart(null));
 function back() {
   if (S.screen === 'combos') return go(S.comboBack || 'lobby');
+  // демо-турнир админа: «назад» — выйти из него (фишки ненастоящие)
+  if (S.screen === 'table' && S.table?.kind === 'tour' && S.table.demo) {
+    if (confirm('Выйти из демо-турнира?')) send({ t: 'leave' });
+    return;
+  }
   if (S.screen === 'table' && S.table?.kind === 'bots' && S.table.locked) return leaveLocked();
   if (S.screen === 'table' && (S.table?.kind === 'bots' || S.table?.kind === 'mixed')) return leaveBots();
   go(BACK[S.screen] || 'lobby');
@@ -897,9 +902,15 @@ function soloScreen() {
     h('div', { class: 'glass card' },
       h('div', { class: 'b', id: 'solo-pool' }, `Призовой фонд ${fmt(pool)}`),
       h('div', { class: 'small soft', id: 'solo-prizes', style: 'line-height:1.5' }, prizeText())),
+    S.me.isAdmin && h('button', { class: 'btn-ghost', onclick: startDemoSolo }, `Демо-турнир на ${size} для видео — без фишек, карты выбираешь сам`),
     h('div', { style: 'height:70px' }),
     !enough ? h('button', { class: 'btn cta', onclick: () => go('wallet') }, 'Пополнить фишки')
       : h('button', { class: 'btn cta', onclick: startSolo }, `Начать · взнос ${fmt(buyin)}`));
+}
+
+async function startDemoSolo() {
+  const r = await run({ t: 'startSolo', demo: true, size: S.soloSize ?? 18, blindMin: S.soloBlind ?? 3 });
+  if (r) go('table');
 }
 
 async function startSolo() {

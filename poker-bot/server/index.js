@@ -147,7 +147,7 @@ const handlers = {
     }
     return null;
   },
-  leave: (uid) => (botRooms.get(uid)?.leave(uid), { t: 'ok' }),
+  leave: (uid) => (botRooms.get(uid)?.leave(uid), solos.get(uid)?.quit(), { t: 'ok' }),
   rebuy: (uid) => (botRooms.get(uid)?.rebuy(uid), { t: 'ok' }),
   // стол с друзьями: создать, посмотреть по ссылке, сесть
   createMixed(uid, m) {
@@ -176,7 +176,7 @@ const handlers = {
   // сольный турнир с ботами — старт сразу
   startSolo(uid, m) {
     if (activeTable(uid) || solos.get(uid)) throw new Error('Ты уже за столом');
-    const tour = SoloTour.open(hub, getUser(uid), { buyin: m.buyin, size: m.size, blindMin: m.blindMin });
+    const tour = SoloTour.open(hub, getUser(uid), { buyin: m.buyin, size: m.size, blindMin: m.blindMin, demo: !!m.demo });
     solos.set(uid, tour);
     hub.sendMe(uid);
     return { t: 'ok', id: tour.id };
@@ -191,8 +191,10 @@ const handlers = {
   },
   demoPlan(uid, m) {
     const room = botRooms.get(uid);
-    if (!config.adminIds.includes(uid) || !(room instanceof DemoRoom)) throw new Error('Только на демо-столе');
-    room.setPlan(m.plan);
+    const solo = solos.get(uid);
+    if (config.adminIds.includes(uid) && solo?.demo && !solo.done) solo.setPlan(m.plan);
+    else if (config.adminIds.includes(uid) && room instanceof DemoRoom) room.setPlan(m.plan);
+    else throw new Error('Только на демо-столе');
     return { t: 'ok' };
   },
   async invoice(uid, m) {
@@ -215,7 +217,7 @@ const handlers = {
     const pending = at.seat.pending;
     if (!pending) throw new Error('Подсказка доступна в твой ход');
     const room = botRooms.get(uid);
-    const free = room instanceof DemoRoom; // на демо-столе админа — бесплатно
+    const free = room instanceof DemoRoom || !!solos.get(uid)?.demo; // на демо админа — бесплатно
     if (!free && !useHint(uid)) throw new Error('Подсказок нет — купи в кошельке');
     const table = at.table;
     let adv = room?.table === table ? room.advisor : null;

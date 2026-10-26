@@ -9,6 +9,7 @@ import { CROWD, makeBot } from '../../core/crowd.js';
 import { BOT_CLASSES } from '../../core/bots.js';
 import { GameTable, HumanSeat, botSeat } from './table.js';
 import { botRating } from './elo.js';
+import { checkPlan, arrangeDeck } from './demoplan.js';
 
 const MAX_SEATS = 6;
 export const SOLO_SIZES = [6, 18, 60];
@@ -16,11 +17,15 @@ export const SOLO_BLINDS = [2, 3, 6]; // минут на уровень
 const setInPlay = db.prepare('UPDATE users SET in_play = ? WHERE id = ?');
 
 export class SoloTour {
-  constructor(hub, user, { buyin, size, blindMin }) {
+  constructor(hub, user, { buyin, size, blindMin, demo = false }) {
     this.hub = hub;
+    // демо — только админ, для видео: фишки ненастоящие, баланс/Эло/призы не трогаются,
+    // карты на следующую раздачу за своим столом выбираешь сам
+    this.demo = demo;
+    this.plan = null;
     this.userId = user.id;
     this.id = `s${randomBytes(5).toString('base64url').replace(/[^a-zA-Z0-9]/g, 'x')}`;
-    this.name = `Сольный турнир · ${size}`;
+    this.name = demo ? `Демо-турнир · ${size}` : `Сольный турнир · ${size}`;
     this.buyin = buyin;
     this.n = size;
     this.blindMin = blindMin;
@@ -37,6 +42,14 @@ export class SoloTour {
   }
 
   static open(hub, user, o) {
+    if (o.demo) {
+      if (!config.adminIds.includes(user.id)) throw new Error('Нет доступа');
+      const size = SOLO_SIZES.includes(Number(o.size)) ? Number(o.size) : 60;
+      const blindMin = SOLO_BLINDS.includes(Number(o.blindMin)) ? Number(o.blindMin) : 3;
+      const t = new SoloTour(hub, user, { buyin: 1000, size, blindMin, demo: true });
+      t.start(user);
+      return t;
+    }
     const buyin = Math.floor(Number(o.buyin));
     const size = Number(o.size);
     const blindMin = Number(o.blindMin) || 3;
@@ -96,7 +109,15 @@ export class SoloTour {
 
   newTable(num) {
     const tb = new GameTable({ id: `${this.id}:${num}`, kind: 'tour', title: `${this.name} · стол ${num}`, hub: this.hub, sb: 10, bb: 20 });
+    // карты по плану — только за столом, где сидишь ты
+    if (this.demo) tb.engine.demoDeck = (deck, ids) => {
+      if (!ids.includes(this.userId) || !this.plan) return deck;
+      const plan = this.plan;
+      this.plan = null;
+      return arrangeDeck(plan, deck, ids);
+    };
     tb.extra = () => ({
+      ...(this.demo && tb.players.some((p) => p.id === this.userId) ? { demo: true, plan: this.plan } : {}),
       tournamentId: this.id, solo: true, alive: this.alive(), total: this.n, ...this.levelInfo(),
       prizePool: this.n * this.buyin, tableNo: num,
     });
@@ -153,10 +174,27 @@ export class SoloTour {
     from.broadcast();
   }
 
+  setPlan(plan) {
+    const tb = this.tableOf(this.userId);
+    if (!tb) throw new Error('Ты не за столом');
+    this.plan = checkPlan(tb.players, plan);
+    tb.broadcast();
+  }
+
+  // выйти из демо-турнира в любой момент
+  quit() {
+    if (this.demo) this.finish(this.placesLeft);
+  }
+
   finish(place) {
     if (this.done) return;
     this.done = true;
     for (const tb of this.tables) tb.closed = true;
+    if (this.demo) {
+      this.hub.send(this.userId, { t: 'finished', tournamentId: this.id, solo: true, demo: true, place, prize: 0, total: this.n });
+      this.hub.sendMe(this.userId);
+      return this.hub.onSoloDone?.(this);
+    }
     const prize = this.prizes()[place - 1] || 0;
     // Эло: ты против каждого бота — кто вылетел раньше тебя, тех ты обыграл
     const u = db.prepare('SELECT rating FROM users WHERE id = ?').get(this.userId);
