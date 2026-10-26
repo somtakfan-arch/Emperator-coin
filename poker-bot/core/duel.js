@@ -4,7 +4,7 @@
 //   node duel.js Охотник v1:Охотник 2000
 //   node duel.js Акула station 1000 --seed 3
 import { Table } from './engine.js';
-import { BOT_CLASSES } from './bots.js';
+import { BOT_CLASSES, BOSS_CLASSES } from './bots.js';
 import { V1_CLASSES, CallingStation, Aggressor, Nit, RandomBot } from './benchmarks.js';
 
 const args = process.argv.slice(2);
@@ -29,11 +29,11 @@ function makeBot(t, rng) {
   if (t === 'nit') return new Nit();
   if (t === 'random') return new RandomBot(rng);
   const v1 = t.startsWith('v1:');
-  const list = v1 ? V1_CLASSES : BOT_CLASSES;
+  const list = v1 ? V1_CLASSES : [...BOT_CLASSES, ...BOSS_CLASSES];
   const name = v1 ? t.slice(3) : t;
   const C = list.find((C) => new C({}).name === name);
   if (!C) throw new Error(`нет бота ${t}`);
-  return new C({ rng, iters: v1 ? 160 : 300 });
+  return new C({ rng, iters: v1 ? 160 : name === 'Король' ? 600 : 300 });
 }
 
 async function match(first, second, botRng) {

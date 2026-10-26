@@ -74,7 +74,21 @@ export class Chameleon extends EliteBot {
   }
 }
 
+// 6. КОРОЛЬ — мега-босс. Чтение как у Охотника (учится за пару раздач, верит пойманным блефам),
+// считает больше всех, почти без страха. Овербеты до 2.2 банка, рейзы до 1.7, частые олл-ины,
+// сбрасывает реже остальных. Сильнее давить нельзя: в дуэлях это уже начинает проигрывать.
+export class King extends EliteBot {
+  constructor(opts = {}) {
+    super('Король', 'мега-босс: овербеты, олл-ины, почти не сбрасывает, читает всех', {
+      wide: 1.05, aggr: 0, trap: 0.06, sizes: [0.33, 0.66, 1, 1.5, 2.2], raiseSizes: [0.75, 1.2, 1.7],
+      temp: 0.015, priorN: 4, readSkill: 1, bluff3: 0.4, bluff4: 0.15, callTax: 0.01,
+      jam: 0.35, fear: 0.2,
+    }, { ...opts, iters: Math.max(opts.iters ?? 0, 800) });
+  }
+}
+
 export const BOT_CLASSES = [Rock, Shark, Maniac, Hunter, Chameleon];
+export const BOSS_CLASSES = [King]; // отдельно: за стол на 6 не садится, только 1 на 1 и турниры
 
 export function createBots(opts) {
   return BOT_CLASSES.map((C) => new C(opts));

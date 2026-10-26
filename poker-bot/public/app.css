@@ -230,3 +230,5 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
 .crowd-bot { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.05); color: #fff; font-size: 13px; text-align: left; min-width: 0; }
 .crowd-bot .b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .crowd-bot.on { border-color: rgba(127,209,168,0.9); background: rgba(127,209,168,0.12); }
+.bot.boss { border-color: rgba(242,201,76,0.7); background: linear-gradient(135deg, rgba(242,201,76,0.16), rgba(255,255,255,0.04)); }
+.bot.boss .letter { background: linear-gradient(145deg, #f2c94c, #b8892a); color: #1a1408; }

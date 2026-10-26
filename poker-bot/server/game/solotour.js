@@ -32,7 +32,8 @@ export class SoloTour {
     // соперники: пара сильных + обычные, все разные
     const pros = BOT_CLASSES.map((C) => new C({}).name).sort(() => Math.random() - 0.5).slice(0, size >= 18 ? 3 : 1);
     const crowd = CROWD.map((c) => c.name).sort(() => Math.random() - 0.5);
-    this.botNames = [...pros, ...crowd].slice(0, size - 1);
+    // в больших турнирах за одним из столов сидит босс — Король
+    this.botNames = [...(size >= 18 ? ['Король'] : []), ...pros, ...crowd].slice(0, size - 1);
   }
 
   static open(hub, user, o) {

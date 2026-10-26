@@ -20,6 +20,7 @@ const BOT_INFO = {
   Маньяк: { text: 'Борзый, давит овербетами', aggr: 95 },
   Охотник: { text: 'Учит тебя и бьёт по слабостям', aggr: 60 },
   Хамелеон: { text: 'Меняет стиль по ходу игры', aggr: 70 },
+  Король: { text: 'Мега-босс · 3500 Эло: овербеты, олл-ины, почти не сбрасывает', aggr: 90, boss: true },
 };
 
 // ---------- DOM ----------
@@ -352,9 +353,9 @@ function botsScreen() {
       h('div', { class: 'small muted', style: 'line-height:1.45' },
         'Создаёшь стол и зовёшь друзей по ссылке — каждый садится со своими фишками. Боты занимают свободные места (всего до 6). Встать можно в любой момент.')),
     S.botMode !== 'mixed' && h('div', { class: 'field' },
-      h('div', { class: 'label' }, S.botMode === 'hu' ? 'Соперник' : 'За столом все пятеро'),
+      h('div', { class: 'label' }, S.botMode === 'hu' ? 'Соперник' : 'За столом все пятеро (Король — только 1 на 1)'),
       Object.entries(BOT_INFO).map(([name, info]) => h('button', {
-        class: `bot ${S.botMode === 'hu' && S.botName === name ? 'on' : ''}`,
+        class: `bot ${info.boss ? 'boss' : ''} ${S.botMode === 'hu' && S.botName === name ? 'on' : ''}`,
         onclick: () => { S.botName = name; S.botMode = 'hu'; render(); },
       },
       h('div', { class: 'letter' }, name[0]),

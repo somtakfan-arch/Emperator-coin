@@ -2,7 +2,7 @@
 // Мозг тот же (brain.js), но характеры с дырами: рыбы, колл-станции, ниты, пушеры…
 // Больше случайности (temp), хуже читают соперника, меньше считают (iters).
 import { EliteBot } from './brain.js';
-import { BOT_CLASSES } from './bots.js';
+import { BOT_CLASSES, BOSS_CLASSES } from './bots.js';
 
 const NAMES = [
   'Тимоха', 'Рыжий', 'Барон', 'Колян', 'Сэм', 'Лёха', 'Бизон', 'Мадам Ро', 'Профессор', 'Кекс',
@@ -46,7 +46,7 @@ export const CROWD = NAMES.map((name, i) => {
   return { name, kind: K.kind, style: `${K.kind}: ${K.text}`, elo: K.elo + Math.round((r() - 0.5) * 120), params: p };
 });
 
-const PROS = BOT_CLASSES.map((C) => ({ C, name: new C({}).name }));
+const PROS = [...BOT_CLASSES, ...BOSS_CLASSES].map((C) => ({ C, name: new C({}).name }));
 
 export function isBotName(name) {
   return PROS.some((x) => x.name === name) || CROWD.some((x) => x.name === name);
