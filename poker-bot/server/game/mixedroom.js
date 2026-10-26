@@ -13,8 +13,10 @@ const AWAY_MS = 10 * 60 * 1000;
 const setInPlay = db.prepare('UPDATE users SET in_play = ? WHERE id = ?');
 
 export class MixedRoom {
-  constructor(hub, host, { buyin, bots }) {
+  constructor(hub, host, { buyin, bots, pvp = false }) {
     this.hub = hub;
+    // режим «против людей»: без ботов и подсказок, свой рейтинг; стол виден всем в поиске
+    this.pvp = pvp;
     this.id = randomBytes(5).toString('base64url').replace(/[^a-zA-Z0-9]/g, 'x');
     this.hostId = host.id;
     this.hostName = host.name;
@@ -22,7 +24,8 @@ export class MixedRoom {
     this.humans = new Map(); // uid -> { seat, player, invested, leaving, played }
     const bb = Math.max(2, Math.floor(buyin / 100));
     const sb = Math.max(1, Math.floor(bb / 2));
-    this.table = new GameTable({ id: `m${this.id}`, kind: 'mixed', hub, sb, bb, title: `Стол ${host.name} · ${sb}/${bb}` });
+    this.table = new GameTable({ id: `m${this.id}`, kind: 'mixed', hub, sb, bb, title: `${pvp ? 'Против людей' : `Стол ${host.name}`} · ${sb}/${bb}` });
+    this.table.pvp = pvp;
     this.bots = [];
     // боты на свободные места: от сильного к слабому, без повторов
     const order = ['Акула', 'Охотник', 'Хамелеон', 'Маньяк', 'Скала'];
@@ -35,7 +38,7 @@ export class MixedRoom {
     this.table.extra = (uid) => {
       const h = this.humans.get(uid);
       return {
-        roomId: this.id, host: this.hostName, isHost: uid === this.hostId, buyin, invite: this.hub.mixedInvite?.(this.id) ?? null,
+        pvp: this.pvp, roomId: this.id, host: this.hostName, isHost: uid === this.hostId, buyin, invite: this.hub.mixedInvite?.(this.id) ?? null,
         canRebuy: h ? h.player.stack === 0 : false, leaving: !!h?.leaving,
         humans: this.humans.size, seatsFree: MAX_SEATS - this.table.players.length,
       };
@@ -47,9 +50,9 @@ export class MixedRoom {
 
   static open(hub, host, opts) {
     if (!(Number.isSafeInteger(opts.buyin) && opts.buyin >= config.buyinMin)) throw new Error(`Бай-ин — от ${config.buyinMin} фишек`); // сверху — сколько есть на балансе
-    const bots = Math.floor(Number(opts.bots));
+    const bots = opts.pvp ? 0 : Math.floor(Number(opts.bots));
     if (!(bots >= 0 && bots <= 4)) throw new Error('Ботов — от 0 до 4');
-    const room = new MixedRoom(hub, host, { buyin: opts.buyin, bots });
+    const room = new MixedRoom(hub, host, { buyin: opts.buyin, bots, pvp: !!opts.pvp });
     room.join(host);
     room.table.run();
     return room;
@@ -57,7 +60,7 @@ export class MixedRoom {
 
   info() {
     return {
-      id: this.id, host: this.hostName, buyin: this.buyin, bb: this.table.bb,
+      id: this.id, host: this.hostName, buyin: this.buyin, bb: this.table.bb, pvp: this.pvp,
       seats: this.table.players.length, max: MAX_SEATS, closed: this.table.closed,
       players: this.table.players.map((p) => ({ name: p.name, bot: !!p.isBot })),
     };
@@ -83,6 +86,7 @@ export class MixedRoom {
     this.humans.set(user.id, { seat, player, invested: this.buyin, leaving: false, played: false });
     this.table.addPlayer(player);
     setInPlay.run(this.buyin, user.id);
+    if (this.pvp) this.hub.lobbyChanged?.();
   }
 
   rebuy(uid) {
@@ -117,6 +121,7 @@ export class MixedRoom {
     this.hub.onWinnings?.(uid, stack - h.invested);
     this.hub.onRoomClosed(uid, this, stack, null, kicked);
     if (!this.humans.size) this.table.closed = true; // людей не осталось — стол закрыт
+    if (this.pvp) this.hub.lobbyChanged?.(); // список столов «против людей»
     else this.table.broadcast();
   }
 
@@ -164,6 +169,8 @@ export class MixedRoom {
       this.humans.get(e.id).played = true;
     } else if (e.type === 'showdown') {
       for (const r of e.reveals) if (this.humans.has(r.id)) this.humans.get(r.id).played = true;
+    } else if (e.type === 'handEnd' && this.pvp) {
+      this.pvpElo(e);
     } else if (e.type === 'handEnd') {
       const opps = e.contributions.filter((c) => c.id < 0 && c.total > 0)
         .map((c) => botRating(this.bots.find((b) => b.id === c.id)?.name));
@@ -180,5 +187,27 @@ export class MixedRoom {
         if (delta) db.prepare('UPDATE users SET rating = rating + ? WHERE id = ?').run(delta, uid);
       }
     }
+  }
+
+  // Рейтинг «против людей» за раздачу: каждый выигравший против каждого проигравшего (оба играли)
+  pvpElo(e) {
+    const res = [];
+    for (const [uid, h] of this.humans) {
+      if (!h.played) continue;
+      const mine = e.contributions.find((c) => c.id === uid)?.total ?? 0;
+      const net = (e.winners.find((w) => w.id === uid)?.amount ?? 0) - mine;
+      if (net) res.push({ uid, net, r: db.prepare('SELECT pvp_rating FROM users WHERE id = ?').get(uid).pvp_rating });
+    }
+    const win = res.filter((x) => x.net > 0), lose = res.filter((x) => x.net < 0);
+    if (!win.length || !lose.length) return;
+    const delta = new Map(res.map((x) => [x.uid, 0]));
+    for (const w of win)
+      for (const l of lose) {
+        const k = Math.min(8, 2 + -l.net / this.table.bb / 10) / win.length;
+        const d = k * (1 - 1 / (1 + 10 ** ((l.r - w.r) / 400)));
+        delta.set(w.uid, delta.get(w.uid) + d);
+        delta.set(l.uid, delta.get(l.uid) - d);
+      }
+    for (const [uid, d] of delta) db.prepare('UPDATE users SET pvp_rating = pvp_rating + ? WHERE id = ?').run(d, uid);
   }
 }

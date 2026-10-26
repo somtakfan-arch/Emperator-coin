@@ -299,7 +299,7 @@ test('стол с друзьями: двое людей + боты, чужие �
     && m.table.seats.find((s) => s.me)?.cards, 60000);
   const hostSeat = snap.table.seats.find((s) => s.id === 9101);
   if (!hostSeat.hand) assert.equal(hostSeat.cards, null, 'карты хоста другу не видны');
-  assert.equal(snap.table.seats.filter((s) => s.isBot).length, 2);
+  assert.ok(snap.table.seats.filter((s) => s.isBot).length <= 2, 'ботов не больше двух (проигравшие выбывают)');
   await host.waitFor((m) => m.t === 'turn', 60000);
   await assert.rejects(host.req({ t: 'hint' }), /Подсказок нет|в твой ход/); // с людьми работает, но нужна купленная подсказка
   // играем пару раздач и встаём
@@ -424,4 +424,38 @@ test('демо-турнир на 60: только админ, свои карт�
   assert.equal(after.games, before.games);
   assert.equal(after.in_play, 0);
   a.close();
+});
+
+test('режим против людей: переключатель, быстрый стол только с людьми, без подсказок, свой рейтинг', async () => {
+  const a = new Client(9401), b = new Client(9402);
+  await a.ready; await b.ready;
+  await a.req({ t: 'setMode', pvp: true });
+  await a.waitFor((m) => m.t === 'me' && m.me.pvp === true);
+  for (const c of [a, b]) {
+    await c.req({ t: 'invoice', pack: 'p1' });
+    await c.req({ t: 'invoice', pack: 'h1' });
+  }
+  const r1 = await a.req({ t: 'quickPvp', buyin: 700 });
+  const r2 = await b.req({ t: 'quickPvp', buyin: 700 });
+  assert.equal(r1.id, r2.id, 'второй сел за тот же стол');
+  const lobby = await b.req({ t: 'lobby' });
+  assert.ok(lobby.pvpTables.some((t) => t.id === r1.id && t.pvp));
+  const snap = await a.waitFor((m) => m.t === 'table' && m.table?.pvp && m.table.seats.length === 2 && m.table.inHand, 60000);
+  assert.ok(snap.table.seats.every((s) => !s.isBot), 'ботов нет');
+  await a.waitFor((m) => m.t === 'turn', 60000).catch(() => {});
+  await assert.rejects(a.req({ t: 'hint' }), /подсказок нет/);
+  await b.waitFor((m) => m.t === 'table' && m.table?.handId >= snap.table.handId + 3, 60000).catch(() => {});
+  a.ws.send(JSON.stringify({ t: 'leave' }));
+  const al = await a.waitFor((m) => m.t === 'left', 30000);
+  b.ws.send(JSON.stringify({ t: 'leave' }));
+  const bl = await b.waitFor((m) => m.t === 'left', 30000);
+  await new Promise((r) => setTimeout(r, 50));
+  const ua = assertLedger(9401), ub = assertLedger(9402);
+  assert.equal(ua.chips, 4300 + al.stack);
+  assert.equal(ub.chips, 4300 + bl.stack);
+  assert.equal(al.stack + bl.stack, 1400, 'фишки только переходят между людьми');
+  const rs = db.prepare('SELECT rating, pvp_rating FROM users WHERE id IN (9401, 9402)').all();
+  assert.ok(rs.every((r) => r.rating === 1500), 'обычный рейтинг не тронут');
+  assert.ok(Math.abs(rs[0].pvp_rating + rs[1].pvp_rating - 3000) < 1e-6, 'рейтинг против людей — сумма сохраняется');
+  a.close(); b.close();
 });

@@ -90,6 +90,8 @@ function meView(uid) {
   return {
     id: u.id, name: u.name, chips: u.chips, inPlay: u.in_play, rating: Math.round(u.rating),
     isAdmin: config.adminIds.includes(u.id),
+    pvp: !!u.pvp, pvpRating: Math.round(u.pvp_rating),
+    pvpPlace: db.prepare('SELECT COUNT(*) AS n FROM users WHERE pvp_rating > ?').get(u.pvp_rating).n + 1,
     won: u.won, winRewards: WIN_REWARDS.map((r, i) => ({ ...r, done: i < u.won_rewards })), hints: u.hints,
     games: u.games, wins: u.wins, ...ranks(uid),
     bonus: config.dailyBonus > 0 ? { amount: config.dailyBonus, readyAt: u.bonus_at + 86400000 } : null,
@@ -100,6 +102,7 @@ function meView(uid) {
 function lobbyView(uid) {
   return {
     tournaments: tournaments.list(uid),
+    pvpTables: [...mixedRooms.values()].filter((r) => r.pvp && !r.table.closed).map((r) => r.info()),
     online: sockets.size,
     packs: config.packs, hintPacks: config.hintPacks, bots: BOTS, crowd: CROWD_VIEW, solo: SOLO_VIEW, buyins: config.botBuyins, buyinMin: config.buyinMin,
     sizes: config.tournament.sizes, blindOptions: config.tournament.blindOptions, turnSeconds: config.turnSeconds, timedMinutes: config.timedMinutes,
@@ -112,11 +115,34 @@ const handlers = {
   lobby: (uid) => ({ t: 'lobby', ...lobbyView(uid) }),
   me: (uid) => ({ t: 'me', me: meView(uid) }),
   tour: (uid, m) => ({ t: 'tour', tour: tournaments.one(m.id, uid), invite: bot.username ? inviteLink(m.id) : null }),
-  top: () => ({
+  top: (uid, m) => ({
     t: 'top',
-    rating: db.prepare('SELECT name, rating, games FROM users WHERE games > 0 OR rating <> 1500 ORDER BY rating DESC LIMIT 20').all()
+    rating: (m.pvp
+      ? db.prepare('SELECT name, pvp_rating AS rating, games FROM users WHERE pvp_rating <> 1500 ORDER BY pvp_rating DESC LIMIT 20')
+      : db.prepare('SELECT name, rating, games FROM users WHERE games > 0 OR rating <> 1500 ORDER BY rating DESC LIMIT 20')).all()
       .map((r) => ({ ...r, rating: Math.round(r.rating) })),
   }),
+  // переключатель режима «против людей» (без ботов и подсказок)
+  setMode(uid, m) {
+    db.prepare('UPDATE users SET pvp = ? WHERE id = ?').run(m.pvp ? 1 : 0, uid);
+    hub.sendMe(uid);
+    return { t: 'ok' };
+  },
+  // быстрая игра против людей: садимся за открытый стол с таким бай-ином или открываем новый
+  quickPvp(uid, m) {
+    if (activeTable(uid)) throw new Error('Ты уже за столом');
+    const buyin = Math.floor(Number(m.buyin));
+    let room = [...mixedRooms.values()].find((r) => r.pvp && !r.table.closed && r.buyin === buyin && r.table.players.length < 6);
+    if (room) room.join(getUser(uid));
+    else {
+      room = MixedRoom.open(hub, getUser(uid), { buyin, bots: 0, pvp: true });
+      mixedRooms.set(room.id, room);
+    }
+    botRooms.set(uid, room);
+    hub.sendMe(uid);
+    hub.lobbyChanged();
+    return { t: 'ok', id: room.id };
+  },
   createT: (uid, m) => ({ t: 'created', id: tournaments.create(getUser(uid), m.tour || {}) }),
   reg: (uid, m) => (tournaments.register(getUser(uid), m.id), { t: 'ok' }),
   unreg: (uid, m) => (tournaments.unregister(getUser(uid), m.id), { t: 'ok' }),
@@ -152,7 +178,7 @@ const handlers = {
   // стол с друзьями: создать, посмотреть по ссылке, сесть
   createMixed(uid, m) {
     if (activeTable(uid)) throw new Error('Ты уже за столом');
-    const room = MixedRoom.open(hub, getUser(uid), { buyin: Number(m.buyin), bots: Number(m.bots) });
+    const room = MixedRoom.open(hub, getUser(uid), { buyin: Number(m.buyin), bots: Number(m.bots), pvp: !!m.pvp });
     mixedRooms.set(room.id, room);
     botRooms.set(uid, room);
     hub.sendMe(uid);
@@ -214,6 +240,7 @@ const handlers = {
   hint(uid) {
     const at = activeTable(uid);
     if (!at) throw new Error('Ты не за столом');
+    if (at.table.pvp) throw new Error('В режиме «против людей» подсказок нет');
     const pending = at.seat.pending;
     if (!pending) throw new Error('Подсказка доступна в твой ход');
     const room = botRooms.get(uid);

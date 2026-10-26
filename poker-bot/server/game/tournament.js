@@ -10,7 +10,7 @@ const MAX_SEATS = 6;
 const newId = () => randomBytes(6).toString('base64url').replace(/[^a-zA-Z0-9]/g, 'x');
 const T = {
   get: db.prepare('SELECT * FROM tournaments WHERE id = ?'),
-  regs: db.prepare('SELECT r.*, u.name, u.rating FROM regs r JOIN users u ON u.id = r.user_id WHERE r.t_id = ? ORDER BY r.at'),
+  regs: db.prepare('SELECT r.*, u.name, u.rating, u.pvp_rating FROM regs r JOIN users u ON u.id = r.user_id WHERE r.t_id = ? ORDER BY r.at'),
   count: db.prepare('SELECT COUNT(*) AS n FROM regs WHERE t_id = ?'),
   isReg: db.prepare('SELECT 1 FROM regs WHERE t_id = ? AND user_id = ?'),
   setStatus: db.prepare('UPDATE tournaments SET status = ? WHERE id = ?'),
@@ -30,9 +30,9 @@ export class Tournaments {
     return {
       id: t.id, name: t.name, kind: t.kind, maxPlayers: t.max_players, buyin: t.buyin,
       minRating: t.min_rating, blindMin: t.blind_min, startMode: t.start_mode, startAt: t.start_at,
-      private: !!t.private, status: t.status, count: regs.length, prizePool: regs.length * t.buyin,
+      private: !!t.private, pvp: !!t.pvp, status: t.status, count: regs.length, prizePool: regs.length * t.buyin,
       mine: t.creator === uid, registered: regs.some((r) => r.user_id === uid),
-      players: regs.map((r) => ({ id: r.user_id, name: r.name, rating: Math.round(r.rating), place: r.place, prize: r.prize })),
+      players: regs.map((r) => ({ id: r.user_id, name: r.name, rating: Math.round(t.pvp ? r.pvp_rating : r.rating), place: r.place, prize: r.prize })),
       alive: run ? run.alive() : null,
       level: run ? run.levelInfo() : null,
     };
@@ -65,7 +65,7 @@ export class Tournaments {
     if (!config.tournament.sizes.includes(maxPlayers)) throw new Error('Неверное число игроков');
     if (!(buyin >= 100 && buyin <= 1_000_000)) throw new Error('Взнос от 100 до 1 000 000');
     if (!config.tournament.blindOptions.includes(blindMin)) throw new Error('Неверная скорость блайндов');
-    if (user.rating < minRating) throw new Error('Твой рейтинг ниже порога этого турнира');
+    if ((o.pvp ? user.pvp_rating : user.rating) < minRating) throw new Error('Твой рейтинг ниже порога этого турнира');
     const startMode = o.startMode === 'time' ? 'time' : 'full';
     let startAt = null;
     if (startMode === 'time') {
@@ -77,9 +77,9 @@ export class Tournaments {
     if (open >= config.tournament.maxOpenPerUser) throw new Error('У тебя уже много открытых турниров');
     const id = newId();
     tx(() => {
-      db.prepare(`INSERT INTO tournaments (id, name, creator, kind, max_players, buyin, min_rating, blind_min, start_mode, start_at, private, status, created)
-        VALUES (?, ?, ?, 'user', ?, ?, ?, ?, ?, ?, ?, 'reg', ?)`)
-        .run(id, name, user.id, maxPlayers, buyin, minRating, blindMin, startMode, startAt, o.private ? 1 : 0, Date.now());
+      db.prepare(`INSERT INTO tournaments (id, name, creator, kind, max_players, buyin, min_rating, blind_min, start_mode, start_at, private, status, created, pvp)
+        VALUES (?, ?, ?, 'user', ?, ?, ?, ?, ?, ?, ?, 'reg', ?, ?)`)
+        .run(id, name, user.id, maxPlayers, buyin, minRating, blindMin, startMode, startAt, o.private ? 1 : 0, Date.now(), o.pvp ? 1 : 0);
     });
     this.register(user, id); // создатель сразу в турнире
     return id;
@@ -89,7 +89,7 @@ export class Tournaments {
     const t = T.get.get(String(id));
     if (!t || t.status !== 'reg') throw new Error('Регистрация закрыта');
     if (T.isReg.get(t.id, user.id)) return;
-    if (user.rating < t.min_rating) throw new Error(`Нужен рейтинг ${t.min_rating}`);
+    if ((t.pvp ? user.pvp_rating : user.rating) < t.min_rating) throw new Error(`Нужен рейтинг ${t.min_rating}`);
     if (T.count.get(t.id).n >= t.max_players) throw new Error('Мест нет');
     if (!debit(user.id, t.buyin, 'tour_buyin', t.id)) throw new Error('Не хватает фишек — пополни кошелёк');
     db.prepare('INSERT INTO regs (t_id, user_id, at) VALUES (?, ?, ?)').run(t.id, user.id, Date.now());
@@ -178,7 +178,7 @@ class RunningTournament {
     this.t = t;
     this.n = regs.length;
     this.startedAt = Date.now();
-    this.players = regs.map((r) => ({ id: r.user_id, name: r.name, rating: r.rating }));
+    this.players = regs.map((r) => ({ id: r.user_id, name: r.name, rating: t.pvp ? r.pvp_rating : r.rating }));
     this.tables = [];
     this.placesLeft = this.n;
     this.done = false;
@@ -215,9 +215,10 @@ class RunningTournament {
 
   newTable(num) {
     const tb = new GameTable({ id: `${this.t.id}:${num}`, kind: 'tour', title: `${this.t.name} · стол ${num}`, hub: this.hub, sb: 10, bb: 20 });
+    tb.pvp = !!this.t.pvp; // режим «против людей» — подсказок нет
     tb.extra = () => ({
       tournamentId: this.t.id, alive: this.alive(), total: this.n, ...this.levelInfo(),
-      prizePool: this.n * this.t.buyin, tableNo: num,
+      prizePool: this.n * this.t.buyin, tableNo: num, pvp: !!this.t.pvp,
     });
     tb.beforeHand = () => {
       // остался один за столом — пересаживаем к остальным
@@ -298,7 +299,8 @@ class RunningTournament {
     for (let i = 0; i < regs.length; i++)
       for (let j = i + 1; j < regs.length; j++) {
         const a = regs[i], b = regs[j];
-        const e = 1 / (1 + 10 ** ((b.rating - a.rating) / 400));
+        const [ra, rb] = this.t.pvp ? [a.pvp_rating, b.pvp_rating] : [a.rating, b.rating];
+        const e = 1 / (1 + 10 ** ((rb - ra) / 400));
         delta.set(a.user_id, delta.get(a.user_id) + K * (1 - e));
         delta.set(b.user_id, delta.get(b.user_id) - K * (1 - e));
       }
@@ -307,7 +309,7 @@ class RunningTournament {
       for (const r of regs) {
         const prize = prizes[r.place - 1] || 0;
         db.prepare('UPDATE regs SET prize = ? WHERE t_id = ? AND user_id = ?').run(prize, this.t.id, r.user_id);
-        db.prepare('UPDATE users SET chips = chips + ?, rating = rating + ?, games = games + 1, wins = wins + ? WHERE id = ?')
+        db.prepare(`UPDATE users SET chips = chips + ?, ${this.t.pvp ? 'pvp_rating = pvp_rating' : 'rating = rating'} + ?, games = games + 1, wins = wins + ? WHERE id = ?`)
           .run(prize, delta.get(r.user_id), r.place === 1 ? 1 : 0, r.user_id);
         if (prize) db.prepare('INSERT INTO ledger (user_id, delta, reason, ref, at) VALUES (?, ?, ?, ?, ?)').run(r.user_id, prize, 'tour_prize', this.t.id, Date.now());
       }

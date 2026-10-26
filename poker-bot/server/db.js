@@ -45,6 +45,11 @@ const userCols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) =>
 if (!userCols.has('won')) db.exec('ALTER TABLE users ADD COLUMN won INTEGER NOT NULL DEFAULT 0'); // чистый выигрыш в играх
 if (!userCols.has('won_rewards')) db.exec('ALTER TABLE users ADD COLUMN won_rewards INTEGER NOT NULL DEFAULT 0'); // сколько наград выдано
 if (!userCols.has('hints')) db.exec('ALTER TABLE users ADD COLUMN hints INTEGER NOT NULL DEFAULT 0'); // купленные подсказки
+// режим «против людей»: включён ли и свой рейтинг (только игры с людьми, без ботов и подсказок)
+if (!userCols.has('pvp')) db.exec('ALTER TABLE users ADD COLUMN pvp INTEGER NOT NULL DEFAULT 0');
+if (!userCols.has('pvp_rating')) db.exec('ALTER TABLE users ADD COLUMN pvp_rating REAL NOT NULL DEFAULT 1500');
+const tourCols = new Set(db.prepare('PRAGMA table_info(tournaments)').all().map((c) => c.name));
+if (!tourCols.has('pvp')) db.exec('ALTER TABLE tournaments ADD COLUMN pvp INTEGER NOT NULL DEFAULT 0'); // турнир режима «против людей»
 
 // Списать одну подсказку. false — подсказок нет.
 export function useHint(id) {
