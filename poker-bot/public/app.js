@@ -170,6 +170,11 @@ function onMessage(m) {
       if (m.text) toast(m.text);
       break;
     case 'club': S.club = m; break;
+    case 'admin':
+      S.adm = { ...(S.adm || {}), ...m };
+      if (m.user) S.adm.users = (S.adm.users || []).map((u) => (u.id === m.user.id ? m.user : u));
+      if (m.text) toast(m.text);
+      break;
     case 'invite': S.friendInvite = m; break;
     case 'watchEnd':
       toast('Друг встал из-за стола');
@@ -372,7 +377,7 @@ function playerCardModal(c) {
 // Настройки экрана на этом устройстве: колода, сцена, фишки, анимация, режим
 const SCENES = [['felt', 'Сукно'], ['casino', 'Казино'], ['city', 'Ночной город'], ['space', 'Космос'], ['sakura', 'Сакура']];
 const CHIP_STYLES = [['classic', 'Классика'], ['neon', 'Неон'], ['gold', 'Золото']];
-const MODES = [['normal', 'Обычный'], ['minimal', 'Минимализм'], ['large', 'Крупный']];
+const MODES = [['normal', 'Обычный'], ['minimal', 'Минимализм'], ['large', 'Крупный'], ['stream', 'Стрим']];
 function loadUi() {
   try { return { deck4: false, scene: 'felt', chips: 'classic', anim: false, mode: 'normal', ...JSON.parse(localStorage.getItem('ui') || '{}') }; } catch { return { deck4: false, scene: 'felt', chips: 'classic', anim: false, mode: 'normal' }; }
 }
@@ -448,7 +453,7 @@ function leaveTableScreen(tournamentId) {
 
 // ---------- Навигация ----------
 
-const BACK = { friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
+const BACK = { admin: 'profile', friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
 
 function go(screen) {
   if (screen !== 'table' && S.screen === 'table' && S.table) S.tableHidden = true;
@@ -458,6 +463,7 @@ function go(screen) {
   if (screen === 'progress') send({ t: 'progress' });
   if (screen === 'bots') send({ t: 'botsInfo' });
   if (screen === 'friends') { send({ t: 'friends' }); send({ t: 'club' }); }
+  if (screen === 'admin') { send({ t: 'admin', a: 'stats' }); send({ t: 'admin', a: 'promos' }); }
   if (screen !== 'table') S.card = null;
   window.scrollTo(0, 0);
   render();
@@ -623,6 +629,10 @@ function lobbyScreen() {
           h('div', { class: 'b', style: 'font-size:15px' }, me.name),
           h('div', { class: 'small muted' }, me.rank && h('b', { style: `color:${me.rank.color}` }, `${me.rank.name} `), `Эло ${me.rating} · место ${fmt(me.ratingPlace)} · раздач выиграно ${fmt(me.handsWon || 0)}`))),
       balancePill()),
+    // ивент (x2 награды / опыт)
+    S.lobby?.event && h('div', { class: 'glass card event-banner' },
+      h('div', { class: 'b' }, `🎉 ${S.lobby.event.title}`),
+      h('div', { class: 'small soft' }, `до ${new Date(S.lobby.event.until).toLocaleString('ru', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit' })}`)),
     // друг зовёт за стол
     S.friendInvite && h('div', { class: 'glass card', style: 'border-color:rgba(127,209,168,0.6)' },
       h('div', { class: 'row between' }, h('div', { class: 'b' }, `${S.friendInvite.from} зовёт ${S.friendInvite.duel ? `на дуэль (${S.friendInvite.duel} раздач)` : 'за стол'}`),
@@ -1030,6 +1040,8 @@ function tableScreen() {
 
   const adminDock = S.me.isAdmin && (T.kind === 'bots' || T.solo);
   return h('div', { class: `table-screen ${adminDock ? 'with-admin' : ''} ${nine ? 'nine' : ''}` },
+    // режим стрима: водяной знак для записи
+    h('div', { class: 'stream-mark', 'aria-hidden': 'true' }, '♠ Покер в Telegram · @pokergamebetbot'),
     h('div', { class: 'table-top' },
       h('button', { class: 'icon-btn', 'aria-label': T.kind === 'tour' ? 'В лобби' : 'Встать из-за стола', onclick: back }, icon('back', 18)),
       h('div', { class: 'title' }, info,
@@ -1418,6 +1430,88 @@ function progressScreen() {
     nav());
 }
 
+// ---------- Админка ----------
+
+function adminScreen() {
+  const A = S.adm || {};
+  const tab = S.admTab || 'stats';
+  const st = A.stats;
+  const adj = (u, field, label) => h('div', { class: 'row', style: 'gap:6px;align-items:center' },
+    h('div', { class: 'small', style: 'width:92px' }, label),
+    h('input', { class: 'buyin-input', style: 'margin:0;flex:1;height:36px', type: 'number', id: `adj-${u.id}-${field}`, placeholder: '±число или =число' }),
+    h('button', { class: 'btn-sm', onclick: () => {
+      const raw = document.getElementById(`adj-${u.id}-${field}`).value.trim();
+      if (!raw) return;
+      run({ t: 'admin', a: 'adjust', id: u.id, field, mode: raw.startsWith('=') ? 'set' : 'add', value: raw.replace('=', '') });
+    } }, 'OK'));
+  const tabs = h('div', { class: 'seg' }, [['stats', 'Стата'], ['users', 'Игроки'], ['promo', 'Промо'], ['more', 'Ещё']].map(([k, l]) =>
+    h('button', { class: tab === k ? 'on' : '', onclick: () => { S.admTab = k; render(); } }, l)));
+  let body;
+  if (tab === 'stats') {
+    const max = Math.max(1, ...(st?.days || []).map((d) => d.stars));
+    body = !st ? h('div', { class: 'muted small' }, 'Загрузка…') : [
+      h('div', { class: 'glass card' },
+        h('div', { class: 'grid3' }, stat('Игроков', fmt(st.users)), stat('За сутки', fmt(st.dau)), stat('За неделю', fmt(st.wau))),
+        h('div', { class: 'grid3' }, stat('Звёзд всего', `⭐ ${fmt(st.starsTotal)}`), stat('Платежей', fmt(st.paymentsTotal)), stat('Платят', fmt(st.payers))),
+        h('div', { class: 'grid3' }, stat('Фишек у всех', fmtShort(st.chips)), stat('Столов сейчас', st.activeTables), stat('', ''))),
+      h('div', { class: 'label' }, 'Звёзды по дням (14 дней)'),
+      h('div', { class: 'glass card bars' }, st.days.map((d) => h('div', { class: 'bar-col', title: `${d.day}: ⭐${d.stars}, платежей ${d.payments}, новых ${d.newUsers}` },
+        h('div', { class: 'small', style: 'font-size:9.5px' }, d.stars ? d.stars : ''),
+        h('div', { class: 'bar', style: `height:${Math.round((d.stars / max) * 90)}px` }),
+        h('div', { class: 'small muted', style: 'font-size:9px' }, d.day.slice(3))))),
+      h('div', { class: 'small muted' }, 'Новых игроков по дням: ' + st.days.map((d) => d.newUsers).join(' · ')),
+      h('button', { class: 'btn-ghost', onclick: () => send({ t: 'admin', a: 'stats' }) }, 'Обновить'),
+    ];
+  } else if (tab === 'users') {
+    body = [
+      h('div', { class: 'row', style: 'gap:8px' },
+        h('input', { class: 'buyin-input', style: 'margin:0;flex:1', id: 'adm-q', placeholder: 'id, имя или @ник', value: S.admQ || '', oninput: (e) => { S.admQ = e.target.value; } }),
+        h('button', { class: 'btn-sm', onclick: () => send({ t: 'admin', a: 'search', q: S.admQ || '' }) }, 'Найти')),
+      h('div', { class: 'small muted' }, '«+500» — добавить, «-500» — забрать, «=1800» — поставить'),
+      (A.users || []).map((u) => h('div', { class: 'glass card', style: 'gap:6px' },
+        h('div', { class: 'row between' }, h('div', { class: 'b' }, `${u.name}${u.username ? ` @${u.username}` : ''}`), h('div', { class: 'small muted' }, `id ${u.id}`)),
+        h('div', { class: 'small soft' }, `Фишки ${fmt(u.chips)} (в игре ${fmt(u.inPlay)}) · Эло ${u.rating} · подсказок ${u.hints} · раздач ${fmt(u.handsWon)} · турниров ${u.games}/${u.wins}`),
+        adj(u, 'chips', 'Фишки'), adj(u, 'rating', 'Эло'), adj(u, 'hints', 'Подсказки'), adj(u, 'handsWon', 'Раздачи'))),
+    ];
+  } else if (tab === 'promo') {
+    const P = S.admPromo || (S.admPromo = { code: '', chips: 1000, hints: 0, chest: '', maxUses: 100, days: 7 });
+    const inp = (k, ph, type = 'text') => h('input', { class: 'buyin-input', style: 'margin:0', type, id: `promo-${k}`, placeholder: ph, value: P[k] ?? '', oninput: (e) => { P[k] = e.target.value; } });
+    body = [
+      h('div', { class: 'glass card', style: 'gap:8px' },
+        h('div', { class: 'b' }, 'Новый промокод'),
+        inp('code', 'КОД (латиница)'), inp('chips', 'Фишки', 'number'), inp('hints', 'Подсказки', 'number'),
+        h('div', { class: 'choices' }, [['', 'Без сундука'], ['common', 'Обычный'], ['rare', 'Редкий'], ['epic', 'Эпический']].map(([k, l]) => h('button', { class: P.chest === k ? 'on' : '', onclick: () => { P.chest = k; render(); } }, l))),
+        inp('maxUses', 'Сколько раз можно ввести', 'number'), inp('days', 'Сколько дней действует', 'number'),
+        h('button', { class: 'btn', onclick: () => run({ t: 'admin', a: 'promoCreate', promo: { ...P, chest: P.chest || null } }) }, 'Создать')),
+      h('div', { class: 'label' }, 'Промокоды'),
+      (A.promos || []).map((p) => h('div', { class: 'item' },
+        h('div', { class: 'col' }, h('div', { class: 'b' }, p.code),
+          h('div', { class: 'small muted' }, `${[p.chips && `${fmt(p.chips)} фишек`, p.hints && `${p.hints} подск.`, p.chest && `сундук: ${p.chest}`].filter(Boolean).join(', ')} · ${p.used}/${p.max_uses} · до ${new Date(p.expires).toLocaleDateString('ru')}`)),
+        h('button', { class: 'btn-sm ghost', onclick: () => { if (confirm(`Удалить ${p.code}?`)) run({ t: 'admin', a: 'promoDelete', code: p.code }); } }, '✕'))),
+    ];
+  } else {
+    const E = S.admEvent || (S.admEvent = { kind: 'x2chips', hours: 48, title: '' });
+    const bs = A.broadcast;
+    body = [
+      h('div', { class: 'glass card', style: 'gap:8px' },
+        h('div', { class: 'b' }, '📣 Рассылка всем игрокам'),
+        h('textarea', { class: 'buyin-input', style: 'margin:0;height:110px;padding:10px', id: 'adm-bc', placeholder: 'Текст сообщения (можно <b>жирный</b>)', oninput: (e) => { S.admBc = e.target.value; } }, S.admBc || ''),
+        h('button', { class: 'btn', onclick: () => { if (confirm('Отправить всем игрокам?')) run({ t: 'admin', a: 'broadcast', text: S.admBc }); } }, 'Отправить всем'),
+        bs && h('div', { class: 'small soft' }, `Отправлено ${bs.sent} из ${bs.total}${bs.failed ? `, не дошло ${bs.failed}` : ''}${bs.done ? ' · готово' : ' · идёт…'}`)),
+      h('div', { class: 'glass card', style: 'gap:8px' },
+        h('div', { class: 'b' }, '🎉 Ивент'),
+        h('div', { class: 'choices' }, [['x2chips', 'x2 фишки'], ['x2xp', 'x2 опыт']].map(([k, l]) => h('button', { class: E.kind === k ? 'on' : '', onclick: () => { E.kind = k; render(); } }, l))),
+        h('div', { class: 'choices' }, [24, 48, 72, 168].map((hh) => h('button', { class: E.hours === hh ? 'on' : '', onclick: () => { E.hours = hh; render(); } }, hh < 168 ? `${hh} ч` : 'неделя'))),
+        h('input', { class: 'buyin-input', style: 'margin:0', id: 'adm-ev', placeholder: 'Название (например «x2 на выходных!»)', value: E.title, oninput: (e) => { E.title = e.target.value; } }),
+        h('div', { class: 'row', style: 'gap:8px' },
+          h('button', { class: 'btn-sm', onclick: () => run({ t: 'admin', a: 'event', kind: E.kind, hours: E.hours, title: E.title }) }, 'Включить'),
+          h('button', { class: 'btn-sm ghost', onclick: () => run({ t: 'admin', a: 'event', kind: null }) }, 'Выключить'))),
+      h('div', { class: 'small muted', style: 'line-height:1.45' }, 'Режим стрима: Профиль → Настройки экрана → «Стрим». Скрывает лишние кнопки и добавляет водяной знак для записи.'),
+    ];
+  }
+  return h('div', { class: 'screen' }, header('Админка'), tabs, body, h('div', { style: 'height:80px' }), nav());
+}
+
 // ---------- Друзья и клуб ----------
 
 async function stopWatching() {
@@ -1780,6 +1874,10 @@ function walletScreen() {
       h('div', { class: 'small soft', style: 'font-size:13px' }, 'Фишки'),
       h('div', { class: 'big' }, fmt(me.chips)),
       h('div', { class: 'small muted' }, `В игре: ${fmt(me.inPlay)} · место по фишкам: ${fmt(me.chipsPlace)}`)),
+    // промокод
+    h('div', { class: 'row', style: 'gap:8px' },
+      h('input', { class: 'buyin-input', style: 'margin:0;flex:1', id: 'promo', placeholder: 'Промокод', value: S.promo || '', oninput: (e) => { S.promo = e.target.value; } }),
+      h('button', { class: 'btn-sm', onclick: async () => { const r = await run({ t: 'redeemPromo', code: S.promo }); if (r) { toast(r.text); S.promo = ''; render(); } } }, 'Активировать')),
     bonus && h('div', { class: 'item', style: 'padding:14px;border-radius:16px' },
       h('div', { class: 'col' }, h('div', { style: 'font-size:15px;font-weight:600' }, 'Ежедневный бонус'), h('div', { class: 'small soft' }, `+${fmt(bonus.amount)} фишек раз в сутки`)),
       h('button', { class: 'btn-sm', disabled: nowSrv() < bonus.readyAt, onclick: () => run({ t: 'bonus' }) },
@@ -1825,6 +1923,7 @@ function profileScreen() {
     h('div', { class: 'row' },
       h('div', { class: 'avatar', style: 'width:56px;height:56px;font-size:22px' }, initial(me.name)),
       h('div', { class: 'col' }, h('h1', { class: 'h2' }, me.name), h('div', { class: 'small muted' }, `Эло ${me.rating}`))),
+    me.isAdmin && h('button', { class: 'btn-ghost', onclick: () => go('admin') }, '⚙️ Админка'),
     h('div', { class: 'glass card' },
       h('div', { class: 'grid3' }, stat('Место', fmt(me.ratingPlace)), stat('Турниров', me.games), stat('Побед', me.wins)),
       h('div', { class: 'grid3' }, stat('Раздач выиграно', fmt(me.handsWon || 0)), stat('Эло', me.rating), stat('Подсказок', me.hints || 0)),
@@ -1894,7 +1993,7 @@ function combosScreen() {
 
 // ---------- Рендер ----------
 
-const SCREENS = { friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
+const SCREENS = { admin: adminScreen, friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
 
 function render() {
   const app = document.getElementById('app');

@@ -800,3 +800,37 @@ test('друзья: заявка и принятие, подарок с лими
   assert.equal(registerRef(9934, 9931), false, 'второй раз — нельзя');
   a.close(); b.close(); out.close();
 });
+
+test('админка: доступ, правка игрока, статистика, промокод один раз, ивент x2', async () => {
+  const x = new Client(7007);
+  await x.ready;
+  await assert.rejects(x.req({ t: 'admin', a: 'stats' }), /Нет доступа/);
+  const a = new Client(7001);
+  await a.ready;
+  const st = await a.req({ t: 'admin', a: 'stats' });
+  assert.ok(st.stats.users >= 1);
+  assert.equal(st.stats.days.length, 14);
+  const found = await a.req({ t: 'admin', a: 'search', q: '7007' });
+  assert.equal(found.users[0].id, 7007);
+  const adj = await a.req({ t: 'admin', a: 'adjust', id: 7007, field: 'chips', mode: 'add', value: 777 });
+  assert.equal(adj.user.chips, 777);
+  const set = await a.req({ t: 'admin', a: 'adjust', id: 7007, field: 'handsWon', mode: 'set', value: 42 });
+  assert.equal(set.user.handsWon, 42);
+  // промокод
+  await assert.rejects(a.req({ t: 'admin', a: 'promoCreate', promo: { code: 'x' } }), /Код/);
+  await a.req({ t: 'admin', a: 'promoCreate', promo: { code: 'TEST100', chips: 100, maxUses: 5, days: 1 } });
+  const r = await x.req({ t: 'redeemPromo', code: 'test100' });
+  assert.match(r.text, /100/);
+  await assert.rejects(x.req({ t: 'redeemPromo', code: 'TEST100' }), /уже вводил/);
+  await assert.rejects(x.req({ t: 'redeemPromo', code: 'NOPE' }), /Нет такого/);
+  assertLedger(7007);
+  // ивент x2 фишки: бонус дня удваивается
+  await a.req({ t: 'admin', a: 'event', kind: 'x2chips', hours: 1, title: 'x2!' });
+  const lobby = await x.req({ t: 'lobby' });
+  assert.equal(lobby.event.kind, 'x2chips');
+  const d = await x.req({ t: 'claimDaily' });
+  assert.match(d.text, /\+200 фишек/);
+  await a.req({ t: 'admin', a: 'event', kind: null });
+  assert.equal((await x.req({ t: 'lobby' })).event, null);
+  a.close(); x.close();
+});

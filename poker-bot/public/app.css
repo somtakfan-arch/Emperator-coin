@@ -429,3 +429,16 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
 .phrase { flex: none; height: 34px; padding: 0 12px; border-radius: 17px; border: 1px solid var(--line); background: var(--glass); color: var(--text); font-size: 13px; font-weight: 600; }
 .share-btn { margin-left: 8px; width: 30px; height: 30px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.12); font-size: 14px; pointer-events: auto; }
 .result { pointer-events: auto; }
+/* ---------- Пачка 7: админка и стрим ---------- */
+.bars { flex-direction: row !important; align-items: flex-end; justify-content: space-between; gap: 3px; height: 150px; }
+.bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 3px; min-width: 0; }
+.bar { width: 100%; min-height: 2px; border-radius: 4px 4px 0 0; background: linear-gradient(180deg, #f2c94c, #b8892a); }
+.event-banner { border-color: rgba(242,201,76,0.7) !important; background: rgba(242,201,76,0.12) !important; }
+textarea.buyin-input { resize: vertical; font: inherit; }
+.stream-mark { display: none; }
+:root[data-mode="stream"] .stream-mark { display: block; position: absolute; left: 50%; bottom: calc(6px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 6; font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.55); letter-spacing: 0.5px; pointer-events: none; white-space: nowrap; }
+:root[data-mode="stream"] .admin-btns, :root[data-mode="stream"] .hint-ico, :root[data-mode="stream"] .emote-btn, :root[data-mode="stream"] .session-line, :root[data-mode="stream"] .timebank-btn { display: none !important; }
+:root[data-mode="stream"] .table-screen.with-admin .felt-wrap { bottom: 215px; }
+:root[data-mode="stream"] .bottom-dock { bottom: calc(26px + env(safe-area-inset-bottom)); }
+:root[data-mode="stream"] .panel { background: rgba(12,24,26,0.5); }
+:root[data-mode="stream"] .pick-btn { opacity: 0.25; } /* выбор карт остаётся, но почти не виден на записи */

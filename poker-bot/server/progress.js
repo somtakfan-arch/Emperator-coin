@@ -3,6 +3,7 @@
 // Всё хранится в users.progress (JSON), для таблиц лидеров — отдельные колонки.
 import { db, tx, credit } from './db.js';
 import { config } from './config.js';
+import { eventMult } from './events.js';
 
 const cols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
 if (!cols.has('progress')) db.exec("ALTER TABLE users ADD COLUMN progress TEXT NOT NULL DEFAULT '{}'");
@@ -150,15 +151,16 @@ export function setProgressNotifier(fn) {
 }
 
 function addXp(p, n) {
-  p.pass.xp += n;
+  p.pass.xp += n * eventMult('x2xp'); // ивент «x2 опыт»
 }
+const x2 = (chips) => chips * eventMult('x2chips'); // ивент «x2 фишки»
 
 function unlock(uid, p, key, out) {
   if (p.ach[key]) return;
   const a = ACHIEVEMENTS.find((x) => x.key === key);
   if (!a) return;
   p.ach[key] = Date.now();
-  if (a.chips && config.progressRewards) credit(uid, a.chips, 'achievement', key);
+  if (a.chips && config.progressRewards) credit(uid, x2(a.chips), 'achievement', key);
   if (a.chest) p.chests[a.chest]++;
   addXp(p, 50);
   out.push(`🏅 Достижение «${a.name}»: +${a.chips} фишек${a.chest ? ` и ${CHESTS[a.chest].name.toLowerCase()}` : ''}`);
@@ -267,7 +269,7 @@ export function claimQuest(uid, period, key) {
     if (q.claimed) throw new Error('Награда уже получена');
     if (q.p < def.need) throw new Error('Задание ещё не выполнено');
     q.claimed = true;
-    credit(uid, def.chips, 'quest', key);
+    credit(uid, x2(def.chips), 'quest', key);
     addXp(p, def.xp);
     if (def.chest) p.chests[def.chest]++;
     save(uid, p);
@@ -291,8 +293,8 @@ export function claimDaily(uid) {
       p.chests.rare++;
       msg = `День ${p.bonus.streak}: редкий сундук!`;
     } else {
-      credit(uid, reward, 'daily_bonus');
-      msg = `День ${p.bonus.streak}: +${reward} фишек`;
+      credit(uid, x2(reward), 'daily_bonus');
+      msg = `День ${p.bonus.streak}: +${x2(reward)} фишек`;
     }
     addXp(p, 10);
     if (p.bonus.streak >= 7) unlock(uid, p, 'streak_7', out);
@@ -310,7 +312,7 @@ export function openChest(uid, kind) {
     const def = CHESTS[kind];
     if (!def || !(p.chests[kind] > 0)) throw new Error('Такого сундука нет');
     p.chests[kind]--;
-    const chips = rnd(def.chips);
+    const chips = x2(rnd(def.chips));
     const hints = rnd(def.hints);
     credit(uid, chips, 'chest', kind);
     if (hints) db.prepare('UPDATE users SET hints = hints + ? WHERE id = ?').run(hints, uid);
@@ -339,7 +341,7 @@ export function claimPass(uid, lvl) {
     if (Math.floor(p.pass.xp / XP_PER_LEVEL) < L.lvl) throw new Error('Уровень ещё не открыт');
     if (p.pass.claimed.includes(L.lvl)) throw new Error('Награда уже получена');
     p.pass.claimed.push(L.lvl);
-    if (L.chips) credit(uid, L.chips, 'pass', String(L.lvl));
+    if (L.chips) credit(uid, x2(L.chips), 'pass', String(L.lvl));
     if (L.hints) db.prepare('UPDATE users SET hints = hints + ? WHERE id = ?').run(L.hints, uid);
     if (L.chest) p.chests[L.chest]++;
     save(uid, p);

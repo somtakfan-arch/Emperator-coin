@@ -5,7 +5,7 @@ import { extname, join, normalize } from 'node:path';
 import { WebSocketServer } from 'ws';
 import { config, payoutShares } from './config.js';
 import { db, upsertUser, getUser, ranks, credit, recoverAfterRestart, addWinnings, WIN_REWARDS, useHint } from './db.js';
-import { verifyInitData, startBot, createInvoice, hooks, inviteLink, bot, notify, openButton, findPack } from './telegram.js';
+import { verifyInitData, startBot, createInvoice, hooks, inviteLink, bot, notify, openButton, findPack, api } from './telegram.js';
 import { BotRoom, DemoRoom } from './game/botroom.js';
 import { MixedRoom } from './game/mixedroom.js';
 import { Tournaments } from './game/tournament.js';
@@ -18,6 +18,7 @@ import { botRating } from './game/elo.js';
 import * as progress from './progress.js';
 import * as cosmetics from './cosmetics.js';
 import * as social from './social.js';
+import * as admin from './admin.js';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 
@@ -190,6 +191,7 @@ function meView(uid) {
 function lobbyView(uid) {
   return {
     tournaments: tournaments.list(uid),
+    event: admin.getEvent(),
     online: sockets.size,
     packs: config.packs, hintPacks: config.hintPacks, bots: BOTS, crowd: CROWD_VIEW, solo: SOLO_VIEW, buyins: config.botBuyins, buyinMin: config.buyinMin,
     sizes: config.tournament.sizes, blindOptions: config.tournament.blindOptions, turnSeconds: config.turnSeconds, timedMinutes: config.timedMinutes,
@@ -211,6 +213,48 @@ const handlers = {
         ? db.prepare('SELECT name, biggest_pot AS value, rating FROM users WHERE biggest_pot > 0 ORDER BY biggest_pot DESC LIMIT 20').all()
         : db.prepare('SELECT name, rating AS value, rating FROM users WHERE games > 0 OR rating <> 1500 ORDER BY rating DESC LIMIT 20').all();
     return { t: 'top', kind, rating: rows.map((r) => ({ name: r.name, value: Math.round(r.value), rank: progress.rankOf(r.rating).name, rankColor: progress.rankOf(r.rating).color })) };
+  },
+  // ---------- промокод (для всех) ----------
+  redeemPromo(uid, m) {
+    const text = admin.redeem(uid, m.code);
+    hub.sendMe(uid);
+    return { t: 'ok', text: `Промокод активирован: ${text}` };
+  },
+  // ---------- админка (только админ) ----------
+  admin(uid, m) {
+    if (!config.adminIds.includes(uid)) throw new Error('Нет доступа');
+    const a = m.a;
+    if (a === 'search') return { t: 'admin', users: admin.searchUsers(m.q) };
+    if (a === 'adjust') {
+      const u = admin.adjust(m.id, m.field, m.mode, m.value);
+      hub.sendMe(u.id);
+      // значок раздач за столом — сразу
+      if (m.field === 'handsWon') hooks.onHandsWon?.(u.id, u.handsWon);
+      return { t: 'admin', user: u, text: 'Сохранено' };
+    }
+    if (a === 'stats') {
+      const tables = new Set([...botRooms.values()].map((r) => r.table)).size + solos.size + tournaments.running.size;
+      return { t: 'admin', stats: admin.stats(tables), broadcast: admin.broadcastStatus() };
+    }
+    if (a === 'broadcast') {
+      const st = admin.startBroadcast(m.text, (id, text) => api('sendMessage', { chat_id: id, text, parse_mode: 'HTML', reply_markup: { inline_keyboard: [[openButton('Играть', '', 'success')]] } }));
+      return { t: 'admin', broadcast: st, text: `Рассылка началась: ${st.total} игроков` };
+    }
+    if (a === 'promos') return { t: 'admin', promos: admin.listPromos() };
+    if (a === 'promoCreate') {
+      admin.createPromo(m.promo || {});
+      return { t: 'admin', promos: admin.listPromos(), text: 'Промокод создан' };
+    }
+    if (a === 'promoDelete') {
+      admin.deletePromo(m.code);
+      return { t: 'admin', promos: admin.listPromos() };
+    }
+    if (a === 'event') {
+      const e = admin.setEvent(m.kind || null, m.hours, m.title);
+      hub.lobbyChanged();
+      return { t: 'admin', event: m.kind ? e : null, text: m.kind ? 'Ивент включён' : 'Ивент выключен' };
+    }
+    throw new Error('Неизвестное действие');
   },
   // ---------- друзья, клубы, подарки, приглашения ----------
   friends: (uid) => ({ t: 'friends', ...social.friendsView(uid, presence), ref: { ...social.refStats(uid), link: bot.username ? `https://t.me/${bot.username}?start=r_${uid}` : null, bonusNew: social.REF_BONUS_NEW, bonusInviter: social.REF_BONUS_INVITER } }),
@@ -633,6 +677,7 @@ wss.on('connection', (ws) => {
         if (!auth?.user?.id) return reply({ t: 'error', text: 'Открой приложение через Telegram' });
         const u = upsertUser(auth.user);
         uid = u.id;
+        admin.touch(uid); // для статистики «активные за сутки»
         if (!sockets.has(uid)) sockets.set(uid, new Set());
         sockets.get(uid).add(ws);
         reply({ t: 'hello', me: meView(uid), startParam: auth.startParam || null });
