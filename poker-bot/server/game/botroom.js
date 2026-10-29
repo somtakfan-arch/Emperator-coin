@@ -147,11 +147,8 @@ export class BotRoom {
     return !!this.endsAt && Date.now() < this.endsAt && this.me.stack > 0;
   }
 
+  // встать можно всегда, даже со стола на время — стек вернётся на баланс
   leave() {
-    if (this.locked()) {
-      const min = Math.ceil((this.endsAt - Date.now()) / 60000);
-      throw new Error(`Это стол на время — встать можно через ${min} мин`);
-    }
     this.leaving = true;
     this.seat.sittingOut = true;
     this.seat.forceFold();
@@ -194,6 +191,7 @@ export class DemoRoom {
       bot.id = -(i + 1);
       this.table.addPlayer({ id: bot.id, name: bot.name, stack: DEMO_STACK, bot: botSeat(bot, this.table), isBot: true });
     });
+    this.table.noStats = true; // демо — не в счёт
     this.table.extra = () => ({ demo: true, plan: this.plan, canRebuy: this.me.stack === 0 });
     this.table.engine.demoDeck = (deck, ids) => this.applyPlan(deck, ids);
     this.advisor = makeAdvisor(user.id);

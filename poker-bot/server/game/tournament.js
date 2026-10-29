@@ -162,6 +162,17 @@ export class Tournaments {
     this.hub.lobbyChanged();
   }
 
+  // сдаться: за столом сразу фолд, после раздачи — вылет (место по текущему)
+  forfeit(userId) {
+    const t = this.tableOf(userId);
+    if (!t) return;
+    const p = t.table.players.find((x) => x.id === userId);
+    p.forfeit = true;
+    p.bot.sittingOut = true;
+    p.bot.forceFold();
+    if (!t.table.inHand) t.run.afterHand(t.table);
+  }
+
   tableOf(userId) {
     for (const run of this.running.values()) {
       const tb = run.tableOf(userId);
@@ -233,6 +244,7 @@ class RunningTournament {
 
   afterHand(tb) {
     if (this.done) return;
+    for (const p of tb.players) if (p.forfeit) p.stack = 0; // сдавшиеся выбывают
     // вылетевшие: кто раньше раздачи имел больше — тот выше
     const busted = tb.players.filter((p) => p.stack === 0)
       .sort((a, b) => (tb.handStacks?.get(b.id) ?? 0) - (tb.handStacks?.get(a.id) ?? 0));

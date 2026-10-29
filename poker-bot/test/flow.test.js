@@ -92,19 +92,23 @@ test('старт с нулём, пополнение (DEV), стол проти�
   await c.req({ t: 'invoice', pack: 'p1' });
   await c.waitFor((m) => m.t === 'me' && m.me.chips === 5000);
   await c.req({ t: 'sitBots', mode: 'hu', botName: 'Акула', buyin: 500 });
-  await c.waitFor((m) => m.t === 'table' && (m.table?.handId >= 3 || m.table?.canRebuy));
+  await c.waitFor((m) => m.t === 'left' || (m.t === 'table' && (m.table?.handId >= 3 || m.table?.canRebuy)));
   let rebuys = 0;
-  if (c.table.canRebuy) {
+  if (c.table?.canRebuy && !c.msgs.some((m) => m.t === 'left')) {
     // колл-станцию Акула обыгрывает быстро — проверим докупку
     await c.req({ t: 'rebuy' });
     rebuys = 1;
   }
   // чужие карты не видны (кроме вскрытия — там их показывают всем)
-  const opp = c.table.seats.find((s) => !s.me);
-  if (c.table.inHand && !opp.hand) assert.equal(opp.cards, null);
-  await assert.rejects(c.req({ t: 'sitBots', mode: 'hu', botName: 'Акула', buyin: 500 }), /уже за столом/);
-  c.ws.send(JSON.stringify({ t: 'leave' }));
-  const left = await c.waitFor((m) => m.t === 'left');
+  const opp = c.table?.seats.find((s) => !s.me);
+  if (opp && c.table.inHand && !opp.hand) assert.equal(opp.cards, null);
+  // если бот уже проиграл весь стек, стол закрылся сам (боты не докупаются)
+  let left = c.msgs.find((m) => m.t === 'left');
+  if (!left) {
+    await assert.rejects(c.req({ t: 'sitBots', mode: 'hu', botName: 'Акула', buyin: 500 }), /уже за столом/);
+    c.ws.send(JSON.stringify({ t: 'leave' }));
+    left = await c.waitFor((m) => m.t === 'left').catch(() => c.msgs.find((m) => m.t === 'left'));
+  }
   await new Promise((r) => setTimeout(r, 50));
   const u = assertLedger(1001);
   assert.equal(u.in_play, 0);
@@ -171,17 +175,16 @@ test('отмена своего турнира возвращает взносы
   a.close(); b.close();
 });
 
-test('стол на время: встать нельзя, по окончании закрывается сам с итогом', async () => {
+test('стол на время: по окончании закрывается сам с итогом', async () => {
   const c = new Client(5001);
   await c.ready;
   await c.req({ t: 'invoice', pack: 'p1' });
   await assert.rejects(c.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 500, minutes: 7 }), /Неверное время/);
   await c.req({ t: 'sitBots', mode: '6', buyin: 500, minutes: 10 });
   await c.waitFor((m) => m.t === 'table' && m.table?.locked);
-  await assert.rejects(c.req({ t: 'leave' }), /стол на время/);
-  // свободного выхода нет — проверим, что стол всё ещё идёт
-  await new Promise((r) => setTimeout(r, 200));
-  assert.ok(c.table && !c.msgs.some((m) => m.t === 'left'));
+  // встать можно и со стола на время — стек на баланс
+  await c.req({ t: 'leave' });
+  await c.waitFor((m) => m.t === 'left', 30000);
   c.close();
 
   // короткий стол (3 с): закрывается сам и присылает итог
@@ -299,7 +302,7 @@ test('стол с друзьями: двое людей + боты, чужие �
     && m.table.seats.find((s) => s.me)?.cards, 60000);
   const hostSeat = snap.table.seats.find((s) => s.id === 9101);
   if (!hostSeat.hand) assert.equal(hostSeat.cards, null, 'карты хоста другу не видны');
-  assert.equal(snap.table.seats.filter((s) => s.isBot).length, 2);
+  assert.ok(snap.table.seats.filter((s) => s.isBot).length <= 2, 'ботов не больше двух (проигравшие выбывают)');
   await host.waitFor((m) => m.t === 'turn', 60000);
   await assert.rejects(host.req({ t: 'hint' }), /Подсказок нет|в твой ход/); // с людьми работает, но нужна купленная подсказка
   // играем пару раздач и встаём
@@ -424,4 +427,28 @@ test('демо-турнир на 60: только админ, свои карт�
   assert.equal(after.games, before.games);
   assert.equal(after.in_play, 0);
   a.close();
+});
+
+test('выйти можно с любого стола: со стола на время и из сольного турнира; раздачи считаются', async () => {
+  const c = new Client(9501);
+  await c.ready;
+  await c.req({ t: 'invoice', pack: 'p1' });
+  await c.waitFor((m) => m.t === 'me' && m.me.chips === 5000);
+  await c.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 500, minutes: 10 });
+  await c.waitFor((m) => m.t === 'table' && m.table?.locked && m.table.handId >= 3, 60000);
+  await c.req({ t: 'leave' });
+  const left = await c.waitFor((m) => m.t === 'left', 30000);
+  await c.req({ t: 'startSolo', buyin: 500, size: 18, blindMin: 6 });
+  await c.waitFor((m) => m.t === 'table' && m.table?.solo, 30000);
+  await c.req({ t: 'leave' });
+  const fin = await c.waitFor((m) => m.t === 'finished' && m.solo, 30000);
+  assert.ok(fin.place >= 1 && fin.place <= 18);
+  await new Promise((r) => setTimeout(r, 50));
+  const u = assertLedger(9501);
+  assert.equal(u.in_play, 0);
+  assert.equal(u.chips, 5000 - 500 + left.stack - 500 + fin.prize);
+  const me = await c.req({ t: 'me' });
+  assert.equal(me.me.table, null, 'карточки «Ты за столом» больше нет');
+  assert.ok(Number.isInteger(me.me.handsWon));
+  c.close();
 });

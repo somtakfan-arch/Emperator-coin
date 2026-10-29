@@ -6,6 +6,9 @@ import { randomInt } from 'node:crypto';
 import { Table } from '../../core/engine.js';
 import { describeHand, evaluate, handCategory } from '../../core/cards.js';
 import { config } from '../config.js';
+import { db } from '../db.js';
+
+const addHandWon = db.prepare('UPDATE users SET hands_won = hands_won + 1 WHERE id = ?');
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms * config.speed));
 const cryptoRng = () => randomInt(0, 2 ** 32) / 2 ** 32; // колода тасуется криптостойко
@@ -175,6 +178,12 @@ export class GameTable {
     // ходы текущей раздачи — по ним честная подсказка оценивает руки соперников
     if (e.type === 'handStart') this.handLog = [];
     this.handLog?.push(e);
+    // счётчик выигранных раздач (на демо-столах не считается)
+    if (e.type === 'handEnd' && !this.noStats) {
+      for (const id of new Set(e.winners.map((w) => w.id))) {
+        if (this.players.some((p) => p.id === id && !p.isBot)) addHandWon.run(id);
+      }
+    }
     const v = this.v;
     if (e.type === 'handStart') {
       v.handId = e.handId;

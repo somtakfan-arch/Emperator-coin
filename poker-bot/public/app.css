@@ -14,7 +14,21 @@
   --green: #7fd1a8;
   --star: #f2c94c;
   --blur: blur(6px);
+  --felt-1: #2a6a62;
+  --felt-2: #17413d;
+  --felt-3: #0f2c29;
 }
+
+/* Темы оформления: фон и сукно стола */
+:root[data-theme="red"] { --bg-deep: #120607; --bg-mid: #2a0f12; --bg-top: #5a1a20; --felt-1: #8a2a2f; --felt-2: #5a1a1e; --felt-3: #3a0f12; }
+:root[data-theme="blue"] { --bg-deep: #060a14; --bg-mid: #0f1a33; --bg-top: #1f3566; --felt-1: #2a4f8a; --felt-2: #1a335a; --felt-3: #0f203a; }
+:root[data-theme="purple"] { --bg-deep: #0c0614; --bg-mid: #1f1033; --bg-top: #3d2266; --felt-1: #5a2a8a; --felt-2: #3a1a5a; --felt-3: #22103a; }
+:root[data-theme="gold"] { --bg-deep: #0a0906; --bg-mid: #1e1a10; --bg-top: #4a3f1f; --felt-1: #6a5a2a; --felt-2: #41381a; --felt-3: #2a230f; }
+:root[data-theme="graphite"] { --bg-deep: #080808; --bg-mid: #161616; --bg-top: #2c2c2c; --felt-1: #3a3a3a; --felt-2: #262626; --felt-3: #161616; }
+.themes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.theme-btn { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 6px; border-radius: 14px; border: 1px solid var(--line); background: var(--glass); color: var(--text); font-size: 13px; }
+.theme-btn.on { border-color: var(--silver); background: var(--glass-2); font-weight: 700; }
+.theme-swatch { width: 44px; height: 28px; border-radius: 14px; border: 2px solid rgba(255,255,255,0.25); }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; }
@@ -109,8 +123,8 @@ select.input { appearance: none; }
 .table-screen { position: fixed; inset: 0; overflow: hidden; background: radial-gradient(120% 70% at 50% 40%, var(--bg-top) 0%, var(--bg-mid) 50%, var(--bg-deep) 100%); }
 .table-top { position: absolute; left: 16px; right: 16px; top: calc(14px + env(safe-area-inset-top)); display: flex; align-items: center; justify-content: space-between; gap: 10px; z-index: 3; }
 .table-top .title { font-size: 13px; color: var(--soft); text-align: center; flex: 1; line-height: 1.4; }
-.felt-wrap { position: absolute; left: 0; right: 0; top: 64px; bottom: 150px; }
-.felt { position: absolute; left: 9%; right: 9%; top: 9%; bottom: 9%; border-radius: 200px; background: radial-gradient(ellipse at 50% 45%, #2a6a62 0%, #17413d 70%, #0f2c29 100%); border: 10px solid #1a2326; box-shadow: 0 0 0 2px rgba(220,230,235,0.25), 0 30px 60px rgba(0,0,0,0.5); }
+.felt-wrap { position: absolute; left: 0; right: 0; top: 64px; bottom: 215px; } /* низ стола — над панелью хода */
+.felt { position: absolute; left: 9%; right: 9%; top: 9%; bottom: 9%; border-radius: 200px; background: radial-gradient(ellipse at 50% 45%, var(--felt-1) 0%, var(--felt-2) 70%, var(--felt-3) 100%); border: 10px solid #1a2326; box-shadow: 0 0 0 2px rgba(220,230,235,0.25), 0 30px 60px rgba(0,0,0,0.5); }
 .center { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .pot { font-size: 13px; color: #cfe3df; }
 .pot b { color: #fff; }
@@ -162,7 +176,10 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
 .hint-btn { display: flex; align-items: center; justify-content: space-between; height: 38px; padding: 0 14px; border-radius: 12px; border: 1px solid rgba(242,201,76,0.6); background: rgba(242,201,76,0.12); color: #f7dd8a; font-weight: 700; font-size: 14px; }
 .hint-count { font-size: 12px; font-weight: 600; color: var(--soft); }
 .hint-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 14px; border: 1px solid rgba(242,201,76,0.6); background: rgba(242,201,76,0.1); }
-.my-hand { margin-top: 2px; padding: 5px 12px; border-radius: 12px; border: 1px solid var(--silver); background: rgba(230,235,238,0.14); color: #fff; font-size: 12px; font-weight: 700; white-space: nowrap; backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); }
+/* твоё место прижато к низу стола и растёт вверх; комбинация — справа от карт */
+.seat.me { transform: translate(-50%, -100%); }
+.my-cards { position: relative; }
+.my-hand { position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%); width: max-content; max-width: min(96px, calc(50vw - 70px)); padding: 5px 9px; border-radius: 12px; border: 1px solid var(--silver); background: rgba(230,235,238,0.14); color: #fff; font-size: 12px; font-weight: 700; line-height: 1.2; text-align: left; white-space: normal; backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); }
 .combo { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); }
 .combo.mine { background: rgba(255,255,255,0.13); border-color: var(--silver); }
 .combo-n { width: 24px; height: 24px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; background: rgba(255,255,255,0.1); }
@@ -232,3 +249,15 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
 .crowd-bot.on { border-color: rgba(127,209,168,0.9); background: rgba(127,209,168,0.12); }
 .bot.boss { border-color: rgba(242,201,76,0.7); background: linear-gradient(135deg, rgba(242,201,76,0.16), rgba(255,255,255,0.04)); }
 .bot.boss .letter { background: linear-gradient(145deg, #f2c94c, #b8892a); color: #1a1408; }
+.at-table { display: flex; flex-direction: row; align-items: center; gap: 12px; }
+.at-table-back { flex: 1; display: flex; flex-direction: column; gap: 4px; background: none; border: 0; color: inherit; text-align: left; padding: 0; min-width: 0; }
+.leave-btn { flex: none; border-color: rgba(235,87,87,0.6) !important; color: #ff9b9b !important; }
+/* невысокие экраны (многие Android): карты поменьше, чтобы твоя рука не наезжала на стол */
+@media (max-height: 700px) {
+  .felt-wrap { top: 56px; }
+  .board .pcard { width: 38px; height: 54px; }
+  .board .pcard .r { font-size: 16px; } .board .pcard .s { font-size: 14px; }
+  .seat.me .pcard.lg { width: 42px; height: 60px; }
+  .seat.me .pcard.lg .r { font-size: 18px; } .seat.me .pcard.lg .s { font-size: 16px; }
+  .seat { gap: 2px; }
+}

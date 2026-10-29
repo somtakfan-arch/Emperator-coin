@@ -238,16 +238,8 @@ function back() {
     if (confirm('Выйти из демо-турнира?')) send({ t: 'leave' });
     return;
   }
-  if (S.screen === 'table' && S.table?.kind === 'bots' && S.table.locked) return leaveLocked();
-  if (S.screen === 'table' && (S.table?.kind === 'bots' || S.table?.kind === 'mixed')) return leaveBots();
+  if (S.screen === 'table' && (S.table?.kind === 'bots' || S.table?.kind === 'mixed')) return leaveAny(S.table.kind);
   go(BACK[S.screen] || 'lobby');
-}
-
-// стол на время: встать нельзя, можно только уйти в лобби — игра продолжится без тебя
-function leaveLocked() {
-  const text = `Это стол на время — встать можно через ${clockLeft(S.table.endsAt)}. Уйти в лобби? Пока тебя нет, за тебя будут чек/фолд.`;
-  if (tg?.showConfirm) tg.showConfirm(text, (ok) => ok && go('lobby'));
-  else if (confirm(text)) go('lobby');
 }
 
 const clockLeft = (ts) => {
@@ -255,10 +247,20 @@ const clockLeft = (ts) => {
   return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
 };
 
-function leaveBots() {
-  const doLeave = () => send({ t: 'leave' });
-  if (tg?.showConfirm) tg.showConfirm('Встать из-за стола? Стек вернётся на баланс.', (ok) => ok && doLeave());
-  else if (confirm('Встать из-за стола? Стек вернётся на баланс.')) doLeave();
+// Встать / выйти с любого стола. Свой стол — стек на баланс; турнир — вылет с текущим местом.
+function leaveAny(kind) {
+  const text = kind === 'tour'
+    ? 'Выйти из турнира? Это как вылететь сейчас: место и приз — по текущему месту.'
+    : 'Встать из-за стола? Стек вернётся на баланс.';
+  const doLeave = async () => {
+    if (await run({ t: 'leave' })) {
+      S.table = null;
+      S.turn = null;
+      go('lobby');
+    }
+  };
+  if (tg?.showConfirm) tg.showConfirm(text, (ok) => ok && doLeave());
+  else if (confirm(text)) doLeave();
 }
 
 // ---------- Общие куски ----------
@@ -293,6 +295,43 @@ const clock = (ts) => new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit'
 
 // ---------- Лобби ----------
 
+// ---------- Темы оформления (запоминаются на этом устройстве) ----------
+
+const THEMES = [
+  { id: 'emerald', name: 'Изумруд', bg: '#070e10', felt: '#2a6a62' },
+  { id: 'red', name: 'Красный', bg: '#120607', felt: '#8a2a2f' },
+  { id: 'blue', name: 'Синий', bg: '#060a14', felt: '#2a4f8a' },
+  { id: 'purple', name: 'Фиолет', bg: '#0c0614', felt: '#5a2a8a' },
+  { id: 'gold', name: 'Золото', bg: '#0a0906', felt: '#6a5a2a' },
+  { id: 'graphite', name: 'Графит', bg: '#080808', felt: '#3a3a3a' },
+];
+
+function loadTheme() {
+  try { return localStorage.getItem('theme') || 'emerald'; } catch { return 'emerald'; }
+}
+
+function applyTheme(id) {
+  const t = THEMES.find((x) => x.id === id) || THEMES[0];
+  if (t.id === 'emerald') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = t.id;
+  tg?.setHeaderColor?.(t.bg);
+  tg?.setBackgroundColor?.(t.bg);
+  S.theme = t.id;
+}
+
+function setTheme(id) {
+  applyTheme(id);
+  try { localStorage.setItem('theme', id); } catch {}
+  render();
+}
+
+function themesCard() {
+  return h('div', { class: 'col', style: 'gap:10px' },
+    h('div', { class: 'label' }, 'Оформление'),
+    h('div', { class: 'themes' }, THEMES.map((t) => h('button', { class: `theme-btn ${S.theme === t.id ? 'on' : ''}`, onclick: () => setTheme(t.id) },
+      h('span', { class: 'theme-swatch', style: `background:radial-gradient(circle at 50% 40%, ${t.felt}, ${t.bg})` }), t.name))));
+}
+
 function lobbyScreen() {
   const me = S.me;
   const upcoming = (S.lobby?.tournaments || []).filter((t) => t.status === 'reg').slice(0, 2);
@@ -302,11 +341,13 @@ function lobbyScreen() {
         h('div', { class: 'avatar' }, initial(me.name)),
         h('div', { class: 'col' },
           h('div', { class: 'b', style: 'font-size:15px' }, me.name),
-          h('div', { class: 'small muted' }, `Эло ${me.rating} · место ${fmt(me.ratingPlace)}`))),
+          h('div', { class: 'small muted' }, `Эло ${me.rating} · место ${fmt(me.ratingPlace)} · раздач выиграно ${fmt(me.handsWon || 0)}`))),
       balancePill()),
-    me.table && h('button', { class: 'glass card', onclick: () => { send({ t: 'table' }); go('table'); } },
-      h('div', { class: 'row between' }, h('div', { class: 'b' }, 'Ты за столом'), icon('chev')),
-      h('div', { class: 'small soft' }, 'Вернуться к игре')),
+    me.table && h('div', { class: 'glass card at-table' },
+      h('button', { class: 'at-table-back', onclick: () => { send({ t: 'table' }); go('table'); } },
+        h('div', { class: 'row between' }, h('div', { class: 'b' }, 'Ты за столом'), icon('chev')),
+        h('div', { class: 'small soft' }, 'Вернуться к игре')),
+      h('button', { class: 'btn-sm leave-btn', onclick: () => leaveAny(me.table.kind) }, 'Выйти')),
     h('div', { class: 'col', style: 'padding-top:8px' },
       h('div', { class: 'small muted b', style: 'letter-spacing:3px' }, 'ТЕХАССКИЙ ХОЛДЕМ'),
       h('div', { style: 'font-size:32px;font-weight:800;letter-spacing:-0.5px' }, 'Покер')),
@@ -529,7 +570,7 @@ function pcard(c, size = '') {
 
 // места вокруг стола (в % от области стола); я всегда снизу
 const SPOTS = {
-  bottom: [50, 74], bl: [15, 64], tl: [15, 26], top: [50, 8], tr: [85, 26], br: [85, 64],
+  bottom: [50, 99], bl: [15, 64], tl: [15, 26], top: [50, 8], tr: [85, 26], br: [85, 64],
 };
 const LAYOUT = { 1: ['top'], 2: ['tl', 'tr'], 3: ['tl', 'top', 'tr'], 4: ['bl', 'tl', 'tr', 'br'], 5: ['bl', 'tl', 'top', 'tr', 'br'] };
 
@@ -572,8 +613,10 @@ function tableScreen() {
     return h('div', { class: `seat ${s.me ? 'me' : ''}`, style: `left:${x}%;top:${y}%` },
       top ? [cards.length ? h('div', { class: 'cards' }, cards) : null, plate, s.hand && h('div', { class: 'hand-name' }, s.hand), timer, extras]
         : s.me
-          ? [(s.hand || s.myHand) && h('button', { class: 'my-hand', onclick: openCombos, 'aria-label': 'Моя комбинация — открыть справочник' }, s.hand || s.myHand),
-            extras, h('div', { class: 'cards' }, cards), plate, timer]
+          // твоя комбинация — сбоку от карт, чтобы не закрывать флоп
+          ? [extras, h('div', { class: 'my-cards' }, h('div', { class: 'cards' }, cards),
+            (s.hand || s.myHand) && h('button', { class: 'my-hand', onclick: openCombos, 'aria-label': 'Моя комбинация — открыть справочник' }, s.hand || s.myHand)),
+            plate, timer]
           : [extras, h('div', { class: 'cards' }, cards), plate, s.hand && h('div', { class: 'hand-name' }, s.hand), timer]);
   };
 
@@ -1119,8 +1162,10 @@ function profileScreen() {
       h('div', { class: 'col' }, h('h1', { class: 'h2' }, me.name), h('div', { class: 'small muted' }, `Эло ${me.rating}`))),
     h('div', { class: 'glass card' },
       h('div', { class: 'grid3' }, stat('Место', fmt(me.ratingPlace)), stat('Турниров', me.games), stat('Побед', me.wins)),
+      h('div', { class: 'grid3' }, stat('Раздач выиграно', fmt(me.handsWon || 0)), stat('Эло', me.rating), stat('Подсказок', me.hints || 0)),
       h('div', { class: 'grid3' }, stat('Фишки', fmt(me.chips)), stat('В игре', fmt(me.inPlay)), stat('По фишкам', fmt(me.chipsPlace)))),
     winRewardsCard(me),
+    themesCard(),
     h('div', { class: 'label' }, 'Топ игроков по рейтингу'),
     S.top == null ? h('div', { class: 'muted small' }, 'Загрузка…')
       : S.top.length ? S.top.map((p, i) => h('div', { class: 'item' },
@@ -1225,8 +1270,7 @@ setInterval(() => {
 
 tg?.ready();
 tg?.expand();
-tg?.setHeaderColor?.('#0b1416');
-tg?.setBackgroundColor?.('#070e10');
+applyTheme(loadTheme());
 tg?.disableVerticalSwipes?.();
 render();
 connect();

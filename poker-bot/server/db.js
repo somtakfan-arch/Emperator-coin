@@ -45,6 +45,7 @@ const userCols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) =>
 if (!userCols.has('won')) db.exec('ALTER TABLE users ADD COLUMN won INTEGER NOT NULL DEFAULT 0'); // чистый выигрыш в играх
 if (!userCols.has('won_rewards')) db.exec('ALTER TABLE users ADD COLUMN won_rewards INTEGER NOT NULL DEFAULT 0'); // сколько наград выдано
 if (!userCols.has('hints')) db.exec('ALTER TABLE users ADD COLUMN hints INTEGER NOT NULL DEFAULT 0'); // купленные подсказки
+if (!userCols.has('hands_won')) db.exec('ALTER TABLE users ADD COLUMN hands_won INTEGER NOT NULL DEFAULT 0'); // выигранные раздачи
 
 // Списать одну подсказку. false — подсказок нет.
 export function useHint(id) {

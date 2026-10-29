@@ -90,7 +90,7 @@ function meView(uid) {
   return {
     id: u.id, name: u.name, chips: u.chips, inPlay: u.in_play, rating: Math.round(u.rating),
     isAdmin: config.adminIds.includes(u.id),
-    won: u.won, winRewards: WIN_REWARDS.map((r, i) => ({ ...r, done: i < u.won_rewards })), hints: u.hints,
+    handsWon: u.hands_won, won: u.won, winRewards: WIN_REWARDS.map((r, i) => ({ ...r, done: i < u.won_rewards })), hints: u.hints,
     games: u.games, wins: u.wins, ...ranks(uid),
     bonus: config.dailyBonus > 0 ? { amount: config.dailyBonus, readyAt: u.bonus_at + 86400000 } : null,
     table: act ? { id: act.table.id, kind: act.table.kind } : null,
@@ -147,7 +147,15 @@ const handlers = {
     }
     return null;
   },
-  leave: (uid) => (botRooms.get(uid)?.leave(uid), solos.get(uid)?.quit(), { t: 'ok' }),
+  // встать / выйти с любого стола: свой стол — стек на баланс; турнир — вылет с текущим местом
+  leave(uid) {
+    botRooms.get(uid)?.leave(uid);
+    const solo = solos.get(uid);
+    if (solo && !solo.done) solo.quit();
+    tournaments.forfeit(uid);
+    hub.sendMe(uid);
+    return { t: 'ok' };
+  },
   rebuy: (uid) => (botRooms.get(uid)?.rebuy(uid), { t: 'ok' }),
   // стол с друзьями: создать, посмотреть по ссылке, сесть
   createMixed(uid, m) {

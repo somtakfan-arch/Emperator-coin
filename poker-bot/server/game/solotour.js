@@ -109,6 +109,7 @@ export class SoloTour {
 
   newTable(num) {
     const tb = new GameTable({ id: `${this.id}:${num}`, kind: 'tour', title: `${this.name} · стол ${num}`, hub: this.hub, sb: 10, bb: 20 });
+    tb.noStats = this.demo; // демо — не в счёт
     // карты по плану — только за столом, где сидишь ты
     if (this.demo) tb.engine.demoDeck = (deck, ids) => {
       if (!ids.includes(this.userId) || !this.plan) return deck;
@@ -181,9 +182,15 @@ export class SoloTour {
     tb.broadcast();
   }
 
-  // выйти из демо-турнира в любой момент
+  // выйти в любой момент: как будто вылетел сейчас — место и приз по текущему месту
   quit() {
-    if (this.demo) this.finish(this.placesLeft);
+    const tb = this.tableOf(this.userId);
+    const seat = tb?.players.find((p) => p.id === this.userId)?.bot;
+    if (seat) {
+      seat.sittingOut = true;
+      seat.forceFold();
+    }
+    this.finish(this.placesLeft);
   }
 
   finish(place) {
