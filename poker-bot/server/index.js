@@ -71,6 +71,15 @@ const hub = {
   },
 };
 hooks.onBalance = (uid) => hub.sendMe(uid);
+hooks.onHandsWon = (uid, n) => {
+  const at = activeTable(uid);
+  const p = at?.table.players.find((x) => x.id === uid);
+  if (p) {
+    p.handsWon = n;
+    at.table.broadcast();
+  }
+  hub.sendMe(uid);
+};
 const tournaments = new Tournaments(hub);
 
 // Стол, где работают кнопки админа: только админ и только без других людей

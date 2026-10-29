@@ -160,6 +160,7 @@ const ADMIN_HELP = [
   '/give <id или @ник> <фишки> — выдать фишки (минус — забрать)',
   '/elo <id или @ник> <число> — поставить Эло; +50 / -30 — изменить',
   '/hints <id или @ник> <число> — выдать подсказки (минус — забрать)',
+  '/wins <id или @ник> <число> — поставить выигранные раздачи; +50 / -30 — изменить',
   '/user <id или @ник> — инфо об игроке',
   '/stats — общая статистика',
   '/refund <id платежа> — вернуть звёзды',
@@ -169,12 +170,12 @@ async function onAdmin(msg) {
   const [cmd, arg, arg2] = (msg.text || '').split(/\s+/);
   const reply = (text) => api('sendMessage', { chat_id: msg.chat.id, text });
   if (cmd === '/admin' || cmd === '/help') return reply(ADMIN_HELP);
-  if (cmd === '/give' || cmd === '/elo' || cmd === '/user' || cmd === '/hints') {
+  if (cmd === '/give' || cmd === '/elo' || cmd === '/user' || cmd === '/hints' || cmd === '/wins') {
     const u = findUser(arg);
     if (!u) return reply('Игрок не найден. Он должен хотя бы раз нажать /start или открыть приложение.');
     const who = `${u.name}${u.username ? ` (@${u.username})` : ''}, id ${u.id}`;
     if (cmd === '/user') {
-      return reply(`${who}\nФишки: ${u.chips} (в игре ${u.in_play})\nЭло: ${Math.round(u.rating)}\nПодсказок: ${u.hints}\nТурниров: ${u.games}, побед: ${u.wins}`);
+      return reply(`${who}\nФишки: ${u.chips} (в игре ${u.in_play})\nЭло: ${Math.round(u.rating)}\nПодсказок: ${u.hints}\nВыиграно раздач: ${u.hands_won}\nТурниров: ${u.games}, побед: ${u.wins}`);
     }
     if (cmd === '/hints') {
       const amount = Math.trunc(Number(arg2));
@@ -199,6 +200,14 @@ async function onAdmin(msg) {
       return reply(`${who}: ${delta >= 0 ? '+' : ''}${delta} фишек, теперь ${u.chips + delta}`);
     }
     const m = /^([+-]?)(\d+)$/.exec(arg2 || '');
+    if (cmd === '/wins') {
+      if (!m) return reply('Пример: /wins @nick 500 или /wins @nick +50');
+      const val = Number(m[2]);
+      const next = Math.max(0, m[1] === '+' ? u.hands_won + val : m[1] === '-' ? u.hands_won - val : val);
+      db.prepare('UPDATE users SET hands_won = ? WHERE id = ?').run(next, u.id);
+      hooks.onHandsWon?.(u.id, next); // значок за столом обновится сразу
+      return reply(`${who}: выиграно раздач ${u.hands_won} → ${next}`);
+    }
     if (!m) return reply('Пример: /elo @nick 1800 или /elo @nick +50');
     const val = Number(m[2]);
     const rating = Math.max(0, m[1] === '+' ? u.rating + val : m[1] === '-' ? u.rating - val : val);
@@ -252,6 +261,7 @@ export async function startBot() {
         { command: 'give', description: 'Выдать фишки: /give @ник 5000' },
         { command: 'elo', description: 'Эло: /elo @ник 1800 или +50' },
         { command: 'hints', description: 'Подсказки: /hints @ник 10' },
+        { command: 'wins', description: 'Выигранные раздачи: /wins @ник 500 или +50' },
         { command: 'user', description: 'Инфо об игроке' },
         { command: 'stats', description: 'Статистика' },
         { command: 'admin', description: 'Все команды админа' },
