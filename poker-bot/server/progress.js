@@ -427,3 +427,12 @@ export function adjustShadow(uid, delta) {
   });
   return shadowLevel(uid);
 }
+
+// выдать сундук (награды за режимы)
+export function grantChest(uid, kind) {
+  tx(() => {
+    const p = load(uid);
+    p.chests[kind] = (p.chests[kind] || 0) + 1;
+    save(uid, p);
+  });
+}

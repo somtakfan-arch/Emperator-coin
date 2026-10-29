@@ -1,7 +1,18 @@
 // Стол против ботов (кэш-игра): бай-ин списывается с баланса, при выходе стек возвращается.
 // Два режима: свободный (встать можно в любой момент) и на время (встать нельзя, пока не кончится время).
 import { BOT_CLASSES, Hunter } from '../../core/bots.js';
-import { makeBot, isBotName } from '../../core/crowd.js';
+import { makeBot, isBotName, CROWD } from '../../core/crowd.js';
+
+// босс-раш: шесть сильнейших по очереди
+const RUSH = ['Скала', 'Маньяк', 'Хамелеон', 'Акула', 'Охотник', 'Король'];
+// Хаос: одно событие на раздачу
+const CHAOS = [
+  { kind: 'double', text: 'Хаос: двойные блайнды' },
+  { kind: 'bonus', text: 'Хаос: победителю +10 больших блайндов от заведения' },
+  { kind: 'jackpot', text: 'Хаос: джекпот — победитель получает банк ещё раз (до 50 бб)' },
+  { kind: 'cardUp', text: 'Хаос: у всех открыта одна карта' },
+  { kind: 'calm', text: 'Хаос: обычная раздача… пока что' },
+];
 
 // Советник для подсказок: смотрит на стол с места игрока — видит только его карты и чужие ходы
 function makeAdvisor(userId) {
@@ -21,7 +32,9 @@ const saveMemory = db.prepare(`INSERT INTO bot_memory (user_id, bot, data, at) V
   ON CONFLICT (user_id, bot) DO UPDATE SET data = excluded.data, at = excluded.at`);
 
 export class BotRoom {
-  constructor(hub, user, { mode, botName, buyin, minutes = 0, fast = false, level = 'normal', shadow = 0 }) {
+  constructor(hub, user, { mode, botName, buyin, minutes = 0, fast = false, level = 'normal', shadow = 0, variant = null, chaos = false }) {
+    this.mode = mode;
+    this.chaosOn = chaos;
     this.level = level;
     this.shadow = shadow;
     this.hub = hub;
@@ -31,11 +44,18 @@ export class BotRoom {
     this.endsAt = minutes ? Date.now() + minutes * 60000 : 0;
     const bb = Math.max(2, Math.floor(buyin / 100));
     const sb = Math.max(1, Math.floor(bb / 2));
-    const names = mode === 'hu' ? [botName] : BOT_CLASSES.map((C) => new C({}).name);
+    // стол на 9: пятеро сильных и трое обычных; босс-раш: боссы по очереди 1 на 1
+    const pros = BOT_CLASSES.map((C) => new C({}).name);
+    const names = mode === 'hu' ? [botName]
+      : mode === '9' ? [...pros, ...CROWD.map((c) => c.name).sort(() => Math.random() - 0.5).slice(0, 3)]
+        : mode === 'rush' ? [RUSH[0]] : pros;
+    if (mode === 'rush') this.rush = { i: 0 };
+    const label = { hu: '1 на 1', 6: 'Стол на 6', 9: 'Стол на 9', rush: 'Босс-раш' }[mode];
     this.table = new GameTable({
-      id: `b${user.id}`, kind: 'bots', hub, sb, bb,
-      title: `${mode === 'hu' ? '1 на 1' : 'Стол на 6'} · ${sb}/${bb}${minutes ? ` · ${minutes} мин` : ''}${fast ? ' · быстрый' : ''}`,
+      id: `b${user.id}`, kind: 'bots', hub, sb, bb, variant,
+      title: `${label} · ${sb}/${bb}${variant === 'short' ? ' · Short Deck' : ''}${chaos ? ' · Хаос' : ''}${minutes ? ` · ${minutes} мин` : ''}${fast ? ' · быстрый' : ''}`,
     });
+    this.baseBlinds = [sb, bb];
     this.table.fast = fast; // боты думают меньше, паузы короче
     this.bots = [];
     this.advisor = makeAdvisor(user.id);
@@ -53,7 +73,8 @@ export class BotRoom {
       this.table.addPlayer({ id: bot.id, name: bot.name, stack: buyin, bot: botSeat(bot, this.table), isBot: true });
     });
     this.table.extra = () => ({
-      buyin, canRebuy: this.me.stack === 0, leaving: !!this.leaving,
+      buyin, canRebuy: this.me.stack === 0 && !this.rush, leaving: !!this.leaving,
+      rush: this.rush ? { i: this.rush.i + 1, of: RUSH.length, name: RUSH[this.rush.i] } : null,
       endsAt: this.endsAt || null, locked: this.locked(), eloDelta: this.lastElo ?? null,
     });
     this.table.eventHook = (e) => this.onTableEvent(e);
@@ -66,6 +87,8 @@ export class BotRoom {
     if (!(Number.isSafeInteger(opts.buyin) && opts.buyin >= config.buyinMin)) throw new Error(`Бай-ин — от ${config.buyinMin} фишек`); // сверху — сколько есть на балансе
     if (opts.minutes && !config.timedMinutes.includes(opts.minutes)) throw new Error('Неверное время стола');
     if (opts.mode === 'hu' && !isBotName(opts.botName)) throw new Error('Нет такого бота');
+    if (!['hu', '6', '9', 'rush'].includes(opts.mode)) throw new Error('Неверный стол');
+    if (opts.variant && opts.variant !== 'short') throw new Error('Неверный вариант');
     if (!['easy', 'normal', 'master'].includes(opts.level || 'normal')) throw new Error('Неверная сложность');
     if (!debit(user.id, opts.buyin, 'bots_buyin')) throw new Error('Не хватает фишек — пополни кошелёк');
     const room = new BotRoom(hub, user, opts);
@@ -84,6 +107,31 @@ export class BotRoom {
     if (this.leaving) return this.close();
     // боты не докупаются: проиграл весь стек — выбывает
     for (const p of [...this.table.players]) if (p.isBot && p.stack === 0) this.table.removePlayer(p.id);
+    // босс-раш: обыграл босса — садится следующий; проиграл стек — забег окончен
+    if (this.rush) {
+      if (this.me.stack === 0) {
+        this.hub.send(this.userId, { t: 'toast', text: `Босс-раш окончен на боссе ${this.rush.i + 1} из ${RUSH.length}` });
+        return this.close();
+      }
+      if (!this.table.players.some((p) => p.isBot)) {
+        this.rush.i++;
+        if (this.rush.i >= RUSH.length) {
+          this.beatAll = true;
+          this.hub.onRushDone?.(this.userId, this.buyin);
+          return this.close();
+        }
+        const name = RUSH[this.rush.i];
+        const bot = makeBot(name, { iters: 300, level: this.level });
+        bot.id = -(this.rush.i + 1);
+        this.bots.push(bot);
+        this.table.addPlayer({ id: bot.id, name, stack: this.buyin, bot: botSeat(bot, this.table), isBot: true });
+        this.hub.send(this.userId, { t: 'toast', text: `Босс ${this.rush.i + 1} из ${RUSH.length}: ${name}` });
+      }
+    }
+    // Хаос: случайное событие на каждую раздачу
+    this.table.setBlinds(...this.baseBlinds);
+    this.table.chaos = this.chaosOn ? CHAOS[(Math.random() * CHAOS.length) | 0] : null;
+    if (this.table.chaos?.kind === 'double') this.table.setBlinds(this.baseBlinds[0] * 2, this.baseBlinds[1] * 2);
     if (!this.table.players.some((p) => p.isBot)) {
       this.beatAll = true; // обыграл всех ботов — стол закрывается, стек на баланс
       this.hub.onBeatAll?.(this.userId);
@@ -93,6 +141,17 @@ export class BotRoom {
   }
 
   afterHand() {
+    // Хаос: бонус от заведения победителю
+    const ch = this.table.chaos;
+    if (ch && this.table.v.result?.length) {
+      const bb = this.table.bb;
+      for (const w of this.table.v.result) {
+        const p = this.table.players.find((x) => x.id === w.id);
+        if (!p) continue;
+        if (ch.kind === 'bonus') p.stack += 10 * this.baseBlinds[1];
+        if (ch.kind === 'jackpot') p.stack += Math.min(w.amount, 50 * bb);
+      }
+    }
     // свободный стол: пропустил 2 хода подряд — убираем из-за стола, стек на баланс
     if (!this.endsAt && this.seat.sittingOut && !this.leaving) {
       this.leaving = true;
@@ -140,6 +199,7 @@ export class BotRoom {
 
   rebuy() {
     if (this.me.stack > 0) return;
+    if (this.rush) throw new Error('В босс-раше докупки нет');
     if (!debit(this.userId, this.buyin, 'bots_buyin')) throw new Error('Не хватает фишек');
     this.me.stack = this.buyin;
     this.invested += this.buyin;

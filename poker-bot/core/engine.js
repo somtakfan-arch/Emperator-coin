@@ -2,7 +2,7 @@
 // Игрок: { id, name, stack, bot }. Бот: act(state) -> действие (можно Promise — так ходит живой игрок),
 // observe(event) и deal(hole) — по желанию.
 // Действия: { type: 'fold' | 'check' | 'call' } или { type: 'raise', to } (to — итоговая ставка на улице).
-import { newDeck, shuffle, evaluate } from './cards.js';
+import { newDeck, shuffle, evaluate, evaluateShort } from './cards.js';
 
 const STREETS = ['preflop', 'flop', 'turn', 'river'];
 
@@ -42,7 +42,8 @@ export class Table {
     const bbIdx = n === 2 ? 0 : 1;
     const positions = hs.map((_, i) => positionName(i, n, sbIdx, bbIdx));
 
-    let deck = shuffle(newDeck(), this.deckRng);
+    // Short Deck: только 6–A (36 карт)
+    let deck = shuffle(this.variant === 'short' ? newDeck().filter((c) => c >> 2 >= 4) : newDeck(), this.deckRng);
     // только демо-стол админа задаёт этот хук; на обычных столах и в турнирах его нет
     if (this.demoDeck) deck = this.demoDeck(deck, ps.map((p) => p.id));
     for (const h of hs) h.hole = [deck.pop(), deck.pop()];
@@ -184,7 +185,8 @@ export class Table {
     if (!showdown) {
       give(live[0], hs.reduce((s, h) => s + h.total, 0));
     } else {
-      for (const h of live) h.score = evaluate(h.hole.concat(board));
+      const ev = this.variant === 'short' ? evaluateShort : evaluate;
+      for (const h of live) h.score = ev(h.hole.concat(board));
       reveals = live.map((h) => ({ id: h.p.id, cards: h.hole.slice(), score: h.score }));
       this.emit({ type: 'showdown', handId: ctx.handId, board: board.slice(), reveals });
       const levels = [...new Set(hs.map((h) => h.total).filter((t) => t > 0))].sort((a, b) => a - b);

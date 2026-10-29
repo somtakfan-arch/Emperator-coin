@@ -71,6 +71,13 @@ const hub = {
   onTourDone: (uid, ev) => progress.onEvent(uid, { type: 'tour', ...ev }),
   onBeatAll: (uid) => progress.onEvent(uid, { type: 'beatAll' }),
   onBotVs: (uid, bots, won, net) => progress.recordVs(uid, bots, won, net),
+  // босс-раш пройден: эпический сундук и фишки ×3 от бай-ина
+  onRushDone(uid, buyin) {
+    progress.grantChest(uid, 'epic');
+    credit(uid, buyin * 3, 'rush', null);
+    hub.send(uid, { t: 'toast', text: `Босс-раш пройден! +${(buyin * 3).toLocaleString('ru')} фишек и эпический сундук` });
+    hub.sendMe(uid);
+  },
   // Тень: обыграл — +1 уровень, крупно проиграл — −1
   onShadowResult(uid, net, buyin) {
     const delta = net > 0 ? 1 : net < -buyin / 2 ? -1 : 0;
@@ -245,7 +252,7 @@ const handlers = {
   sitBots(uid, m) {
     if (activeTable(uid)) throw new Error('Ты уже за столом');
     botRooms.set(uid, BotRoom.open(hub, getUser(uid), {
-      mode: m.mode === '6' ? '6' : 'hu', botName: m.botName, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0, fast: !!m.fast,
+      mode: ['6', '9', 'rush'].includes(m.mode) ? m.mode : 'hu', botName: m.botName, variant: m.variant === 'short' ? 'short' : null, chaos: !!m.chaos, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0, fast: !!m.fast,
       level: m.level || 'normal', shadow: progress.shadowLevel(uid),
     }));
     hub.sendMe(uid);
@@ -311,7 +318,7 @@ const handlers = {
   // стол с друзьями: создать, посмотреть по ссылке, сесть
   createMixed(uid, m) {
     if (activeTable(uid)) throw new Error('Ты уже за столом');
-    const room = MixedRoom.open(hub, getUser(uid), { buyin: Number(m.buyin), bots: Number(m.bots) });
+    const room = MixedRoom.open(hub, getUser(uid), { buyin: Number(m.buyin), bots: Number(m.bots), seats: Number(m.seats), password: m.password || null, variant: m.variant });
     mixedRooms.set(room.id, room);
     botRooms.set(uid, room);
     hub.sendMe(uid);
@@ -327,7 +334,7 @@ const handlers = {
     if (!room || room.table.closed) throw new Error('Стол уже закрыт');
     if (botRooms.get(uid) === room) return { t: 'ok' };
     if (activeTable(uid)) throw new Error('Ты уже за другим столом');
-    room.join(getUser(uid));
+    room.join(getUser(uid), m.password ? String(m.password) : null);
     botRooms.set(uid, room);
     hub.sendMe(uid);
     return { t: 'ok' };
@@ -335,7 +342,7 @@ const handlers = {
   // сольный турнир с ботами — старт сразу
   startSolo(uid, m) {
     if (activeTable(uid) || solos.get(uid)) throw new Error('Ты уже за столом');
-    const tour = SoloTour.open(hub, getUser(uid), { buyin: m.buyin, size: m.size, blindMin: m.blindMin, demo: !!m.demo });
+    const tour = SoloTour.open(hub, getUser(uid), { buyin: m.buyin, size: m.size, blindMin: m.blindMin, demo: !!m.demo, ko: !!m.ko });
     solos.set(uid, tour);
     hub.sendMe(uid);
     return { t: 'ok', id: tour.id };

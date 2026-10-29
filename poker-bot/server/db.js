@@ -50,6 +50,9 @@ if (!userCols.has('won_rewards')) db.exec('ALTER TABLE users ADD COLUMN won_rewa
 if (!userCols.has('hints')) db.exec('ALTER TABLE users ADD COLUMN hints INTEGER NOT NULL DEFAULT 0'); // купленные подсказки
 if (!userCols.has('hands_won')) db.exec('ALTER TABLE users ADD COLUMN hands_won INTEGER NOT NULL DEFAULT 0'); // выигранные раздачи
 
+const tourCols = new Set(db.prepare('PRAGMA table_info(tournaments)').all().map((c) => c.name));
+if (!tourCols.has('ko')) db.exec('ALTER TABLE tournaments ADD COLUMN ko INTEGER NOT NULL DEFAULT 0'); // нокаут: половина взноса — награда за выбивание
+
 // Списать одну подсказку. false — подсказок нет.
 export function useHint(id) {
   return db.prepare('UPDATE users SET hints = hints - 1 WHERE id = ? AND hints > 0').run(id).changes > 0;

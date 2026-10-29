@@ -3,18 +3,18 @@ import { evaluate, handCategory } from '../../core/cards.js';
 
 // Шансы каждого игрока, когда карты всех известны (олл-ин до ривера).
 // Тёрн и ривер — точный перебор, флоп и префлоп — Монте-Карло.
-export function knownEquity(holes, board) {
+export function knownEquity(holes, board, ev = evaluate, short = false) {
   const ids = Object.keys(holes);
   const used = new Set([...board, ...ids.flatMap((id) => holes[id])]);
   const rest = [];
-  for (let c = 0; c < 52; c++) if (!used.has(c)) rest.push(c);
+  for (let c = 0; c < 52; c++) if (!used.has(c) && (!short || c >> 2 >= 4)) rest.push(c);
   const need = 5 - board.length;
   const win = Object.fromEntries(ids.map((id) => [id, 0]));
   let total = 0;
   const score = (full) => {
     let best = -1, who = [];
     for (const id of ids) {
-      const v = evaluate(holes[id].concat(full));
+      const v = ev(holes[id].concat(full));
       if (v > best) { best = v; who = [id]; } else if (v === best) who.push(id);
     }
     for (const id of who) win[id] += 1 / who.length;
@@ -49,12 +49,12 @@ export function bestFive(cards) {
 
 // Ауты: карты, которые улучшают ТВОЮ руку до комбинации старше
 // (и не просто ложатся на стол всем — улучшение должно быть твоим).
-export function outs(hole, board) {
+export function outs(hole, board, short = false) {
   if (board.length < 3 || board.length > 4) return [];
   const used = new Set([...hole, ...board]);
   const cur = handCategory(evaluate(hole.concat(board)));
   const res = [];
-  for (let c = 0; c < 52; c++) {
+  for (let c = short ? 16 : 0; c < 52; c++) {
     if (used.has(c)) continue;
     const mine = handCategory(evaluate(hole.concat(board, c)));
     const boardOnly = handCategory(evaluate(board.concat(c)));

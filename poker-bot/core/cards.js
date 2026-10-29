@@ -93,6 +93,22 @@ export function evaluate(cards) {
 }
 
 export const handCategory = (v) => Math.floor(v / CAT_BASE);
+
+// Short Deck (колода без 2–5): стрит A-6-7-8-9 и флеш старше фулл-хауса.
+// Возвращает число только для сравнения рук; название руки — по обычному evaluate.
+export function evaluateShort(cards) {
+  let v = evaluate(cards);
+  let cat = handCategory(v);
+  const sm = [0, 0, 0, 0], sc = [0, 0, 0, 0];
+  let mask = 0;
+  for (const c of cards) { sm[c & 3] |= 1 << (c >> 2); sc[c & 3]++; mask |= 1 << (c >> 2); }
+  const WHEEL = (1 << 12) | (1 << 4) | (1 << 5) | (1 << 6) | (1 << 7); // A 6 7 8 9
+  if (cat < 8 && sm.some((m, s) => sc[s] >= 5 && (m & WHEEL) === WHEEL)) { v = score(8, [7]); cat = 8; }
+  else if (cat < 4 && (mask & WHEEL) === WHEEL) { v = score(4, [7]); cat = 4; }
+  if (cat === 5) return v + CAT_BASE; // флеш поднимается выше фулл-хауса
+  if (cat === 6) return v - CAT_BASE; // фулл-хаус опускается ниже флеша
+  return v;
+}
 export const handName = (v) => HAND_NAMES[handCategory(v)];
 
 // Название комбинации с достоинствами: «Пара тузов», «Стрит до дамы», «Фулл-хаус: короли и семёрки».

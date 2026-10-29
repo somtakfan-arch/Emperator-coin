@@ -6,7 +6,8 @@ import { config, BLIND_LEVELS, payoutShares } from '../config.js';
 import { notify, openButton, escapeHtml } from '../telegram.js';
 import { GameTable, HumanSeat } from './table.js';
 
-const MAX_SEATS = 6;
+const MAX_SEATS = 6; // столы по 6; турнир на 9 — один стол на 9
+export const bountyOf = (t) => (t.ko ? Math.floor(t.buyin / 2) : 0);
 const newId = () => randomBytes(6).toString('base64url').replace(/[^a-zA-Z0-9]/g, 'x');
 const T = {
   get: db.prepare('SELECT * FROM tournaments WHERE id = ?'),
@@ -30,7 +31,7 @@ export class Tournaments {
     return {
       id: t.id, name: t.name, kind: t.kind, maxPlayers: t.max_players, buyin: t.buyin,
       minRating: t.min_rating, blindMin: t.blind_min, startMode: t.start_mode, startAt: t.start_at,
-      private: !!t.private, status: t.status, count: regs.length, prizePool: regs.length * t.buyin,
+      private: !!t.private, status: t.status, count: regs.length, prizePool: regs.length * (t.buyin - bountyOf(t)), ko: !!t.ko, bounty: bountyOf(t),
       mine: t.creator === uid, registered: regs.some((r) => r.user_id === uid),
       players: regs.map((r) => ({ id: r.user_id, name: r.name, rating: Math.round(r.rating), place: r.place, prize: r.prize })),
       alive: run ? run.alive() : null,
@@ -77,9 +78,9 @@ export class Tournaments {
     if (open >= config.tournament.maxOpenPerUser) throw new Error('У тебя уже много открытых турниров');
     const id = newId();
     tx(() => {
-      db.prepare(`INSERT INTO tournaments (id, name, creator, kind, max_players, buyin, min_rating, blind_min, start_mode, start_at, private, status, created)
-        VALUES (?, ?, ?, 'user', ?, ?, ?, ?, ?, ?, ?, 'reg', ?)`)
-        .run(id, name, user.id, maxPlayers, buyin, minRating, blindMin, startMode, startAt, o.private ? 1 : 0, Date.now());
+      db.prepare(`INSERT INTO tournaments (id, name, creator, kind, max_players, buyin, min_rating, blind_min, start_mode, start_at, private, status, created, ko)
+        VALUES (?, ?, ?, 'user', ?, ?, ?, ?, ?, ?, ?, 'reg', ?, ?)`)
+        .run(id, name, user.id, maxPlayers, buyin, minRating, blindMin, startMode, startAt, o.private ? 1 : 0, Date.now(), o.ko ? 1 : 0);
     });
     this.register(user, id); // создатель сразу в турнире
     return id;
@@ -191,6 +192,7 @@ class RunningTournament {
     this.startedAt = Date.now();
     this.players = regs.map((r) => ({ id: r.user_id, name: r.name, rating: r.rating }));
     this.tables = [];
+    this.seats = this.n === 9 ? 9 : MAX_SEATS;
     this.placesLeft = this.n;
     this.done = false;
   }
@@ -216,7 +218,7 @@ class RunningTournament {
 
   start() {
     const order = this.players.slice().sort(() => Math.random() - 0.5);
-    const k = Math.ceil(order.length / MAX_SEATS);
+    const k = Math.ceil(order.length / this.seats);
     for (let i = 0; i < k; i++) this.tables.push(this.newTable(i + 1));
     order.forEach((p, i) => {
       this.tables[i % k].addPlayer({ id: p.id, name: p.name, stack: config.tournament.stack, bot: new HumanSeat(p.id, this.hub), isBot: false });
@@ -228,7 +230,7 @@ class RunningTournament {
     const tb = new GameTable({ id: `${this.t.id}:${num}`, kind: 'tour', title: `${this.t.name} · стол ${num}`, hub: this.hub, sb: 10, bb: 20 });
     tb.extra = () => ({
       tournamentId: this.t.id, alive: this.alive(), total: this.n, ...this.levelInfo(),
-      prizePool: this.n * this.t.buyin, tableNo: num,
+      prizePool: this.n * (this.t.buyin - bountyOf(this.t)), tableNo: num, ko: !!this.t.ko, bounty: bountyOf(this.t),
     });
     tb.beforeHand = () => {
       // остался один за столом — пересаживаем к остальным
@@ -251,10 +253,22 @@ class RunningTournament {
     for (const p of busted) {
       tb.removePlayer(p.id);
       this.setPlace(p.id, this.placesLeft--);
+      this.knockout(tb, p);
     }
     if (this.alive() <= 1) return this.finish();
     this.rebalance(tb);
     this.hub.lobbyChanged();
+  }
+
+  // Нокаут: кто выбил — забирает награду за голову (половину взноса выбывшего)
+  knockout(tb, busted) {
+    const bounty = bountyOf(this.t);
+    if (!bounty) return;
+    const w = (tb.v.result || []).filter((x) => x.id !== busted.id).sort((a, b) => b.amount - a.amount)[0];
+    if (!w || w.id < 0) return;
+    credit(w.id, bounty, 'tour_bounty', this.t.id);
+    this.hub.send(w.id, { t: 'toast', text: `Нокаут! Ты выбил ${busted.name}: +${bounty.toLocaleString('ru')} фишек` });
+    this.hub.sendMe(w.id);
   }
 
   setPlace(userId, place) {
@@ -267,11 +281,11 @@ class RunningTournament {
     if (tb.closed) return;
     const live = this.tables.filter((x) => !x.closed);
     const total = this.alive();
-    const need = Math.ceil(total / MAX_SEATS);
+    const need = Math.ceil(total / this.seats);
     const byCount = () => live.filter((x) => x !== tb && !x.closed).sort((a, b) => a.players.length - b.players.length);
     if (live.length > need && tb.players.length === Math.min(...live.map((x) => x.players.length))) {
       for (const p of tb.players.slice()) {
-        const dest = byCount().find((x) => x.players.length < MAX_SEATS);
+        const dest = byCount().find((x) => x.players.length < this.seats);
         if (!dest) break;
         this.move(tb, dest, p);
       }
@@ -298,7 +312,7 @@ class RunningTournament {
     if (winner) this.setPlace(winner.id, 1);
     for (const tb of this.tables) tb.closed = true;
 
-    const pool = this.n * this.t.buyin;
+    const pool = this.n * (this.t.buyin - bountyOf(this.t));
     const shares = payoutShares(this.n);
     const regs = T.regs.all(this.t.id).sort((a, b) => a.place - b.place);
     const prizes = shares.map((s) => Math.floor(pool * s));

@@ -673,11 +673,26 @@ function botsScreen() {
       h('div', { class: 'seg' },
         h('button', { class: S.botMode === 'hu' ? 'on' : '', onclick: () => { S.botMode = 'hu'; render(); } }, '1 на 1'),
         h('button', { class: S.botMode === '6' ? 'on' : '', onclick: () => { S.botMode = '6'; render(); } }, 'Стол на 6'),
-        h('button', { class: S.botMode === 'mixed' ? 'on' : '', onclick: () => { S.botMode = 'mixed'; render(); } }, 'С друзьями'))),
+        h('button', { class: S.botMode === '9' ? 'on' : '', onclick: () => { S.botMode = '9'; render(); } }, 'Стол на 9')),
+      h('div', { class: 'seg', style: 'margin-top:6px' },
+        h('button', { class: S.botMode === 'rush' ? 'on' : '', onclick: () => { S.botMode = 'rush'; render(); } }, 'Босс-раш'),
+        h('button', { class: S.botMode === 'mixed' ? 'on' : '', onclick: () => { S.botMode = 'mixed'; render(); } }, 'С друзьями')),
+      S.botMode === 'rush' && h('div', { class: 'small soft', style: 'line-height:1.45' },
+        'Шесть сильнейших по очереди: Скала → Маньяк → Хамелеон → Акула → Охотник → Король. Обыграл одного — садится следующий, твой стек сохраняется. Проиграл стек — забег окончен, докупки нет. Прошёл всех — фишки ×3 от бай-ина и эпический сундук.'),
+      // варианты игры
+      h('label', { class: 'toggle-row', style: 'margin-top:8px' },
+        h('input', { type: 'checkbox', checked: !!S.shortDeck, onchange: (e) => { S.shortDeck = e.target.checked; } }),
+        h('span', {}, 'Short Deck'), h('span', { class: 'small muted' }, 'без 2–5, флеш старше фулл-хауса')),
+      S.botMode !== 'mixed' && h('label', { class: 'toggle-row' },
+        h('input', { type: 'checkbox', checked: !!S.chaos, onchange: (e) => { S.chaos = e.target.checked; } }),
+        h('span', {}, 'Хаос'), h('span', { class: 'small muted' }, 'случайное событие каждую раздачу'))),
     S.botMode === 'mixed' && h('div', { class: 'field' },
+      h('div', { class: 'label' }, 'Мест за столом'),
+      h('div', { class: 'choices' }, [6, 9].map((n) => h('button', { class: (S.mixedSeats || 6) === n ? 'on' : '', onclick: () => { S.mixedSeats = n; S.mixedBots = Math.min(S.mixedBots ?? 2, n - 2); render(); } }, n))),
       h('div', { class: 'label' }, 'Ботов за столом'),
-      h('div', { class: 'choices' }, [0, 1, 2, 3, 4].map((n) =>
+      h('div', { class: 'choices' }, Array.from({ length: (S.mixedSeats || 6) - 1 }, (_, n) => n).map((n) =>
         h('button', { class: (S.mixedBots ?? 2) === n ? 'on' : '', onclick: () => { S.mixedBots = n; render(); } }, n))),
+      h('input', { class: 'buyin-input', type: 'text', maxlength: 20, placeholder: 'Пароль стола (необязательно)', 'aria-label': 'Пароль стола', value: S.mixedPass || '', id: 'mixed-pass', oninput: (e) => { S.mixedPass = e.target.value; } }),
       h('div', { class: 'small muted', style: 'line-height:1.45' },
         'Создаёшь стол и зовёшь друзей по ссылке — каждый садится со своими фишками. Боты занимают свободные места (всего до 6). Встать можно в любой момент.')),
     S.botMode !== 'mixed' && h('div', { class: 'field' },
@@ -759,7 +774,7 @@ function botsScreen() {
 // ---------- Стол с друзьями ----------
 
 async function createMixed() {
-  const r = await run({ t: 'createMixed', buyin: S.buyin, bots: S.mixedBots ?? 2 });
+  const r = await run({ t: 'createMixed', buyin: S.buyin, bots: S.mixedBots ?? 2, seats: S.mixedSeats || 6, password: (S.mixedPass || '').trim() || null, variant: S.shortDeck ? 'short' : null });
   if (!r) return;
   go('table');
   if (r.invite) shareMixed(r.invite);
@@ -793,12 +808,14 @@ function mixedScreen() {
       h('div', { class: 'grid3' }, stat('Бай-ин', fmt(r.buyin)), stat('Блайнды', `${Math.max(1, Math.floor(r.bb / 2))}/${r.bb}`), stat('Мест', `${r.seats} из ${r.max}`)),
       h('div', { class: 'row', style: 'flex-wrap:wrap;gap:6px' }, r.players.map((p) => h('span', { class: 'tag' }, p.bot ? `${p.name} (бот)` : p.name)))),
     enough
-      ? h('button', { class: 'btn', onclick: async () => { if (await run({ t: 'joinMixed', id: r.id })) go('table'); } }, `Сесть · бай-ин ${fmt(r.buyin)}`)
+      ? h('div', { class: 'col', style: 'gap:8px' },
+        r.private && h('input', { class: 'buyin-input', type: 'text', placeholder: '🔒 Пароль стола', 'aria-label': 'Пароль стола', id: 'join-pass', value: S.joinPass || '', oninput: (e) => { S.joinPass = e.target.value; } }),
+        h('button', { class: 'btn', onclick: async () => { if (await run({ t: 'joinMixed', id: r.id, password: (S.joinPass || '').trim() || null })) go('table'); } }, `Сесть · бай-ин ${fmt(r.buyin)}`))
       : h('button', { class: 'btn', onclick: () => go('wallet') }, `Пополнить — бай-ин ${fmt(r.buyin)}`));
 }
 
 async function sitBots() {
-  const r = await run({ t: 'sitBots', mode: S.botMode, botName: S.botName, buyin: S.buyin, minutes: S.botMinutes, fast: !!S.botFast, level: S.botLevel || 'normal' });
+  const r = await run({ t: 'sitBots', mode: S.botMode, botName: S.botName, buyin: S.buyin, minutes: S.botMinutes, fast: !!S.botFast, level: S.botLevel || 'normal', variant: S.shortDeck ? 'short' : null, chaos: !!S.chaos });
   if (r) go('table');
 }
 
@@ -875,8 +892,13 @@ function pcard(c, size = '', extra = '') {
 // места вокруг стола (в % от области стола); я всегда снизу
 const SPOTS = {
   bottom: [50, 99], bl: [18, 64], tl: [18, 26], top: [50, 8], tr: [82, 26], br: [82, 64],
+  // стол на 9
+  l9: [14, 46], tl9: [20, 18], tc9l: [36, 6], tc9r: [64, 6], tr9: [80, 18], r9: [86, 46], bl9: [16, 72], br9: [84, 72],
 };
-const LAYOUT = { 1: ['top'], 2: ['tl', 'tr'], 3: ['tl', 'top', 'tr'], 4: ['bl', 'tl', 'tr', 'br'], 5: ['bl', 'tl', 'top', 'tr', 'br'] };
+const LAYOUT = {
+  1: ['top'], 2: ['tl', 'tr'], 3: ['tl', 'top', 'tr'], 4: ['bl', 'tl', 'tr', 'br'], 5: ['bl', 'tl', 'top', 'tr', 'br'],
+  6: ['bl9', 'l9', 'tc9l', 'tc9r', 'r9', 'br9'], 7: ['bl9', 'l9', 'tl9', 'top', 'tr9', 'r9', 'br9'], 8: ['bl9', 'l9', 'tl9', 'tc9l', 'tc9r', 'tr9', 'r9', 'br9'],
+};
 
 function clampRaise(x, t) {
   return Math.round(Math.max(t.minRaiseTo, Math.min(t.maxTo, x)));
@@ -891,7 +913,8 @@ function tableScreen() {
   const ordered = meIdx >= 0 ? [...T.seats.slice(meIdx), ...T.seats.slice(0, meIdx)] : T.seats;
   const mySeat = meIdx >= 0 ? T.seats[meIdx] : null;
   const others = ordered.slice(mySeat ? 1 : 0);
-  const spots = LAYOUT[Math.min(others.length, 5)] || [];
+  const spots = LAYOUT[Math.min(others.length, 8)] || [];
+  const nine = others.length > 5; // стол на 9 — компактнее
   const myTurn = S.turn && T.actor === S.me.id && S.turn.tableId === T.id;
 
   // выигрышные 5 карт подсвечиваем, раздаём карты с анимацией
@@ -972,10 +995,13 @@ function tableScreen() {
     : null;
 
   const adminDock = S.me.isAdmin && (T.kind === 'bots' || T.solo);
-  return h('div', { class: `table-screen ${adminDock ? 'with-admin' : ''}` },
+  return h('div', { class: `table-screen ${adminDock ? 'with-admin' : ''} ${nine ? 'nine' : ''}` },
     h('div', { class: 'table-top' },
       h('button', { class: 'icon-btn', 'aria-label': T.kind === 'tour' ? 'В лобби' : 'Встать из-за стола', onclick: back }, icon('back', 18)),
-      h('div', { class: 'title' }, info, sessionLine),
+      h('div', { class: 'title' }, info,
+        // Хаос / босс-раш — строкой в шапке, чтобы не закрывать игроков
+        (T.chaos || T.rush) && h('div', { class: 'mode-line' }, T.rush ? `Босс ${T.rush.i} из ${T.rush.of}: ${T.rush.name}` : T.chaos),
+        sessionLine),
       // подсказка — круглая кнопка в шапке, чтобы не закрывать игроков
       myTurn && !S.hint && h('button', { class: 'icon-btn hint-ico', 'aria-label': 'Подсказка', onclick: askHint },
         icon('bulb', 18), h('span', { class: 'hint-ico-count' }, T.demo ? '∞' : S.me.hints ? S.me.hints : '5⭐')),
@@ -993,6 +1019,7 @@ function tableScreen() {
       mySeat && seatEl(mySeat, 'bottom')),
     result,
     hintRule,
+
     myTurn && hintFloat(T),
     // низ экрана: кнопки админа (только в играх с ботами) над панелью хода
     h('div', { class: 'bottom-dock' },
@@ -1368,6 +1395,9 @@ function soloScreen() {
       h('div', { class: 'label' }, 'Мест'),
       h('div', { class: 'choices' }, cfg.sizes.map((n) => h('button', { class: size === n ? 'on' : '', onclick: () => { S.soloSize = n; render(); } }, n)))),
     h('div', { class: 'field' },
+      h('label', { class: 'toggle-row', style: 'margin-bottom:8px' },
+        h('input', { type: 'checkbox', checked: !!S.soloKo, onchange: (e) => { S.soloKo = e.target.checked; render(); } }),
+        h('span', {}, 'Нокаут'), h('span', { class: 'small muted' }, 'за каждого выбитого бота — полвзноса сразу')),
       h('div', { class: 'label' }, 'Блайнды растут каждые'),
       h('div', { class: 'choices' }, cfg.blinds.map((n) => h('button', { class: blind === n ? 'on' : '', onclick: () => { S.soloBlind = n; render(); } }, `${n} мин`)))),
     h('div', { class: 'field' },
@@ -1404,7 +1434,7 @@ async function startDemoSolo() {
 }
 
 async function startSolo() {
-  const r = await run({ t: 'startSolo', buyin: S.soloBuyin ?? 1000, size: S.soloSize ?? 18, blindMin: S.soloBlind ?? 3 });
+  const r = await run({ t: 'startSolo', buyin: S.soloBuyin ?? 1000, size: S.soloSize ?? 18, blindMin: S.soloBlind ?? 3, ko: !!S.soloKo });
   if (r) go('table');
 }
 
@@ -1537,6 +1567,9 @@ function createScreen() {
     h('div', { class: 'item', style: 'padding:14px;border-radius:16px' },
       h('div', { class: 'col' }, h('div', { style: 'font-size:15px;font-weight:600' }, 'Закрытый'), h('div', { class: 'small soft' }, 'Зайти можно только по твоей ссылке')),
       h('button', { class: `switch ${c.private ? 'on' : ''}`, role: 'switch', 'aria-checked': String(c.private), 'aria-label': 'Закрытый турнир', onclick: () => { c.private = !c.private; render(); } })),
+    h('div', { class: 'item', style: 'padding:14px;border-radius:16px' },
+      h('div', { class: 'col' }, h('div', { style: 'font-size:15px;font-weight:600' }, 'Нокаут'), h('div', { class: 'small soft' }, 'Половина взноса — награда за голову: выбил игрока — забрал сразу')),
+      h('button', { class: `switch ${c.ko ? 'on' : ''}`, role: 'switch', 'aria-checked': String(!!c.ko), 'aria-label': 'Турнир-нокаут', onclick: () => { c.ko = !c.ko; render(); } })),
     h('div', { class: 'small muted', style: 'line-height:1.5;padding-bottom:70px' }, prizeText(c.maxPlayers)),
     h('button', { class: 'btn cta', onclick: createTour }, 'Создать и позвать друзей'));
 }

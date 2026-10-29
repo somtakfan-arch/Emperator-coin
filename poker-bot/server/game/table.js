@@ -4,7 +4,7 @@
 //  • делает паузы, чтобы за игрой можно было следить.
 import { randomInt } from 'node:crypto';
 import { Table } from '../../core/engine.js';
-import { describeHand, evaluate, handCategory } from '../../core/cards.js';
+import { describeHand, evaluate, evaluateShort, handCategory } from '../../core/cards.js';
 import { config } from '../config.js';
 import { db } from '../db.js';
 import { knownEquity, bestFive, outs } from './tablefx.js';
@@ -129,7 +129,7 @@ export function botSeat(bot, table) {
 const ACTION_TEXT = { fold: 'Фолд', check: 'Чек', call: 'Колл' };
 
 export class GameTable {
-  constructor({ id, kind, title, hub, sb, bb }) {
+  constructor({ id, kind, title, hub, sb, bb, variant = null }) {
     this.id = id;
     this.kind = kind; // 'bots' | 'tour'
     this.title = title;
@@ -140,6 +140,8 @@ export class GameTable {
       onEvent: (e) => this.onEvent(e),
       pause: (k) => sleep((k === 'street' ? 700 : 450) * (this.fast ? 0.4 : 1)),
     });
+    this.variant = variant; // 'short' — Short Deck (без 2–5)
+    this.engine.variant = variant;
     this.closed = false;
     this.inHand = false;
     this.extra = () => ({}); // доп. инфа для экрана (уровень турнира и т.п.)
@@ -251,7 +253,7 @@ export class GameTable {
     for (const p of live) if (p.bot.hole) holes[p.id] = p.bot.hole;
     if (Object.keys(holes).length < 2) return;
     for (const [id, cards] of Object.entries(holes)) v.shown[id] = v.shown[id] || { cards, hand: null };
-    v.equity = knownEquity(holes, v.board);
+    v.equity = knownEquity(holes, v.board, this.variant === 'short' ? evaluateShort : evaluate, this.variant === 'short');
   }
 
   async run() {
@@ -347,7 +349,11 @@ export class GameTable {
         this.checkRunout();
       }
     } else if (e.type === 'showdown') {
-      for (const r of e.reveals) v.shown[r.id] = { cards: r.cards, hand: describeHand(r.score), score: r.score };
+      for (const r of e.reveals) {
+        // в Short Deck порядок рук другой — название и категорию берём по обычной оценке
+        const std = this.variant === 'short' ? evaluate(r.cards.concat(v.board)) : r.score;
+        v.shown[r.id] = { cards: r.cards, hand: describeHand(std), score: std };
+      }
     } else if (e.type === 'handEnd') {
       v.actor = null;
       v.bets = {};
@@ -392,7 +398,7 @@ export class GameTable {
     return {
       id: this.id, kind: this.kind, title: this.title, sb: this.sb, bb: this.bb,
       board: v.board, pot: v.pot, actor: v.actor, deadline: v.deadline, buttonId: v.buttonId,
-      handId: v.handId, result: v.result, inHand: this.inHand, fast: !!this.fast,
+      handId: v.handId, result: v.result, inHand: this.inHand, fast: !!this.fast, variant: this.variant, chaos: this.chaos?.text ?? null,
       winCards: v.result ? v.winCards : null, ...this.extra(uid),
       seats: this.players.map((p) => {
         const dealt = v.dealt.has(p.id);
@@ -403,7 +409,9 @@ export class GameTable {
           folded: v.folded.has(p.id), inHand: dealt && !v.folded.has(p.id),
           allIn: dealt && p.stack === 0 && !v.folded.has(p.id),
           last: v.last[p.id] || null,
-          cards: v.shown[p.id]?.cards ?? (mine && dealt ? p.bot.hole : null),
+          cards: v.shown[p.id]?.cards ?? (mine && dealt ? p.bot.hole
+            // Хаос «открытая карта»: у всех видна первая карта
+            : this.chaos?.kind === 'cardUp' && dealt && !v.folded.has(p.id) && p.bot.hole ? [p.bot.hole[0], null] : null),
           hand: v.shown[p.id]?.hand ?? null,
           // твоя текущая комбинация (только тебе)
           ...(mine && dealt && p.bot.hole && !v.folded.has(p.id) ? this.myHand(p.bot.hole) : {}),
@@ -458,7 +466,7 @@ export class GameTable {
     const key = `${this.v.handId}:${this.v.board.length}:${hole.join()}`;
     if (this.outsKey !== key) {
       this.outsKey = key;
-      this.outsVal = outs(hole, this.v.board);
+      this.outsVal = outs(hole, this.v.board, this.variant === 'short');
     }
     return this.outsVal;
   }

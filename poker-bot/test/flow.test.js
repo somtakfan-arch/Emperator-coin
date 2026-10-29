@@ -691,3 +691,50 @@ test('боты: боссы, сложность, статистика проти�
   assert.ok(after.vs['Робот']?.hands >= 1, 'статистика против Робота записана');
   c.close();
 });
+
+test('режимы: Short Deck, стол на 9, Хаос, босс-раш, стол с паролем, нокаут и турнир на 9', async () => {
+  const c = new Client(9921);
+  await c.ready;
+  await c.req({ t: 'invoice', pack: 'p2' });
+  await c.waitFor((m) => m.t === 'me' && m.me.chips > 0);
+  // Short Deck + Хаос на столе на 9: в колоде нет карт 2–5
+  await c.req({ t: 'sitBots', mode: '9', buyin: 500, variant: 'short', chaos: true });
+  const snap = await c.waitFor((m) => m.t === 'table' && m.table?.variant === 'short' && m.table.seats.length === 9 && m.table.chaos, 30000);
+  assert.equal(snap.table.seats.length, 9);
+  const seen = await c.waitFor((m) => m.t === 'table' && m.table?.board?.length >= 3, 60000).catch(() => null);
+  if (seen) assert.ok(seen.table.board.every((x) => x >> 2 >= 4), 'на столе только 6–A');
+  c.ws.send(JSON.stringify({ t: 'leave' }));
+  await c.waitFor((m) => m.t === 'left', 30000);
+  // босс-раш: первый — Скала, докупки нет
+  c.msgs.length = 0;
+  await c.req({ t: 'sitBots', mode: 'rush', buyin: 500 });
+  const rush = await c.waitFor((m) => m.t === 'table' && m.table?.rush, 30000);
+  assert.equal(rush.table.rush.name, 'Скала');
+  assert.equal(rush.table.canRebuy, false);
+  c.ws.send(JSON.stringify({ t: 'leave' }));
+  await c.waitFor((m) => m.t === 'left', 30000);
+  // стол с паролем: без пароля не сесть
+  const host = new Client(9922);
+  await host.ready;
+  await host.req({ t: 'invoice', pack: 'p1' });
+  await assert.rejects(host.req({ t: 'createMixed', buyin: 500, bots: 1, password: 'a' }), /Пароль/);
+  const created = await host.req({ t: 'createMixed', buyin: 500, bots: 1, seats: 9, password: 'tuz777' });
+  const info = await c.req({ t: 'mixedInfo', id: created.id });
+  assert.equal(info.room.private, true);
+  assert.equal(info.room.max, 9);
+  await assert.rejects(c.req({ t: 'joinMixed', id: created.id, password: 'nope' }), /Неверный пароль/);
+  await c.req({ t: 'joinMixed', id: created.id, password: 'tuz777' });
+  c.msgs.length = 0;
+  c.ws.send(JSON.stringify({ t: 'leave' }));
+  await c.waitFor((m) => m.t === 'left', 30000);
+  host.ws.send(JSON.stringify({ t: 'leave' }));
+  await host.waitFor((m) => m.t === 'left', 30000);
+  // турнир-нокаут на 9: призовой — половина взносов
+  const t = await c.req({ t: 'createT', tour: { name: 'KO', maxPlayers: 9, buyin: 1000, blindMin: 5, startMode: 'full', ko: true } });
+  const tour = (await c.req({ t: 'tour', id: t.id })).tour;
+  assert.equal(tour.ko, true);
+  assert.equal(tour.bounty, 500);
+  assert.equal(tour.prizePool, 500);
+  await c.req({ t: 'cancelT', id: t.id });
+  host.close(); c.close();
+});

@@ -8,12 +8,15 @@ import { handElo, botRating } from './elo.js';
 import { config } from '../config.js';
 import { db, debit, credit } from '../db.js';
 
-const MAX_SEATS = 6;
+const MAX_SEATS = 6; // по умолчанию; стол на 9 — по выбору
 const AWAY_MS = 10 * 60 * 1000;
 const setInPlay = db.prepare('UPDATE users SET in_play = ? WHERE id = ?');
 
 export class MixedRoom {
-  constructor(hub, host, { buyin, bots }) {
+  constructor(hub, host, { buyin, bots, seats = 6, password = null, variant = null }) {
+    this.maxSeats = seats === 9 ? 9 : MAX_SEATS;
+    this.password = password || null; // приватный стол
+    this.variant = variant;
     this.hub = hub;
     this.id = randomBytes(5).toString('base64url').replace(/[^a-zA-Z0-9]/g, 'x');
     this.hostId = host.id;
@@ -22,11 +25,14 @@ export class MixedRoom {
     this.humans = new Map(); // uid -> { seat, player, invested, leaving, played }
     const bb = Math.max(2, Math.floor(buyin / 100));
     const sb = Math.max(1, Math.floor(bb / 2));
-    this.table = new GameTable({ id: `m${this.id}`, kind: 'mixed', hub, sb, bb, title: `Стол ${host.name} · ${sb}/${bb}` });
+    this.table = new GameTable({
+      id: `m${this.id}`, kind: 'mixed', hub, sb, bb, variant,
+      title: `${this.password ? '🔒 ' : ''}Стол ${host.name} · ${sb}/${bb}${variant === 'short' ? ' · Short Deck' : ''}${this.maxSeats === 9 ? ' · на 9' : ''}`,
+    });
     this.bots = [];
     // боты на свободные места: от сильного к слабому, без повторов
-    const order = ['Акула', 'Охотник', 'Хамелеон', 'Маньяк', 'Скала'];
-    order.slice(0, Math.max(0, Math.min(bots, MAX_SEATS - 1))).forEach((name, i) => {
+    const order = ['Акула', 'Охотник', 'Хамелеон', 'Маньяк', 'Скала', 'Колян', 'Сэм', 'Барон'];
+    order.slice(0, Math.max(0, Math.min(bots, this.maxSeats - 1))).forEach((name, i) => {
       const bot = makeBot(name, { iters: 300 });
       bot.id = -(i + 1);
       this.bots.push(bot);
@@ -37,7 +43,7 @@ export class MixedRoom {
       return {
         roomId: this.id, host: this.hostName, isHost: uid === this.hostId, buyin, invite: this.hub.mixedInvite?.(this.id) ?? null,
         canRebuy: h ? h.player.stack === 0 : false, leaving: !!h?.leaving,
-        humans: this.humans.size, seatsFree: MAX_SEATS - this.table.players.length,
+        humans: this.humans.size, seatsFree: this.maxSeats - this.table.players.length, private: !!this.password,
       };
     };
     this.table.eventHook = (e) => this.onTableEvent(e);
@@ -48,8 +54,11 @@ export class MixedRoom {
   static open(hub, host, opts) {
     if (!(Number.isSafeInteger(opts.buyin) && opts.buyin >= config.buyinMin)) throw new Error(`Бай-ин — от ${config.buyinMin} фишек`); // сверху — сколько есть на балансе
     const bots = Math.floor(Number(opts.bots));
-    if (!(bots >= 0 && bots <= 4)) throw new Error('Ботов — от 0 до 4');
-    const room = new MixedRoom(hub, host, { buyin: opts.buyin, bots });
+    const seats = Number(opts.seats) === 9 ? 9 : 6;
+    if (!(bots >= 0 && bots <= seats - 2)) throw new Error(`Ботов — от 0 до ${seats - 2}`);
+    const password = opts.password ? String(opts.password).trim().slice(0, 20) : null;
+    if (opts.password && !/^[\p{L}\p{N}]{3,20}$/u.test(password)) throw new Error('Пароль — от 3 до 20 букв или цифр');
+    const room = new MixedRoom(hub, host, { buyin: opts.buyin, bots, seats, password, variant: opts.variant === 'short' ? 'short' : null });
     room.join(host);
     room.table.run();
     return room;
@@ -58,7 +67,7 @@ export class MixedRoom {
   info() {
     return {
       id: this.id, host: this.hostName, buyin: this.buyin, bb: this.table.bb,
-      seats: this.table.players.length, max: MAX_SEATS, closed: this.table.closed,
+      seats: this.table.players.length, max: this.maxSeats, closed: this.table.closed, private: !!this.password, variant: this.variant,
       players: this.table.players.map((p) => ({ name: p.name, bot: !!p.isBot })),
     };
   }
@@ -67,11 +76,12 @@ export class MixedRoom {
     return this.humans.get(uid)?.seat;
   }
 
-  join(user) {
+  join(user, password = null) {
     if (this.table.closed) throw new Error('Стол уже закрыт');
     if (this.humans.has(user.id)) return;
+    if (this.password && user.id !== this.hostId && password !== this.password) throw new Error('Неверный пароль стола');
     // место для человека: если всё занято, уступает бот — но только между раздачами
-    if (this.table.players.length >= MAX_SEATS) {
+    if (this.table.players.length >= this.maxSeats) {
       const bot = this.table.players.find((p) => p.isBot);
       if (!bot) throw new Error('Мест нет');
       if (this.table.inHand) throw new Error('Стол полный — попробуй через пару секунд, после раздачи');

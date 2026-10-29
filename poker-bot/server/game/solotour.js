@@ -3,7 +3,7 @@
 // Взносы ботов — «виртуальные»: призовой фонд = взнос × число мест.
 // Вылетел — турнир для тебя закончен сразу (боты дальше не доигрывают), место и приз считаются.
 import { randomBytes } from 'node:crypto';
-import { db, tx, debit } from '../db.js';
+import { db, tx, debit, credit } from '../db.js';
 import { config, BLIND_LEVELS, payoutShares } from '../config.js';
 import { CROWD, makeBot } from '../../core/crowd.js';
 import { BOT_CLASSES } from '../../core/bots.js';
@@ -12,12 +12,14 @@ import { botRating } from './elo.js';
 import { checkPlan, arrangeDeck } from './demoplan.js';
 
 const MAX_SEATS = 6;
-export const SOLO_SIZES = [6, 18, 60];
+export const SOLO_SIZES = [6, 9, 18, 60]; // 9 — один стол до последнего
 export const SOLO_BLINDS = [2, 3, 6]; // минут на уровень
 const setInPlay = db.prepare('UPDATE users SET in_play = ? WHERE id = ?');
 
 export class SoloTour {
-  constructor(hub, user, { buyin, size, blindMin, demo = false }) {
+  constructor(hub, user, { buyin, size, blindMin, demo = false, ko = false }) {
+    this.seats = size === 9 ? 9 : MAX_SEATS;
+    this.bounty = ko ? Math.floor(buyin / 2) : 0; // нокаут: за каждого выбитого бота
     this.hub = hub;
     // демо — только админ, для видео: фишки ненастоящие, баланс/Эло/призы не трогаются,
     // карты на следующую раздачу за своим столом выбираешь сам
@@ -25,7 +27,7 @@ export class SoloTour {
     this.plan = null;
     this.userId = user.id;
     this.id = `s${randomBytes(5).toString('base64url').replace(/[^a-zA-Z0-9]/g, 'x')}`;
-    this.name = demo ? `Демо-турнир · ${size}` : `Сольный турнир · ${size}`;
+    this.name = `${demo ? 'Демо-турнир' : 'Сольный турнир'}${ko ? ' · нокаут' : ''} · ${size}`;
     this.buyin = buyin;
     this.n = size;
     this.blindMin = blindMin;
@@ -58,7 +60,7 @@ export class SoloTour {
     if (!SOLO_BLINDS.includes(blindMin)) throw new Error('Неверная скорость блайндов');
     if (!debit(user.id, buyin, 'solo_buyin')) throw new Error('Не хватает фишек — пополни кошелёк');
     setInPlay.run(buyin, user.id); // при перезапуске сервера взнос вернётся
-    const t = new SoloTour(hub, user, { buyin, size, blindMin });
+    const t = new SoloTour(hub, user, { buyin, size, blindMin, ko: !!o.ko });
     t.start(user);
     return t;
   }
@@ -79,7 +81,7 @@ export class SoloTour {
   }
 
   prizes() {
-    const pool = this.n * this.buyin;
+    const pool = this.n * (this.buyin - this.bounty);
     const p = payoutShares(this.n).map((s) => Math.floor(pool * s));
     p[0] += pool - p.reduce((a, b) => a + b, 0);
     return p;
@@ -92,7 +94,7 @@ export class SoloTour {
   start(user) {
     const stack = config.tournament.stack;
     const entries = [{ id: user.id, name: user.name, stack, bot: new HumanSeat(user.id, this.hub), isBot: false }];
-    const k = Math.ceil(this.n / MAX_SEATS);
+    const k = Math.ceil(this.n / this.seats);
     for (let i = 0; i < k; i++) this.tables.push(this.newTable(i + 1));
     this.botNames.forEach((name, i) => {
       const bot = makeBot(name, { iters: 200 });
@@ -120,7 +122,7 @@ export class SoloTour {
     tb.extra = () => ({
       ...(this.demo && tb.players.some((p) => p.id === this.userId) ? { demo: true, plan: this.plan } : {}),
       tournamentId: this.id, solo: true, alive: this.alive(), total: this.n, ...this.levelInfo(),
-      prizePool: this.n * this.buyin, tableNo: num,
+      prizePool: this.n * (this.buyin - this.bounty), tableNo: num, ko: !!this.bounty, bounty: this.bounty,
     });
     tb.beforeHand = () => {
       if (tb.players.length < 2 && !this.done) this.rebalance(tb);
@@ -141,6 +143,15 @@ export class SoloTour {
       const place = this.placesLeft--;
       if (p.id === this.userId) return this.finish(place);
       this.places.set(p.id, place);
+      // нокаут: выбил бота ты — награда сразу на баланс
+      if (this.bounty && !this.demo) {
+        const w = (tb.v.result || []).filter((x) => x.id !== p.id).sort((a, b) => b.amount - a.amount)[0];
+        if (w?.id === this.userId) {
+          credit(this.userId, this.bounty, 'solo_bounty', this.id);
+          this.hub.send(this.userId, { t: 'toast', text: `Нокаут! Ты выбил ${p.name}: +${this.bounty.toLocaleString('ru')} фишек` });
+          this.hub.sendMe(this.userId);
+        }
+      }
     }
     if (this.alive() <= 1) return this.finish(1);
     this.rebalance(tb);
@@ -150,11 +161,11 @@ export class SoloTour {
   rebalance(tb) {
     if (tb.closed) return;
     const live = this.tables.filter((x) => !x.closed);
-    const need = Math.ceil(this.alive() / MAX_SEATS);
+    const need = Math.ceil(this.alive() / this.seats);
     const byCount = () => live.filter((x) => x !== tb && !x.closed).sort((a, b) => a.players.length - b.players.length);
     if (live.length > need && tb.players.length === Math.min(...live.map((x) => x.players.length))) {
       for (const p of tb.players.slice()) {
-        const dest = byCount().find((x) => x.players.length < MAX_SEATS);
+        const dest = byCount().find((x) => x.players.length < this.seats);
         if (!dest) break;
         this.move(tb, dest, p);
       }

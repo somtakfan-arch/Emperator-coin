@@ -49,7 +49,7 @@ export const config = {
 
   tournament: {
     stack: 1500,
-    sizes: [2, 3, 6, 18, 60],
+    sizes: [2, 3, 6, 9, 18, 60], // 9 — один стол до последнего
     blindOptions: [3, 5, 10],               // минут на уровень
     maxOpenPerUser: 3,
   },
