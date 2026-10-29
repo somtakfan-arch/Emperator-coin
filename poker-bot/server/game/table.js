@@ -7,6 +7,10 @@ import { Table } from '../../core/engine.js';
 import { describeHand, evaluate, handCategory } from '../../core/cards.js';
 import { config } from '../config.js';
 import { db } from '../db.js';
+import { knownEquity, bestFive, outs } from './tablefx.js';
+
+// эмодзи за столом (только из набора — без свободного текста)
+export const EMOTES = ['👍', '😂', '🔥', '😎', '😱', '🤡', '💀', '🙏', '😡', '🍀', '👑', '🤔'];
 
 const addHandWon = db.prepare('UPDATE users SET hands_won = hands_won + 1 WHERE id = ?');
 const getHandsWon = db.prepare('SELECT hands_won FROM users WHERE id = ?');
@@ -32,10 +36,25 @@ export class HumanSeat {
     this.pending = null;
     this.timeouts = 0;
     this.sittingOut = false;
+    this.timebanks = 3; // +15 с к ходу, 3 раза за стол
+    this.session = { hands: 0, won: 0 }; // для итога, когда встаёшь
   }
 
   deal(hole) {
     this.hole = hole;
+  }
+
+  // таймбанк: +15 секунд к текущему ходу
+  extend() {
+    const p = this.pending;
+    if (!p || this.timebanks <= 0) return false;
+    this.timebanks--;
+    clearTimeout(p.timer);
+    p.deadline += 15000;
+    p.timer = setTimeout(p.onTimeout, p.deadline - Date.now());
+    if (this.table) this.table.v.deadline = p.deadline;
+    this.table?.broadcast();
+    return true;
   }
 
   act(state) {
@@ -44,17 +63,18 @@ export class HumanSeat {
     const seconds = this.hub.isOnline(this.id) ? config.turnSeconds : Math.min(8, config.turnSeconds);
     return new Promise((resolve) => {
       const finish = (a) => {
-        clearTimeout(timer);
+        clearTimeout(this.pending?.timer);
         this.pending = null;
         resolve(a);
       };
-      const timer = setTimeout(() => {
+      const onTimeout = () => {
         // не успел — чек/фолд; два раза подряд — садим «отошёл»
         if (++this.timeouts >= 2) this.sittingOut = true;
         finish(autoAction(state));
         this.table?.broadcast();
-      }, seconds * 1000);
-      this.pending = { state, finish, deadline: Date.now() + seconds * 1000 };
+      };
+      const timer = setTimeout(onTimeout, seconds * 1000);
+      this.pending = { state, finish, onTimeout, timer, deadline: Date.now() + seconds * 1000 };
     });
   }
 
@@ -83,7 +103,7 @@ export function botSeat(bot, table) {
     },
     act: async (state) => {
       table.setActor(bot.id, state);
-      await sleep(500 + Math.random() * 900);
+      await sleep(table.fast ? 150 + Math.random() * 250 : 500 + Math.random() * 900); // быстрый стол — боты думают меньше
       // кнопка админа «все ва-банк»: до конца раздачи боты идут олл-ин
       if (table.forceJam) return state.stack > state.toCall ? { type: 'raise', to: state.myBet + state.stack } : { type: 'call' };
       // кнопка админа «почти ва-банк и фолд»: бот ставит всё, кроме 1 фишки, а дальше сбрасывает
@@ -110,7 +130,7 @@ export class GameTable {
     this.engine = new Table({
       players: this.players, smallBlind: sb, bigBlind: bb, deckRng: cryptoRng,
       onEvent: (e) => this.onEvent(e),
-      pause: (k) => sleep(k === 'street' ? 700 : 450),
+      pause: (k) => sleep((k === 'street' ? 700 : 450) * (this.fast ? 0.4 : 1)),
     });
     this.closed = false;
     this.inHand = false;
@@ -128,7 +148,10 @@ export class GameTable {
   }
 
   resetView() {
-    this.v = { board: [], pot: 0, bets: {}, folded: new Set(), last: {}, shown: {}, dealt: new Set(), actor: null, deadline: 0, result: null, handId: 0, buttonId: null };
+    this.v = {
+      board: [], pot: 0, bets: {}, folded: new Set(), last: {}, shown: {}, dealt: new Set(), actor: null, deadline: 0, result: null, handId: 0, buttonId: null,
+      equity: null, winCards: null, emotes: this.v?.emotes || {},
+    };
   }
 
   addPlayer(p) {
@@ -151,6 +174,38 @@ export class GameTable {
     return this.players.filter((p) => !p.isBot);
   }
 
+  // эмодзи над игроком на 3 секунды (не чаще раза в секунду)
+  emote(id, e) {
+    if (!EMOTES.includes(e)) throw new Error('Нет такого эмодзи');
+    const prev = this.v.emotes[id];
+    if (prev && Date.now() - prev.at < 1000) return;
+    this.v.emotes[id] = { e, at: Date.now() };
+    this.broadcast();
+    setTimeout(() => {
+      if (this.v.emotes[id]?.at && Date.now() - this.v.emotes[id].at >= 3000) {
+        delete this.v.emotes[id];
+        this.broadcast();
+      }
+    }, 3100);
+  }
+
+  // Олл-ин до ривера: больше никто не может ставить — открываем карты и считаем шансы, как на ТВ
+  checkRunout() {
+    const v = this.v;
+    if (v.board.length >= 5) return;
+    const live = this.players.filter((p) => v.dealt.has(p.id) && !v.folded.has(p.id));
+    if (live.length < 2) return;
+    const canAct = live.filter((p) => p.stack > 0);
+    const maxBet = Math.max(...live.map((p) => v.bets[p.id] || 0));
+    const settled = canAct.every((p) => (v.bets[p.id] || 0) === maxBet);
+    if (canAct.length > 1 || !settled || v.actor != null) return;
+    const holes = {};
+    for (const p of live) if (p.bot.hole) holes[p.id] = p.bot.hole;
+    if (Object.keys(holes).length < 2) return;
+    for (const [id, cards] of Object.entries(holes)) v.shown[id] = v.shown[id] || { cards, hand: null };
+    v.equity = knownEquity(holes, v.board);
+  }
+
   async run() {
     while (!this.closed) {
       await this.beforeHand?.();
@@ -163,7 +218,7 @@ export class GameTable {
       this.inHand = true;
       const res = await this.engine.playHand();
       this.inHand = false;
-      await sleep(res?.showdown ? 3500 : 1800);
+      await sleep((res?.showdown ? 3500 : 1800) * (this.fast ? 0.5 : 1));
       await this.afterHand?.(res);
     }
   }
@@ -230,15 +285,36 @@ export class GameTable {
       v.actor = null;
       if (e.action === 'fold') v.folded.add(e.id);
       v.last[e.id] = e.allIn ? 'Олл-ин' : e.action === 'raise' ? `${e.facing > 0 ? 'Рейз' : 'Бет'} ${e.to}` : ACTION_TEXT[e.action];
+      this.checkRunout();
     } else if (e.type === 'street') {
       v.board = e.board;
       v.bets = {};
       for (const id of Object.keys(v.last)) if (v.last[id] !== 'Фолд') delete v.last[id];
+      if (v.equity) {
+        v.equity = null;
+        this.checkRunout();
+      }
     } else if (e.type === 'showdown') {
       for (const r of e.reveals) v.shown[r.id] = { cards: r.cards, hand: describeHand(r.score) };
     } else if (e.type === 'handEnd') {
       v.actor = null;
       v.bets = {};
+      v.equity = null;
+      // выигрышные карты (при вскрытии) — подсветим их на столе
+      const shownWinners = e.winners.filter((w) => v.shown[w.id]?.cards);
+      if (shownWinners.length && v.board.length === 5) {
+        v.winCards = [...new Set(shownWinners.flatMap((w) => bestFive(v.shown[w.id].cards.concat(v.board))))];
+      }
+      // серии побед и итог сессии
+      const winners = new Set(e.winners.map((w) => w.id));
+      for (const p of this.players) {
+        if (!v.dealt.has(p.id)) continue;
+        p.streak = winners.has(p.id) ? (p.streak || 0) + 1 : 0;
+        if (!p.isBot && p.bot.session) {
+          p.bot.session.hands++;
+          if (winners.has(p.id)) p.bot.session.won++;
+        }
+      }
       v.result = e.winners.map((w) => ({
         id: w.id, amount: w.amount,
         name: this.players.find((p) => p.id === w.id)?.name ?? '',
@@ -254,7 +330,8 @@ export class GameTable {
     return {
       id: this.id, kind: this.kind, title: this.title, sb: this.sb, bb: this.bb,
       board: v.board, pot: v.pot, actor: v.actor, deadline: v.deadline, buttonId: v.buttonId,
-      handId: v.handId, result: v.result, inHand: this.inHand, ...this.extra(uid),
+      handId: v.handId, result: v.result, inHand: this.inHand, fast: !!this.fast,
+      winCards: v.result ? v.winCards : null, ...this.extra(uid),
       seats: this.players.map((p) => {
         const dealt = v.dealt.has(p.id);
         const mine = p.id === uid;
@@ -270,9 +347,24 @@ export class GameTable {
           ...(mine && dealt && p.bot.hole && !v.folded.has(p.id) ? this.myHand(p.bot.hole) : {}),
           away: !p.isBot && p.bot.sittingOut,
           handsWon: p.isBot ? botHandsWon(p.name) : p.handsWon ?? 0,
+          streak: p.streak || 0,
+          equity: v.equity?.[p.id] ?? null,
+          emote: v.emotes[p.id]?.e ?? null,
+          ...(mine && !p.isBot ? { timebanks: p.bot.timebanks } : {}),
+          ...(mine && dealt && p.bot.hole && !v.folded.has(p.id) && this.inHand ? { outs: this.myOuts(p.bot.hole) } : {}),
         };
       }),
     };
+  }
+
+  // ауты считаем раз на улицу
+  myOuts(hole) {
+    const key = `${this.v.handId}:${this.v.board.length}:${hole.join()}`;
+    if (this.outsKey !== key) {
+      this.outsKey = key;
+      this.outsVal = outs(hole, this.v.board);
+    }
+    return this.outsVal;
   }
 
   myHand(hole) {

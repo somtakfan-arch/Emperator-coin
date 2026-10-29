@@ -115,7 +115,7 @@ export class MixedRoom {
     setInPlay.run(0, uid);
     credit(uid, stack, 'mixed_cashout', this.id);
     this.hub.onWinnings?.(uid, stack - h.invested);
-    this.hub.onRoomClosed(uid, this, stack, null, kicked);
+    this.hub.onRoomClosed(uid, this, stack, stack - h.invested, kicked);
     if (!this.humans.size) this.table.closed = true; // людей не осталось — стол закрыт
     else this.table.broadcast();
   }

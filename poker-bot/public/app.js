@@ -140,6 +140,9 @@ function onMessage(m) {
       if (m.table && S.table?.id !== m.table.id) S.turn = null;
       // запоминаем, где были фишки до перерисовки, — для анимации
       if (S.screen === 'table') S.pendingFx = { prev: S.table, before: measureChips() };
+      trackSession(S.table, m.table);
+      tableSounds(S.table, m.table);
+      if (S.turn && m.table?.deadline > S.turn.deadline) S.turn.deadline = m.table.deadline; // таймбанк
       S.table = m.table;
       if (m.table && S.screen !== 'table' && !S.tableHidden) go('table');
       if (S.turn && m.table && m.table.actor !== S.me?.id) S.turn = null;
@@ -149,6 +152,8 @@ function onMessage(m) {
       S.hint = null;
       S.raiseTo = clampRaise(m.currentBet + 0.66 * (m.pot + m.toCall), m);
       tg?.HapticFeedback?.impactOccurred('medium');
+      if (runPreAction(m)) break;
+      sfx('turn');
       break;
     case 'tour': S.tour = m.tour; S.invite = m.invite; break;
     case 'top': S.top = m.rating; break;
@@ -167,13 +172,14 @@ function onMessage(m) {
     case 'left':
       S.table = null;
       S.turn = null;
-      toast(m.beatAll
-        ? `Ты обыграл всех ботов! На баланс: ${fmt(m.stack)}`
-        : m.kicked
-        ? `Тебя убрали со стола: пропущено 2 хода подряд. На баланс: ${fmt(m.stack)}`
-        : m.net != null
-        ? `Время вышло! Итог: ${m.net >= 0 ? '+' : '−'}${fmt(Math.abs(m.net))} фишек`
-        : m.stack ? `Со стола на баланс: ${fmt(m.stack)}` : 'Ты встал из-за стола');
+      S.pre = null;
+      // итог сессии — карточкой в лобби
+      S.summary = {
+        title: m.beatAll ? 'Ты обыграл всех ботов!' : m.kicked ? 'Тебя убрали со стола: 2 хода подряд пропущено' : m.timed ? 'Время стола вышло' : 'Ты встал из-за стола',
+        hands: m.hands, won: m.won, net: m.demo ? null : m.net, stack: m.stack,
+        minutes: S.session ? Math.max(1, Math.round((Date.now() - S.session.start) / 60000)) : null,
+      };
+      S.session = null;
       go('lobby');
       break;
     case 'invoice':
@@ -186,6 +192,131 @@ function onMessage(m) {
     case 'toast': toast(m.text); break;
   }
   render();
+}
+
+// ---------- Сессия за столом: время, раздачи, выигрыши ----------
+
+function trackSession(prev, next) {
+  if (!next) return;
+  const key = next.tournamentId || next.id;
+  if (!S.session || S.session.key !== key) S.session = { key, start: Date.now(), hands: 0, won: 0, lastHand: null };
+  const ss = S.session;
+  if (next.handId && next.handId !== ss.lastHand && next.seats.some((x) => x.me && (x.inHand || x.folded))) {
+    ss.lastHand = next.handId;
+    ss.hands++;
+    S.dealPending = true; // анимация раздачи — в первой отрисовке новой раздачи
+    S.pre = null;
+  }
+  if (next.result && !(prev?.result && prev.handId === next.handId) && next.result.some((w) => w.id === S.me?.id)) ss.won++;
+}
+
+// ---------- Звуки (синтез, без файлов) ----------
+
+let audioCtx = null;
+function soundOn() {
+  try { return localStorage.getItem('sound') !== 'off'; } catch { return true; }
+}
+function sfx(kind) {
+  if (!soundOn() || document.hidden) return;
+  try {
+    audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = audioCtx;
+    const tone = (freq, start, dur, type = 'sine', vol = 0.08) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = type;
+      o.frequency.value = freq;
+      g.gain.setValueAtTime(vol, ctx.currentTime + start);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + start + dur);
+      o.connect(g).connect(ctx.destination);
+      o.start(ctx.currentTime + start);
+      o.stop(ctx.currentTime + start + dur + 0.02);
+    };
+    if (kind === 'chip') { tone(2200, 0, 0.05, 'triangle', 0.05); tone(1700, 0.04, 0.05, 'triangle', 0.04); }
+    if (kind === 'card') tone(900, 0, 0.06, 'square', 0.025);
+    if (kind === 'turn') { tone(660, 0, 0.12); tone(880, 0.1, 0.16); }
+    if (kind === 'win') [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.09, 0.22, 'triangle', 0.07));
+    if (kind === 'allin') { tone(196, 0, 0.3, 'sawtooth', 0.04); tone(147, 0.12, 0.35, 'sawtooth', 0.04); }
+  } catch {}
+}
+
+function tableSounds(prev, next) {
+  if (!prev || !next || prev.id !== next.id || S.screen !== 'table') return;
+  if (next.board.length > prev.board.length) sfx('card');
+  const prevBet = Object.fromEntries(prev.seats.map((x) => [x.id, x.bet]));
+  if (next.seats.some((x) => x.bet > (prevBet[x.id] || 0))) sfx('chip');
+  if (next.seats.some((x) => x.allIn) && !prev.seats.some((x) => x.allIn)) sfx('allin');
+  if (next.result && !prev.result && next.result.some((w) => w.id === S.me?.id)) {
+    sfx('win');
+    const mine = next.result.find((w) => w.id === S.me?.id);
+    if (mine.amount >= 30 * next.bb) setTimeout(() => confetti(), 400); // большой банк — салют
+  }
+}
+
+// ---------- Кнопки заранее: «чек/фолд», «чек», «колл любой» ----------
+
+function runPreAction(t) {
+  const p = S.pre;
+  if (!p || p.hand !== S.table?.handId) return false;
+  S.pre = null;
+  let action = null;
+  if (p.kind === 'cf') action = { type: t.toCall > 0 ? 'fold' : 'check' };
+  if (p.kind === 'c' && t.toCall === 0) action = { type: 'check' };
+  if (p.kind === 'any') action = { type: t.toCall > 0 ? 'call' : 'check' };
+  if (!action) return false;
+  setTimeout(() => {
+    send({ t: 'act', action });
+    S.turn = null;
+    render();
+  }, 250);
+  return true;
+}
+
+// ---------- Свои размеры ставок (в доле банка) ----------
+
+const PRESET_OPTIONS = [0.33, 0.5, 0.66, 0.75, 1, 1.5, 2];
+const presetLabel = (f) => ({ 0.33: '⅓ банка', 0.5: '½ банка', 0.66: '⅔ банка', 0.75: '¾ банка', 1: 'Банк', 1.5: '1.5 банка', 2: '2 банка' }[f] || `${f}×`);
+function loadPresets() {
+  try {
+    const v = JSON.parse(localStorage.getItem('presets') || 'null');
+    if (Array.isArray(v) && v.length === 3 && v.every((x) => PRESET_OPTIONS.includes(x))) return v;
+  } catch {}
+  return [0.5, 0.75, 1];
+}
+function togglePreset(f) {
+  let cur = loadPresets();
+  if (cur.includes(f)) return toast('Выбери 3 размера: нажми на другой, чтобы заменить');
+  cur = [...cur.slice(1), f].sort((a, b) => a - b);
+  try { localStorage.setItem('presets', JSON.stringify(cur)); } catch {}
+  render();
+}
+
+// ---------- Салют на большой выигрыш ----------
+
+function confetti() {
+  if (document.hidden) return;
+  const layer = fxLayer();
+  const colors = ['#f2c94c', '#7fd1a8', '#eb5757', '#56ccf2', '#bb6bd9', '#fff'];
+  for (let i = 0; i < 48; i++) {
+    const c = h('div', { class: 'confetti', style: `left:${50 + (Math.random() - 0.5) * 20}%;top:45%;background:${colors[i % colors.length]}` });
+    layer.append(c);
+    const dx = (Math.random() - 0.5) * 520, dy = -180 - Math.random() * 260;
+    const a = c.animate([
+      { transform: 'translate(0,0) rotate(0)', opacity: 1 },
+      { transform: `translate(${dx * 0.6}px, ${dy}px) rotate(${Math.random() * 540}deg)`, opacity: 1, offset: 0.45 },
+      { transform: `translate(${dx}px, ${dy + 520}px) rotate(${Math.random() * 900}deg)`, opacity: 0 },
+    ], { duration: 1600 + Math.random() * 600, easing: 'cubic-bezier(.2,.6,.4,1)' });
+    a.onfinish = () => c.remove();
+  }
+}
+
+// ---------- Эмодзи за столом ----------
+
+const EMOTES = ['👍', '😂', '🔥', '😎', '😱', '🤡', '💀', '🙏', '😡', '🍀', '👑', '🤔'];
+function emoteTray() {
+  return h('div', { class: 'emote-tray' }, EMOTES.map((e) => h('button', {
+    class: 'emote-pick', 'aria-label': `Эмодзи ${e}`, onclick: () => { send({ t: 'emote', e }); S.emoteOpen = false; render(); },
+  }, e)));
 }
 
 function leaveTableScreen(tournamentId) {
@@ -329,6 +460,18 @@ function setTheme(id) {
   render();
 }
 
+// Настройки игры: звук и свои размеры ставок (на этом устройстве)
+function settingsCard() {
+  const presets = loadPresets();
+  return h('div', { class: 'col', style: 'gap:10px' },
+    h('div', { class: 'label' }, 'Настройки'),
+    h('label', { class: 'toggle-row glass', style: 'padding:12px 14px;border-radius:14px' },
+      h('input', { type: 'checkbox', checked: soundOn(), onchange: (e) => { try { localStorage.setItem('sound', e.target.checked ? 'on' : 'off'); } catch {} if (e.target.checked) sfx('win'); } }),
+      h('span', {}, 'Звуки за столом')),
+    h('div', { class: 'small soft' }, 'Кнопки ставок за столом (выбери 3):'),
+    h('div', { class: 'choices' }, PRESET_OPTIONS.map((f) => h('button', { class: presets.includes(f) ? 'on' : '', onclick: () => togglePreset(f) }, presetLabel(f)))));
+}
+
 function themesCard() {
   return h('div', { class: 'col', style: 'gap:10px' },
     h('div', { class: 'label' }, 'Оформление'),
@@ -347,6 +490,14 @@ function lobbyScreen() {
           h('div', { class: 'b', style: 'font-size:15px' }, me.name),
           h('div', { class: 'small muted' }, `Эло ${me.rating} · место ${fmt(me.ratingPlace)} · раздач выиграно ${fmt(me.handsWon || 0)}`))),
       balancePill()),
+    // итог последнего стола
+    S.summary && h('div', { class: 'glass card summary' },
+      h('div', { class: 'row between' }, h('div', { class: 'b' }, S.summary.title),
+        h('button', { class: 'hint-x', 'aria-label': 'Закрыть итог', onclick: () => { S.summary = null; render(); } }, '✕')),
+      h('div', { class: 'grid3' },
+        stat('Раздач', fmt(S.summary.hands || 0)), stat('Выиграно', fmt(S.summary.won || 0)),
+        S.summary.net != null ? stat('Итог', `${S.summary.net >= 0 ? '+' : '−'}${fmt(Math.abs(S.summary.net))}`) : stat('Минут', S.summary.minutes ?? '—')),
+      S.summary.stack > 0 && h('div', { class: 'small soft' }, `На баланс вернулось ${fmt(S.summary.stack)} фишек${S.summary.minutes ? ` · ${S.summary.minutes} мин за столом` : ''}`)),
     me.table && h('div', { class: 'glass card at-table' },
       h('button', { class: 'at-table-back', onclick: () => { send({ t: 'table' }); go('table'); } },
         h('div', { class: 'row between' }, h('div', { class: 'b' }, 'Ты за столом'), icon('chev')),
@@ -428,8 +579,12 @@ function botsScreen() {
       S.botMinutes > 0 && h('div', { class: 'choices' }, (S.lobby?.timedMinutes || [10, 20, 30]).map((m) =>
         h('button', { class: S.botMinutes === m ? 'on' : '', onclick: () => { S.botMinutes = m; render(); } }, `${m} мин`))),
       h('div', { class: 'small muted', style: 'line-height:1.45' }, S.botMinutes
-        ? `Встать нельзя ${S.botMinutes} минут. Закроешь приложение — за тебя будут чек/фолд. Когда время выйдет, стек вернётся на баланс.`
-        : 'Встать можно в любой момент — стек сразу вернётся на баланс.')),
+        ? `Стол на ${S.botMinutes} минут: когда время выйдет, стек вернётся на баланс. Встать можно и раньше.`
+        : 'Встать можно в любой момент — стек сразу вернётся на баланс.'),
+      // быстрый стол: боты думают меньше, паузы короче
+      h('label', { class: 'toggle-row' },
+        h('input', { type: 'checkbox', checked: !!S.botFast, onchange: (e) => { S.botFast = e.target.checked; } }),
+        h('span', {}, 'Быстрый стол'), h('span', { class: 'small muted' }, 'боты ходят почти сразу'))),
     h('div', { class: 'field', style: 'padding-bottom:70px' },
       h('div', { class: 'label' }, 'Бай-ин (100 больших блайндов)'),
       h('div', { class: 'choices' }, presets.map((b) =>
@@ -498,7 +653,7 @@ function mixedScreen() {
 }
 
 async function sitBots() {
-  const r = await run({ t: 'sitBots', mode: S.botMode, botName: S.botName, buyin: S.buyin, minutes: S.botMinutes });
+  const r = await run({ t: 'sitBots', mode: S.botMode, botName: S.botName, buyin: S.buyin, minutes: S.botMinutes, fast: !!S.botFast });
   if (r) go('table');
 }
 
@@ -564,11 +719,11 @@ function pickerModal(T) {
 
 const RANKS = '23456789TJQKA';
 const SUITS = ['♠', '♥', '♦', '♣'];
-function pcard(c, size = '') {
-  if (c == null) return h('div', { class: `pcard back ${size}` });
+function pcard(c, size = '', extra = '') {
+  if (c == null) return h('div', { class: `pcard back ${size} ${extra}` });
   const red = (c & 3) === 1 || (c & 3) === 2;
   const r = RANKS[c >> 2] === 'T' ? '10' : RANKS[c >> 2];
-  return h('div', { class: `pcard ${size} ${red ? 'red' : ''}`, 'aria-label': r + SUITS[c & 3] },
+  return h('div', { class: `pcard ${size} ${red ? 'red' : ''} ${extra}`, 'aria-label': r + SUITS[c & 3] },
     h('div', { class: 'r' }, r), h('div', { class: 's' }, SUITS[c & 3]));
 }
 
@@ -594,12 +749,17 @@ function tableScreen() {
   const spots = LAYOUT[Math.min(others.length, 5)] || [];
   const myTurn = S.turn && T.actor === S.me.id && S.turn.tableId === T.id;
 
+  // выигрышные 5 карт подсвечиваем, раздаём карты с анимацией
+  const win = T.result && T.winCards?.length ? new Set(T.winCards) : null;
+  const dealing = S.dealPending ? 'deal' : '';
+  S.dealPending = false;
+  const hl = (c) => (win ? (win.has(c) ? 'hl' : 'dim') : '');
   const seatEl = (s, spot) => {
     const [x, y] = SPOTS[spot];
     const top = y < 50;
     const cards = s.me
-      ? (s.cards ? s.cards.map((c) => pcard(c, 'lg')) : [])
-      : s.cards ? s.cards.map((c) => pcard(c, 'sm')) : s.inHand && T.inHand ? [pcard(null, 'sm'), pcard(null, 'sm')] : [];
+      ? (s.cards ? s.cards.map((c) => pcard(c, 'lg', `${hl(c)} ${dealing}`)) : [])
+      : s.cards ? s.cards.map((c) => pcard(c, 'sm', hl(c))) : s.inHand && T.inHand ? [pcard(null, 'sm', dealing), pcard(null, 'sm', dealing)] : [];
     const won = !T.inHand && T.result?.some((w) => w.id === s.id);
     const plate = h('div', { 'data-seat': s.id, class: `plate ${T.actor === s.id ? 'turn' : ''} ${s.folded || s.away ? 'out' : ''} ${won ? 'win' : ''}` },
       s.me ? h('div', { class: 'avatar', style: 'width:24px;height:24px;font-size:11px' }, initial(s.name)) : h('div', { class: 'ini' }, initial(s.name)),
@@ -608,7 +768,13 @@ function tableScreen() {
         // стек и рядом значок выигранных раздач (у людей и у ботов) — внутри таблички, ничего не закрывает
         h('div', { class: 'st' }, s.allIn ? 'олл-ин' : fmt(s.stack),
           s.handsWon > 0 && h('span', { class: 'wins-badge', title: 'Выиграно раздач', 'aria-label': `Выиграно раздач: ${s.handsWon}` },
-            icon('trophy', 9), fmtShort(s.handsWon)))));
+            icon('trophy', 9), fmtShort(s.handsWon)),
+          // серия побед подряд
+          s.streak >= 2 && h('span', { class: 'streak-badge', title: 'Серия побед', 'aria-label': `Серия побед: ${s.streak}` }, `🔥${s.streak}`))),
+      // эмодзи над игроком
+      s.emote && h('div', { class: 'emote-bubble', 'aria-label': `Эмодзи ${s.emote}` }, s.emote),
+      // шансы при олл-ине
+      s.equity != null && h('div', { class: 'equity-chip' }, `${s.equity}%`));
     const planned = T.demo && T.plan?.holes?.[s.id];
     const extras = h('div', { class: 'row', style: 'gap:4px;min-height:20px' },
       T.demo && h('button', { class: 'pick-btn', 'aria-label': `Выбрать карты: ${s.me ? 'мне' : s.name}`, onclick: () => openPicker({ hole: s.id }) }, '✎'),
@@ -623,13 +789,17 @@ function tableScreen() {
           // твоя комбинация — справа от твоей таблички: не закрывает ни флоп, ни соседей
           ? [extras, h('div', { class: 'cards' }, cards),
             h('div', { class: 'my-plate' }, plate,
-              (s.hand || s.myHand) && h('button', { class: 'my-hand', onclick: openCombos, 'aria-label': 'Моя комбинация — открыть справочник' }, s.hand || s.myHand)),
+              h('button', { class: 'emote-btn', 'aria-label': 'Эмодзи', onclick: () => { S.emoteOpen = !S.emoteOpen; render(); } }, '😊'),
+              (s.hand || s.myHand) && h('button', { class: 'my-hand', onclick: openCombos, 'aria-label': 'Моя комбинация — открыть справочник' },
+                s.hand || s.myHand,
+                // ауты: сколько карт улучшат твою руку
+                !s.hand && s.outs?.length > 0 && h('span', { class: 'outs' }, ` · аутов ${s.outs.length}`))),
             timer]
           : [extras, h('div', { class: 'cards' }, cards), plate, s.hand && h('div', { class: 'hand-name' }, s.hand), timer]);
   };
 
   const board = [];
-  for (let i = 0; i < 5; i++) board.push(T.board[i] != null ? pcard(T.board[i]) : h('div', { class: 'pcard empty' }));
+  for (let i = 0; i < 5; i++) board.push(T.board[i] != null ? pcard(T.board[i], '', hl(T.board[i])) : h('div', { class: 'pcard empty' }));
 
   const info = T.kind === 'tour'
     ? [T.title, h('br'), `Уровень ${T.level} · ${T.sb}/${T.bb} · осталось ${T.alive} из ${T.total}`]
@@ -637,6 +807,8 @@ function tableScreen() {
     : T.kind === 'mixed' ? [T.title, h('br'),
       T.invite ? h('button', { class: 'invite-pill', onclick: () => shareMixed(T.invite) }, `Позвать друзей · мест ${T.seatsFree}`) : `мест свободно: ${T.seatsFree}`]
     : [T.title];
+  // время сессии и раздачи — обновляется каждую секунду
+  const sessionLine = S.session && h('div', { class: 'session-line', 'data-session': '1' }, sessionText());
   // за столами с людьми правило про подсказки видно всем
   const hintRule = T.kind === 'mixed' || (T.kind === 'tour' && !T.solo)
     ? h('div', { class: 'hint-rule' }, 'Здесь работают подсказки — они видят карты') : null;
@@ -652,7 +824,7 @@ function tableScreen() {
   return h('div', { class: `table-screen ${adminDock ? 'with-admin' : ''}` },
     h('div', { class: 'table-top' },
       h('button', { class: 'icon-btn', 'aria-label': T.kind === 'tour' ? 'В лобби' : 'Встать из-за стола', onclick: back }, icon('back', 18)),
-      h('div', { class: 'title' }, info),
+      h('div', { class: 'title' }, info, sessionLine),
       // подсказка — круглая кнопка в шапке, чтобы не закрывать игроков
       myTurn && !S.hint && h('button', { class: 'icon-btn hint-ico', 'aria-label': 'Подсказка', onclick: askHint },
         icon('bulb', 18), h('span', { class: 'hint-ico-count' }, T.demo ? '∞' : S.me.hints ? S.me.hints : '5⭐')),
@@ -685,6 +857,7 @@ function tableScreen() {
         h('button', {
           class: 'jam-btn aces-btn', 'aria-label': 'Два туза в следующей раздаче, ещё два на тёрне и ривере', onclick: async () => { if (await run({ t: 'forceAces' })) toast('Следующая раздача: тузы у тебя и на тёрне с ривером'); },
         }, 'A A')),
+      S.emoteOpen && emoteTray(),
       actionPanel(T, mySeat, myTurn)),
     T.demo && S.pick && pickerModal(T));
 }
@@ -856,9 +1029,11 @@ function actionPanel(T, me, myTurn) {
     return h('div', { class: 'panel' },
       t.deadline > 0 && h('div', { class: 'countdown', 'data-countdown': t.deadline },
         h('span', { class: 'cd-label' }, 'Твой ход'),
+        // таймбанк: +15 секунд, 3 раза за стол
+        me?.timebanks > 0 && h('button', { class: 'timebank-btn', onclick: () => run({ t: 'timebank' }) }, `+15 с · ${me.timebanks}`),
         h('span', { class: 'cd-sec' }, ''),
         h('div', { class: 'cd-bar' }, h('div', { 'data-deadline': t.deadline }))),
-      canRaise && h('div', { class: 'presets' }, preset('½ банка', 0.5), preset('¾ банка', 0.75), preset('Банк', 1), preset('Олл-ин', 'all')),
+      canRaise && h('div', { class: 'presets' }, loadPresets().map((f) => preset(presetLabel(f), f)), preset('Олл-ин', 'all')),
       canRaise && t.maxTo > t.minRaiseTo && h('input', {
         type: 'range', min: t.minRaiseTo, max: t.maxTo, step: Math.max(1, Math.floor(t.bb / 2)), value: S.raiseTo,
         'aria-label': 'Размер ставки',
@@ -885,6 +1060,17 @@ function actionPanel(T, me, myTurn) {
       h('div', { class: 'grid2' },
         h('button', { class: 'btn-ghost', onclick: () => send({ t: 'leave' }) }, 'Встать'),
         h('button', { class: 'btn', style: 'height:46px;font-size:14px', onclick: () => run({ t: 'rebuy' }) }, `Докупить ${fmt(T.buyin)}`)));
+  }
+  // кнопки заранее, пока ходят другие
+  if (T.inHand && me?.inHand && !me.allIn && !T.leaving) {
+    const actorNow = T.seats.find((s) => s.id === T.actor);
+    const pre = (kind, label) => h('button', {
+      class: S.pre?.kind === kind && S.pre.hand === T.handId ? 'on' : '',
+      onclick: () => { S.pre = S.pre?.kind === kind && S.pre.hand === T.handId ? null : { kind, hand: T.handId }; render(); },
+    }, label);
+    return h('div', { class: 'panel' },
+      h('div', { class: 'soft', style: 'text-align:center;font-size:13px' }, actorNow ? `Ходит ${actorNow.name}` : 'Раздача идёт'),
+      h('div', { class: 'pre-acts' }, pre('cf', 'Чек / фолд'), pre('c', 'Чек'), pre('any', 'Колл любой')));
   }
   const actor = T.seats.find((s) => s.id === T.actor);
   const text = T.leaving ? 'Встаём после раздачи…'
@@ -1189,6 +1375,7 @@ function profileScreen() {
       h('div', { class: 'grid3' }, stat('Фишки', fmt(me.chips)), stat('В игре', fmt(me.inPlay)), stat('По фишкам', fmt(me.chipsPlace)))),
     winRewardsCard(me),
     themesCard(),
+    settingsCard(),
     h('div', { class: 'label' }, 'Топ игроков по рейтингу'),
     S.top == null ? h('div', { class: 'muted small' }, 'Загрузка…')
       : S.top.length ? S.top.map((p, i) => h('div', { class: 'item' },
@@ -1274,7 +1461,16 @@ function render() {
 
 // Обратный отсчёт хода: обновляем только цифры, без перерисовки (не сбивает слайдер)
 let buzzed = 0;
+function sessionText() {
+  const ss = S.session;
+  if (!ss) return '';
+  const sec = Math.floor((Date.now() - ss.start) / 1000);
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')} · раздач ${ss.hands} · выиграно ${ss.won}`;
+}
+
 setInterval(() => {
+  const sl = document.querySelector('[data-session]');
+  if (sl) sl.textContent = sessionText();
   for (const e of document.querySelectorAll('[data-ends]')) {
     const left = Number(e.dataset.ends) - nowSrv();
     e.textContent = left > 0 ? `осталось ${clockLeft(Number(e.dataset.ends))}` : 'время вышло — доигрываем раздачу';

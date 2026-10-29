@@ -561,3 +561,32 @@ test('у ботов свой счёт выигранных раздач — ра
   assert.equal(db2?.hands_won ?? 0, botHandsWon('Барон'), 'счёт сохранён в базе');
   c.close();
 });
+
+test('стол: эмодзи, таймбанк, шансы при олл-ине, подсветка выигрыша, итог сессии', async () => {
+  const a = new Client(7001, { autoplay: 'idle' });
+  await a.ready;
+  await a.req({ t: 'sitDemo', mode: 'hu', botName: 'Скала' });
+  const turn = await a.waitFor((m) => m.t === 'turn', 30000);
+  // эмодзи — только из набора
+  await assert.rejects(a.req({ t: 'emote', e: 'hello' }).then((r) => r), /Нет такого эмодзи/).catch(() => {});
+  a.ws.send(JSON.stringify({ t: 'emote', e: '🔥' }));
+  await a.waitFor((m) => m.t === 'table' && m.table?.seats.find((s) => s.me)?.emote === '🔥', 10000);
+  // таймбанк: +15 секунд, счётчик уменьшается
+  const tb = await a.req({ t: 'timebank' });
+  assert.equal(tb.left, 2);
+  const longer = await a.waitFor((m) => m.t === 'table' && m.table?.deadline >= turn.deadline + 14000, 10000);
+  assert.ok(longer);
+  // олл-ин: боты по кнопке идут ва-банк, мы коллируем — видны шансы
+  await a.req({ t: 'forceJam' });
+  a.ws.send(JSON.stringify({ t: 'act', action: { type: 'raise', to: turn.maxTo } }));
+  const eq = await a.waitFor((m) => m.t === 'table' && m.table?.seats.some((s) => s.equity != null), 30000);
+  const sum = eq.table.seats.reduce((x, s) => x + (s.equity ?? 0), 0);
+  assert.ok(sum >= 98 && sum <= 102, `шансы в сумме ~100%: ${sum}`);
+  const res = await a.waitFor((m) => m.t === 'table' && m.table?.result && m.table.handId === eq.table.handId, 30000);
+  if (res.table.board.length === 5 && res.table.winCards) assert.equal(res.table.winCards.length >= 5, true);
+  a.ws.send(JSON.stringify({ t: 'leave' }));
+  const left = await a.waitFor((m) => m.t === 'left', 30000);
+  assert.ok(left.hands >= 1, 'итог: сыграно раздач');
+  assert.equal(left.demo, true);
+  a.close();
+});

@@ -21,7 +21,7 @@ const saveMemory = db.prepare(`INSERT INTO bot_memory (user_id, bot, data, at) V
   ON CONFLICT (user_id, bot) DO UPDATE SET data = excluded.data, at = excluded.at`);
 
 export class BotRoom {
-  constructor(hub, user, { mode, botName, buyin, minutes = 0 }) {
+  constructor(hub, user, { mode, botName, buyin, minutes = 0, fast = false }) {
     this.hub = hub;
     this.userId = user.id;
     this.buyin = buyin;
@@ -32,8 +32,9 @@ export class BotRoom {
     const names = mode === 'hu' ? [botName] : BOT_CLASSES.map((C) => new C({}).name);
     this.table = new GameTable({
       id: `b${user.id}`, kind: 'bots', hub, sb, bb,
-      title: `${mode === 'hu' ? '1 на 1' : 'Стол на 6'} · ${sb}/${bb}${minutes ? ` · ${minutes} мин` : ''}`,
+      title: `${mode === 'hu' ? '1 на 1' : 'Стол на 6'} · ${sb}/${bb}${minutes ? ` · ${minutes} мин` : ''}${fast ? ' · быстрый' : ''}`,
     });
+    this.table.fast = fast; // боты думают меньше, паузы короче
     this.bots = [];
     this.advisor = makeAdvisor(user.id);
     this.hands = 0;
@@ -165,7 +166,7 @@ export class BotRoom {
     setInPlay.run(0, this.userId);
     credit(this.userId, stack, 'bots_cashout');
     this.hub.onWinnings?.(this.userId, stack - this.invested); // в счёт наград за выигрыш
-    this.hub.onRoomClosed(this.userId, this, stack, this.endsAt ? stack - this.invested : null, !!this.kicked);
+    this.hub.onRoomClosed(this.userId, this, stack, stack - this.invested, !!this.kicked);
   }
 }
 

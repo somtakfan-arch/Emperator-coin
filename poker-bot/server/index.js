@@ -66,7 +66,12 @@ const hub = {
   },
   onRoomClosed(uid, room, stack, net = null, kicked = false) {
     if (botRooms.get(uid) === room) botRooms.delete(uid);
-    hub.send(uid, { t: 'left', stack, net, kicked, beatAll: !!room.beatAll });
+    // итог сессии: сколько раздач сыграл и выиграл, ± фишки
+    const seat = room.seatOf ? room.seatOf(uid) : room.seat;
+    hub.send(uid, {
+      t: 'left', stack, net, kicked, beatAll: !!room.beatAll, timed: !!room.endsAt,
+      hands: seat?.session?.hands ?? 0, won: seat?.session?.won ?? 0, demo: !!room.table?.noStats,
+    });
     hub.sendMe(uid);
   },
 };
@@ -146,7 +151,7 @@ const handlers = {
   cancelT: (uid, m) => (tournaments.cancel(getUser(uid), m.id), { t: 'ok' }),
   sitBots(uid, m) {
     if (activeTable(uid)) throw new Error('Ты уже за столом');
-    botRooms.set(uid, BotRoom.open(hub, getUser(uid), { mode: m.mode === '6' ? '6' : 'hu', botName: m.botName, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0 }));
+    botRooms.set(uid, BotRoom.open(hub, getUser(uid), { mode: m.mode === '6' ? '6' : 'hu', botName: m.botName, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0, fast: !!m.fast }));
     hub.sendMe(uid);
     return { t: 'ok' };
   },
@@ -160,6 +165,17 @@ const handlers = {
   act(uid, m) {
     activeTable(uid)?.seat.submit(m.action);
     return null;
+  },
+  // эмодзи над собой за столом
+  emote(uid, m) {
+    activeTable(uid)?.table.emote(uid, String(m.e));
+    return null;
+  },
+  // таймбанк: +15 секунд к ходу (3 раза за стол)
+  timebank(uid) {
+    const a = activeTable(uid);
+    if (!a?.seat.extend?.()) throw new Error('Таймбанк закончился');
+    return { t: 'ok', left: a.seat.timebanks };
   },
   back(uid) {
     const a = activeTable(uid);
