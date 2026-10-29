@@ -195,13 +195,13 @@ function leaveTableScreen(tournamentId) {
 
 // ---------- Навигация ----------
 
-const BACK = { pvp: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
+const BACK = { solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
 
 function go(screen) {
   if (screen !== 'table' && S.screen === 'table' && S.table) S.tableHidden = true;
   if (screen === 'table') S.tableHidden = false;
   S.screen = screen;
-  if (screen === 'profile') { S.top = null; send({ t: 'top', pvp: !!S.me?.pvp }); }
+  if (screen === 'profile') send({ t: 'top' });
   window.scrollTo(0, 0);
   render();
 }
@@ -293,76 +293,16 @@ const clock = (ts) => new Date(ts).toLocaleTimeString('ru-RU', { hour: '2-digit'
 
 // ---------- Лобби ----------
 
-async function setMode(pvp) {
-  if (!!S.me.pvp === pvp) return;
-  S.me.pvp = pvp;
-  render();
-  await run({ t: 'setMode', pvp });
-}
-
-// ---------- Быстрая игра против людей ----------
-
-function pvpScreen() {
-  const min = S.lobby?.buyinMin || 100;
-  const buyin = S.pvpBuyin ?? 1000;
-  const presets = [200, 500, 1000, 5000];
-  const tables = S.lobby?.pvpTables || [];
-  const enough = S.me.chips >= buyin;
-  return h('div', { class: 'screen' },
-    header('Быстрая игра'),
-    h('div', { class: 'small soft', style: 'line-height:1.45' }, 'Только люди: ни ботов, ни подсказок. Встать можно в любой момент — стек вернётся на баланс.'),
-    h('div', { class: 'field' },
-      h('div', { class: 'label' }, 'Бай-ин'),
-      h('div', { class: 'choices' }, presets.map((b) => h('button', { class: buyin === b ? 'on' : '', onclick: () => { S.pvpBuyin = b; render(); } }, fmt(b)))),
-      h('input', {
-        class: `buyin-input ${presets.includes(buyin) ? '' : 'on'}`, type: 'number', inputmode: 'numeric', min, step: 100,
-        placeholder: `Своя сумма: от ${fmt(min)} до ${fmt(Math.max(min, S.me.chips))}`, 'aria-label': 'Свой бай-ин',
-        value: presets.includes(buyin) ? '' : buyin,
-        oninput: (e) => { const v = Math.floor(Number(e.target.value)); if (v >= min) S.pvpBuyin = v; },
-        onchange: () => render(),
-      }),
-      h('div', { class: 'small muted' }, `на балансе ${fmt(S.me.chips)} фишек`)),
-    !enough ? h('button', { class: 'btn', onclick: () => go('wallet') }, 'Пополнить фишки')
-      : h('button', { class: 'btn', onclick: quickPvp }, `Найти стол · ${fmt(buyin)}`),
-    enough && h('button', { class: 'btn-ghost', onclick: createPvpFriends }, 'Открыть стол и позвать друзей'),
-    h('div', { class: 'label', style: 'padding-top:6px' }, 'Открытые столы'),
-    tables.length ? tables.map((t) => h('button', { class: 'item', onclick: () => joinPvp(t) },
-      h('div', { class: 'col' },
-        h('div', { class: 'b', style: 'font-size:14px' }, `Бай-ин ${fmt(t.buyin)} · блайнды ${Math.max(1, Math.floor(t.bb / 2))}/${t.bb}`),
-        h('div', { class: 'small muted' }, t.players.map((p) => p.name).join(', '))),
-      h('div', { class: 'b', style: 'font-size:13px' }, `${t.seats}/${t.max}`)))
-      : h('div', { class: 'muted small' }, 'Пока нет — нажми «Найти стол», и соперники подсядут к тебе'),
-    h('div', { style: 'height:80px' }),
-    nav());
-}
-
-async function quickPvp() {
-  if (await run({ t: 'quickPvp', buyin: S.pvpBuyin ?? 1000 })) go('table');
-}
-
-async function joinPvp(t) {
-  if (S.me.chips < t.buyin) return toast('Не хватает фишек для этого стола');
-  if (await run({ t: 'joinMixed', id: t.id })) go('table');
-}
-
-async function createPvpFriends() {
-  const r = await run({ t: 'createMixed', buyin: S.pvpBuyin ?? 1000, bots: 0, pvp: true });
-  if (!r) return;
-  go('table');
-  if (r.invite) shareMixed(r.invite);
-}
-
 function lobbyScreen() {
   const me = S.me;
-  const pvp = !!me.pvp;
-  const upcoming = (S.lobby?.tournaments || []).filter((t) => t.status === 'reg' && !!t.pvp === pvp && (!pvp || t.kind !== 'big')).slice(0, 2);
+  const upcoming = (S.lobby?.tournaments || []).filter((t) => t.status === 'reg').slice(0, 2);
   return h('div', { class: 'screen' },
     h('div', { class: 'row between' },
       h('div', { class: 'row' },
         h('div', { class: 'avatar' }, initial(me.name)),
         h('div', { class: 'col' },
           h('div', { class: 'b', style: 'font-size:15px' }, me.name),
-          h('div', { class: 'small muted' }, pvp ? `Эло против людей ${me.pvpRating} · место ${fmt(me.pvpPlace)}` : `Эло ${me.rating} · место ${fmt(me.ratingPlace)}`))),
+          h('div', { class: 'small muted' }, `Эло ${me.rating} · место ${fmt(me.ratingPlace)}`))),
       balancePill()),
     me.table && h('button', { class: 'glass card', onclick: () => { send({ t: 'table' }); go('table'); } },
       h('div', { class: 'row between' }, h('div', { class: 'b' }, 'Ты за столом'), icon('chev')),
@@ -370,22 +310,12 @@ function lobbyScreen() {
     h('div', { class: 'col', style: 'padding-top:8px' },
       h('div', { class: 'small muted b', style: 'letter-spacing:3px' }, 'ТЕХАССКИЙ ХОЛДЕМ'),
       h('div', { style: 'font-size:32px;font-weight:800;letter-spacing:-0.5px' }, 'Покер')),
-    // переключатель режима
-    h('div', { class: 'seg mode-switch' },
-      h('button', { class: !pvp ? 'on' : '', onclick: () => setMode(false) }, 'Обычный'),
-      h('button', { class: pvp ? 'on' : '', onclick: () => setMode(true) }, 'Против людей')),
-    pvp && h('div', { class: 'small soft', style: 'line-height:1.45;margin-top:-6px' },
-      'Только живые игроки: без ботов и без подсказок. Свой рейтинг. Вывода фишек нет — это игра, не казино.'),
-    pvp && h('button', { class: 'glass card', onclick: () => go('pvp') },
-      h('div', { class: 'row between' }, h('div', { class: 'card-title' }, 'Быстрая игра'), icon('chev', 22)),
-      h('div', { class: 'soft', style: 'font-size:14px;line-height:1.45' }, 'Садишься за стол с живыми соперниками на свою ставку. Или открываешь стол и зовёшь друзей.'),
-      h('div', { class: 'row', style: 'font-size:13px' }, h('span', { class: 'dot' }), `Открытых столов: ${fmt((S.lobby?.pvpTables || []).length)} · онлайн ${fmt(S.lobby?.online)}`)),
-    !pvp && h('button', { class: 'glass card', onclick: () => go('bots') },
+    h('button', { class: 'glass card', onclick: () => go('bots') },
       h('div', { class: 'row between' }, h('div', { class: 'card-title' }, 'Против ботов'), icon('chev', 22)),
       h('div', { class: 'soft', style: 'font-size:14px;line-height:1.45' }, '5 соперников с разным стилем. Сел и играешь — без ожидания.'),
       h('div', { class: 'row', style: 'flex-wrap:wrap;gap:6px' }, Object.keys(BOT_INFO).map((n) => h('span', { class: 'tag' }, n)))),
     h('button', { class: 'glass card', onclick: () => go('tours') },
-      h('div', { class: 'row between' }, h('div', { class: 'card-title' }, pvp ? 'Турниры' : 'Против людей'), icon('chev', 22)),
+      h('div', { class: 'row between' }, h('div', { class: 'card-title' }, 'Против людей'), icon('chev', 22)),
       h('div', { class: 'soft', style: 'font-size:14px;line-height:1.45' }, 'Турниры от 2 до 60 игроков. Создай свой и позови друзей по ссылке.'),
       h('div', { class: 'row', style: 'font-size:13px' }, h('span', { class: 'dot' }), `Сейчас онлайн: ${fmt(S.lobby?.online)}`)),
     h('button', { class: 'item', onclick: openCombos },
@@ -657,7 +587,7 @@ function tableScreen() {
       T.invite ? h('button', { class: 'invite-pill', onclick: () => shareMixed(T.invite) }, `Позвать друзей · мест ${T.seatsFree}`) : `мест свободно: ${T.seatsFree}`]
     : [T.title];
   // за столами с людьми правило про подсказки видно всем
-  const hintRule = (T.kind === 'tour' || T.kind === 'mixed') && !T.pvp
+  const hintRule = T.kind === 'tour' || T.kind === 'mixed'
     ? h('div', { class: 'hint-rule' }, 'Здесь работают подсказки — они видят карты') : null;
 
   const elo = !T.inHand && T.eloDelta ? Math.round(T.eloDelta) || (T.eloDelta > 0 ? 1 : -1) : 0;
@@ -685,7 +615,7 @@ function tableScreen() {
       mySeat && seatEl(mySeat, 'bottom')),
     result,
     hintRule,
-    myTurn && !T.pvp && hintFloat(T),
+    myTurn && hintFloat(T),
     actionPanel(T, mySeat, myTurn),
     T.demo && S.pick && pickerModal(T));
 }
@@ -905,8 +835,7 @@ function raiseLabel(t) {
 // ---------- Турниры ----------
 
 function toursScreen() {
-  const pvp = !!S.me.pvp;
-  const all = (S.lobby?.tournaments || []).filter((t) => !!t.pvp === pvp && (!pvp || t.kind !== 'big'));
+  const all = S.lobby?.tournaments || [];
   const list = S.tab === 'mine' ? all.filter((t) => t.registered || t.mine) : all.filter((t) => t.status !== 'done' && t.status !== 'cancelled');
   const big = list.filter((t) => t.kind === 'big');
   const rest = list.filter((t) => t.kind !== 'big');
@@ -916,7 +845,7 @@ function toursScreen() {
     h('div', { class: 'seg' },
       h('button', { class: S.tab === 'all' ? 'on' : '', onclick: () => { S.tab = 'all'; render(); } }, 'Все'),
       h('button', { class: S.tab === 'mine' ? 'on' : '', onclick: () => { S.tab = 'mine'; render(); } }, 'Мои')),
-    !pvp && h('button', { class: 'glass card', style: 'background:rgba(127,209,168,0.08)', onclick: () => go('solo') },
+    h('button', { class: 'glass card', style: 'background:rgba(127,209,168,0.08)', onclick: () => go('solo') },
       h('div', { class: 'row between' }, h('div', { style: 'font-size:18px;font-weight:800' }, 'Сольный турнир с ботами'), icon('chev')),
       h('div', { class: 'small soft', style: 'line-height:1.45' }, 'Старт сразу, в любое время. Ты и боты: 6, 18 или 60 мест, взнос — любой.')),
     big.map(bigCard),
@@ -1125,7 +1054,7 @@ function createScreen() {
 async function createTour() {
   const c = S.create;
   const buyin = c.buyin === 'own' ? Number(c.customBuyin) : c.buyin;
-  const r = await run({ t: 'createT', tour: { ...c, buyin, minRating: Number(c.minRating) || 0, pvp: !!S.me.pvp } });
+  const r = await run({ t: 'createT', tour: { ...c, buyin, minRating: Number(c.minRating) || 0 } });
   if (r) {
     toast('Турнир создан — зови друзей');
     openTour(r.id);
@@ -1187,12 +1116,12 @@ function profileScreen() {
   return h('div', { class: 'screen' },
     h('div', { class: 'row' },
       h('div', { class: 'avatar', style: 'width:56px;height:56px;font-size:22px' }, initial(me.name)),
-      h('div', { class: 'col' }, h('h1', { class: 'h2' }, me.name), h('div', { class: 'small muted' }, `Эло ${me.rating} · против людей ${me.pvpRating}`))),
+      h('div', { class: 'col' }, h('h1', { class: 'h2' }, me.name), h('div', { class: 'small muted' }, `Эло ${me.rating}`))),
     h('div', { class: 'glass card' },
       h('div', { class: 'grid3' }, stat('Место', fmt(me.ratingPlace)), stat('Турниров', me.games), stat('Побед', me.wins)),
       h('div', { class: 'grid3' }, stat('Фишки', fmt(me.chips)), stat('В игре', fmt(me.inPlay)), stat('По фишкам', fmt(me.chipsPlace)))),
     winRewardsCard(me),
-    h('div', { class: 'label' }, me.pvp ? 'Топ игроков против людей' : 'Топ игроков по рейтингу'),
+    h('div', { class: 'label' }, 'Топ игроков по рейтингу'),
     S.top == null ? h('div', { class: 'muted small' }, 'Загрузка…')
       : S.top.length ? S.top.map((p, i) => h('div', { class: 'item' },
         h('div', { class: 'row' }, h('div', { class: 'seat-dot taken' }, i + 1), h('div', { class: 'b', style: 'font-size:14px' }, p.name)),
@@ -1247,7 +1176,7 @@ function combosScreen() {
 
 // ---------- Рендер ----------
 
-const SCREENS = { pvp: pvpScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
+const SCREENS = { solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
 
 function render() {
   const app = document.getElementById('app');

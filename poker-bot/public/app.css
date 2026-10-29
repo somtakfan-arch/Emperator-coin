@@ -232,4 +232,3 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
 .crowd-bot.on { border-color: rgba(127,209,168,0.9); background: rgba(127,209,168,0.12); }
 .bot.boss { border-color: rgba(242,201,76,0.7); background: linear-gradient(135deg, rgba(242,201,76,0.16), rgba(255,255,255,0.04)); }
 .bot.boss .letter { background: linear-gradient(145deg, #f2c94c, #b8892a); color: #1a1408; }
-.mode-switch button { font-weight: 700; }
