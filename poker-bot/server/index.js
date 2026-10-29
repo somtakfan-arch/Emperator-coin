@@ -207,19 +207,29 @@ const handlers = {
   forceJam(uid) {
     const table = adminBotTable(uid);
     if (!table.inHand) throw new Error('Раздача ещё не началась');
+    table.forceDump = false;
     table.forceJam = true;
     return { t: 'ok' };
   },
-  // Кнопка админа: в следующей раздаче тебе приходят два туза
+  // Кнопка админа: все боты в раздаче ставят всё, кроме 1 фишки, а потом сбрасывают
+  forceDump(uid) {
+    const table = adminBotTable(uid);
+    if (!table.inHand) throw new Error('Раздача ещё не началась');
+    table.forceJam = false;
+    table.forceDump = true;
+    return { t: 'ok' };
+  },
+  // Кнопка админа: в следующей раздаче тебе приходят два туза, а на тёрне и ривере — два других (каре)
   forceAces(uid) {
     const table = adminBotTable(uid);
     const suits = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
     const aces = [12 * 4 + suits[0], 12 * 4 + suits[1]];
+    const board = [undefined, undefined, undefined, 12 * 4 + suits[2], 12 * 4 + suits[3]]; // флоп случайный
     const prev = table.engine.demoDeck; // на демо-столе свой выбор карт — не теряем его
     table.engine.demoDeck = (deck, ids) => {
       table.engine.demoDeck = prev; // один раз
       const d = prev ? prev(deck, ids) : deck;
-      return ids.includes(uid) ? arrangeDeck({ holes: { [uid]: aces }, board: [] }, d, ids) : d;
+      return ids.includes(uid) ? arrangeDeck({ holes: { [uid]: aces }, board }, d, ids) : d;
     };
     return { t: 'ok' };
   },

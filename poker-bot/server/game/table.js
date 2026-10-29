@@ -82,6 +82,12 @@ export function botSeat(bot, table) {
       await sleep(500 + Math.random() * 900);
       // кнопка админа «все ва-банк»: до конца раздачи боты идут олл-ин
       if (table.forceJam) return state.stack > state.toCall ? { type: 'raise', to: state.myBet + state.stack } : { type: 'call' };
+      // кнопка админа «почти ва-банк и фолд»: бот ставит всё, кроме 1 фишки, а дальше сбрасывает
+      if (table.forceDump) {
+        if (table.dumped.has(bot.id) || state.stack - 1 <= state.toCall) return { type: 'fold' };
+        table.dumped.add(bot.id);
+        return { type: 'raise', to: state.myBet + state.stack - 1 };
+      }
       return bot.act(state);
     },
     observe: (e) => bot.observe(e),
@@ -184,6 +190,8 @@ export class GameTable {
     if (e.type === 'handStart') {
       this.handLog = [];
       this.forceJam = false;
+      this.forceDump = false;
+      this.dumped = new Set();
     }
     this.handLog?.push(e);
     // счётчик выигранных раздач (на демо-столах не считается)

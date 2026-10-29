@@ -437,7 +437,8 @@ test('выйти можно с любого стола: со стола на в�
   await c.waitFor((m) => m.t === 'me' && m.me.chips === 5000);
   await c.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 500, minutes: 10 });
   // бот может проиграть весь стек раньше — тогда стол закрывается сам
-  await c.waitFor((m) => m.t === 'left' || (m.t === 'table' && m.table?.locked && m.table.handId >= 3), 60000);
+  // (или мы сами проиграли стек и стол ждёт докупку)
+  await c.waitFor((m) => m.t === 'left' || (m.t === 'table' && m.table?.kind === 'bots' && (m.table.handId >= 3 || m.table.canRebuy)), 60000);
   if (!c.msgs.some((m) => m.t === 'left')) await c.req({ t: 'leave' });
   const left = await c.waitFor((m) => m.t === 'left', 30000);
   await c.req({ t: 'startSolo', buyin: 500, size: 18, blindMin: 6 });
@@ -488,13 +489,51 @@ test('кнопка «два туза»: только админ, в следую
   await a.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 500 });
   await a.waitFor((m) => m.t === 'table' && m.table?.kind === 'bots', 30000);
   await a.req({ t: 'forceAces' });
+  const pressedAt = a.table.handId; // тузы — со следующей раздачи (в текущей могут прийти и сами)
   const isAces = (cs) => cs?.length === 2 && cs.every((c) => c >> 2 === 12);
   const got = await a.waitFor((m) => m.t === 'left'
-    || (m.t === 'table' && isAces(m.table?.seats.find((s) => s.me)?.cards)), 30000);
+    || (m.t === 'table' && m.table?.handId > pressedAt && m.table.seats.find((s) => s.me)?.cards), 30000);
   if (got.t !== 'left') {
-    assert.ok(isAces(got.table.seats.find((s) => s.me).cards));
+    assert.ok(isAces(got.table.seats.find((s) => s.me).cards), 'в следующей раздаче — два туза');
+    // если раздача дошла до ривера — на тёрне и ривере тоже тузы (каре)
+    const hand = got.table.handId;
+    const river = await a.waitFor((m) => m.t === 'table' && m.table?.handId === hand && m.table.board.length === 5, 15000).catch(() => null);
+    if (river) assert.deepEqual(river.table.board.slice(3).map((c) => c >> 2), [12, 12]);
     a.ws.send(JSON.stringify({ t: 'leave' }));
     await a.waitFor((m) => m.t === 'left', 30000);
   }
+  a.close();
+});
+
+test('кнопка «олл-ин −1»: боты ставят всё, кроме 1 фишки, а потом сбрасывают', async () => {
+  const x = new Client(7006);
+  await x.ready;
+  await assert.rejects(x.req({ t: 'forceDump' }), /Нет доступа/);
+  x.close();
+
+  const a = new Client(7001, { autoplay: 'idle' });
+  await a.ready;
+  // играем сами: в свой первый ход жмём кнопку; пока бот не поставил «всё кроме 1» — колл/чек,
+  // потом ставим сами — бот должен сбросить
+  let hand = null;
+  let sawOne = false;
+  a.waiters.push((m) => {
+    if (m.t === 'table' && hand != null && m.table?.handId === hand && m.table.seats.some((x) => x.isBot && x.stack === 1)) sawOne = true;
+    if (m.t !== 'turn') return false;
+    if (hand == null) {
+      hand = a.table.handId;
+      a.ws.send(JSON.stringify({ t: 'forceDump' }));
+    }
+    const bot = a.table?.seats.find((x) => x.isBot);
+    const act = bot?.stack === 1 && m.toCall === 0 ? { type: 'raise', to: m.minRaiseTo } : { type: m.toCall ? 'call' : 'check' };
+    setTimeout(() => a.ws.send(JSON.stringify({ t: 'act', action: act })), 30);
+    return false;
+  });
+  await a.req({ t: 'sitDemo', mode: 'hu', botName: 'Скала' });
+  const end = await a.waitFor((m) => m.t === 'table' && hand != null && m.table?.handId === hand && m.table.result, 60000);
+  assert.ok(sawOne, 'бот оставил себе 1 фишку');
+  assert.ok(end.table.seats.find((s) => s.isBot).folded, 'бот сбросил');
+  a.ws.send(JSON.stringify({ t: 'leave' }));
+  await a.waitFor((m) => m.t === 'left', 30000);
   a.close();
 });

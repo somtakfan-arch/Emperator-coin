@@ -669,9 +669,13 @@ function tableScreen() {
     S.me.isAdmin && (T.kind === 'bots' || T.solo) && h('div', { class: 'admin-btns' },
       T.inHand && h('button', {
         class: 'jam-btn', 'aria-label': 'Все боты — олл-ин', onclick: async () => { if (await run({ t: 'forceJam' })) toast('Боты идут ва-банк'); },
-      }, 'Все ва-банк'),
+      }, 'Олл-ин'),
+      T.inHand && h('button', {
+        class: 'jam-btn', 'aria-label': 'Боты ставят всё кроме 1 фишки и сбрасывают',
+        onclick: async () => { if (await run({ t: 'forceDump' })) toast('Боты ставят почти всё — и сбросят'); },
+      }, 'Олл-ин −1'),
       h('button', {
-        class: 'jam-btn aces-btn', 'aria-label': 'Два туза в следующей раздаче', onclick: async () => { if (await run({ t: 'forceAces' })) toast('В следующей раздаче у тебя два туза'); },
+        class: 'jam-btn aces-btn', 'aria-label': 'Два туза в следующей раздаче, ещё два на тёрне и ривере', onclick: async () => { if (await run({ t: 'forceAces' })) toast('Следующая раздача: тузы у тебя и на тёрне с ривером'); },
       }, 'A A')),
     actionPanel(T, mySeat, myTurn),
     T.demo && S.pick && pickerModal(T));
