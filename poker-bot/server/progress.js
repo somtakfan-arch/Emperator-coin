@@ -396,3 +396,34 @@ export function checkSeason(onDone) {
   });
   onDone?.(users.filter((u) => u.rating !== 1500).map((u) => ({ id: u.id, rank: rankOf(u.rating).name, chips: SEASON_REWARD[rankOf(u.rating).name] })));
 }
+
+// ---------- Статистика против каждого бота ----------
+
+db.exec(`CREATE TABLE IF NOT EXISTS bot_vs (
+  user_id INTEGER NOT NULL, bot TEXT NOT NULL, hands INTEGER NOT NULL DEFAULT 0, wins INTEGER NOT NULL DEFAULT 0, net INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, bot)
+)`);
+const vsUp = db.prepare(`INSERT INTO bot_vs (user_id, bot, hands, wins, net) VALUES (?, ?, 1, ?, ?)
+  ON CONFLICT (user_id, bot) DO UPDATE SET hands = hands + 1, wins = wins + excluded.wins, net = net + excluded.net`);
+export function recordVs(uid, bots, won, net) {
+  for (const b of bots) vsUp.run(uid, b, won ? 1 : 0, net ?? 0);
+}
+export function vsStats(uid, bot = null) {
+  if (bot) return db.prepare('SELECT hands, wins, net FROM bot_vs WHERE user_id = ? AND bot = ?').get(uid, bot) || { hands: 0, wins: 0, net: 0 };
+  return Object.fromEntries(db.prepare('SELECT bot, hands, wins, net FROM bot_vs WHERE user_id = ?').all(uid).map((r) => [r.bot, { hands: r.hands, wins: r.wins, net: r.net }]));
+}
+
+// ---------- Тень: уровень растёт, когда ты её обыгрываешь ----------
+
+export function shadowLevel(uid) {
+  const p = load(uid);
+  return p?.shadow ?? 0;
+}
+export function adjustShadow(uid, delta) {
+  tx(() => {
+    const p = load(uid);
+    p.shadow = Math.max(0, Math.min(10, (p.shadow ?? 0) + delta));
+    save(uid, p);
+  });
+  return shadowLevel(uid);
+}

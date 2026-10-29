@@ -21,7 +21,9 @@ const saveMemory = db.prepare(`INSERT INTO bot_memory (user_id, bot, data, at) V
   ON CONFLICT (user_id, bot) DO UPDATE SET data = excluded.data, at = excluded.at`);
 
 export class BotRoom {
-  constructor(hub, user, { mode, botName, buyin, minutes = 0, fast = false }) {
+  constructor(hub, user, { mode, botName, buyin, minutes = 0, fast = false, level = 'normal', shadow = 0 }) {
+    this.level = level;
+    this.shadow = shadow;
     this.hub = hub;
     this.userId = user.id;
     this.buyin = buyin;
@@ -42,7 +44,7 @@ export class BotRoom {
     this.me = { id: user.id, name: user.name, stack: buyin, bot: this.seat, isBot: false };
     this.table.addPlayer(this.me);
     names.forEach((name, i) => {
-      const bot = makeBot(name, { iters: 300 });
+      const bot = makeBot(name, { iters: 300, level, shadowLevel: shadow });
       bot.id = -(i + 1); // у ботов отрицательные id — не пересекаются с Telegram
       // бот помнит этого игрока с прошлых столов: как часто он рейзит, фолдит, блефует
       const mem = loadMemory.get(user.id, bot.name);
@@ -64,6 +66,7 @@ export class BotRoom {
     if (!(Number.isSafeInteger(opts.buyin) && opts.buyin >= config.buyinMin)) throw new Error(`Бай-ин — от ${config.buyinMin} фишек`); // сверху — сколько есть на балансе
     if (opts.minutes && !config.timedMinutes.includes(opts.minutes)) throw new Error('Неверное время стола');
     if (opts.mode === 'hu' && !isBotName(opts.botName)) throw new Error('Нет такого бота');
+    if (!['easy', 'normal', 'master'].includes(opts.level || 'normal')) throw new Error('Неверная сложность');
     if (!debit(user.id, opts.buyin, 'bots_buyin')) throw new Error('Не хватает фишек — пополни кошелёк');
     const room = new BotRoom(hub, user, opts);
     room.table.run();
@@ -117,7 +120,7 @@ export class BotRoom {
       const net = won - mine;
       if (net === 0) return;
       const opps = e.contributions.filter((c) => c.id < 0 && c.total > 0)
-        .map((c) => botRating(this.bots.find((b) => b.id === c.id)?.name));
+        .map((c) => botRating(this.bots.find((b) => b.id === c.id)?.name, this.level, this.shadow));
       if (!opps.length) return;
       const oppElo = opps.reduce((a, b) => a + b, 0) / opps.length;
       const u = db.prepare('SELECT rating FROM users WHERE id = ?').get(this.userId);
@@ -163,6 +166,8 @@ export class BotRoom {
     this.table.closed = true;
     this.saveMemory();
     const stack = this.me.stack;
+    // Тень: обыграл — она становится сильнее, крупно проиграл — слабее
+    if (this.bots.some((b) => b.name === 'Тень')) this.hub.onShadowResult?.(this.userId, stack - this.invested, this.buyin);
     this.me.stack = 0;
     setInPlay.run(0, this.userId);
     credit(this.userId, stack, 'bots_cashout');

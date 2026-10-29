@@ -9,6 +9,11 @@ import { config } from '../config.js';
 import { db } from '../db.js';
 import { knownEquity, bestFive, outs } from './tablefx.js';
 import { publicLook, vipEmotes, VIP_EMOTES } from '../cosmetics.js';
+import { botPhrase } from '../../core/phrases.js';
+import { CROWD } from '../../core/crowd.js';
+import { Hunter } from '../../core/bots.js';
+
+const STREET_RU = { preflop: 'префлопе', flop: 'флопе', turn: 'тёрне', river: 'ривере' };
 
 // эмодзи за столом (только из набора — без свободного текста)
 export const EMOTES = ['👍', '😂', '🔥', '😎', '😱', '🤡', '💀', '🙏', '😡', '🍀', '👑', '🤔'];
@@ -38,6 +43,7 @@ export class HumanSeat {
     this.timeouts = 0;
     this.sittingOut = false;
     this.timebanks = 3; // +15 с к ходу, 3 раза за стол
+    this.decisions = []; // ходы этой раздачи — для тренера
     this.session = { hands: 0, won: 0 }; // для итога, когда встаёшь
   }
 
@@ -86,6 +92,7 @@ export class HumanSeat {
     if (!type) return;
     this.timeouts = 0;
     const to = Math.floor(Number(a.to) || 0);
+    if (this.hub.coachOn?.(this.id)) this.decisions.push({ state: s, type, logLen: this.table?.handLog?.length ?? 0 });
     this.pending.finish(type === 'raise' ? { type, to: Math.max(s.minRaiseTo, Math.min(to, s.myBet + s.stack)) } : { type });
   }
 
@@ -151,7 +158,7 @@ export class GameTable {
   resetView() {
     this.v = {
       board: [], pot: 0, bets: {}, folded: new Set(), last: {}, shown: {}, dealt: new Set(), actor: null, deadline: 0, result: null, handId: 0, buttonId: null,
-      equity: null, winCards: null, emotes: this.v?.emotes || {},
+      equity: null, winCards: null, emotes: this.v?.emotes || {}, says: this.v?.says || {},
     };
   }
 
@@ -189,6 +196,45 @@ export class GameTable {
         this.broadcast();
       }
     }, 3100);
+  }
+
+  // фраза бота над табличкой на 3.5 секунды
+  say(id, text) {
+    if (!text) return;
+    this.v.says[id] = { text, at: Date.now() };
+    setTimeout(() => {
+      if (Date.now() - (this.v.says[id]?.at ?? 0) >= 3400) {
+        delete this.v.says[id];
+        this.broadcast();
+      }
+    }, 3500);
+  }
+
+  botTalk(p, event, chance) {
+    if (!p?.isBot || Math.random() >= chance) return;
+    const kind = CROWD.find((c) => c.name === p.name)?.kind;
+    this.say(p.id, botPhrase(p.name, kind, event));
+  }
+
+  // Тренер: после раздачи разбирает твои ходы (только по открытой информации — как честная подсказка)
+  coachReview(p, decisions, log) {
+    const tips = [];
+    for (const d of decisions) {
+      if (tips.length >= 2) break;
+      const s = d.state;
+      if (s.street === 'preflop' && s.toCall <= s.bigBlind) continue; // мелочи префлопа не разбираем
+      const adv = new Hunter({ iters: 400 });
+      adv.id = p.id;
+      for (const e of log.slice(0, d.logLen)) adv.observe(e);
+      let a;
+      try { a = adv.analyze(s); } catch { continue; }
+      const eq = Math.round(a.eq * 100), need = Math.round(a.potOdds * 100), st = STREET_RU[s.street] || '';
+      if (d.type === 'fold' && s.toCall > 0 && a.eq >= a.potOdds + 0.1) tips.push(`Фолд на ${st}: шансы были ~${eq}%, а для колла хватало ${need}% — можно было коллировать.`);
+      else if (d.type === 'call' && a.eq < a.potOdds - 0.1) tips.push(`Колл на ${st}: шансы ~${eq}% при нужных ${need}% — это дорого, лучше сбросить.`);
+      else if (d.type === 'check' && a.eq > 0.75 && a.action.type === 'raise') tips.push(`Чек на ${st} с сильной рукой (~${eq}%) — стоило ставить и забирать больше.`);
+      else if (d.type === 'raise' && a.eq < 0.25 && a.action.type !== 'raise') tips.push(`Ставка на ${st} с шансами ~${eq}% — рискованный блеф.`);
+    }
+    if (tips.length) this.hub.send(p.id, { t: 'coach', tips });
   }
 
   // Олл-ин до ривера: больше никто не может ставить — открываем карты и считаем шансы, как на ТВ
@@ -250,6 +296,7 @@ export class GameTable {
     // ходы текущей раздачи — по ним честная подсказка оценивает руки соперников
     if (e.type === 'handStart') {
       this.handLog = [];
+      for (const p of this.players) if (!p.isBot && p.bot.decisions) p.bot.decisions = [];
       this.forceJam = false;
       this.forceDump = false;
       this.dumped = new Set();
@@ -287,6 +334,9 @@ export class GameTable {
       v.actor = null;
       if (e.action === 'fold') v.folded.add(e.id);
       v.last[e.id] = e.allIn ? 'Олл-ин' : e.action === 'raise' ? `${e.facing > 0 ? 'Рейз' : 'Бет'} ${e.to}` : ACTION_TEXT[e.action];
+      const actor = this.players.find((x) => x.id === e.id);
+      if (e.allIn) this.botTalk(actor, 'allin', 0.35);
+      else if (e.action === 'fold' && e.facing > v.pot * 0.4) this.botTalk(actor, 'fold', 0.12);
       this.checkRunout();
     } else if (e.type === 'street') {
       v.board = e.board;
@@ -310,6 +360,15 @@ export class GameTable {
       // серии побед и итог сессии
       const winners = new Set(e.winners.map((w) => w.id));
       if (!this.noStats) this.reportHand(e, winners);
+      for (const w of e.winners) if (w.amount >= 10 * this.bb) this.botTalk(this.players.find((x) => x.id === w.id), 'win', 0.4);
+      // тренер: разбор ходов живых игроков
+      const log = this.handLog || [];
+      for (const p of this.players) {
+        if (p.isBot || !p.bot.decisions?.length) continue;
+        const ds = p.bot.decisions;
+        p.bot.decisions = [];
+        setTimeout(() => this.coachReview(p, ds, log), 30);
+      }
       for (const p of this.players) {
         if (!v.dealt.has(p.id)) continue;
         p.streak = winners.has(p.id) ? (p.streak || 0) + 1 : 0;
@@ -354,6 +413,7 @@ export class GameTable {
           look: p.isBot ? null : p.look || null,
           equity: v.equity?.[p.id] ?? null,
           emote: v.emotes[p.id]?.e ?? null,
+          say: v.says[p.id]?.text ?? null,
           ...(mine && !p.isBot ? { timebanks: p.bot.timebanks } : {}),
           ...(mine && dealt && p.bot.hole && !v.folded.has(p.id) && this.inHand ? { outs: this.myOuts(p.bot.hole) } : {}),
         };
@@ -366,9 +426,16 @@ export class GameTable {
     const v = this.v;
     const log = this.handLog || [];
     const king = this.players.find((p) => p.isBot && p.name === 'Король');
+    const botsIn = this.players.filter((p) => p.isBot && v.dealt.has(p.id));
     for (const p of this.players) {
       if (p.isBot || !v.dealt.has(p.id)) continue;
       const won = winners.has(p.id);
+      // статистика против каждого бота за столом (итог в фишках — только 1 на 1)
+      if (botsIn.length) {
+        const mine = e.contributions.find((c) => c.id === p.id)?.total ?? 0;
+        const got = e.winners.filter((w) => w.id === p.id).reduce((a, w) => a + w.amount, 0);
+        this.hub.onBotVs?.(p.id, botsIn.map((b) => b.name), won, botsIn.length === 1 ? got - mine : null);
+      }
       const shown = v.shown[p.id];
       const score = shown?.score;
       this.hub.onHandResult?.(p.id, {

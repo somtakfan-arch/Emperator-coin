@@ -87,8 +87,53 @@ export class King extends EliteBot {
   }
 }
 
+// 7. МАФИЯ — босс-ловушка: часто чекает сильные руки и ловит на блефе, редко, но больно рейзит.
+export class Mafia extends EliteBot {
+  constructor(opts = {}) {
+    super('Мафия', 'босс-ловушка: чек-рейзы, слоуплей, ловит блефы', {
+      wide: 0.95, aggr: -0.005, trap: 0.22, sizes: [0.33, 0.75, 1.25], raiseSizes: [0.9, 1.5],
+      temp: 0.02, priorN: 5, readSkill: 1, bluff3: 0.3, bluff4: 0.1, callTax: 0, jam: 0.25, fear: 0.15,
+    }, { ...opts, iters: Math.max(opts.iters ?? 0, 600) });
+  }
+}
+
+// 8. РОБОТ — босс-баланс: минимум случайности, точные сайзинги, почти не эксплуатируется.
+export class Robot extends EliteBot {
+  constructor(opts = {}) {
+    super('Робот', 'босс-баланс: холодный расчёт, точные ставки, без эмоций', {
+      wide: 1, aggr: 0, trap: 0.05, sizes: [0.25, 0.5, 0.75, 1, 1.5], raiseSizes: [0.7, 1, 1.4],
+      temp: 0.008, priorN: 20, readSkill: 0.6, bluff3: 0.35, bluff4: 0.12, callTax: 0.015, jam: 0.2, fear: 0,
+    }, { ...opts, iters: Math.max(opts.iters ?? 0, 900) });
+  }
+}
+
+// 9. ШЕЙХ — босс-богач: широкий, огромные овербеты, давит деньгами.
+export class Sheikh extends EliteBot {
+  constructor(opts = {}) {
+    super('Шейх', 'босс-богач: играет много рук, огромные овербеты, давит стеком', {
+      wide: 1.3, aggr: 0.025, trap: 0.03, sizes: [0.75, 1.5, 2.5], raiseSizes: [1.2, 2],
+      temp: 0.03, priorN: 8, readSkill: 0.8, bluff3: 0.55, bluff4: 0.25, callTax: 0.005, jam: 0.45, deepJam: true, fear: 0.1,
+    }, { ...opts, iters: Math.max(opts.iters ?? 0, 500) });
+  }
+}
+
+// 10. ТЕНЬ — подстраивается под тебя: чем чаще ты её обыгрываешь, тем сильнее она становится (уровни 0–10).
+export class Shadow extends EliteBot {
+  constructor(opts = {}) {
+    const lvl = Math.max(0, Math.min(10, Number(opts.shadowLevel) || 0));
+    const k = lvl / 10; // 0 — слабая, 1 — как лучшие боты
+    const mix = (a, b) => a + (b - a) * k;
+    super('Тень', `растёт вместе с тобой · уровень ${lvl}`, {
+      wide: mix(1.35, 1.05), aggr: 0, trap: 0.05, sizes: [0.33, 0.66, 1, 1.5], raiseSizes: [0.75, 1.2],
+      temp: mix(0.12, 0.015), priorN: Math.round(mix(30, 4)), readSkill: mix(0.3, 1), bluff3: mix(0.15, 0.4), bluff4: mix(0.05, 0.15),
+      callTax: mix(-0.03, 0.015), jam: mix(0.1, 0.3), fear: mix(0.5, 0.2),
+    }, { ...opts, iters: Math.round(mix(120, 700)) });
+    this.level = lvl;
+  }
+}
+
 export const BOT_CLASSES = [Rock, Shark, Maniac, Hunter, Chameleon];
-export const BOSS_CLASSES = [King]; // отдельно: за стол на 6 не садится, только 1 на 1 и турниры
+export const BOSS_CLASSES = [King, Mafia, Robot, Sheikh, Shadow]; // отдельно: за стол на 6 не садится, только 1 на 1 и турниры
 
 export function createBots(opts) {
   return BOT_CLASSES.map((C) => new C(opts));

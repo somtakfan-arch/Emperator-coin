@@ -20,7 +20,6 @@ const BOT_INFO = {
   Маньяк: { text: 'Борзый, давит овербетами', aggr: 95 },
   Охотник: { text: 'Учит тебя и бьёт по слабостям', aggr: 60 },
   Хамелеон: { text: 'Меняет стиль по ходу игры', aggr: 70 },
-  Король: { text: 'Мега-босс · 3500 Эло: овербеты, олл-ины, почти не сбрасывает', aggr: 90, boss: true },
 };
 
 // ---------- DOM ----------
@@ -131,6 +130,7 @@ function onMessage(m) {
     case 'hello':
       S.me = m.me;
       send({ t: 'look' });
+      if (coachOn()) send({ t: 'coach', on: true });
       if (S.screen === 'loading') openStart(m.startParam);
       break;
     case 'me': S.me = m.me; break;
@@ -164,6 +164,12 @@ function onMessage(m) {
       applyUi();
       break;
     case 'card': S.card = m.card; break;
+    case 'botsInfo': S.botsInfo = m; break;
+    case 'coach':
+      S.coachTips = m.tips;
+      clearTimeout(S.coachTimer);
+      S.coachTimer = setTimeout(() => { S.coachTips = null; render(); }, 9000);
+      break;
     case 'progress':
       S.progress = m.progress;
       if (m.text) toast(m.text);
@@ -346,6 +352,8 @@ function playerCardModal(c) {
         stat('Раздач выиграно', fmt(c.handsWon || 0)),
         c.bot ? stat('Эло', fmt(c.elo)) : stat('Достижений', c.achievements),
         c.bot ? stat('', '') : stat('Побед в турн.', c.tourWins || 0)),
+      c.bot && c.vs?.hands > 0 && h('div', { class: 'small soft' }, `Против тебя: раздач ${fmt(c.vs.hands)}, ты выиграл ${fmt(c.vs.wins)} (${Math.round((c.vs.wins / c.vs.hands) * 100)}%)${c.vs.net ? ` · итог 1 на 1: ${c.vs.net > 0 ? '+' : '−'}${fmt(Math.abs(c.vs.net))}` : ''}`),
+      c.bot && c.level && c.level !== 'normal' && h('div', { class: 'small muted' }, `Сложность: ${c.level === 'easy' ? 'лёгкий' : 'мастер'}`),
       !c.bot && c.stats && h('div', { class: 'small muted' }, `Сыграно раздач: ${fmt(c.stats.hands)}${c.stats.bestCat >= 0 ? ` · лучшая рука: ${HAND_CATS[c.stats.bestCat]}` : ''}`)));
 }
 
@@ -436,6 +444,7 @@ function go(screen) {
   S.screen = screen;
   if (screen === 'profile') { S.top = null; send({ t: 'top', kind: S.topKind || 'rating' }); }
   if (screen === 'progress') send({ t: 'progress' });
+  if (screen === 'bots') send({ t: 'botsInfo' });
   if (screen !== 'table') S.card = null;
   window.scrollTo(0, 0);
   render();
@@ -564,6 +573,10 @@ function setTheme(id) {
 }
 
 // Настройки игры: звук и свои размеры ставок (на этом устройстве)
+function coachOn() {
+  try { return localStorage.getItem('coach') === 'on'; } catch { return false; }
+}
+
 function settingsCard() {
   const presets = loadPresets();
   return h('div', { class: 'col', style: 'gap:10px' },
@@ -571,6 +584,9 @@ function settingsCard() {
     h('label', { class: 'toggle-row glass', style: 'padding:12px 14px;border-radius:14px' },
       h('input', { type: 'checkbox', checked: soundOn(), onchange: (e) => { try { localStorage.setItem('sound', e.target.checked ? 'on' : 'off'); } catch {} if (e.target.checked) sfx('win'); } }),
       h('span', {}, 'Звуки за столом')),
+    h('label', { class: 'toggle-row glass', style: 'padding:12px 14px;border-radius:14px' },
+      h('input', { type: 'checkbox', checked: coachOn(), onchange: (e) => { try { localStorage.setItem('coach', e.target.checked ? 'on' : 'off'); } catch {} send({ t: 'coach', on: e.target.checked }); } }),
+      h('span', {}, 'Тренер'), h('span', { class: 'small muted' }, 'после раздачи подскажет, где ошибся')),
     h('div', { class: 'small soft' }, 'Кнопки ставок за столом (выбери 3):'),
     h('div', { class: 'choices' }, PRESET_OPTIONS.map((f) => h('button', { class: presets.includes(f) ? 'on' : '', onclick: () => togglePreset(f) }, presetLabel(f)))));
 }
@@ -634,6 +650,14 @@ function lobbyScreen() {
 
 // ---------- Против ботов ----------
 
+// твоя статистика против бота: выиграно раздач и итог в фишках
+function vsLine(name) {
+  const v = S.botsInfo?.vs?.[name];
+  if (!v?.hands) return null;
+  return h('div', { class: 'small muted', style: 'font-size:10.5px;white-space:nowrap' },
+    `ты: ${v.wins}/${v.hands}${v.net ? ` · ${v.net > 0 ? '+' : '−'}${fmt(Math.abs(v.net))}` : ''}`);
+}
+
 function botsScreen() {
   const blinds = (b) => {
     const bb = Math.max(2, Math.floor(b / 100));
@@ -666,7 +690,19 @@ function botsScreen() {
       h('div', { class: 'col', style: 'flex:1' }, h('div', { class: 'b', style: 'font-size:15px' }, name), h('div', { class: 'small soft' }, info.text)),
       h('div', { class: 'col', style: 'align-items:flex-end' },
         h('div', { class: 'small muted', style: 'font-size:11px' }, 'агрессия'),
-        h('div', { class: 'meter' }, h('div', { style: `width:${info.aggr}%` }))))),
+        h('div', { class: 'meter' }, h('div', { style: `width:${info.aggr}%` })),
+        vsLine(name)))),
+      // боссы: Король, Мафия, Робот, Шейх и Тень, которая растёт вместе с тобой
+      S.botMode !== '6' && (S.botsInfo?.bosses || []).length > 0 && h('div', { class: 'label', style: 'padding-top:6px' }, 'Боссы — только 1 на 1'),
+      S.botMode !== '6' && (S.botsInfo?.bosses || []).map((b) => h('button', {
+        class: `bot boss ${S.botMode === 'hu' && S.botName === b.name ? 'on' : ''}`,
+        onclick: () => { S.botName = b.name; S.botMode = 'hu'; render(); },
+      },
+      h('div', { class: 'letter' }, b.name[0]),
+      h('div', { class: 'col', style: 'flex:1' }, h('div', { class: 'b', style: 'font-size:15px' }, b.name), h('div', { class: 'small soft' }, b.style)),
+      h('div', { class: 'col', style: 'align-items:flex-end' },
+        h('div', { class: 'b', style: 'font-size:13px;color:#f7dd8a' }, `${fmt(b.elo)} Эло`),
+        vsLine(b.name)))),
       // ещё 60 ботов попроще — только для игры 1 на 1
       S.lobby?.crowd?.length > 0 && h('button', { class: 'btn-ghost', onclick: () => { S.showCrowd = !S.showCrowd; render(); } },
         S.showCrowd ? 'Скрыть остальных ботов' : `Ещё ${S.lobby.crowd.length} ботов попроще`),
@@ -688,6 +724,12 @@ function botsScreen() {
       h('label', { class: 'toggle-row' },
         h('input', { type: 'checkbox', checked: !!S.botFast, onchange: (e) => { S.botFast = e.target.checked; } }),
         h('span', {}, 'Быстрый стол'), h('span', { class: 'small muted' }, 'боты ходят почти сразу'))),
+    S.botMode !== 'mixed' && h('div', { class: 'field' },
+      h('div', { class: 'label' }, 'Сложность ботов'),
+      h('div', { class: 'seg' }, [['easy', 'Лёгкий'], ['normal', 'Нормальный'], ['master', 'Мастер']].map(([k, label]) => h('button', {
+        class: (S.botLevel || 'normal') === k ? 'on' : '', onclick: () => { S.botLevel = k; render(); },
+      }, label))),
+      h('div', { class: 'small muted' }, 'Лёгкий — больше ошибок, меньше Эло за победу. Мастер — сильнее и Эло больше.')),
     h('div', { class: 'field', style: 'padding-bottom:70px' },
       h('div', { class: 'label' }, 'Бай-ин (100 больших блайндов)'),
       h('div', { class: 'choices' }, presets.map((b) =>
@@ -756,7 +798,7 @@ function mixedScreen() {
 }
 
 async function sitBots() {
-  const r = await run({ t: 'sitBots', mode: S.botMode, botName: S.botName, buyin: S.buyin, minutes: S.botMinutes, fast: !!S.botFast });
+  const r = await run({ t: 'sitBots', mode: S.botMode, botName: S.botName, buyin: S.buyin, minutes: S.botMinutes, fast: !!S.botFast, level: S.botLevel || 'normal' });
   if (r) go('table');
 }
 
@@ -880,6 +922,8 @@ function tableScreen() {
           s.streak >= 2 && h('span', { class: 'streak-badge', title: 'Серия побед', 'aria-label': `Серия побед: ${s.streak}` }, `🔥${s.streak}`))),
       // эмодзи над игроком
       s.emote && h('div', { class: 'emote-bubble', 'aria-label': `Эмодзи ${s.emote}` }, s.emote),
+      // фраза бота
+      s.say && h('div', { class: 'say-bubble' }, s.say),
       // шансы при олл-ине
       s.equity != null && h('div', { class: 'equity-chip' }, `${s.equity}%`));
     const planned = T.demo && T.plan?.holes?.[s.id];
@@ -965,6 +1009,10 @@ function tableScreen() {
           class: 'jam-btn aces-btn', 'aria-label': 'Два туза в следующей раздаче, ещё два на тёрне и ривере', onclick: async () => { if (await run({ t: 'forceAces' })) toast('Следующая раздача: тузы у тебя и на тёрне с ривером'); },
         }, 'A A')),
       S.emoteOpen && emoteTray(),
+      S.coachTips && h('div', { class: 'coach-card' },
+        h('div', { class: 'row between' }, h('div', { class: 'b', style: 'font-size:13px' }, '🎓 Тренер'),
+          h('button', { class: 'hint-x', 'aria-label': 'Закрыть', onclick: () => { S.coachTips = null; render(); } }, '✕')),
+        S.coachTips.map((t) => h('div', { class: 'small', style: 'line-height:1.4' }, t))),
       S.card && playerCardModal(S.card),
       actionPanel(T, mySeat, myTurn)),
     T.demo && S.pick && pickerModal(T));

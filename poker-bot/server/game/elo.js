@@ -6,8 +6,10 @@ import { config } from '../config.js';
 import { crowdElo } from '../../core/crowd.js';
 
 // рейтинг бота: 5 сильных — из конфига, 60 обычных — свой у каждого
-export function botRating(name) {
-  return config.botElo[name] ?? crowdElo(name) ?? 1400;
+export function botRating(name, level = 'normal', shadow = 0) {
+  if (name === 'Тень') return 1300 + shadow * 60;
+  const base = config.botElo[name] ?? crowdElo(name) ?? 1400;
+  return base + (level === 'easy' ? -300 : level === 'master' ? 200 : 0); // сложность меняет и Эло
 }
 
 const WIN_STEPS = [

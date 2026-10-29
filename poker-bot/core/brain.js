@@ -383,10 +383,10 @@ export class EliteBot {
       else if (s.toCall === 0) action = { type: 'check' };
       else action = sim.eq >= potOdds ? { type: 'call' } : { type: 'fold' };
     } else if (s.street === 'preflop') {
-      const rng = this.rng;
-      this.rng = () => 0.99; // без блефов «по монетке» — только основная линия
-      action = this.preflop(s, opps);
-      this.rng = rng;
+      // без блефов «по монетке» — только основная линия. Подменяем лишь бросок решения:
+      // если подменить весь rng, розыгрыш карт в simulate может зациклиться на одной карте.
+      this.fixedR = 0.99;
+      try { action = this.preflop(s, opps); } finally { this.fixedR = null; }
     } else {
       const cands = this.postflopCands(s, opps, sim);
       action = cands.reduce((a, b) => (b.ev > a.ev ? b : a)).a;
@@ -497,7 +497,7 @@ export class EliteBot {
     const raises = pre.filter((a) => a.action === 'raise').length;
     const maxOpp = Math.max(...opps.map((o) => o.stack + o.bet));
     const eff = Math.min(s.stack + s.myBet, maxOpp) / bb;
-    const r = this.rng();
+    const r = this.fixedR ?? this.rng();
     const [r1, r2] = [s.hole[0] >> 2, s.hole[1] >> 2];
     const hi = Math.max(r1, r2), lo = Math.min(r1, r2);
     const suited = (s.hole[0] & 3) === (s.hole[1] & 3);

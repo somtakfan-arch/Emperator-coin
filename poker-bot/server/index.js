@@ -10,7 +10,7 @@ import { BotRoom, DemoRoom } from './game/botroom.js';
 import { MixedRoom } from './game/mixedroom.js';
 import { Tournaments } from './game/tournament.js';
 import { SoloTour, SOLO_SIZES, SOLO_BLINDS } from './game/solotour.js';
-import { BOT_CLASSES, Hunter } from '../core/bots.js';
+import { BOT_CLASSES, BOSS_CLASSES, Hunter } from '../core/bots.js';
 import { CROWD } from '../core/crowd.js';
 import { arrangeDeck } from './game/demoplan.js';
 import { botHandsWon } from './game/table.js';
@@ -35,6 +35,7 @@ const seen = new Map();
 const botRooms = new Map(); // userId -> BotRoom | DemoRoom | MixedRoom (за которым он сидит)
 const mixedRooms = new Map(); // roomId -> MixedRoom (столы с друзьями)
 const solos = new Map(); // userId -> SoloTour (сольный турнир с ботами)
+const coachUsers = new Set(); // у кого включён тренер
 
 const hub = {
   send(uid, msg) {
@@ -69,6 +70,16 @@ const hub = {
   onHandResult: (uid, h) => progress.onHand(uid, h),
   onTourDone: (uid, ev) => progress.onEvent(uid, { type: 'tour', ...ev }),
   onBeatAll: (uid) => progress.onEvent(uid, { type: 'beatAll' }),
+  onBotVs: (uid, bots, won, net) => progress.recordVs(uid, bots, won, net),
+  // Тень: обыграл — +1 уровень, крупно проиграл — −1
+  onShadowResult(uid, net, buyin) {
+    const delta = net > 0 ? 1 : net < -buyin / 2 ? -1 : 0;
+    if (!delta) return;
+    const lvl = progress.adjustShadow(uid, delta);
+    hub.send(uid, { t: 'toast', text: delta > 0 ? `Тень стала сильнее: уровень ${lvl}` : `Тень ослабла: уровень ${lvl}` });
+  },
+  // тренер включён у игрока?
+  coachOn: (uid) => coachUsers.has(uid),
   onSoloDone(tour) {
     if (solos.get(tour.userId) === tour) solos.delete(tour.userId);
   },
@@ -184,7 +195,15 @@ const handlers = {
     if (!p) throw new Error('Игрок не за твоим столом');
     if (p.isBot) {
       const info = BOTS.find((b) => b.name === p.name) || CROWD_VIEW.find((b) => b.name === p.name);
-      return { t: 'card', card: { bot: true, name: p.name, style: info?.style ?? '', handsWon: botHandsWon(p.name), elo: botRating(p.name) } };
+      const boss = BOSS_CLASSES.map((C) => new C({})).find((b) => b.name === p.name);
+      const room = botRooms.get(uid);
+      return {
+        t: 'card',
+        card: {
+          bot: true, name: p.name, style: info?.style ?? boss?.style ?? '', handsWon: botHandsWon(p.name),
+          elo: botRating(p.name, room?.level, room?.shadow), level: room?.level ?? 'normal', vs: progress.vsStats(uid, p.name),
+        },
+      };
     }
     const u = getUser(p.id);
     const P = progress.progressView(p.id);
@@ -225,7 +244,10 @@ const handlers = {
   cancelT: (uid, m) => (tournaments.cancel(getUser(uid), m.id), { t: 'ok' }),
   sitBots(uid, m) {
     if (activeTable(uid)) throw new Error('Ты уже за столом');
-    botRooms.set(uid, BotRoom.open(hub, getUser(uid), { mode: m.mode === '6' ? '6' : 'hu', botName: m.botName, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0, fast: !!m.fast }));
+    botRooms.set(uid, BotRoom.open(hub, getUser(uid), {
+      mode: m.mode === '6' ? '6' : 'hu', botName: m.botName, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0, fast: !!m.fast,
+      level: m.level || 'normal', shadow: progress.shadowLevel(uid),
+    }));
     hub.sendMe(uid);
     return { t: 'ok' };
   },
@@ -240,6 +262,22 @@ const handlers = {
     activeTable(uid)?.seat.submit(m.action);
     return null;
   },
+  // тренер: после раздачи — разбор твоих ходов
+  coach(uid, m) {
+    if (m.on) coachUsers.add(uid);
+    else coachUsers.delete(uid);
+    return null;
+  },
+  // боссы и твоя статистика против каждого бота
+  botsInfo: (uid) => ({
+    t: 'botsInfo',
+    bosses: BOSS_CLASSES.map((C) => {
+      const b = new C({ shadowLevel: progress.shadowLevel(uid) });
+      return { name: b.name, style: b.style, elo: botRating(b.name, 'normal', progress.shadowLevel(uid)) };
+    }),
+    vs: progress.vsStats(uid),
+    shadow: progress.shadowLevel(uid),
+  }),
   // эмодзи над собой за столом
   emote(uid, m) {
     activeTable(uid)?.table.emote(uid, String(m.e));

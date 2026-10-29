@@ -53,12 +53,28 @@ export function isBotName(name) {
 }
 
 // Создать бота по имени — любого из 5 сильных или из 60 обычных
+// Уровень сложности: лёгкий — больше случайности и меньше расчёта, мастер — наоборот
+export const LEVELS = { easy: 'Лёгкий', normal: 'Нормальный', master: 'Мастер' };
+function applyLevel(bot, level) {
+  if (level === 'easy') {
+    bot.base = { ...bot.base, temp: bot.base.temp * 3 + 0.03, readSkill: bot.base.readSkill * 0.5, priorN: bot.base.priorN * 2, callTax: bot.base.callTax - 0.02 };
+    bot.p = bot.base;
+    bot.iters = Math.min(bot.iters, 100);
+  } else if (level === 'master') {
+    bot.base = { ...bot.base, temp: bot.base.temp * 0.6, readSkill: Math.min(1, bot.base.readSkill * 1.3) };
+    bot.p = bot.base;
+    bot.iters = Math.max(bot.iters, 700);
+  }
+  bot.level = level;
+  return bot;
+}
+
 export function makeBot(name, opts = {}) {
   const pro = PROS.find((x) => x.name === name);
-  if (pro) return new pro.C(opts);
+  if (pro) return applyLevel(new pro.C(opts), opts.level);
   const c = CROWD.find((x) => x.name === name);
   if (!c) throw new Error('Нет такого бота');
-  return new EliteBot(c.name, c.style, c.params, { ...opts, iters: Math.min(opts.iters ?? 150, 150) });
+  return applyLevel(new EliteBot(c.name, c.style, c.params, { ...opts, iters: Math.min(opts.iters ?? 150, 150) }), opts.level);
 }
 
 export function crowdElo(name) {

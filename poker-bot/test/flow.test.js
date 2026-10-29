@@ -667,3 +667,27 @@ test('внешний вид: аватар, рамки по рангу, руба�
   await c.waitFor((m) => m.t === 'left', 30000);
   c.close();
 });
+
+test('боты: боссы, сложность, статистика против бота, тренер включается', async () => {
+  const c = new Client(9911);
+  await c.ready;
+  const info = await c.req({ t: 'botsInfo' });
+  assert.deepEqual(info.bosses.map((b) => b.name), ['Король', 'Мафия', 'Робот', 'Шейх', 'Тень']);
+  assert.equal(info.shadow, 0);
+  await c.req({ t: 'invoice', pack: 'p1' });
+  await assert.rejects(c.req({ t: 'sitBots', mode: 'hu', botName: 'Робот', buyin: 500, level: 'god' }), /сложность/);
+  c.ws.send(JSON.stringify({ t: 'coach', on: true }));
+  await c.req({ t: 'sitBots', mode: 'hu', botName: 'Робот', buyin: 500, level: 'easy' });
+  await c.waitFor((m) => m.t === 'left' || (m.t === 'table' && (m.table?.handId >= 3 || m.table?.canRebuy)), 60000);
+  const bot = c.table?.seats?.find((s) => s.isBot);
+  if (bot && !c.msgs.some((m) => m.t === 'left')) {
+    const card = await c.req({ t: 'playerCard', id: bot.id });
+    assert.equal(card.card.level, 'easy');
+    assert.equal(card.card.elo, 2500, 'Робот на лёгком: 2800 − 300');
+    c.ws.send(JSON.stringify({ t: 'leave' }));
+  }
+  await c.waitFor((m) => m.t === 'left', 30000);
+  const after = await c.req({ t: 'botsInfo' });
+  assert.ok(after.vs['Робот']?.hands >= 1, 'статистика против Робота записана');
+  c.close();
+});
