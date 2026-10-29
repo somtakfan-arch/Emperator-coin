@@ -8,6 +8,7 @@ import { describeHand, evaluate, handCategory } from '../../core/cards.js';
 import { config } from '../config.js';
 import { db } from '../db.js';
 import { knownEquity, bestFive, outs } from './tablefx.js';
+import { publicLook, vipEmotes, VIP_EMOTES } from '../cosmetics.js';
 
 // эмодзи за столом (только из набора — без свободного текста)
 export const EMOTES = ['👍', '😂', '🔥', '😎', '😱', '🤡', '💀', '🙏', '😡', '🍀', '👑', '🤔'];
@@ -158,6 +159,7 @@ export class GameTable {
     if (p.bot instanceof HumanSeat) p.bot.table = this;
     // выигранные раздачи — значок рядом с игроком за столом
     if (!p.isBot && p.handsWon == null) p.handsWon = getHandsWon.get(p.id)?.hands_won ?? 0;
+    if (!p.isBot) p.look = publicLook(p.id); // аватар, рамка, цвет ранга
     this.players.push(p);
     this.broadcast();
   }
@@ -176,7 +178,7 @@ export class GameTable {
 
   // эмодзи над игроком на 3 секунды (не чаще раза в секунду)
   emote(id, e) {
-    if (!EMOTES.includes(e)) throw new Error('Нет такого эмодзи');
+    if (!EMOTES.includes(e) && !(VIP_EMOTES.includes(e) && id > 0 && vipEmotes(id))) throw new Error('Нет такого эмодзи');
     const prev = this.v.emotes[id];
     if (prev && Date.now() - prev.at < 1000) return;
     this.v.emotes[id] = { e, at: Date.now() };
@@ -349,6 +351,7 @@ export class GameTable {
           away: !p.isBot && p.bot.sittingOut,
           handsWon: p.isBot ? botHandsWon(p.name) : p.handsWon ?? 0,
           streak: p.streak || 0,
+          look: p.isBot ? null : p.look || null,
           equity: v.equity?.[p.id] ?? null,
           emote: v.emotes[p.id]?.e ?? null,
           ...(mine && !p.isBot ? { timebanks: p.bot.timebanks } : {}),

@@ -130,6 +130,7 @@ function onMessage(m) {
   switch (m.t) {
     case 'hello':
       S.me = m.me;
+      send({ t: 'look' });
       if (S.screen === 'loading') openStart(m.startParam);
       break;
     case 'me': S.me = m.me; break;
@@ -158,6 +159,11 @@ function onMessage(m) {
       break;
     case 'tour': S.tour = m.tour; S.invite = m.invite; break;
     case 'top': S.top = m.rating; S.topKind = m.kind; break;
+    case 'look':
+      S.look = m.look;
+      applyUi();
+      break;
+    case 'card': S.card = m.card; break;
     case 'progress':
       S.progress = m.progress;
       if (m.text) toast(m.text);
@@ -255,6 +261,7 @@ function tableSounds(prev, next) {
   if (next.result && !prev.result && next.result.some((w) => w.id === S.me?.id)) {
     sfx('win');
     const mine = next.result.find((w) => w.id === S.me?.id);
+    goldFlash(); // эффект победы
     if (mine.amount >= 30 * next.bb) setTimeout(() => confetti(), 400); // большой банк — салют
   }
 }
@@ -316,11 +323,99 @@ function confetti() {
   }
 }
 
+// ---------- Внешний вид: аватар, рамка, карточка игрока, настройки экрана ----------
+
+function seatAvatar(s) {
+  const a = s.look?.avatar;
+  const inner = a?.photo ? h('img', { src: a.photo, alt: '', referrerpolicy: 'no-referrer' }) : a?.emoji ? a.emoji : initial(s.name);
+  return h('div', { class: `ava ${s.me ? 'me' : ''} ${a?.emoji ? 'emoji' : ''} ${s.look?.frame ? `frame-${s.look.frame}` : ''}` }, inner);
+}
+
+function playerCardModal(c) {
+  const close = () => { S.card = null; render(); };
+  return h('div', { class: 'card-modal', onclick: (e) => { if (e.target === e.currentTarget) close(); } },
+    h('div', { class: 'glass card', style: 'gap:10px;background:rgba(12,24,26,0.96)' },
+      h('div', { class: 'row between' },
+        h('div', { class: 'row' },
+          c.bot ? h('div', { class: 'ava', style: 'width:44px;height:44px;font-size:18px' }, initial(c.name)) : seatAvatar({ name: c.name, look: c.look }),
+          h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 'b', style: 'font-size:17px' }, c.name),
+            h('div', { class: 'small', style: c.rankColor ? `color:${c.rankColor}` : '' }, c.bot ? `Бот · ${fmt(c.elo)} Эло` : `${c.rank} · ${fmt(c.rating)} Эло`))),
+        h('button', { class: 'hint-x', 'aria-label': 'Закрыть', onclick: close }, '✕')),
+      c.bot && h('div', { class: 'small soft', style: 'line-height:1.45' }, c.style),
+      h('div', { class: 'grid3' },
+        stat('Раздач выиграно', fmt(c.handsWon || 0)),
+        c.bot ? stat('Эло', fmt(c.elo)) : stat('Достижений', c.achievements),
+        c.bot ? stat('', '') : stat('Побед в турн.', c.tourWins || 0)),
+      !c.bot && c.stats && h('div', { class: 'small muted' }, `Сыграно раздач: ${fmt(c.stats.hands)}${c.stats.bestCat >= 0 ? ` · лучшая рука: ${HAND_CATS[c.stats.bestCat]}` : ''}`)));
+}
+
+// Настройки экрана на этом устройстве: колода, сцена, фишки, анимация, режим
+const SCENES = [['felt', 'Сукно'], ['casino', 'Казино'], ['city', 'Ночной город'], ['space', 'Космос'], ['sakura', 'Сакура']];
+const CHIP_STYLES = [['classic', 'Классика'], ['neon', 'Неон'], ['gold', 'Золото']];
+const MODES = [['normal', 'Обычный'], ['minimal', 'Минимализм'], ['large', 'Крупный']];
+function loadUi() {
+  try { return { deck4: false, scene: 'felt', chips: 'classic', anim: false, mode: 'normal', ...JSON.parse(localStorage.getItem('ui') || '{}') }; } catch { return { deck4: false, scene: 'felt', chips: 'classic', anim: false, mode: 'normal' }; }
+}
+function setUi(patch) {
+  const ui = { ...loadUi(), ...patch };
+  try { localStorage.setItem('ui', JSON.stringify(ui)); } catch {}
+  applyUi();
+  render();
+}
+function applyUi() {
+  const ui = loadUi();
+  const d = document.documentElement.dataset;
+  d.scene = ui.scene;
+  d.chips = ui.chips;
+  d.mode = ui.mode;
+  d.back = S.look?.back || 'classic';
+  document.documentElement.classList.toggle('deck4', !!ui.deck4);
+  document.documentElement.classList.toggle('anim', !!ui.anim);
+}
+
+function goldFlash() {
+  if (document.hidden) return;
+  const el = h('div', { class: 'gold-flash', 'aria-hidden': 'true' });
+  document.body.append(el);
+  el.animate([{ opacity: 0 }, { opacity: 1, offset: 0.25 }, { opacity: 0 }], { duration: 900, easing: 'ease-out' }).onfinish = () => el.remove();
+}
+
+function lookCard() {
+  const L = S.look;
+  if (!L) return null;
+  const ui = loadUi();
+  const pick = (list, cur, onPick) => h('div', { class: 'choices' }, list.map(([id, name]) => h('button', { class: cur === id ? 'on' : '', onclick: () => onPick(id) }, name)));
+  return h('div', { class: 'col', style: 'gap:10px' },
+    h('div', { class: 'label' }, 'Аватар'),
+    h('div', { class: 'ava-grid' },
+      h('button', { class: `ava-pick ${!L.avatar ? 'on' : ''}`, onclick: () => run({ t: 'equip', kind: 'avatar', id: null }) }, initial(S.me.name)),
+      L.hasPhoto && h('button', { class: `ava-pick ${L.avatar === 'photo' ? 'on' : ''}`, onclick: () => run({ t: 'equip', kind: 'avatar', id: 'photo' }) }, 'Фото'),
+      L.avatars.map((a) => h('button', { class: `ava-pick ${L.avatar === a ? 'on' : ''}`, onclick: () => run({ t: 'equip', kind: 'avatar', id: a }) }, a))),
+    h('div', { class: 'label' }, 'Рамка аватара'),
+    h('div', { class: 'item-grid' }, L.frames.map((f) => h('button', {
+      class: `item-pick ${L.frame === f.id ? 'on' : ''} ${f.owned ? '' : 'locked'}`, onclick: () => (f.owned ? run({ t: 'equip', kind: 'frame', id: f.id }) : toast(`Закрыто: ${f.how}`)),
+    }, h('div', { class: `ava frame-${f.id}` }, '🙂'), h('div', { class: 'small' }, f.name), !f.owned && h('div', { class: 'small muted', style: 'font-size:10px' }, `🔒 ${f.how}`)))),
+    h('div', { class: 'label' }, 'Рубашка карт'),
+    h('div', { class: 'item-grid' }, L.backs.map((b) => h('button', {
+      class: `item-pick ${L.back === b.id ? 'on' : ''} ${b.owned ? '' : 'locked'}`, onclick: () => (b.owned ? run({ t: 'equip', kind: 'back', id: b.id }) : toast(`Закрыто: ${b.how}`)),
+    }, h('div', { class: `pcard back sm back-${b.id}` }), h('div', { class: 'small' }, b.name), !b.owned && h('div', { class: 'small muted', style: 'font-size:10px' }, `🔒 ${b.how}`)))),
+    h('div', { class: 'label' }, 'Сцена стола'),
+    pick(SCENES, ui.scene, (id) => setUi({ scene: id })),
+    h('div', { class: 'label' }, 'Фишки'),
+    pick(CHIP_STYLES, ui.chips, (id) => setUi({ chips: id })),
+    h('div', { class: 'label' }, 'Режим экрана'),
+    pick(MODES, ui.mode, (id) => setUi({ mode: id })),
+    h('label', { class: 'toggle-row' }, h('input', { type: 'checkbox', checked: ui.deck4, onchange: (e) => setUi({ deck4: e.target.checked }) }), h('span', {}, 'Колода в 4 цвета'), h('span', { class: 'small muted' }, '♦ синие, ♣ зелёные')),
+    h('label', { class: 'toggle-row' }, h('input', { type: 'checkbox', checked: ui.anim, onchange: (e) => setUi({ anim: e.target.checked }) }), h('span', {}, 'Живой фон'), h('span', { class: 'small muted' }, 'лёгкие огоньки')));
+}
+
 // ---------- Эмодзи за столом ----------
 
 const EMOTES = ['👍', '😂', '🔥', '😎', '😱', '🤡', '💀', '🙏', '😡', '🍀', '👑', '🤔'];
 function emoteTray() {
-  return h('div', { class: 'emote-tray' }, EMOTES.map((e) => h('button', {
+  // VIP-эмодзи: с ранга «Золото» или 10 уровня пропуска
+  const list = S.me?.vip ? [...EMOTES, ...(S.look?.vipEmotes || [])] : EMOTES;
+  return h('div', { class: 'emote-tray' }, list.map((e) => h('button', {
     class: 'emote-pick', 'aria-label': `Эмодзи ${e}`, onclick: () => { send({ t: 'emote', e }); S.emoteOpen = false; render(); },
   }, e)));
 }
@@ -341,6 +436,7 @@ function go(screen) {
   S.screen = screen;
   if (screen === 'profile') { S.top = null; send({ t: 'top', kind: S.topKind || 'rating' }); }
   if (screen === 'progress') send({ t: 'progress' });
+  if (screen !== 'table') S.card = null;
   window.scrollTo(0, 0);
   render();
 }
@@ -730,7 +826,7 @@ function pcard(c, size = '', extra = '') {
   if (c == null) return h('div', { class: `pcard back ${size} ${extra}` });
   const red = (c & 3) === 1 || (c & 3) === 2;
   const r = RANKS[c >> 2] === 'T' ? '10' : RANKS[c >> 2];
-  return h('div', { class: `pcard ${size} ${red ? 'red' : ''} ${extra}`, 'aria-label': r + SUITS[c & 3] },
+  return h('div', { class: `pcard ${size} ${red ? 'red' : ''} s${c & 3} ${extra}`, 'aria-label': r + SUITS[c & 3] },
     h('div', { class: 'r' }, r), h('div', { class: 's' }, SUITS[c & 3]));
 }
 
@@ -768,10 +864,14 @@ function tableScreen() {
       ? (s.cards ? s.cards.map((c) => pcard(c, 'lg', `${hl(c)} ${dealing}`)) : [])
       : s.cards ? s.cards.map((c) => pcard(c, 'sm', hl(c))) : s.inHand && T.inHand ? [pcard(null, 'sm', dealing), pcard(null, 'sm', dealing)] : [];
     const won = !T.inHand && T.result?.some((w) => w.id === s.id);
-    const plate = h('div', { 'data-seat': s.id, class: `plate ${T.actor === s.id ? 'turn' : ''} ${s.folded || s.away ? 'out' : ''} ${won ? 'win' : ''}` },
-      s.me ? h('div', { class: 'avatar', style: 'width:24px;height:24px;font-size:11px' }, initial(s.name)) : h('div', { class: 'ini' }, initial(s.name)),
+    const plate = h('div', {
+      'data-seat': s.id, class: `plate ${T.actor === s.id ? 'turn' : ''} ${s.folded || s.away ? 'out' : ''} ${won ? 'win' : ''}`,
+      role: 'button', 'aria-label': `Карточка игрока ${s.me ? 'ты' : s.name}`, onclick: () => run({ t: 'playerCard', id: s.id }),
+    },
+      seatAvatar(s),
       h('div', { class: 'col', style: 'gap:0;min-width:0' },
-        h('div', { class: 'nm' }, s.me ? 'Ты' : s.name),
+        // ник окрашен цветом ранга
+        h('div', { class: 'nm', style: s.look?.rankColor ? `color:${s.look.rankColor}` : null }, s.me ? 'Ты' : s.name),
         // стек и рядом значок выигранных раздач (у людей и у ботов) — внутри таблички, ничего не закрывает
         h('div', { class: 'st' }, s.allIn ? 'олл-ин' : fmt(s.stack),
           s.handsWon > 0 && h('span', { class: 'wins-badge', title: 'Выиграно раздач', 'aria-label': `Выиграно раздач: ${s.handsWon}` },
@@ -865,6 +965,7 @@ function tableScreen() {
           class: 'jam-btn aces-btn', 'aria-label': 'Два туза в следующей раздаче, ещё два на тёрне и ривере', onclick: async () => { if (await run({ t: 'forceAces' })) toast('Следующая раздача: тузы у тебя и на тёрне с ривером'); },
         }, 'A A')),
       S.emoteOpen && emoteTray(),
+      S.card && playerCardModal(S.card),
       actionPanel(T, mySeat, myTurn)),
     T.demo && S.pick && pickerModal(T));
 }
@@ -1464,6 +1565,7 @@ function profileScreen() {
       h('div', { class: 'grid3' }, stat('Фишки', fmt(me.chips)), stat('В игре', fmt(me.inPlay)), stat('По фишкам', fmt(me.chipsPlace)))),
     winRewardsCard(me),
     themesCard(),
+    lookCard(),
     settingsCard(),
     // таблицы лидеров
     h('div', { class: 'label' }, 'Лучшие игроки'),
@@ -1585,6 +1687,7 @@ setInterval(() => {
 tg?.ready();
 tg?.expand();
 applyTheme(loadTheme());
+applyUi();
 tg?.disableVerticalSwipes?.();
 render();
 connect();

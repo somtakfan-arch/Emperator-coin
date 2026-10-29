@@ -126,6 +126,10 @@ export function upsertUser(tg) {
   } else if (u.name !== name || u.username !== (tg.username || null)) {
     q.updateName.run(name, tg.username || null, tg.id);
   }
+  // фото из Telegram — его можно поставить аватаром
+  if (tg.photo_url && getUser(tg.id)?.photo !== tg.photo_url) {
+    try { db.prepare('UPDATE users SET photo = ? WHERE id = ?').run(String(tg.photo_url).slice(0, 500), tg.id); } catch {}
+  }
   return getUser(tg.id);
 }
 

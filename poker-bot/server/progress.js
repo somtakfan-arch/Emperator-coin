@@ -318,7 +318,7 @@ export function openChest(uid, kind) {
     p.stats.chestsOpened = (p.stats.chestsOpened || 0) + 1;
     if (p.stats.chestsOpened >= 10) unlock(uid, p, 'chest_10', out);
     // косметика из сундука (рамки, рубашки) — если модуль внешнего вида её подключил
-    const cosmetic = chestCosmetic?.(p, kind);
+    const cosmetic = chestCosmetic?.(p, kind, uid);
     save(uid, p);
     res = { kind, name: def.name, chips, hints, xp: def.xp, cosmetic };
   });

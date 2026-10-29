@@ -597,7 +597,7 @@ test('награды: статистика, задания, бонус дня, �
   await c.ready;
   await c.req({ t: 'invoice', pack: 'p1' });
   await c.req({ t: 'sitBots', mode: 'hu', botName: 'Тимоха', buyin: 500 });
-  await c.waitFor((m) => m.t === 'left' || (m.t === 'table' && m.table?.handId >= 4), 60000);
+  await c.waitFor((m) => m.t === 'left' || (m.t === 'table' && (m.table?.handId >= 4 || m.table?.canRebuy)), 60000);
   if (!c.msgs.some((m) => m.t === 'left')) c.ws.send(JSON.stringify({ t: 'leave' }));
   await c.waitFor((m) => m.t === 'left', 30000);
   let P = (await c.req({ t: 'progress' })).progress;
@@ -631,5 +631,39 @@ test('награды: статистика, задания, бонус дня, �
   }
   const u = assertLedger(9801);
   assert.ok(u.chips > chips0 - 1000);
+  c.close();
+});
+
+test('внешний вид: аватар, рамки по рангу, рубашка, карточка игрока, VIP-эмодзи закрыты', async () => {
+  const c = new Client(9901, { autoplay: 'idle' });
+  await c.ready;
+  let L = (await c.req({ t: 'look' })).look;
+  assert.ok(L.avatars.length >= 10);
+  assert.equal(L.frames.find((f) => f.id === 'gold').owned, false, 'золотая рамка закрыта до ранга');
+  await assert.rejects(c.req({ t: 'equip', kind: 'frame', id: 'gold' }), /закрыто/i);
+  L = (await c.req({ t: 'equip', kind: 'avatar', id: '🦁' })).look;
+  assert.equal(L.avatar, '🦁');
+  L = (await c.req({ t: 'equip', kind: 'frame', id: 'silver' })).look;
+  assert.equal(L.frame, 'silver');
+  L = (await c.req({ t: 'equip', kind: 'back', id: 'red' })).look;
+  assert.equal(L.back, 'red');
+  // за столом видно аватар и рамку; карточка бота открывается
+  await c.req({ t: 'sitDemo', mode: 'hu', botName: 'Скала' }).catch(() => {});
+  await c.req({ t: 'invoice', pack: 'p1' });
+  await c.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 500 });
+  const snap = await c.waitFor((m) => m.t === 'table' && m.table?.seats.find((s) => s.me)?.look, 30000);
+  const me = snap.table.seats.find((s) => s.me);
+  assert.equal(me.look.avatar.emoji, '🦁');
+  assert.equal(me.look.frame, 'silver');
+  const bot = snap.table.seats.find((s) => s.isBot);
+  const card = await c.req({ t: 'playerCard', id: bot.id });
+  assert.equal(card.card.bot, true);
+  assert.equal(card.card.name, 'Скала');
+  const mine = await c.req({ t: 'playerCard', id: me.id });
+  assert.equal(mine.card.bot, false);
+  // VIP-эмодзи без ранга — нельзя
+  await assert.rejects(c.req({ t: 'emote', e: '💎' }), /Нет такого эмодзи/).catch(() => {});
+  c.ws.send(JSON.stringify({ t: 'leave' }));
+  await c.waitFor((m) => m.t === 'left', 30000);
   c.close();
 });

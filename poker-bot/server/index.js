@@ -13,7 +13,10 @@ import { SoloTour, SOLO_SIZES, SOLO_BLINDS } from './game/solotour.js';
 import { BOT_CLASSES, Hunter } from '../core/bots.js';
 import { CROWD } from '../core/crowd.js';
 import { arrangeDeck } from './game/demoplan.js';
+import { botHandsWon } from './game/table.js';
+import { botRating } from './game/elo.js';
 import * as progress from './progress.js';
+import * as cosmetics from './cosmetics.js';
 
 const PUBLIC = new URL('../public/', import.meta.url).pathname;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json' };
@@ -128,6 +131,7 @@ function meView(uid) {
     id: u.id, name: u.name, chips: u.chips, inPlay: u.in_play, rating: Math.round(u.rating),
     isAdmin: config.adminIds.includes(u.id),
     rank: (({ name, color }) => ({ name, color }))(progress.rankOf(u.rating)),
+    vip: cosmetics.vipEmotes(u.id),
     handsWon: u.hands_won, won: u.won, winRewards: WIN_REWARDS.map((r, i) => ({ ...r, done: i < u.won_rewards })), hints: u.hints,
     games: u.games, wins: u.wins, ...ranks(uid),
     bonus: config.dailyBonus > 0 ? { amount: config.dailyBonus, readyAt: u.bonus_at + 86400000 } : null,
@@ -159,6 +163,39 @@ const handlers = {
         ? db.prepare('SELECT name, biggest_pot AS value, rating FROM users WHERE biggest_pot > 0 ORDER BY biggest_pot DESC LIMIT 20').all()
         : db.prepare('SELECT name, rating AS value, rating FROM users WHERE games > 0 OR rating <> 1500 ORDER BY rating DESC LIMIT 20').all();
     return { t: 'top', kind, rating: rows.map((r) => ({ name: r.name, value: Math.round(r.value), rank: progress.rankOf(r.rating).name, rankColor: progress.rankOf(r.rating).color })) };
+  },
+  // внешний вид: аватар, рамка, рубашка
+  look: (uid) => ({ t: 'look', look: cosmetics.lookView(uid) }),
+  equip(uid, m) {
+    cosmetics.equip(uid, String(m.kind), m.id === null ? null : String(m.id));
+    // за столом обновим сразу
+    const at = activeTable(uid);
+    const p = at?.table.players.find((x) => x.id === uid);
+    if (p) {
+      p.look = cosmetics.publicLook(uid);
+      at.table.broadcast();
+    }
+    return { t: 'look', look: cosmetics.lookView(uid) };
+  },
+  // карточка игрока за твоим столом
+  playerCard(uid, m) {
+    const at = activeTable(uid);
+    const p = at?.table.players.find((x) => x.id === Number(m.id));
+    if (!p) throw new Error('Игрок не за твоим столом');
+    if (p.isBot) {
+      const info = BOTS.find((b) => b.name === p.name) || CROWD_VIEW.find((b) => b.name === p.name);
+      return { t: 'card', card: { bot: true, name: p.name, style: info?.style ?? '', handsWon: botHandsWon(p.name), elo: botRating(p.name) } };
+    }
+    const u = getUser(p.id);
+    const P = progress.progressView(p.id);
+    return {
+      t: 'card',
+      card: {
+        bot: false, name: u.name, rank: P.rank.name, rankColor: P.rank.color, rating: Math.round(u.rating), handsWon: u.hands_won,
+        achievements: P.achievements.filter((a) => a.at).length, tourWins: u.wins, look: cosmetics.publicLook(p.id),
+        stats: { hands: P.stats.hands, wins: P.stats.wins, bestCat: P.stats.bestCat },
+      },
+    };
   },
   // прогресс: задания, достижения, сундуки, пропуск
   progress: (uid) => ({ t: 'progress', progress: progress.progressView(uid) }),
