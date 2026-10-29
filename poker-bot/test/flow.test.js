@@ -11,6 +11,7 @@ process.env.SPEED = '0';
 process.env.TURN_SECONDS = '3';
 process.env.TIMED_MINUTES = '0.05,10'; // 3 секунды — для теста
 process.env.ADMIN_IDS = '7001';
+process.env.PROGRESS_REWARDS = '0'; // фишки за достижения не мешают точным подсчётам
 process.env.PORT = String(4100 + Math.floor(Math.random() * 500));
 process.env.DATA_DIR = mkdtempSync(tmpdir() + '/poker-test-');
 
@@ -589,4 +590,46 @@ test('стол: эмодзи, таймбанк, шансы при олл-ине,
   assert.ok(left.hands >= 1, 'итог: сыграно раздач');
   assert.equal(left.demo, true);
   a.close();
+});
+
+test('награды: статистика, задания, бонус дня, сундук, пропуск, таблицы лидеров', async () => {
+  const c = new Client(9801);
+  await c.ready;
+  await c.req({ t: 'invoice', pack: 'p1' });
+  await c.req({ t: 'sitBots', mode: 'hu', botName: 'Тимоха', buyin: 500 });
+  await c.waitFor((m) => m.t === 'left' || (m.t === 'table' && m.table?.handId >= 4), 60000);
+  if (!c.msgs.some((m) => m.t === 'left')) c.ws.send(JSON.stringify({ t: 'leave' }));
+  await c.waitFor((m) => m.t === 'left', 30000);
+  let P = (await c.req({ t: 'progress' })).progress;
+  assert.ok(P.stats.hands >= 1, 'раздачи посчитаны');
+  assert.equal(P.daily.length, 3);
+  assert.equal(P.weekly.length, 3);
+  assert.ok(P.pass.xp >= 1, 'опыт пропуска растёт');
+  assert.equal(P.achievements.length >= 20, true);
+  // бонус дня — один раз в день
+  const chips0 = c.me.chips;
+  const d = await c.req({ t: 'claimDaily' });
+  assert.match(d.text, /День 1/);
+  await assert.rejects(c.req({ t: 'claimDaily' }), /уже получен/);
+  // сундука нет — открыть нельзя; выдадим и откроем
+  await assert.rejects(c.req({ t: 'openChest', kind: 'rare' }), /нет/);
+  const raw = JSON.parse(db.prepare('SELECT progress FROM users WHERE id = 9801').get().progress);
+  raw.chests.rare = 1;
+  db.prepare('UPDATE users SET progress = ? WHERE id = 9801').run(JSON.stringify(raw));
+  const ch = await c.req({ t: 'openChest', kind: 'rare' });
+  assert.ok(ch.chest.chips >= 800);
+  P = ch.progress;
+  assert.equal(P.chests.rare, 0);
+  // невыполненное задание забрать нельзя
+  const q = P.daily.find((x) => x.p < x.need);
+  if (q) await assert.rejects(c.req({ t: 'claimQuest', period: 'daily', key: q.key }), /не выполнено/);
+  // таблицы лидеров
+  for (const kind of ['rating', 'hands', 'pot']) {
+    const t = await c.req({ t: 'top', kind });
+    assert.equal(t.kind, kind);
+    assert.ok(Array.isArray(t.rating));
+  }
+  const u = assertLedger(9801);
+  assert.ok(u.chips > chips0 - 1000);
+  c.close();
 });

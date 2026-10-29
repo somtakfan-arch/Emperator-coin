@@ -12,7 +12,8 @@ export const config = {
   speed: num(env.SPEED, 1),                 // множитель пауз за столом (0 — для тестов)
 
   startChips: num(env.START_CHIPS, 0),
-  dailyBonus: num(env.DAILY_BONUS, 0),      // 0 — бонуса нет, карточка в кошельке скрыта
+  dailyBonus: num(env.DAILY_BONUS, 0),
+  progressRewards: env.PROGRESS_REWARDS !== '0', // фишки за достижения (в тестах выключены)      // 0 — бонуса нет, карточка в кошельке скрыта
   turnSeconds: num(env.TURN_SECONDS, 20),
 
   // пакеты: звёзды → фишки

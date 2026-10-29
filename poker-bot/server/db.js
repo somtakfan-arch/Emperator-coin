@@ -81,8 +81,15 @@ export function addWinnings(id, net) {
   });
 }
 
+// Транзакция. Вложенные вызовы идут внутри внешней (например, начисление внутри награды).
+let txDepth = 0;
 export function tx(fn) {
+  if (txDepth > 0) {
+    txDepth++;
+    try { return fn(); } finally { txDepth--; }
+  }
   db.exec('BEGIN');
+  txDepth = 1;
   try {
     const r = fn();
     db.exec('COMMIT');
@@ -90,6 +97,8 @@ export function tx(fn) {
   } catch (e) {
     db.exec('ROLLBACK');
     throw e;
+  } finally {
+    txDepth = 0;
   }
 }
 

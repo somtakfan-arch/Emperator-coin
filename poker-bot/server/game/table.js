@@ -295,7 +295,7 @@ export class GameTable {
         this.checkRunout();
       }
     } else if (e.type === 'showdown') {
-      for (const r of e.reveals) v.shown[r.id] = { cards: r.cards, hand: describeHand(r.score) };
+      for (const r of e.reveals) v.shown[r.id] = { cards: r.cards, hand: describeHand(r.score), score: r.score };
     } else if (e.type === 'handEnd') {
       v.actor = null;
       v.bets = {};
@@ -307,6 +307,7 @@ export class GameTable {
       }
       // серии побед и итог сессии
       const winners = new Set(e.winners.map((w) => w.id));
+      if (!this.noStats) this.reportHand(e, winners);
       for (const p of this.players) {
         if (!v.dealt.has(p.id)) continue;
         p.streak = winners.has(p.id) ? (p.streak || 0) + 1 : 0;
@@ -355,6 +356,31 @@ export class GameTable {
         };
       }),
     };
+  }
+
+  // Итог раздачи каждому живому игроку — для статистики, заданий и достижений
+  reportHand(e, winners) {
+    const v = this.v;
+    const log = this.handLog || [];
+    const king = this.players.find((p) => p.isBot && p.name === 'Король');
+    for (const p of this.players) {
+      if (p.isBot || !v.dealt.has(p.id)) continue;
+      const won = winners.has(p.id);
+      const shown = v.shown[p.id];
+      const score = shown?.score;
+      this.hub.onHandResult?.(p.id, {
+        won,
+        amount: e.winners.filter((w) => w.id === p.id).reduce((a, w) => a + w.amount, 0),
+        showdown: !!score,
+        cat: won && score != null ? handCategory(score) : null,
+        royal: won && score != null && describeHand(score) === 'Роял-флеш',
+        vpip: log.some((x) => x.type === 'action' && x.id === p.id && x.street === 'preflop' && (x.action === 'call' || x.action === 'raise')),
+        allIn: log.some((x) => x.type === 'action' && x.id === p.id && x.allIn),
+        vsKing: won && !!king && (e.contributions.find((c) => c.id === king.id)?.total ?? 0) > 0,
+        handsWon: p.handsWon ?? 0,
+        bb: this.bb,
+      });
+    }
   }
 
   // ауты считаем раз на улицу

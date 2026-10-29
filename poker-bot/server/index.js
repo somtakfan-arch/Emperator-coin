@@ -13,6 +13,7 @@ import { SoloTour, SOLO_SIZES, SOLO_BLINDS } from './game/solotour.js';
 import { BOT_CLASSES, Hunter } from '../core/bots.js';
 import { CROWD } from '../core/crowd.js';
 import { arrangeDeck } from './game/demoplan.js';
+import * as progress from './progress.js';
 
 const PUBLIC = new URL('../public/', import.meta.url).pathname;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json' };
@@ -61,6 +62,10 @@ const hub = {
     }
     hub.sendMe(uid);
   },
+  // прогресс: итог раздачи, турнира, «обыграл всех ботов»
+  onHandResult: (uid, h) => progress.onHand(uid, h),
+  onTourDone: (uid, ev) => progress.onEvent(uid, { type: 'tour', ...ev }),
+  onBeatAll: (uid) => progress.onEvent(uid, { type: 'beatAll' }),
   onSoloDone(tour) {
     if (solos.get(tour.userId) === tour) solos.delete(tour.userId);
   },
@@ -76,6 +81,10 @@ const hub = {
   },
 };
 hooks.onBalance = (uid) => hub.sendMe(uid);
+progress.setProgressNotifier((uid, text) => {
+  hub.send(uid, { t: 'toast', text });
+  hub.sendMe(uid);
+});
 hooks.onHandsWon = (uid, n) => {
   const at = activeTable(uid);
   const p = at?.table.players.find((x) => x.id === uid);
@@ -118,6 +127,7 @@ function meView(uid) {
   return {
     id: u.id, name: u.name, chips: u.chips, inPlay: u.in_play, rating: Math.round(u.rating),
     isAdmin: config.adminIds.includes(u.id),
+    rank: (({ name, color }) => ({ name, color }))(progress.rankOf(u.rating)),
     handsWon: u.hands_won, won: u.won, winRewards: WIN_REWARDS.map((r, i) => ({ ...r, done: i < u.won_rewards })), hints: u.hints,
     games: u.games, wins: u.wins, ...ranks(uid),
     bonus: config.dailyBonus > 0 ? { amount: config.dailyBonus, readyAt: u.bonus_at + 86400000 } : null,
@@ -140,11 +150,38 @@ const handlers = {
   lobby: (uid) => ({ t: 'lobby', ...lobbyView(uid) }),
   me: (uid) => ({ t: 'me', me: meView(uid) }),
   tour: (uid, m) => ({ t: 'tour', tour: tournaments.one(m.id, uid), invite: bot.username ? inviteLink(m.id) : null }),
-  top: () => ({
-    t: 'top',
-    rating: db.prepare('SELECT name, rating, games FROM users WHERE games > 0 OR rating <> 1500 ORDER BY rating DESC LIMIT 20').all()
-      .map((r) => ({ ...r, rating: Math.round(r.rating) })),
-  }),
+  // таблицы лидеров: по Эло, по выигранным раздачам, по самому большому банку
+  top: (uid, m) => {
+    const kind = ['hands', 'pot'].includes(m.kind) ? m.kind : 'rating';
+    const rows = kind === 'hands'
+      ? db.prepare('SELECT name, hands_won AS value, rating FROM users WHERE hands_won > 0 ORDER BY hands_won DESC LIMIT 20').all()
+      : kind === 'pot'
+        ? db.prepare('SELECT name, biggest_pot AS value, rating FROM users WHERE biggest_pot > 0 ORDER BY biggest_pot DESC LIMIT 20').all()
+        : db.prepare('SELECT name, rating AS value, rating FROM users WHERE games > 0 OR rating <> 1500 ORDER BY rating DESC LIMIT 20').all();
+    return { t: 'top', kind, rating: rows.map((r) => ({ name: r.name, value: Math.round(r.value), rank: progress.rankOf(r.rating).name, rankColor: progress.rankOf(r.rating).color })) };
+  },
+  // прогресс: задания, достижения, сундуки, пропуск
+  progress: (uid) => ({ t: 'progress', progress: progress.progressView(uid) }),
+  claimQuest(uid, m) {
+    const text = progress.claimQuest(uid, m.period, m.key);
+    hub.sendMe(uid);
+    return { t: 'progress', progress: progress.progressView(uid), text };
+  },
+  claimDaily(uid) {
+    const text = progress.claimDaily(uid);
+    hub.sendMe(uid);
+    return { t: 'progress', progress: progress.progressView(uid), text };
+  },
+  openChest(uid, m) {
+    const res = progress.openChest(uid, String(m.kind));
+    hub.sendMe(uid);
+    return { t: 'progress', progress: progress.progressView(uid), chest: res };
+  },
+  claimPass(uid, m) {
+    const text = progress.claimPass(uid, m.lvl);
+    hub.sendMe(uid);
+    return { t: 'progress', progress: progress.progressView(uid), text };
+  },
   createT: (uid, m) => ({ t: 'created', id: tournaments.create(getUser(uid), m.tour || {}) }),
   reg: (uid, m) => (tournaments.register(getUser(uid), m.id), { t: 'ok' }),
   unreg: (uid, m) => (tournaments.unregister(getUser(uid), m.id), { t: 'ok' }),
@@ -406,6 +443,15 @@ recoverAfterRestart();
 tournaments.ensureBig();
 setInterval(() => {
   try { tournaments.tick(); } catch (e) { console.error('tick', e); }
+  // новый сезон: награды по рангу и мягкий сброс Эло
+  try {
+    progress.checkSeason((list) => {
+      for (const x of list) {
+        if (x.chips) notify(x.id, `Сезон закончился! Твой ранг: <b>${x.rank}</b>. Награда: <b>${x.chips.toLocaleString('ru')}</b> фишек. Эло частично сброшено — новый сезон начался.`);
+        hub.sendMe(x.id);
+      }
+    });
+  } catch (e) { console.error('season', e); }
   for (const [id, room] of mixedRooms) if (room.table.closed) mixedRooms.delete(id);
 }, 5000);
 

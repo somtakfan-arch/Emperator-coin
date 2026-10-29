@@ -50,6 +50,7 @@ const ICONS = {
   user: '<circle cx="12" cy="9" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 20c1.5-4 14.5-4 16 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
   chip: '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/>',
   plus: '<path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>',
+  gift: '<path d="M4 11h16v9H4zM3 7h18v4H3zM12 7v13M12 7c-1.5-3-5-3.5-5-1s3 1 5 1c2 0 5 1.5 5-1s-3.5-2-5 1" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
   star: '<path d="M12 3l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z" fill="#f2c94c"/>',
 };
 function icon(name, size = 20) {
@@ -156,7 +157,12 @@ function onMessage(m) {
       sfx('turn');
       break;
     case 'tour': S.tour = m.tour; S.invite = m.invite; break;
-    case 'top': S.top = m.rating; break;
+    case 'top': S.top = m.rating; S.topKind = m.kind; break;
+    case 'progress':
+      S.progress = m.progress;
+      if (m.text) toast(m.text);
+      if (m.chest) S.chestOpened = m.chest;
+      break;
     case 'busted':
       toast(`Ты выбыл: ${m.place} место из ${m.total}`);
       leaveTableScreen(m.tournamentId);
@@ -327,13 +333,14 @@ function leaveTableScreen(tournamentId) {
 
 // ---------- Навигация ----------
 
-const BACK = { solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
+const BACK = { progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
 
 function go(screen) {
   if (screen !== 'table' && S.screen === 'table' && S.table) S.tableHidden = true;
   if (screen === 'table') S.tableHidden = false;
   S.screen = screen;
-  if (screen === 'profile') send({ t: 'top' });
+  if (screen === 'profile') { S.top = null; send({ t: 'top', kind: S.topKind || 'rating' }); }
+  if (screen === 'progress') send({ t: 'progress' });
   window.scrollTo(0, 0);
   render();
 }
@@ -408,7 +415,7 @@ function header(title, right) {
 function nav() {
   const item = (screen, ic, text) => h('button', { class: S.screen === screen ? 'on' : '', onclick: () => go(screen) }, icon(ic), text);
   return h('nav', { class: 'nav' },
-    item('lobby', 'home', 'Лобби'), item('tours', 'trophy', 'Турниры'),
+    item('lobby', 'home', 'Лобби'), item('tours', 'trophy', 'Турниры'), item('progress', 'gift', 'Награды'),
     item('wallet', 'wallet', 'Кошелёк'), item('profile', 'user', 'Профиль'));
 }
 
@@ -488,7 +495,7 @@ function lobbyScreen() {
         h('div', { class: 'avatar' }, initial(me.name)),
         h('div', { class: 'col' },
           h('div', { class: 'b', style: 'font-size:15px' }, me.name),
-          h('div', { class: 'small muted' }, `Эло ${me.rating} · место ${fmt(me.ratingPlace)} · раздач выиграно ${fmt(me.handsWon || 0)}`))),
+          h('div', { class: 'small muted' }, me.rank && h('b', { style: `color:${me.rank.color}` }, `${me.rank.name} `), `Эло ${me.rating} · место ${fmt(me.ratingPlace)} · раздач выиграно ${fmt(me.handsWon || 0)}`))),
       balancePill()),
     // итог последнего стола
     S.summary && h('div', { class: 'glass card summary' },
@@ -1109,6 +1116,88 @@ function toursScreen() {
       `фишки `, h('b', {}, fmt(me.chips)), ` · место по фишкам `, h('b', {}, fmt(me.chipsPlace))));
 }
 
+// ---------- Награды: ранг, сезон, пропуск, бонус дня, сундуки, задания, достижения, статистика ----------
+
+const HAND_CATS = ['Старшая карта', 'Пара', 'Две пары', 'Сет', 'Стрит', 'Флеш', 'Фулл-хаус', 'Каре', 'Стрит-флеш'];
+const CHEST_NAMES = { common: 'Обычный', rare: 'Редкий', epic: 'Эпический' };
+
+function progressScreen() {
+  const P = S.progress;
+  if (!P) return h('div', { class: 'screen' }, header('Награды'), h('div', { class: 'center-msg muted' }, 'Загрузка…'), nav());
+  const r = P.rank;
+  const daysLeft = Math.max(0, Math.ceil((P.season.endsAt - nowSrv()) / 86400000));
+  const lvlXp = P.pass.xp % P.pass.perLevel;
+  const st = P.stats;
+  const pctOf = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '—');
+  const quest = (period) => (q) => h('div', { class: 'quest' },
+    h('div', { class: 'col', style: 'gap:4px;flex:1;min-width:0' },
+      h('div', { class: 'b', style: 'font-size:14px' }, q.text),
+      h('div', { class: 'progress' }, h('div', { style: `width:${(q.p / q.need) * 100}%` })),
+      h('div', { class: 'small muted' }, `${q.p}/${q.need} · +${fmt(q.chips)} фишек · +${q.xp} опыта${q.chest ? ` · ${CHEST_NAMES[q.chest].toLowerCase()} сундук` : ''}`)),
+    q.claimed ? h('span', { class: 'small', style: 'color:var(--green)' }, 'Получено')
+      : h('button', { class: 'btn-sm', disabled: q.p < q.need, onclick: () => run({ t: 'claimQuest', period, key: q.key }) }, 'Забрать'));
+  return h('div', { class: 'screen' },
+    header('Награды'),
+    // ранг
+    h('div', { class: 'glass card' },
+      h('div', { class: 'row between' },
+        h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 'small muted' }, 'Твой ранг'),
+          h('div', { style: `font-size:24px;font-weight:800;color:${r.color}` }, r.name)),
+        h('div', { class: 'col', style: 'align-items:flex-end;gap:2px' }, h('div', { class: 'small muted' }, 'Эло'), h('div', { class: 'b', style: 'font-size:20px' }, fmt(r.rating)))),
+      r.next && h('div', { class: 'small soft' }, `До ранга «${r.next.name}»: ${fmt(Math.max(0, r.next.from - r.rating))} Эло`),
+      h('div', { class: 'small muted' }, `${P.season.name} · осталось ${daysLeft} дн. В конце сезона — награда по рангу, Эло частично сбрасывается.`)),
+    // пропуск сезона
+    h('div', { class: 'label' }, `Пропуск сезона · уровень ${P.pass.level}`),
+    h('div', { class: 'glass card', style: 'gap:10px' },
+      h('div', { class: 'progress' }, h('div', { style: `width:${(lvlXp / P.pass.perLevel) * 100}%` })),
+      h('div', { class: 'small muted' }, `${lvlXp}/${P.pass.perLevel} опыта до следующего уровня · опыт за раздачи, победы, задания и сундуки`),
+      h('div', { class: 'pass-row' }, P.pass.levels.map((L) => {
+        const open = P.pass.level >= L.lvl;
+        const got = P.pass.claimed.includes(L.lvl);
+        const label = L.chips ? `${fmt(L.chips)}` : L.hints ? '💡 1' : `📦 ${CHEST_NAMES[L.chest]}`;
+        return h('button', { class: `pass-lvl ${open ? 'open' : ''} ${got ? 'got' : ''}`, disabled: !open || got, onclick: () => run({ t: 'claimPass', lvl: L.lvl }) },
+          h('div', { class: 'small muted' }, `ур. ${L.lvl}`), h('div', { class: 'b', style: 'font-size:12px' }, label), got && h('div', { class: 'small', style: 'color:var(--green)' }, '✓'));
+      }))),
+    // бонус дня
+    h('div', { class: 'label' }, `Бонус за вход · день ${P.bonus.streak || 0} подряд`),
+    h('div', { class: 'glass card', style: 'gap:10px' },
+      h('div', { class: 'streak-row' }, P.bonus.table.map((rew, i) => {
+        const day = i + 1;
+        const cur = ((P.bonus.streak || 0) - 1) % 7 + 1;
+        const done = P.bonus.today ? day <= cur : day < (P.bonus.streak ? cur + 1 : 1);
+        return h('div', { class: `streak-day ${done ? 'done' : ''}` }, h('div', { class: 'small muted' }, `д${day}`), h('div', { class: 'b', style: 'font-size:12px' }, rew === 'chest' ? '📦' : fmt(rew)));
+      })),
+      h('button', { class: 'btn', disabled: P.bonus.today, onclick: () => run({ t: 'claimDaily' }) }, P.bonus.today ? 'Сегодня уже получен — приходи завтра' : 'Забрать бонус')),
+    // сундуки
+    h('div', { class: 'label' }, 'Сундуки'),
+    h('div', { class: 'grid3' }, Object.entries(CHEST_NAMES).map(([k, name]) => h('button', {
+      class: `chest ${k}`, disabled: !(P.chests[k] > 0), onclick: () => run({ t: 'openChest', kind: k }),
+    }, h('div', { style: 'font-size:28px' }, '📦'), h('div', { class: 'b', style: 'font-size:13px' }, name), h('div', { class: 'small muted' }, `есть: ${P.chests[k] || 0}`)))),
+    S.chestOpened && h('div', { class: 'glass card chest-res' },
+      h('div', { class: 'row between' }, h('div', { class: 'b' }, `${S.chestOpened.name} открыт!`),
+        h('button', { class: 'hint-x', 'aria-label': 'Закрыть', onclick: () => { S.chestOpened = null; render(); } }, '✕')),
+      h('div', { class: 'small' }, `+${fmt(S.chestOpened.chips)} фишек${S.chestOpened.hints ? ` · +${S.chestOpened.hints} подсказки` : ''} · +${S.chestOpened.xp} опыта${S.chestOpened.cosmetic ? ` · ${S.chestOpened.cosmetic}` : ''}`)),
+    // задания
+    h('div', { class: 'label' }, 'Задания дня'),
+    h('div', { class: 'col', style: 'gap:8px' }, P.daily.map(quest('daily'))),
+    h('div', { class: 'label' }, 'Задания недели'),
+    h('div', { class: 'col', style: 'gap:8px' }, P.weekly.map(quest('weekly'))),
+    // достижения
+    h('div', { class: 'label' }, `Достижения · ${P.achievements.filter((a) => a.at).length}/${P.achievements.length}`),
+    h('div', { class: 'ach-grid' }, P.achievements.map((a) => h('div', { class: `ach ${a.at ? 'got' : ''}`, title: a.text },
+      h('div', { style: 'font-size:22px' }, a.at ? '🏅' : '🔒'),
+      h('div', { class: 'b', style: 'font-size:12px' }, a.name),
+      h('div', { class: 'small muted', style: 'font-size:10.5px;line-height:1.3' }, a.text)))),
+    // статистика
+    h('div', { class: 'label' }, 'Статистика'),
+    h('div', { class: 'glass card' },
+      h('div', { class: 'grid3' }, stat('Раздач', fmt(st.hands)), stat('Выиграно', pctOf(st.wins, st.hands)), stat('Вход в игру', pctOf(st.vpip, st.hands))),
+      h('div', { class: 'grid3' }, stat('Вскрытий', fmt(st.showdowns)), stat('Победы на вскр.', pctOf(st.showdownWins, st.showdowns)), stat('Лучшая серия', st.bestStreak || 0)),
+      h('div', { class: 'grid3' }, stat('Лучшая рука', st.bestCat >= 0 ? HAND_CATS[st.bestCat] : '—'), stat('Турниров', st.tours), stat('Побед в турн.', st.tourWins))),
+    h('div', { style: 'height:80px' }),
+    nav());
+}
+
 // ---------- Сольный турнир ----------
 
 function soloScreen() {
@@ -1376,12 +1465,18 @@ function profileScreen() {
     winRewardsCard(me),
     themesCard(),
     settingsCard(),
-    h('div', { class: 'label' }, 'Топ игроков по рейтингу'),
+    // таблицы лидеров
+    h('div', { class: 'label' }, 'Лучшие игроки'),
+    h('div', { class: 'seg' }, [['rating', 'Эло'], ['hands', 'Раздачи'], ['pot', 'Банк']].map(([k, label]) => h('button', {
+      class: (S.topKind || 'rating') === k ? 'on' : '', onclick: () => { S.topKind = k; S.top = null; send({ t: 'top', kind: k }); render(); },
+    }, label))),
     S.top == null ? h('div', { class: 'muted small' }, 'Загрузка…')
       : S.top.length ? S.top.map((p, i) => h('div', { class: 'item' },
-        h('div', { class: 'row' }, h('div', { class: 'seat-dot taken' }, i + 1), h('div', { class: 'b', style: 'font-size:14px' }, p.name)),
-        h('div', { class: 'col', style: 'align-items:flex-end' }, h('div', { class: 'b' }, p.rating), h('div', { class: 'small muted' }, `${p.games} турн.`))))
-        : h('div', { class: 'muted small' }, 'Рейтинг появится после первых турниров'),
+        h('div', { class: 'row' }, h('div', { class: 'seat-dot taken' }, i + 1),
+          h('div', { class: 'col', style: 'gap:0' }, h('div', { class: 'b', style: 'font-size:14px' }, p.name),
+            h('div', { class: 'small', style: `color:${p.rankColor}` }, p.rank))),
+        h('div', { class: 'b' }, fmt(p.value))))
+        : h('div', { class: 'muted small' }, 'Пока пусто — сыграй первым'),
     h('div', { style: 'height:70px' }),
     nav());
 }
@@ -1431,7 +1526,7 @@ function combosScreen() {
 
 // ---------- Рендер ----------
 
-const SCREENS = { solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
+const SCREENS = { progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
 
 function render() {
   const app = document.getElementById('app');
