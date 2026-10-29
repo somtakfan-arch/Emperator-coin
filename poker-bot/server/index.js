@@ -189,6 +189,20 @@ const handlers = {
     hub.sendMe(uid);
     return { t: 'ok', id: tour.id };
   },
+  // Кнопка админа: все боты, что ещё в раздаче, идут олл-ин (до конца раздачи).
+  // Только столы без других людей: с ботами, демо, сольные турниры.
+  forceJam(uid) {
+    if (!config.adminIds.includes(uid)) throw new Error('Нет доступа');
+    const at = activeTable(uid);
+    if (!at) throw new Error('Ты не за столом');
+    const solo = solos.get(uid);
+    const own = botRooms.get(uid);
+    const ok = (solo && !solo.done && solo.tableOf(uid) === at.table) || ((own instanceof BotRoom || own instanceof DemoRoom) && own.table === at.table);
+    if (!ok || at.table.players.some((p) => !p.isBot && p.id !== uid)) throw new Error('Только в играх с ботами');
+    if (!at.table.inHand) throw new Error('Раздача ещё не началась');
+    at.table.forceJam = true;
+    return { t: 'ok' };
+  },
   // демо-стол для видео — только админ, без фишек и Эло
   sitDemo(uid, m) {
     if (!config.adminIds.includes(uid)) throw new Error('Нет доступа');

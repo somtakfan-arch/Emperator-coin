@@ -80,6 +80,8 @@ export function botSeat(bot, table) {
     act: async (state) => {
       table.setActor(bot.id, state);
       await sleep(500 + Math.random() * 900);
+      // кнопка админа «все ва-банк»: до конца раздачи боты идут олл-ин
+      if (table.forceJam) return state.stack > state.toCall ? { type: 'raise', to: state.myBet + state.stack } : { type: 'call' };
       return bot.act(state);
     },
     observe: (e) => bot.observe(e),
@@ -179,7 +181,10 @@ export class GameTable {
   onEvent(e) {
     if (e.type === 'handStart') this.resetView();
     // ходы текущей раздачи — по ним честная подсказка оценивает руки соперников
-    if (e.type === 'handStart') this.handLog = [];
+    if (e.type === 'handStart') {
+      this.handLog = [];
+      this.forceJam = false;
+    }
     this.handLog?.push(e);
     // счётчик выигранных раздач (на демо-столах не считается)
     if (e.type === 'handEnd' && !this.noStats) {

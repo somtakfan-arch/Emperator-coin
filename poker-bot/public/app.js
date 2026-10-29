@@ -636,7 +636,7 @@ function tableScreen() {
       T.invite ? h('button', { class: 'invite-pill', onclick: () => shareMixed(T.invite) }, `Позвать друзей · мест ${T.seatsFree}`) : `мест свободно: ${T.seatsFree}`]
     : [T.title];
   // за столами с людьми правило про подсказки видно всем
-  const hintRule = T.kind === 'tour' || T.kind === 'mixed'
+  const hintRule = T.kind === 'mixed' || (T.kind === 'tour' && !T.solo)
     ? h('div', { class: 'hint-rule' }, 'Здесь работают подсказки — они видят карты') : null;
 
   const elo = !T.inHand && T.eloDelta ? Math.round(T.eloDelta) || (T.eloDelta > 0 ? 1 : -1) : 0;
@@ -665,6 +665,10 @@ function tableScreen() {
     result,
     hintRule,
     myTurn && hintFloat(T),
+    // только админ, только игры с ботами: все боты в раздаче — олл-ин
+    S.me.isAdmin && T.inHand && (T.kind === 'bots' || T.solo) && h('button', {
+      class: 'jam-btn', 'aria-label': 'Все боты — олл-ин', onclick: async () => { if (await run({ t: 'forceJam' })) toast('Боты идут ва-банк'); },
+    }, 'Все ва-банк'),
     actionPanel(T, mySeat, myTurn),
     T.demo && S.pick && pickerModal(T));
 }

@@ -436,8 +436,9 @@ test('выйти можно с любого стола: со стола на в�
   await c.req({ t: 'invoice', pack: 'p1' });
   await c.waitFor((m) => m.t === 'me' && m.me.chips === 5000);
   await c.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 500, minutes: 10 });
-  await c.waitFor((m) => m.t === 'table' && m.table?.locked && m.table.handId >= 3, 60000);
-  await c.req({ t: 'leave' });
+  // бот может проиграть весь стек раньше — тогда стол закрывается сам
+  await c.waitFor((m) => m.t === 'left' || (m.t === 'table' && m.table?.locked && m.table.handId >= 3), 60000);
+  if (!c.msgs.some((m) => m.t === 'left')) await c.req({ t: 'leave' });
   const left = await c.waitFor((m) => m.t === 'left', 30000);
   await c.req({ t: 'startSolo', buyin: 500, size: 18, blindMin: 6 });
   await c.waitFor((m) => m.t === 'table' && m.table?.solo, 30000);
@@ -452,4 +453,25 @@ test('выйти можно с любого стола: со стола на в�
   assert.equal(me.me.table, null, 'карточки «Ты за столом» больше нет');
   assert.ok(Number.isInteger(me.me.handsWon));
   c.close();
+});
+
+test('кнопка «все ва-банк»: только админ, только с ботами — боты в раздаче идут олл-ин', async () => {
+  const x = new Client(7004);
+  await x.ready;
+  await assert.rejects(x.req({ t: 'forceJam' }), /Нет доступа/);
+  x.close();
+
+  const a = new Client(7001);
+  await a.ready;
+  await a.req({ t: 'sitDemo', mode: '6', botName: 'Скала' });
+  await a.waitFor((m) => m.t === 'table' && m.table?.demo && m.table.inHand, 30000);
+  await a.req({ t: 'forceJam' });
+  const hand = a.table.handId;
+  // каждый бот, который ходит после нажатия, ставит всё (или коллирует олл-ин)
+  const snap = await a.waitFor((m) => m.t === 'table' && m.table?.handId === hand
+    && m.table.seats.some((s) => s.isBot && s.allIn), 30000);
+  assert.ok(snap.table.seats.some((s) => s.isBot && s.allIn));
+  a.ws.send(JSON.stringify({ t: 'leave' }));
+  await a.waitFor((m) => m.t === 'left', 30000);
+  a.close();
 });
