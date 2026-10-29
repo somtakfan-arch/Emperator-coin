@@ -33,7 +33,7 @@ const DEFAULTS = {
   readSkill: 0.8,      // насколько верит пойманным блефам соперника
   bluff3: 0.35,        // частота 3бет-блефа подходящими руками
   bluff4: 0.12,
-  callTax: 0.02,       // запас при колле — страховка от ошибок модели
+  callTax: 0.01,       // запас при колле — страховка от ошибок модели
   jam: 0.15,           // любовь к олл-инам: 0 — только по расчёту, 1 — давит олл-инами при любой возможности
   deepJam: false,      // пушить и при глубоком стеке (минус к силе, плюс к давлению)
   fear: 0.5,           // страх, как у человека: боится больших ставок, страшных досок и чек-рейзов
@@ -439,7 +439,7 @@ export class EliteBot {
     const size = Math.min(2, s.toCall / Math.max(1, s.pot));
     const raisedBack = s.actions.some((a) => a.street === s.street && a.id === this.id && a.action === 'raise') ? 0.6 : 0;
     const scare = 1 + scaryBoard(s.board) + raisedBack;
-    return P.fear * (0.5 * risk + 0.25 * size) * scare * 0.3 * (1 - eq) * (s.pot + s.toCall);
+    return P.fear * (0.5 * risk + 0.25 * size) * scare * 0.08 * (1 - eq) * (s.pot + s.toCall);
   }
 
   // то же для префлопа — в долях банка (поправка к шансам)
@@ -474,10 +474,13 @@ export class EliteBot {
       const tos = new Set();
       for (const f of s.toCall === 0 ? P.sizes : P.raiseSizes) tos.add(this.raiseTo(s, f));
       // олл-ин в вариантах: при небольшом стеке — всем; при глубоком — только «пушерам» (Маньяк)
-      if (s.stack <= pot * 5 || P.deepJam) tos.add(maxTo);
+      if (s.stack <= pot * 3 || P.deepJam) tos.add(maxTo);
+      const fear = s.toCall > 0 ? this.fearTax(s, eq) : 0;
       for (const to of tos) {
-        // давление: олл-ин получает бонус по характеру бота
-        const ev = this.betEV(s, sim, to, facingCtx) + P.aggr * pot + (to === maxTo ? P.jam * 0.03 * pot : 0);
+        // давление: олл-ин получает небольшой бонус по характеру бота;
+        // страх действует и на рейз — чем больше ставишь в ответ, тем страшнее (иначе бот выбирает «фолд или олл-ин»)
+        const ev = this.betEV(s, sim, to, facingCtx) + P.aggr * pot + (to === maxTo ? P.jam * 0.012 * pot : 0)
+          - fear * Math.min(3, (to - s.myBet) / Math.max(1, s.toCall));
         cands.push({ a: { type: 'raise', to }, ev, eq });
       }
     }
@@ -558,7 +561,7 @@ export class EliteBot {
         return this.open(s, to3);
       }
       // не хочет мучиться с рукой после флопа — сразу олл-ин
-      if (eff <= 30 && pct >= 0.88 && r < P.jam) return this.jam(s);
+      if (eff <= 30 && pct >= 0.92 && r < P.jam * 0.5) return this.jam(s);
       if (eq * R + implied >= potOdds + this.preFear(s) && pct >= 1 - defend) return { type: 'call' };
       return this.passive(s);
     }

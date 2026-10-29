@@ -31,7 +31,7 @@ export class Maniac extends EliteBot {
   constructor(opts) {
     super('Маньяк', 'борзый: широкие диапазоны, овербеты, давление', {
       wide: 1.35, aggr: 0.03, trap: 0, sizes: [0.5, 1, 1.6], raiseSizes: [1, 1.6],
-      temp: 0.035, priorN: 10, bluff3: 0.6, bluff4: 0.3, jam: 0.55, deepJam: true, fear: 0.2,
+      temp: 0.035, priorN: 10, bluff3: 0.6, bluff4: 0.3, jam: 0.4, deepJam: true, fear: 0.2,
     }, opts);
   }
 }

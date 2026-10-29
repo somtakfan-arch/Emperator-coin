@@ -26,7 +26,7 @@ const KINDS = [
   { kind: 'агрессор', text: 'много ставит и блефует', elo: 1350,
     p: { wide: 1.25, aggr: 0.02, temp: 0.08, readSkill: 0.5, bluff3: 0.45, bluff4: 0.2, jam: 0.35, fear: 0.3, priorN: 15, sizes: [0.5, 1], raiseSizes: [1, 1.5] } },
   { kind: 'пушер', text: 'обожает олл-ины', elo: 1200,
-    p: { wide: 1.1, aggr: 0.01, temp: 0.08, readSkill: 0.4, bluff3: 0.3, bluff4: 0.15, jam: 0.7, deepJam: true, fear: 0.2, priorN: 20 } },
+    p: { wide: 1.1, aggr: 0.01, temp: 0.08, readSkill: 0.4, bluff3: 0.3, bluff4: 0.15, jam: 0.5, deepJam: true, fear: 0.2, priorN: 20 } },
 ];
 
 // детерминированный «случайный» разброс, чтобы у каждого бота был свой характер навсегда
