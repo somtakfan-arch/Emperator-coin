@@ -475,3 +475,26 @@ test('кнопка «все ва-банк»: только админ, тольк
   await a.waitFor((m) => m.t === 'left', 30000);
   a.close();
 });
+
+test('кнопка «два туза»: только админ, в следующей раздаче приходят AA', async () => {
+  const x = new Client(7005);
+  await x.ready;
+  await assert.rejects(x.req({ t: 'forceAces' }), /Нет доступа/);
+  x.close();
+
+  const a = new Client(7001);
+  await a.ready;
+  await a.req({ t: 'invoice', pack: 'p1' });
+  await a.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 500 });
+  await a.waitFor((m) => m.t === 'table' && m.table?.kind === 'bots', 30000);
+  await a.req({ t: 'forceAces' });
+  const isAces = (cs) => cs?.length === 2 && cs.every((c) => c >> 2 === 12);
+  const got = await a.waitFor((m) => m.t === 'left'
+    || (m.t === 'table' && isAces(m.table?.seats.find((s) => s.me)?.cards)), 30000);
+  if (got.t !== 'left') {
+    assert.ok(isAces(got.table.seats.find((s) => s.me).cards));
+    a.ws.send(JSON.stringify({ t: 'leave' }));
+    await a.waitFor((m) => m.t === 'left', 30000);
+  }
+  a.close();
+});

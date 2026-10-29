@@ -265,4 +265,6 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
 .wins-badge { position: absolute; top: 50%; left: calc(100% + 5px); transform: translateY(-50%); display: flex; align-items: center; gap: 2px; height: 16px; padding: 0 5px; border-radius: 8px; background: linear-gradient(145deg, #f2c94c, #c99a2e); color: #1a1408; font-size: 10px; font-weight: 800; line-height: 1; box-shadow: 0 2px 6px rgba(0,0,0,0.4); pointer-events: none; }
 .wins-badge svg { width: 9px; height: 9px; }
 .wins-badge.on-left { left: auto; right: calc(100% + 5px); }
-.jam-btn { position: absolute; left: 12px; top: calc(62px + env(safe-area-inset-top)); z-index: 6; height: 28px; padding: 0 11px; border-radius: 14px; border: 1px solid rgba(235,87,87,0.55); background: rgba(40,12,12,0.7); color: #ffb4b4; font-size: 12px; font-weight: 700; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.admin-btns { position: absolute; left: 12px; top: calc(62px + env(safe-area-inset-top)); z-index: 6; display: flex; gap: 6px; }
+.jam-btn { height: 28px; padding: 0 11px; border-radius: 14px; border: 1px solid rgba(235,87,87,0.55); background: rgba(40,12,12,0.7); color: #ffb4b4; font-size: 12px; font-weight: 700; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.aces-btn { border-color: rgba(242,201,76,0.6); background: rgba(40,32,10,0.7); color: #f7dd8a; letter-spacing: 1px; }

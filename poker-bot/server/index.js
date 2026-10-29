@@ -12,6 +12,7 @@ import { Tournaments } from './game/tournament.js';
 import { SoloTour, SOLO_SIZES, SOLO_BLINDS } from './game/solotour.js';
 import { BOT_CLASSES, Hunter } from '../core/bots.js';
 import { CROWD } from '../core/crowd.js';
+import { arrangeDeck } from './game/demoplan.js';
 
 const PUBLIC = new URL('../public/', import.meta.url).pathname;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json' };
@@ -71,6 +72,19 @@ const hub = {
 };
 hooks.onBalance = (uid) => hub.sendMe(uid);
 const tournaments = new Tournaments(hub);
+
+// Стол, где работают кнопки админа: только админ и только без других людей
+// (столы с ботами, демо, сольные турниры)
+function adminBotTable(uid) {
+  if (!config.adminIds.includes(uid)) throw new Error('Нет доступа');
+  const at = activeTable(uid);
+  if (!at) throw new Error('Ты не за столом');
+  const solo = solos.get(uid);
+  const own = botRooms.get(uid);
+  const ok = (solo && !solo.done && solo.tableOf(uid) === at.table) || ((own instanceof BotRoom || own instanceof DemoRoom) && own.table === at.table);
+  if (!ok || at.table.players.some((p) => !p.isBot && p.id !== uid)) throw new Error('Только в играх с ботами');
+  return at.table;
+}
 
 function activeTable(uid) {
   const room = botRooms.get(uid);
@@ -190,17 +204,23 @@ const handlers = {
     return { t: 'ok', id: tour.id };
   },
   // Кнопка админа: все боты, что ещё в раздаче, идут олл-ин (до конца раздачи).
-  // Только столы без других людей: с ботами, демо, сольные турниры.
   forceJam(uid) {
-    if (!config.adminIds.includes(uid)) throw new Error('Нет доступа');
-    const at = activeTable(uid);
-    if (!at) throw new Error('Ты не за столом');
-    const solo = solos.get(uid);
-    const own = botRooms.get(uid);
-    const ok = (solo && !solo.done && solo.tableOf(uid) === at.table) || ((own instanceof BotRoom || own instanceof DemoRoom) && own.table === at.table);
-    if (!ok || at.table.players.some((p) => !p.isBot && p.id !== uid)) throw new Error('Только в играх с ботами');
-    if (!at.table.inHand) throw new Error('Раздача ещё не началась');
-    at.table.forceJam = true;
+    const table = adminBotTable(uid);
+    if (!table.inHand) throw new Error('Раздача ещё не началась');
+    table.forceJam = true;
+    return { t: 'ok' };
+  },
+  // Кнопка админа: в следующей раздаче тебе приходят два туза
+  forceAces(uid) {
+    const table = adminBotTable(uid);
+    const suits = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
+    const aces = [12 * 4 + suits[0], 12 * 4 + suits[1]];
+    const prev = table.engine.demoDeck; // на демо-столе свой выбор карт — не теряем его
+    table.engine.demoDeck = (deck, ids) => {
+      table.engine.demoDeck = prev; // один раз
+      const d = prev ? prev(deck, ids) : deck;
+      return ids.includes(uid) ? arrangeDeck({ holes: { [uid]: aces }, board: [] }, d, ids) : d;
+    };
     return { t: 'ok' };
   },
   // демо-стол для видео — только админ, без фишек и Эло

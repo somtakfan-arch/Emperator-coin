@@ -666,9 +666,13 @@ function tableScreen() {
     hintRule,
     myTurn && hintFloat(T),
     // только админ, только игры с ботами: все боты в раздаче — олл-ин
-    S.me.isAdmin && T.inHand && (T.kind === 'bots' || T.solo) && h('button', {
-      class: 'jam-btn', 'aria-label': 'Все боты — олл-ин', onclick: async () => { if (await run({ t: 'forceJam' })) toast('Боты идут ва-банк'); },
-    }, 'Все ва-банк'),
+    S.me.isAdmin && (T.kind === 'bots' || T.solo) && h('div', { class: 'admin-btns' },
+      T.inHand && h('button', {
+        class: 'jam-btn', 'aria-label': 'Все боты — олл-ин', onclick: async () => { if (await run({ t: 'forceJam' })) toast('Боты идут ва-банк'); },
+      }, 'Все ва-банк'),
+      h('button', {
+        class: 'jam-btn aces-btn', 'aria-label': 'Два туза в следующей раздаче', onclick: async () => { if (await run({ t: 'forceAces' })) toast('В следующей раздаче у тебя два туза'); },
+      }, 'A A')),
     actionPanel(T, mySeat, myTurn),
     T.demo && S.pick && pickerModal(T));
 }
