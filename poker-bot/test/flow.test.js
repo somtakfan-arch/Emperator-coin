@@ -303,6 +303,7 @@ test('стол с друзьями: двое людей + боты, чужие �
   const hostSeat = snap.table.seats.find((s) => s.id === 9101);
   if (!hostSeat.hand) assert.equal(hostSeat.cards, null, 'карты хоста другу не видны');
   assert.ok(snap.table.seats.filter((s) => s.isBot).length <= 2, 'ботов не больше двух (проигравшие выбывают)');
+  assert.ok(snap.table.seats.every((s) => (s.isBot ? s.handsWon === null : Number.isInteger(s.handsWon))), 'значок раздач — только у людей');
   await host.waitFor((m) => m.t === 'turn', 60000);
   await assert.rejects(host.req({ t: 'hint' }), /Подсказок нет|в твой ход/); // с людьми работает, но нужна купленная подсказка
   // играем пару раздач и встаём

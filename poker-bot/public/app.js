@@ -285,6 +285,9 @@ function balancePill() {
     icon('chip', 16), h('span', { class: 'b' }, fmt(S.me?.chips)), h('span', { class: 'plus' }, '+'));
 }
 
+// 1 234 → 1,2k — чтобы значок не разрастался
+const fmtShort = (n) => (n >= 10000 ? `${Math.floor(n / 1000)}k` : n >= 1000 ? `${(n / 1000).toFixed(1).replace('.0', '')}k` : String(n));
+
 function timeLeft(ts) {
   const min = Math.max(0, Math.round((ts - nowSrv()) / 60000));
   if (min < 60) return `${min} мин`;
@@ -601,7 +604,10 @@ function tableScreen() {
       s.me ? h('div', { class: 'avatar', style: 'width:24px;height:24px;font-size:11px' }, initial(s.name)) : h('div', { class: 'ini' }, initial(s.name)),
       h('div', { class: 'col', style: 'gap:0;min-width:0' },
         h('div', { class: 'nm' }, s.me ? 'Ты' : s.name),
-        h('div', { class: 'st' }, s.allIn ? 'олл-ин' : fmt(s.stack))));
+        h('div', { class: 'st' }, s.allIn ? 'олл-ин' : fmt(s.stack))),
+      // значок выигранных раздач — только у людей
+      s.handsWon > 0 && h('div', { class: `wins-badge ${x > 60 ? 'on-left' : ''}`, title: 'Выиграно раздач', 'aria-label': `Выиграно раздач: ${s.handsWon}` },
+        icon('trophy', 9), fmtShort(s.handsWon)));
     const planned = T.demo && T.plan?.holes?.[s.id];
     const extras = h('div', { class: 'row', style: 'gap:4px;min-height:20px' },
       T.demo && h('button', { class: 'pick-btn', 'aria-label': `Выбрать карты: ${s.me ? 'мне' : s.name}`, onclick: () => openPicker({ hole: s.id }) }, '✎'),

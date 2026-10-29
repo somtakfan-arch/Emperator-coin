@@ -9,6 +9,7 @@ import { config } from '../config.js';
 import { db } from '../db.js';
 
 const addHandWon = db.prepare('UPDATE users SET hands_won = hands_won + 1 WHERE id = ?');
+const getHandsWon = db.prepare('SELECT hands_won FROM users WHERE id = ?');
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms * config.speed));
 const cryptoRng = () => randomInt(0, 2 ** 32) / 2 ** 32; // колода тасуется криптостойко
@@ -120,6 +121,8 @@ export class GameTable {
 
   addPlayer(p) {
     if (p.bot instanceof HumanSeat) p.bot.table = this;
+    // выигранные раздачи — значок рядом с игроком за столом
+    if (!p.isBot && p.handsWon == null) p.handsWon = getHandsWon.get(p.id)?.hands_won ?? 0;
     this.players.push(p);
     this.broadcast();
   }
@@ -181,7 +184,10 @@ export class GameTable {
     // счётчик выигранных раздач (на демо-столах не считается)
     if (e.type === 'handEnd' && !this.noStats) {
       for (const id of new Set(e.winners.map((w) => w.id))) {
-        if (this.players.some((p) => p.id === id && !p.isBot)) addHandWon.run(id);
+        const p = this.players.find((x) => x.id === id && !x.isBot);
+        if (!p) continue;
+        addHandWon.run(id);
+        p.handsWon = (p.handsWon ?? 0) + 1;
       }
     }
     const v = this.v;
@@ -241,6 +247,7 @@ export class GameTable {
           // твоя текущая комбинация (только тебе)
           ...(mine && dealt && p.bot.hole && !v.folded.has(p.id) ? this.myHand(p.bot.hole) : {}),
           away: !p.isBot && p.bot.sittingOut,
+          handsWon: p.isBot ? null : p.handsWon ?? 0,
         };
       }),
     };

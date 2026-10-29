@@ -261,3 +261,7 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
   .seat.me .pcard.lg .r { font-size: 18px; } .seat.me .pcard.lg .s { font-size: 16px; }
   .seat { gap: 2px; }
 }
+.plate { position: relative; }
+.wins-badge { position: absolute; top: 50%; left: calc(100% + 5px); transform: translateY(-50%); display: flex; align-items: center; gap: 2px; height: 16px; padding: 0 5px; border-radius: 8px; background: linear-gradient(145deg, #f2c94c, #c99a2e); color: #1a1408; font-size: 10px; font-weight: 800; line-height: 1; box-shadow: 0 2px 6px rgba(0,0,0,0.4); pointer-events: none; }
+.wins-badge svg { width: 9px; height: 9px; }
+.wins-badge.on-left { left: auto; right: calc(100% + 5px); }
