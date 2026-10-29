@@ -10,6 +10,10 @@ import { db } from '../db.js';
 
 const addHandWon = db.prepare('UPDATE users SET hands_won = hands_won + 1 WHERE id = ?');
 const getHandsWon = db.prepare('SELECT hands_won FROM users WHERE id = ?');
+// выигранные раздачи ботов — общий счёт по имени бота, где бы он ни играл
+const addBotWin = db.prepare('INSERT INTO bot_stats (bot, hands_won) VALUES (?, 1) ON CONFLICT (bot) DO UPDATE SET hands_won = hands_won + 1');
+const botWins = new Map(db.prepare('SELECT bot, hands_won FROM bot_stats').all().map((r) => [r.bot, r.hands_won]));
+export const botHandsWon = (name) => botWins.get(name) ?? 0;
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms * config.speed));
 const cryptoRng = () => randomInt(0, 2 ** 32) / 2 ** 32; // колода тасуется криптостойко
@@ -194,11 +198,16 @@ export class GameTable {
       this.dumped = new Set();
     }
     this.handLog?.push(e);
-    // счётчик выигранных раздач (на демо-столах не считается)
+    // счётчик выигранных раздач — у людей и у ботов (на демо-столах не считается)
     if (e.type === 'handEnd' && !this.noStats) {
       for (const id of new Set(e.winners.map((w) => w.id))) {
-        const p = this.players.find((x) => x.id === id && !x.isBot);
+        const p = this.players.find((x) => x.id === id);
         if (!p) continue;
+        if (p.isBot) {
+          addBotWin.run(p.name);
+          botWins.set(p.name, botHandsWon(p.name) + 1);
+          continue;
+        }
         addHandWon.run(id);
         p.handsWon = (p.handsWon ?? 0) + 1;
       }
@@ -260,7 +269,7 @@ export class GameTable {
           // твоя текущая комбинация (только тебе)
           ...(mine && dealt && p.bot.hole && !v.folded.has(p.id) ? this.myHand(p.bot.hole) : {}),
           away: !p.isBot && p.bot.sittingOut,
-          handsWon: p.isBot ? null : p.handsWon ?? 0,
+          handsWon: p.isBot ? botHandsWon(p.name) : p.handsWon ?? 0,
         };
       }),
     };

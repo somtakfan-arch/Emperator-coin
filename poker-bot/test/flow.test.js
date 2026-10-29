@@ -303,7 +303,7 @@ test('стол с друзьями: двое людей + боты, чужие �
   const hostSeat = snap.table.seats.find((s) => s.id === 9101);
   if (!hostSeat.hand) assert.equal(hostSeat.cards, null, 'карты хоста другу не видны');
   assert.ok(snap.table.seats.filter((s) => s.isBot).length <= 2, 'ботов не больше двух (проигравшие выбывают)');
-  assert.ok(snap.table.seats.every((s) => (s.isBot ? s.handsWon === null : Number.isInteger(s.handsWon))), 'значок раздач — только у людей');
+  assert.ok(snap.table.seats.every((s) => Number.isInteger(s.handsWon)), 'значок раздач — у всех, и у ботов');
   await host.waitFor((m) => m.t === 'turn', 60000);
   await assert.rejects(host.req({ t: 'hint' }), /Подсказок нет|в твой ход/); // с людьми работает, но нужна купленная подсказка
   // играем пару раздач и встаём
@@ -491,10 +491,12 @@ test('кнопка «два туза»: только админ, в следую
   await a.req({ t: 'forceAces' });
   const pressedAt = a.table.handId; // тузы — со следующей раздачи (в текущей могут прийти и сами)
   const isAces = (cs) => cs?.length === 2 && cs.every((c) => c >> 2 === 12);
+  // нажали ровно между раздачами — тузы придут через одну, поэтому смотрим две следующие
   const got = await a.waitFor((m) => m.t === 'left'
-    || (m.t === 'table' && m.table?.handId > pressedAt && m.table.seats.find((s) => s.me)?.cards), 30000);
+    || (m.t === 'table' && m.table?.handId > pressedAt && m.table.handId <= pressedAt + 2 && isAces(m.table.seats.find((s) => s.me)?.cards))
+    || (m.t === 'table' && m.table?.handId > pressedAt + 2), 60000);
   if (got.t !== 'left') {
-    assert.ok(isAces(got.table.seats.find((s) => s.me).cards), 'в следующей раздаче — два туза');
+    assert.ok(isAces(got.table.seats.find((s) => s.me)?.cards), 'в одной из следующих раздач — два туза');
     // если раздача дошла до ривера — на тёрне и ривере тоже тузы (каре)
     const hand = got.table.handId;
     const river = await a.waitFor((m) => m.t === 'table' && m.table?.handId === hand && m.table.board.length === 5, 15000).catch(() => null);
@@ -536,4 +538,26 @@ test('кнопка «олл-ин −1»: боты ставят всё, кром�
   a.ws.send(JSON.stringify({ t: 'leave' }));
   await a.waitFor((m) => m.t === 'left', 30000);
   a.close();
+});
+
+test('у ботов свой счёт выигранных раздач — растёт, где бы они ни играли', async () => {
+  const { botHandsWon } = await import('../server/game/table.js');
+  const c = new Client(9701);
+  await c.ready;
+  await c.req({ t: 'invoice', pack: 'p1' });
+  const before = botHandsWon('Барон');
+  await c.req({ t: 'sitBots', mode: 'hu', botName: 'Барон', buyin: 500 });
+  // ждём раздачу, которую выиграл бот
+  const snap = await c.waitFor((m) => m.t === 'left' || (m.t === 'table' && m.table?.result?.some((w) => w.id < 0)), 60000);
+  if (snap.t === 'table') {
+    assert.ok(botHandsWon('Барон') > before);
+    const seat = c.table.seats.find((s) => s.isBot);
+    await c.waitFor((m) => m.t === 'table' && m.table?.seats.find((s) => s.isBot)?.handsWon >= before + 1, 30000);
+    assert.ok(seat);
+    c.ws.send(JSON.stringify({ t: 'leave' }));
+    await c.waitFor((m) => m.t === 'left', 30000);
+  }
+  const db2 = db.prepare("SELECT hands_won FROM bot_stats WHERE bot = 'Барон'").get();
+  assert.equal(db2?.hands_won ?? 0, botHandsWon('Барон'), 'счёт сохранён в базе');
+  c.close();
 });

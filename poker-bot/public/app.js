@@ -44,6 +44,7 @@ const ICONS = {
   back: '<path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
   chev: '<path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
   home: '<path d="M4 11l8-6 8 6v8H4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+  bulb: '<path d="M9 18h6M10 21h4M12 3a6 6 0 00-3.5 10.9c.6.5 1 1.2 1 2V17h5v-1.1c0-.8.4-1.5 1-2A6 6 0 0012 3z" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>',
   trophy: '<path d="M7 4h10v4a5 5 0 01-10 0zM12 13v4M8 20h8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
   wallet: '<rect x="3" y="6" width="18" height="13" rx="3" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 12h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
   user: '<circle cx="12" cy="9" r="4" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 20c1.5-4 14.5-4 16 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',
@@ -573,7 +574,7 @@ function pcard(c, size = '') {
 
 // места вокруг стола (в % от области стола); я всегда снизу
 const SPOTS = {
-  bottom: [50, 99], bl: [15, 64], tl: [15, 26], top: [50, 8], tr: [85, 26], br: [85, 64],
+  bottom: [50, 99], bl: [18, 64], tl: [18, 26], top: [50, 8], tr: [82, 26], br: [82, 64],
 };
 const LAYOUT = { 1: ['top'], 2: ['tl', 'tr'], 3: ['tl', 'top', 'tr'], 4: ['bl', 'tl', 'tr', 'br'], 5: ['bl', 'tl', 'top', 'tr', 'br'] };
 
@@ -604,10 +605,10 @@ function tableScreen() {
       s.me ? h('div', { class: 'avatar', style: 'width:24px;height:24px;font-size:11px' }, initial(s.name)) : h('div', { class: 'ini' }, initial(s.name)),
       h('div', { class: 'col', style: 'gap:0;min-width:0' },
         h('div', { class: 'nm' }, s.me ? 'Ты' : s.name),
-        h('div', { class: 'st' }, s.allIn ? 'олл-ин' : fmt(s.stack))),
-      // значок выигранных раздач — только у людей
-      s.handsWon > 0 && h('div', { class: `wins-badge ${x > 60 ? 'on-left' : ''}`, title: 'Выиграно раздач', 'aria-label': `Выиграно раздач: ${s.handsWon}` },
-        icon('trophy', 9), fmtShort(s.handsWon)));
+        // стек и рядом значок выигранных раздач (у людей и у ботов) — внутри таблички, ничего не закрывает
+        h('div', { class: 'st' }, s.allIn ? 'олл-ин' : fmt(s.stack),
+          s.handsWon > 0 && h('span', { class: 'wins-badge', title: 'Выиграно раздач', 'aria-label': `Выиграно раздач: ${s.handsWon}` },
+            icon('trophy', 9), fmtShort(s.handsWon)))));
     const planned = T.demo && T.plan?.holes?.[s.id];
     const extras = h('div', { class: 'row', style: 'gap:4px;min-height:20px' },
       T.demo && h('button', { class: 'pick-btn', 'aria-label': `Выбрать карты: ${s.me ? 'мне' : s.name}`, onclick: () => openPicker({ hole: s.id }) }, '✎'),
@@ -619,10 +620,11 @@ function tableScreen() {
     return h('div', { class: `seat ${s.me ? 'me' : ''}`, style: `left:${x}%;top:${y}%` },
       top ? [cards.length ? h('div', { class: 'cards' }, cards) : null, plate, s.hand && h('div', { class: 'hand-name' }, s.hand), timer, extras]
         : s.me
-          // твоя комбинация — сбоку от карт, чтобы не закрывать флоп
-          ? [extras, h('div', { class: 'my-cards' }, h('div', { class: 'cards' }, cards),
-            (s.hand || s.myHand) && h('button', { class: 'my-hand', onclick: openCombos, 'aria-label': 'Моя комбинация — открыть справочник' }, s.hand || s.myHand)),
-            plate, timer]
+          // твоя комбинация — справа от твоей таблички: не закрывает ни флоп, ни соседей
+          ? [extras, h('div', { class: 'cards' }, cards),
+            h('div', { class: 'my-plate' }, plate,
+              (s.hand || s.myHand) && h('button', { class: 'my-hand', onclick: openCombos, 'aria-label': 'Моя комбинация — открыть справочник' }, s.hand || s.myHand)),
+            timer]
           : [extras, h('div', { class: 'cards' }, cards), plate, s.hand && h('div', { class: 'hand-name' }, s.hand), timer]);
   };
 
@@ -646,10 +648,14 @@ function tableScreen() {
       elo ? h('span', { class: `elo ${elo > 0 ? 'up' : 'down'}` }, ` Эло ${elo > 0 ? '+' : '−'}${Math.abs(elo)}`) : null)
     : null;
 
-  return h('div', { class: 'table-screen' },
+  const adminDock = S.me.isAdmin && (T.kind === 'bots' || T.solo);
+  return h('div', { class: `table-screen ${adminDock ? 'with-admin' : ''}` },
     h('div', { class: 'table-top' },
       h('button', { class: 'icon-btn', 'aria-label': T.kind === 'tour' ? 'В лобби' : 'Встать из-за стола', onclick: back }, icon('back', 18)),
       h('div', { class: 'title' }, info),
+      // подсказка — круглая кнопка в шапке, чтобы не закрывать игроков
+      myTurn && !S.hint && h('button', { class: 'icon-btn hint-ico', 'aria-label': 'Подсказка', onclick: askHint },
+        icon('bulb', 18), h('span', { class: 'hint-ico-count' }, T.demo ? '∞' : S.me.hints ? S.me.hints : '5⭐')),
       h('button', { class: 'icon-btn', 'aria-label': 'Справочник комбинаций', onclick: openCombos, style: 'font-weight:800;font-size:17px' }, '?')),
     h('div', { class: 'felt-wrap' },
       h('div', { class: 'felt' }),
@@ -665,19 +671,21 @@ function tableScreen() {
     result,
     hintRule,
     myTurn && hintFloat(T),
-    // только админ, только игры с ботами: все боты в раздаче — олл-ин
-    S.me.isAdmin && (T.kind === 'bots' || T.solo) && h('div', { class: 'admin-btns' },
-      T.inHand && h('button', {
-        class: 'jam-btn', 'aria-label': 'Все боты — олл-ин', onclick: async () => { if (await run({ t: 'forceJam' })) toast('Боты идут ва-банк'); },
-      }, 'Олл-ин'),
-      T.inHand && h('button', {
-        class: 'jam-btn', 'aria-label': 'Боты ставят всё кроме 1 фишки и сбрасывают',
-        onclick: async () => { if (await run({ t: 'forceDump' })) toast('Боты ставят почти всё — и сбросят'); },
-      }, 'Олл-ин −1'),
-      h('button', {
-        class: 'jam-btn aces-btn', 'aria-label': 'Два туза в следующей раздаче, ещё два на тёрне и ривере', onclick: async () => { if (await run({ t: 'forceAces' })) toast('Следующая раздача: тузы у тебя и на тёрне с ривером'); },
-      }, 'A A')),
-    actionPanel(T, mySeat, myTurn),
+    // низ экрана: кнопки админа (только в играх с ботами) над панелью хода
+    h('div', { class: 'bottom-dock' },
+      // только админ, только игры с ботами: все боты в раздаче — олл-ин
+      adminDock && h('div', { class: 'admin-btns' },
+        T.inHand && h('button', {
+          class: 'jam-btn', 'aria-label': 'Все боты — олл-ин', onclick: async () => { if (await run({ t: 'forceJam' })) toast('Боты идут ва-банк'); },
+        }, 'Олл-ин'),
+        T.inHand && h('button', {
+          class: 'jam-btn', 'aria-label': 'Боты ставят всё кроме 1 фишки и сбрасывают',
+          onclick: async () => { if (await run({ t: 'forceDump' })) toast('Боты ставят почти всё — и сбросят'); },
+        }, 'Олл-ин −1'),
+        h('button', {
+          class: 'jam-btn aces-btn', 'aria-label': 'Два туза в следующей раздаче, ещё два на тёрне и ривере', onclick: async () => { if (await run({ t: 'forceAces' })) toast('Следующая раздача: тузы у тебя и на тёрне с ривером'); },
+        }, 'A A')),
+      actionPanel(T, mySeat, myTurn)),
     T.demo && S.pick && pickerModal(T));
 }
 
@@ -794,10 +802,7 @@ const pct = (x) => `${Math.round(x * 100)}%`;
 // Подсказка — маленькая карточка в правом верхнем углу, чтобы не закрывать карты
 function hintFloat(T) {
   const t = S.turn;
-  if (!S.hint) {
-    return h('button', { class: 'hint-float hint-chip', onclick: askHint },
-      'Подсказка ', h('span', { class: 'hint-count' }, T.demo ? 'бесплатно' : S.me.hints ? `· ${S.me.hints}` : '· 5⭐'));
-  }
+  if (!S.hint) return null; // кнопка — в шапке стола
   const act = (action) => {
     send({ t: 'act', action });
     S.turn = null;

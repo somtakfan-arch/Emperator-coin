@@ -178,8 +178,8 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
 .hint-card { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 14px; border: 1px solid rgba(242,201,76,0.6); background: rgba(242,201,76,0.1); }
 /* твоё место прижато к низу стола и растёт вверх; комбинация — справа от карт */
 .seat.me { transform: translate(-50%, -100%); }
-.my-cards { position: relative; }
-.my-hand { position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%); width: max-content; max-width: min(96px, calc(50vw - 70px)); padding: 5px 9px; border-radius: 12px; border: 1px solid var(--silver); background: rgba(230,235,238,0.14); color: #fff; font-size: 12px; font-weight: 700; line-height: 1.2; text-align: left; white-space: normal; backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); }
+.my-plate { position: relative; }
+.my-hand { position: absolute; left: calc(100% + 6px); top: 50%; transform: translateY(-50%); width: max-content; max-width: min(110px, calc(50vw - 72px)); padding: 5px 9px; border-radius: 12px; border: 1px solid var(--silver); background: rgba(230,235,238,0.14); color: #fff; font-size: 12px; font-weight: 700; line-height: 1.2; text-align: left; white-space: normal; backdrop-filter: var(--blur); -webkit-backdrop-filter: var(--blur); }
 .combo { display: flex; flex-direction: column; gap: 10px; padding: 14px; border-radius: 18px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); }
 .combo.mine { background: rgba(255,255,255,0.13); border-color: var(--silver); }
 .combo-n { width: 24px; height: 24px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; background: rgba(255,255,255,0.1); }
@@ -262,10 +262,20 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
   .seat { gap: 2px; }
 }
 .plate { position: relative; }
-.wins-badge { position: absolute; top: 50%; left: calc(100% + 5px); transform: translateY(-50%); display: flex; align-items: center; gap: 2px; height: 16px; padding: 0 5px; border-radius: 8px; background: linear-gradient(145deg, #f2c94c, #c99a2e); color: #1a1408; font-size: 10px; font-weight: 800; line-height: 1; box-shadow: 0 2px 6px rgba(0,0,0,0.4); pointer-events: none; }
-.wins-badge svg { width: 9px; height: 9px; }
-.wins-badge.on-left { left: auto; right: calc(100% + 5px); }
-.admin-btns { position: absolute; left: 12px; top: calc(62px + env(safe-area-inset-top)); z-index: 6; display: flex; gap: 6px; }
+.admin-btns { display: flex; gap: 6px; padding-left: 4px; }
 .jam-btn { height: 28px; padding: 0 11px; border-radius: 14px; border: 1px solid rgba(235,87,87,0.55); background: rgba(40,12,12,0.7); color: #ffb4b4; font-size: 12px; font-weight: 700; backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
 .aces-btn { border-color: rgba(242,201,76,0.6); background: rgba(40,32,10,0.7); color: #f7dd8a; letter-spacing: 1px; }
 .admin-btns .jam-btn { height: 26px; padding: 0 9px; font-size: 11px; }
+.plate .st { display: flex; align-items: center; gap: 4px; white-space: nowrap; }
+.wins-badge { display: inline-flex; align-items: center; gap: 1px; height: 14px; padding: 0 4px; border-radius: 7px; background: linear-gradient(145deg, #f2c94c, #c99a2e); color: #1a1408; font-size: 9.5px; font-weight: 800; line-height: 1; }
+.wins-badge svg { width: 8px; height: 8px; }
+.plate { max-width: 116px; }
+/* низ стола: кнопки админа над панелью хода, панель — как раньше */
+.bottom-dock { position: absolute; left: 12px; right: 12px; bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 4; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.bottom-dock > * { pointer-events: auto; }
+.bottom-dock .panel { position: static; }
+.table-screen.with-admin .felt-wrap { bottom: 250px; }
+/* подсказка — кнопка в шапке стола */
+.hint-ico { position: relative; border-color: rgba(242,201,76,0.6) !important; color: #f7dd8a; margin-left: auto; }
+.hint-ico-count { position: absolute; bottom: -6px; right: -6px; min-width: 18px; height: 16px; padding: 0 4px; border-radius: 8px; background: #f2c94c; color: #1a1408; font-size: 9.5px; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+.table-top { gap: 8px; }
