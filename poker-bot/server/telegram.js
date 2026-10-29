@@ -115,6 +115,15 @@ async function onMessage(msg) {
   if (msg.from) upsertUser(msg.from);
   if (text.startsWith('/start')) {
     const arg = text.split(' ')[1] || '';
+    // пришёл по приглашению друга: бонус новичку, дружба, награда пригласившему — после 20 раздач
+    const rId = /^r_\d+$/.test(arg) ? Number(arg.slice(2)) : 0;
+    if (rId && hooks.onRef?.(msg.from.id, rId)) {
+      return api('sendMessage', {
+        chat_id: chat, parse_mode: 'HTML',
+        text: `Тебя пригласил друг 🤝 Держи <b>+${hooks.refBonus ?? 500}</b> фишек на старт — вы уже в друзьях.`,
+        reply_markup: { inline_keyboard: [[appButton('Играть', '', 'success')]] },
+      });
+    }
     const mId = arg.startsWith('m_') ? arg.slice(2).replace(/[^a-zA-Z0-9]/g, '') : '';
     if (mId) {
       return api('sendMessage', {

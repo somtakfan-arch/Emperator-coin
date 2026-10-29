@@ -419,3 +419,13 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
 .table-screen.nine .seat:not(.me) .pcard.sm .r { font-size: 11px; } .table-screen.nine .seat:not(.me) .pcard.sm .s { font-size: 10px; }
 .table-screen.nine .seat:not(.me) .ava { width: 20px; height: 20px; font-size: 10px; }
 .mode-line { font-size: 10.5px; font-weight: 700; color: #e6b8ff; line-height: 1.25; margin-top: 1px; }
+/* ---------- Пачка 6: друзья ---------- */
+.friend { display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 14px; background: var(--glass); border: 1px solid var(--line); }
+.dot.off { background: #6b777c !important; box-shadow: none !important; }
+.btn-sm.ghost { background: transparent !important; border: 1px solid var(--line) !important; color: var(--soft) !important; }
+.tour-chat { display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: 14px; background: rgba(255,255,255,0.04); border: 1px solid var(--line); }
+.phrase-row { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding-bottom: 2px; }
+.phrase-row::-webkit-scrollbar { display: none; }
+.phrase { flex: none; height: 34px; padding: 0 12px; border-radius: 17px; border: 1px solid var(--line); background: var(--glass); color: var(--text); font-size: 13px; font-weight: 600; }
+.share-btn { margin-left: 8px; width: 30px; height: 30px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3); background: rgba(255,255,255,0.12); font-size: 14px; pointer-events: auto; }
+.result { pointer-events: auto; }

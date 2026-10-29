@@ -165,6 +165,17 @@ function onMessage(m) {
       break;
     case 'card': S.card = m.card; break;
     case 'botsInfo': S.botsInfo = m; break;
+    case 'friends':
+      S.friends = m;
+      if (m.text) toast(m.text);
+      break;
+    case 'club': S.club = m; break;
+    case 'invite': S.friendInvite = m; break;
+    case 'watchEnd':
+      toast('Друг встал из-за стола');
+      S.table = null;
+      go('friends');
+      break;
     case 'coach':
       S.coachTips = m.tips;
       clearTimeout(S.coachTimer);
@@ -354,6 +365,7 @@ function playerCardModal(c) {
         c.bot ? stat('', '') : stat('Побед в турн.', c.tourWins || 0)),
       c.bot && c.vs?.hands > 0 && h('div', { class: 'small soft' }, `Против тебя: раздач ${fmt(c.vs.hands)}, ты выиграл ${fmt(c.vs.wins)} (${Math.round((c.vs.wins / c.vs.hands) * 100)}%)${c.vs.net ? ` · итог 1 на 1: ${c.vs.net > 0 ? '+' : '−'}${fmt(Math.abs(c.vs.net))}` : ''}`),
       c.bot && c.level && c.level !== 'normal' && h('div', { class: 'small muted' }, `Сложность: ${c.level === 'easy' ? 'лёгкий' : 'мастер'}`),
+      !c.bot && c.id !== S.me.id && !c.friend && h('button', { class: 'btn-sm', onclick: async () => { if (await run({ t: 'addFriend', ref: c.id })) toast('Заявка в друзья отправлена'); } }, 'Добавить в друзья'),
       !c.bot && c.stats && h('div', { class: 'small muted' }, `Сыграно раздач: ${fmt(c.stats.hands)}${c.stats.bestCat >= 0 ? ` · лучшая рука: ${HAND_CATS[c.stats.bestCat]}` : ''}`)));
 }
 
@@ -436,7 +448,7 @@ function leaveTableScreen(tournamentId) {
 
 // ---------- Навигация ----------
 
-const BACK = { progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
+const BACK = { friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
 
 function go(screen) {
   if (screen !== 'table' && S.screen === 'table' && S.table) S.tableHidden = true;
@@ -445,6 +457,7 @@ function go(screen) {
   if (screen === 'profile') { S.top = null; send({ t: 'top', kind: S.topKind || 'rating' }); }
   if (screen === 'progress') send({ t: 'progress' });
   if (screen === 'bots') send({ t: 'botsInfo' });
+  if (screen === 'friends') { send({ t: 'friends' }); send({ t: 'club' }); }
   if (screen !== 'table') S.card = null;
   window.scrollTo(0, 0);
   render();
@@ -477,6 +490,7 @@ tg?.BackButton.onClick(() => back());
 window.addEventListener('hashchange', () => S.me && openStart(null));
 function back() {
   if (S.screen === 'combos') return go(S.comboBack || 'lobby');
+  if (S.screen === 'table' && S.table?.watching) return stopWatching();
   // демо-турнир админа: «назад» — выйти из него (фишки ненастоящие)
   if (S.screen === 'table' && S.table?.kind === 'tour' && S.table.demo) {
     if (confirm('Выйти из демо-турнира?')) send({ t: 'leave' });
@@ -609,6 +623,11 @@ function lobbyScreen() {
           h('div', { class: 'b', style: 'font-size:15px' }, me.name),
           h('div', { class: 'small muted' }, me.rank && h('b', { style: `color:${me.rank.color}` }, `${me.rank.name} `), `Эло ${me.rating} · место ${fmt(me.ratingPlace)} · раздач выиграно ${fmt(me.handsWon || 0)}`))),
       balancePill()),
+    // друг зовёт за стол
+    S.friendInvite && h('div', { class: 'glass card', style: 'border-color:rgba(127,209,168,0.6)' },
+      h('div', { class: 'row between' }, h('div', { class: 'b' }, `${S.friendInvite.from} зовёт ${S.friendInvite.duel ? `на дуэль (${S.friendInvite.duel} раздач)` : 'за стол'}`),
+        h('button', { class: 'hint-x', 'aria-label': 'Закрыть', onclick: () => { S.friendInvite = null; render(); } }, '✕')),
+      h('button', { class: 'btn', onclick: () => { const id = S.friendInvite.mixedId; S.friendInvite = null; openMixed(id); } }, 'Посмотреть стол')),
     // итог последнего стола
     S.summary && h('div', { class: 'glass card summary' },
       h('div', { class: 'row between' }, h('div', { class: 'b' }, S.summary.title),
@@ -633,6 +652,9 @@ function lobbyScreen() {
       h('div', { class: 'row between' }, h('div', { class: 'card-title' }, 'Против людей'), icon('chev', 22)),
       h('div', { class: 'soft', style: 'font-size:14px;line-height:1.45' }, 'Турниры от 2 до 60 игроков. Создай свой и позови друзей по ссылке.'),
       h('div', { class: 'row', style: 'font-size:13px' }, h('span', { class: 'dot' }), `Сейчас онлайн: ${fmt(S.lobby?.online)}`)),
+    h('button', { class: 'item', onclick: () => go('friends') },
+      h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, 'Друзья и клуб'), h('div', { class: 'small muted' }, 'Смотреть игру друзей, дуэли, подарки, клубные турниры')),
+      icon('chev')),
     h('button', { class: 'item', onclick: openCombos },
       h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, 'Справочник комбинаций'), h('div', { class: 'small muted' }, 'Какие бывают руки и что сильнее')),
       icon('chev')),
@@ -909,10 +931,13 @@ function tableScreen() {
   if (!T) {
     return h('div', { class: 'screen' }, header('Стол'), h('div', { class: 'center-msg' }, h('div', { class: 'muted' }, 'Загружаем стол…')));
   }
-  const meIdx = T.seats.findIndex((s) => s.me);
+  // зритель: друг, за которым смотришь, — внизу
+  const meIdx = T.watching ? T.seats.findIndex((s) => s.id === T.focus) : T.seats.findIndex((s) => s.me);
   const ordered = meIdx >= 0 ? [...T.seats.slice(meIdx), ...T.seats.slice(0, meIdx)] : T.seats;
-  const mySeat = meIdx >= 0 ? T.seats[meIdx] : null;
-  const others = ordered.slice(mySeat ? 1 : 0);
+  const mySeat = meIdx >= 0 && !T.watching ? T.seats[meIdx] : null;
+  // зритель: нижнее место занимает первый игрок, остальные — по кругу
+  const bottomSeat = mySeat ? null : ordered[0];
+  const others = ordered.slice(1);
   const spots = LAYOUT[Math.min(others.length, 8)] || [];
   const nine = others.length > 5; // стол на 9 — компактнее
   const myTurn = S.turn && T.actor === S.me.id && S.turn.tableId === T.id;
@@ -988,10 +1013,19 @@ function tableScreen() {
     ? h('div', { class: 'hint-rule' }, 'Здесь работают подсказки — они видят карты') : null;
 
   const elo = !T.inHand && T.eloDelta ? Math.round(T.eloDelta) || (T.eloDelta > 0 ? 1 : -1) : 0;
+  const myWin = T.result?.find((w) => w.id === S.me.id);
   const result = !T.inHand && T.result
     ? h('div', { class: 'result' },
       T.result.map((w) => `${w.id === S.me.id ? 'Ты забираешь' : `${w.name} забирает`} ${fmt(w.amount)}${w.hand ? ` · ${w.hand}` : ''}`).join(', '),
-      elo ? h('span', { class: `elo ${elo > 0 ? 'up' : 'down'}` }, ` Эло ${elo > 0 ? '+' : '−'}${Math.abs(elo)}`) : null)
+      elo ? h('span', { class: `elo ${elo > 0 ? 'up' : 'down'}` }, ` Эло ${elo > 0 ? '+' : '−'}${Math.abs(elo)}`) : null,
+      // поделиться выигрышем
+      myWin && !T.watching && h('button', {
+        class: 'share-btn', 'aria-label': 'Поделиться раздачей',
+        onclick: () => shareCard({
+          title: 'Я выиграл банк!', subtitle: `${myWin.hand ? `${myWin.hand} · ` : ''}+${fmt(myWin.amount)} фишек`,
+          cards: mySeat?.cards || [], board: T.board, footer: 'Покер в Telegram',
+        }, `Выиграл ${fmt(myWin.amount)} фишек${myWin.hand ? ` с рукой «${myWin.hand}»` : ''}! Го играть:`),
+      }, '📤'))
     : null;
 
   const adminDock = S.me.isAdmin && (T.kind === 'bots' || T.solo);
@@ -1015,8 +1049,9 @@ function tableScreen() {
         h('div', { class: 'board', style: 'align-items:center' },
           T.demo && h('button', { class: 'pick-btn', 'aria-label': 'Выбрать карты стола', onclick: () => openPicker({ board: true }) }, '✎'),
           board)),
-      others.map((s, i) => seatEl(s, spots[i])),
-      mySeat && seatEl(mySeat, 'bottom')),
+      others.map((s, i) => spots[i] && seatEl(s, spots[i])),
+      mySeat && seatEl(mySeat, 'bottom'),
+      bottomSeat && seatEl(bottomSeat, 'bottom')),
     result,
     hintRule,
 
@@ -1196,6 +1231,11 @@ function hintCard(hnt, t, act) {
 }
 
 function actionPanel(T, me, myTurn) {
+  if (T.watching) {
+    return h('div', { class: 'panel' },
+      h('div', { class: 'soft', style: 'text-align:center;font-size:14px' }, 'Ты смотришь игру друга · карты игроков скрыты'),
+      h('button', { class: 'btn-ghost', onclick: stopWatching }, 'Перестать смотреть'));
+  }
   if (myTurn) {
     const t = S.turn;
     const canRaise = t.maxTo > t.currentBet && t.maxTo > t.myBet + t.toCall;
@@ -1360,7 +1400,11 @@ function progressScreen() {
     h('div', { class: 'col', style: 'gap:8px' }, P.weekly.map(quest('weekly'))),
     // достижения
     h('div', { class: 'label' }, `Достижения · ${P.achievements.filter((a) => a.at).length}/${P.achievements.length}`),
-    h('div', { class: 'ach-grid' }, P.achievements.map((a) => h('div', { class: `ach ${a.at ? 'got' : ''}`, title: a.text },
+    h('div', { class: 'small muted' }, 'Нажми на открытое достижение, чтобы поделиться им в сторис или чате'),
+    h('div', { class: 'ach-grid' }, P.achievements.map((a) => h('div', {
+      class: `ach ${a.at ? 'got' : ''}`, title: a.text, role: a.at ? 'button' : null,
+      onclick: a.at ? () => { S.shareTo = tg?.shareToStory ? 'story' : 'link'; shareCard({ title: '🏅 Достижение', subtitle: a.name, footer: a.text }, `Получил достижение «${a.name}» в покере!`); } : null,
+    },
       h('div', { style: 'font-size:22px' }, a.at ? '🏅' : '🔒'),
       h('div', { class: 'b', style: 'font-size:12px' }, a.name),
       h('div', { class: 'small muted', style: 'font-size:10.5px;line-height:1.3' }, a.text)))),
@@ -1372,6 +1416,139 @@ function progressScreen() {
       h('div', { class: 'grid3' }, stat('Лучшая рука', st.bestCat >= 0 ? HAND_CATS[st.bestCat] : '—'), stat('Турниров', st.tours), stat('Побед в турн.', st.tourWins))),
     h('div', { style: 'height:80px' }),
     nav());
+}
+
+// ---------- Друзья и клуб ----------
+
+async function stopWatching() {
+  await run({ t: 'unwatch' });
+  S.table = null;
+  go('friends');
+}
+
+function friendsScreen() {
+  const F = S.friends, C = S.club;
+  const tab = S.friendsTab || 'friends';
+  const atMixed = S.me.table?.kind === 'mixed';
+  const row = (f, buttons) => h('div', { class: 'friend' },
+    h('div', { class: 'row', style: 'gap:10px;min-width:0;flex:1' },
+      h('span', { class: `dot ${f.online ? '' : 'off'}` }),
+      h('div', { class: 'col', style: 'gap:1px;min-width:0' },
+        h('div', { class: 'b', style: `font-size:14px;color:${f.rankColor || '#fff'}` }, f.name),
+        h('div', { class: 'small muted' }, f.table ? `за столом: ${f.table.title}` : f.online ? 'онлайн' : 'не в сети', ` · ${fmt(f.rating)} Эло`))),
+    h('div', { class: 'row', style: 'gap:6px;flex-wrap:wrap;justify-content:flex-end' }, buttons));
+  const friendsTab = () => !F ? h('div', { class: 'muted small' }, 'Загрузка…') : [
+    h('div', { class: 'row', style: 'gap:8px' },
+      h('input', { class: 'buyin-input', style: 'margin:0;flex:1', id: 'friend-ref', placeholder: '@ник друга', value: S.friendRef || '', oninput: (e) => { S.friendRef = e.target.value; } }),
+      h('button', { class: 'btn-sm', onclick: async () => { if (S.friendRef && await run({ t: 'addFriend', ref: S.friendRef.trim() })) { S.friendRef = ''; toast('Заявка отправлена'); } } }, 'Добавить')),
+    F.incoming.length > 0 && h('div', { class: 'label' }, 'Заявки в друзья'),
+    F.incoming.map((f) => row(f, [
+      h('button', { class: 'btn-sm', onclick: () => run({ t: 'addFriend', ref: f.id }) }, 'Принять'),
+      h('button', { class: 'btn-sm ghost', onclick: () => run({ t: 'removeFriend', id: f.id }) }, '✕')])),
+    h('div', { class: 'label' }, `Друзья · ${F.friends.length}`),
+    F.friends.length ? F.friends.map((f) => h('div', { class: 'col', style: 'gap:6px' },
+      row(f, [
+        f.table && h('button', { class: 'btn-sm', onclick: async () => { if (await run({ t: 'watch', id: f.id })) go('table'); } }, 'Смотреть'),
+        f.table?.mixedId && h('button', { class: 'btn-sm', onclick: () => openMixed(f.table.mixedId) }, 'Сесть'),
+        atMixed && h('button', { class: 'btn-sm', onclick: async () => { if (await run({ t: 'inviteFriend', id: f.id })) toast('Приглашение отправлено'); } }, 'Позвать'),
+        h('button', { class: 'btn-sm ghost', onclick: () => { S.friendAct = S.friendAct?.id === f.id ? null : { id: f.id }; render(); } }, '⋯')]),
+      S.friendAct?.id === f.id && friendActions(f))) : h('div', { class: 'muted small' }, 'Пока никого — добавь по нику или позови по ссылке ниже'),
+    // реферальная ссылка
+    F.ref?.link && h('div', { class: 'glass card', style: 'gap:8px' },
+      h('div', { class: 'b' }, 'Позови друга — получите фишки оба'),
+      h('div', { class: 'small soft', style: 'line-height:1.45' }, `Друг получит +${F.ref.bonusNew} фишек сразу, а ты — +${F.ref.bonusInviter} и редкий сундук, когда он сыграет 20 раздач. Позвал: ${F.ref.invited}, награды: ${F.ref.rewarded}.`),
+      h('button', { class: 'btn', onclick: () => shareLink(F.ref.link, 'Го играть в покер со мной!') }, 'Поделиться ссылкой')),
+  ];
+  const clubTab = () => !C ? h('div', { class: 'muted small' }, 'Загрузка…') : [
+    C.club ? [
+      h('div', { class: 'glass card', style: 'gap:6px' },
+        h('div', { class: 'row between' }, h('div', { class: 'b', style: 'font-size:18px' }, C.club.name), h('div', { class: 'small muted' }, `код: ${C.club.code}`)),
+        h('div', { class: 'small soft' }, `Игроков: ${C.club.members.length}. Зови друзей — пусть вступят по коду.`),
+        h('div', { class: 'row', style: 'gap:8px' },
+          h('button', { class: 'btn-sm', onclick: () => { S.create = { ...S.create, club: true, name: `Клуб ${C.club.name}` }; go('create'); } }, 'Клубный турнир'),
+          h('button', { class: 'btn-sm ghost', onclick: () => run({ t: 'leaveClub' }) }, 'Выйти из клуба'))),
+      h('div', { class: 'label' }, 'Участники'),
+      C.club.members.map((m, i) => h('div', { class: 'item' },
+        h('div', { class: 'row' }, h('div', { class: 'seat-dot taken' }, i + 1), h('div', { class: 'col', style: 'gap:0' }, h('div', { class: 'b', style: 'font-size:14px' }, m.name), h('div', { class: 'small', style: `color:${m.rankColor}` }, m.rank))),
+        h('div', { class: 'b' }, fmt(m.rating)))),
+    ] : [
+      h('div', { class: 'glass card', style: 'gap:8px' },
+        h('div', { class: 'b' }, 'Создай клуб'),
+        h('input', { class: 'buyin-input', style: 'margin:0', id: 'club-name', placeholder: 'Название клуба', value: S.clubName || '', oninput: (e) => { S.clubName = e.target.value; } }),
+        h('button', { class: 'btn', onclick: () => run({ t: 'createClub', name: S.clubName }) }, 'Создать')),
+      h('div', { class: 'glass card', style: 'gap:8px' },
+        h('div', { class: 'b' }, 'Или вступи по коду'),
+        h('input', { class: 'buyin-input', style: 'margin:0', id: 'club-code', placeholder: 'Код клуба', value: S.clubCode || '', oninput: (e) => { S.clubCode = e.target.value; } }),
+        h('button', { class: 'btn', onclick: () => run({ t: 'joinClub', code: S.clubCode }) }, 'Вступить')),
+    ],
+    h('div', { class: 'label' }, 'Лучшие клубы'),
+    C.top.length ? C.top.map((c, i) => h('div', { class: 'item' },
+      h('div', { class: 'row' }, h('div', { class: 'seat-dot taken' }, i + 1), h('div', { class: 'col', style: 'gap:0' }, h('div', { class: 'b', style: 'font-size:14px' }, c.name), h('div', { class: 'small muted' }, `игроков: ${c.members}`))),
+      h('div', { class: 'b' }, fmt(c.score)))) : h('div', { class: 'muted small' }, 'Клубов пока нет — создай первый'),
+  ];
+  return h('div', { class: 'screen' },
+    header('Друзья и клуб'),
+    h('div', { class: 'seg' }, [['friends', 'Друзья'], ['club', 'Клуб']].map(([k, l]) => h('button', { class: tab === k ? 'on' : '', onclick: () => { S.friendsTab = k; render(); } }, l))),
+    tab === 'friends' ? friendsTab() : clubTab(),
+    h('div', { style: 'height:80px' }),
+    nav());
+}
+
+// подарок и дуэль другу
+function friendActions(f) {
+  const a = S.friendAct;
+  return h('div', { class: 'glass card', style: 'gap:8px;padding:12px' },
+    h('div', { class: 'small b' }, '🎁 Подарить'),
+    h('div', { class: 'row', style: 'gap:6px' },
+      h('input', { class: 'buyin-input', style: 'margin:0;flex:1', type: 'number', inputmode: 'numeric', id: 'gift-chips', placeholder: `Фишки (сегодня до ${fmt(S.friends?.giftLeft ?? 0)})`, value: a.chips || '', oninput: (e) => { a.chips = e.target.value; } }),
+      h('input', { class: 'buyin-input', style: 'margin:0;width:90px', type: 'number', inputmode: 'numeric', id: 'gift-hints', placeholder: 'Подсказки', value: a.hints || '', oninput: (e) => { a.hints = e.target.value; } })),
+    h('button', { class: 'btn-sm', onclick: () => run({ t: 'gift', id: f.id, chips: Number(a.chips) || 0, hints: Number(a.hints) || 0 }) }, 'Подарить'),
+    h('div', { class: 'small b', style: 'margin-top:6px' }, '⚔️ Дуэль 1 на 1'),
+    h('div', { class: 'choices' }, [10, 20, 50].map((n) => h('button', { class: (a.hands || 20) === n ? 'on' : '', onclick: () => { a.hands = n; render(); } }, `${n} раздач`))),
+    h('div', { class: 'choices' }, [200, 500, 1000, 5000].map((b) => h('button', { class: (a.buyin || 500) === b ? 'on' : '', onclick: () => { a.buyin = b; render(); } }, fmt(b)))),
+    h('button', { class: 'btn-sm', onclick: async () => { if (await run({ t: 'duelFriend', id: f.id, hands: a.hands || 20, buyin: a.buyin || 500 })) { toast('Вызов отправлен — ждём друга'); go('table'); } } }, 'Вызвать на дуэль'),
+    h('button', { class: 'btn-sm ghost', style: 'margin-top:6px', onclick: () => { if (confirm(`Удалить ${f.name} из друзей?`)) run({ t: 'removeFriend', id: f.id }); } }, 'Удалить из друзей'));
+}
+
+// ---------- Поделиться: картинка раздачи / достижения ----------
+
+function shareLink(url, text) {
+  const link = `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(text)}`;
+  if (tg?.openTelegramLink) tg.openTelegramLink(link);
+  else navigator.clipboard?.writeText(url).then(() => toast('Ссылка скопирована'));
+}
+
+// рисуем карточку 1080×1080 на canvas
+function drawShareCard({ title, subtitle, cards = [], board = [], footer }) {
+  const c = document.createElement('canvas');
+  c.width = 1080; c.height = 1080;
+  const g = c.getContext('2d');
+  const bg = g.createRadialGradient(540, 420, 80, 540, 540, 760);
+  bg.addColorStop(0, '#1f4a4f'); bg.addColorStop(0.5, '#10272a'); bg.addColorStop(1, '#070e10');
+  g.fillStyle = bg; g.fillRect(0, 0, 1080, 1080);
+  g.fillStyle = '#eef2f4'; g.textAlign = 'center';
+  g.font = '800 64px Inter, system-ui, sans-serif'; g.fillText(title, 540, 170);
+  g.fillStyle = '#f2c94c'; g.font = '700 46px Inter, system-ui, sans-serif'; g.fillText(subtitle, 540, 250);
+  const drawCard = (card, x, y, w, hh) => {
+    g.fillStyle = '#f4f6f7'; g.beginPath(); g.roundRect(x, y, w, hh, 16); g.fill();
+    const red = (card & 3) === 1 || (card & 3) === 2;
+    g.fillStyle = red ? '#b3261e' : '#0b1416';
+    const r = RANKS[card >> 2] === 'T' ? '10' : RANKS[card >> 2];
+    g.font = `800 ${Math.round(w * 0.42)}px Inter, system-ui, sans-serif`; g.fillText(r, x + w / 2, y + hh * 0.45);
+    g.font = `${Math.round(w * 0.4)}px sans-serif`; g.fillText(SUITS[card & 3], x + w / 2, y + hh * 0.85);
+  };
+  board.forEach((cd, i) => drawCard(cd, 540 - (board.length * 150) / 2 + i * 150 + 10, 360, 130, 182));
+  cards.forEach((cd, i) => drawCard(cd, 540 - 160 + i * 170, board.length ? 620 : 420, 150, 210));
+  g.fillStyle = '#b9c4c9'; g.font = '600 38px Inter, system-ui, sans-serif'; g.fillText(footer, 540, 1000);
+  return c.toDataURL('image/png');
+}
+
+async function shareCard(card, text) {
+  const r = await run({ t: 'shareImage', data: drawShareCard(card) });
+  if (!r?.url) return;
+  // в сторис (если Telegram умеет), иначе — ссылкой в чат
+  if (S.shareTo === 'story' && tg?.shareToStory) tg.shareToStory(r.url, { text });
+  else shareLink(r.url, text);
 }
 
 // ---------- Сольный турнир ----------
@@ -1475,6 +1652,8 @@ function sngCard(t) {
 
 const stat = (k, v) => h('div', { class: 'col stat', style: 'gap:2px' }, h('div', { class: 'k' }, k), h('div', { class: 'v' }, v));
 
+const TOUR_PHRASES = ['Всем удачи!', 'GG', 'Го-го-го!', 'Кто сегодня заберёт?', 'Ну держитесь 😎', '🔥🔥🔥', '👑', 'Я в деле!'];
+
 function tourScreen() {
   const t = S.tour;
   if (!t) return h('div', { class: 'screen' }, header('Турнир'), h('div', { class: 'center-msg muted' }, 'Загрузка…'));
@@ -1511,6 +1690,11 @@ function tourScreen() {
       t.level && h('div', { class: 'small soft' }, `Уровень ${t.level.level} · блайнды ${t.level.sb}/${t.level.bb}`),
       h('div', { class: 'small muted' }, prizeText(t.status === 'reg' ? t.maxPlayers : t.count))),
     action,
+    // фразы в лобби турнира (только из набора)
+    t.registered && h('div', { class: 'col', style: 'gap:8px' },
+      h('div', { class: 'label' }, 'Чат участников'),
+      (t.chat || []).length > 0 && h('div', { class: 'tour-chat' }, t.chat.slice(-8).map((c) => h('div', { class: 'small' }, h('b', {}, `${c.name}: `), c.text))),
+      h('div', { class: 'phrase-row' }, TOUR_PHRASES.map((p, i) => h('button', { class: 'phrase', onclick: () => send({ t: 'tourSay', id: t.id, i }) }, p)))),
     h('div', { class: 'label' }, done ? 'Итоги' : 'Участники'),
     players.length ? players.map((p) => h('div', { class: 'item' },
       h('div', { class: 'row' },
@@ -1579,6 +1763,7 @@ async function createTour() {
   const buyin = c.buyin === 'own' ? Number(c.customBuyin) : c.buyin;
   const r = await run({ t: 'createT', tour: { ...c, buyin, minRating: Number(c.minRating) || 0 } });
   if (r) {
+    S.create.club = false;
     toast('Турнир создан — зови друзей');
     openTour(r.id);
   }
@@ -1709,7 +1894,7 @@ function combosScreen() {
 
 // ---------- Рендер ----------
 
-const SCREENS = { progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
+const SCREENS = { friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
 
 function render() {
   const app = document.getElementById('app');

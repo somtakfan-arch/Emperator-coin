@@ -738,3 +738,65 @@ test('режимы: Short Deck, стол на 9, Хаос, босс-раш, ст
   await c.req({ t: 'cancelT', id: t.id });
   host.close(); c.close();
 });
+
+test('друзья: заявка и принятие, подарок с лимитом, смотреть стол друга, дуэль, клуб, фразы, картинка, реферал', async () => {
+  const a = new Client(9931), b = new Client(9932, { autoplay: 'idle' });
+  await a.ready; await b.ready;
+  await a.req({ t: 'invoice', pack: 'p2' });
+  await b.req({ t: 'invoice', pack: 'p1' });
+  await a.waitFor((m) => m.t === 'me' && m.me.chips > 0);
+  // заявка и принятие
+  let f = await a.req({ t: 'addFriend', ref: 9932 });
+  assert.equal(f.outgoing.length, 1);
+  f = await b.req({ t: 'addFriend', ref: 9931 });
+  assert.equal(f.friends.length, 1);
+  // подарок: не больше 10 000 в сутки
+  const before = (await b.req({ t: 'me' })).me.chips;
+  await a.req({ t: 'gift', id: 9932, chips: 3000 });
+  assert.equal((await b.req({ t: 'me' })).me.chips, before + 3000);
+  await assert.rejects(a.req({ t: 'gift', id: 9932, chips: 8000 }), /ещё 7/);
+  await assert.rejects(a.req({ t: 'gift', id: 9999, chips: 10 }), /только друзьям/);
+  // b садится за стол — a смотрит без чужих карт
+  await b.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 500 });
+  await a.req({ t: 'watch', id: 9932 });
+  const view = await a.waitFor((m) => m.t === 'table' && m.table?.watching && m.table.inHand, 30000);
+  const bSeat = view.table.seats.find((s) => s.id === 9932);
+  if (!bSeat.hand) assert.equal(bSeat.cards, null, 'карты друга не видны зрителю');
+  await a.req({ t: 'unwatch' });
+  b.ws.send(JSON.stringify({ t: 'leave' }));
+  await b.waitFor((m) => m.t === 'left', 30000);
+  // дуэль: стол на двоих, друг получает приглашение
+  b.msgs.length = 0;
+  await a.req({ t: 'duelFriend', id: 9932, hands: 5, buyin: 500 });
+  const inv = await b.waitFor((m) => m.t === 'invite', 10000);
+  assert.equal(inv.duel, 5);
+  const info = await b.req({ t: 'mixedInfo', id: inv.mixedId });
+  assert.equal(info.room.max, 2);
+  a.ws.send(JSON.stringify({ t: 'leave' }));
+  await a.waitFor((m) => m.t === 'left', 30000);
+  // клуб: создать, вступить по коду, клубный турнир виден только своим
+  const c1 = await a.req({ t: 'createClub', name: 'Тузы' });
+  await b.req({ t: 'joinClub', code: c1.club.code });
+  const t = await a.req({ t: 'createT', tour: { name: 'Клубный', maxPlayers: 6, buyin: 500, blindMin: 5, startMode: 'full', club: true } });
+  const out = new Client(9933);
+  await out.ready;
+  await out.req({ t: 'invoice', pack: 'p1' });
+  await assert.rejects(out.req({ t: 'reg', id: t.id }), /участников клуба/);
+  // фразы в лобби турнира
+  a.ws.send(JSON.stringify({ t: 'tourSay', id: t.id, i: 0 }));
+  const tv = await a.waitFor((m) => m.t === 'tour' && m.tour?.chat?.length, 10000);
+  assert.equal(tv.tour.chat[0].text, 'Всем удачи!');
+  await a.req({ t: 'cancelT', id: t.id });
+  // картинка «поделиться»
+  const png = 'data:image/png;base64,' + Buffer.from('\x89PNG\r\n\x1a\nfake').toString('base64');
+  const sh = await a.req({ t: 'shareImage', data: png });
+  assert.match(sh.url, /\/s\/[a-f0-9]{16}\.png$/);
+  // реферал: новичок по ссылке — бонус и дружба
+  const { registerRef, areFriends } = await import('../server/social.js');
+  const { upsertUser } = await import('../server/db.js');
+  upsertUser({ id: 9934, first_name: 'Новичок' });
+  assert.equal(registerRef(9934, 9931), true);
+  assert.equal(areFriends(9931, 9934), true);
+  assert.equal(registerRef(9934, 9931), false, 'второй раз — нельзя');
+  a.close(); b.close(); out.close();
+});

@@ -5,6 +5,10 @@ import { db, tx, debit, credit } from '../db.js';
 import { config, BLIND_LEVELS, payoutShares } from '../config.js';
 import { notify, openButton, escapeHtml } from '../telegram.js';
 import { GameTable, HumanSeat } from './table.js';
+import { clubOf } from '../social.js';
+
+// фразы в лобби турнира — только из набора, без свободного текста
+export const TOUR_PHRASES = ['Всем удачи!', 'GG', 'Го-го-го!', 'Кто сегодня заберёт?', 'Ну держитесь 😎', '🔥🔥🔥', '👑', 'Я в деле!'];
 
 const MAX_SEATS = 6; // столы по 6; турнир на 9 — один стол на 9
 export const bountyOf = (t) => (t.ko ? Math.floor(t.buyin / 2) : 0);
@@ -21,6 +25,7 @@ export class Tournaments {
   constructor(hub) {
     this.hub = hub;
     this.running = new Map(); // id -> RunningTournament
+    this.chats = new Map(); // id -> последние фразы в лобби
   }
 
   // ---------- Лобби ----------
@@ -31,7 +36,7 @@ export class Tournaments {
     return {
       id: t.id, name: t.name, kind: t.kind, maxPlayers: t.max_players, buyin: t.buyin,
       minRating: t.min_rating, blindMin: t.blind_min, startMode: t.start_mode, startAt: t.start_at,
-      private: !!t.private, status: t.status, count: regs.length, prizePool: regs.length * (t.buyin - bountyOf(t)), ko: !!t.ko, bounty: bountyOf(t),
+      private: !!t.private, club: t.club_id || null, chat: this.chats.get(t.id) || [], status: t.status, count: regs.length, prizePool: regs.length * (t.buyin - bountyOf(t)), ko: !!t.ko, bounty: bountyOf(t),
       mine: t.creator === uid, registered: regs.some((r) => r.user_id === uid),
       players: regs.map((r) => ({ id: r.user_id, name: r.name, rating: Math.round(r.rating), place: r.place, prize: r.prize })),
       alive: run ? run.alive() : null,
@@ -45,7 +50,9 @@ export class Tournaments {
       WHERE status IN ('reg', 'running')
          OR (status IN ('done', 'cancelled') AND finished > ? AND id IN (SELECT t_id FROM regs WHERE user_id = ?))
       ORDER BY kind = 'big' DESC, created DESC LIMIT 100`).all(Date.now() - 86400000, uid);
+    const myClub = clubOf(uid);
     return rows
+      .filter((t) => !t.club_id || t.club_id === myClub) // клубные турниры видят только члены клуба
       .filter((t) => !t.private || t.creator === uid || T.isReg.get(t.id, uid))
       .map((t) => this.view(t, uid));
   }
@@ -74,6 +81,8 @@ export class Tournaments {
       if (!(min >= 5 && min <= 7 * 24 * 60)) throw new Error('Старт — от 5 минут до 7 дней');
       startAt = Date.now() + min * 60000;
     }
+    const club = o.club ? clubOf(user.id) : null;
+    if (o.club && !club) throw new Error('Ты не в клубе');
     const open = db.prepare("SELECT COUNT(*) AS n FROM tournaments WHERE creator = ? AND status = 'reg'").get(user.id).n;
     if (open >= config.tournament.maxOpenPerUser) throw new Error('У тебя уже много открытых турниров');
     const id = newId();
@@ -81,6 +90,7 @@ export class Tournaments {
       db.prepare(`INSERT INTO tournaments (id, name, creator, kind, max_players, buyin, min_rating, blind_min, start_mode, start_at, private, status, created, ko)
         VALUES (?, ?, ?, 'user', ?, ?, ?, ?, ?, ?, ?, 'reg', ?, ?)`)
         .run(id, name, user.id, maxPlayers, buyin, minRating, blindMin, startMode, startAt, o.private ? 1 : 0, Date.now(), o.ko ? 1 : 0);
+      if (club) db.prepare('UPDATE tournaments SET club_id = ? WHERE id = ?').run(club, id);
     });
     this.register(user, id); // создатель сразу в турнире
     return id;
@@ -90,6 +100,7 @@ export class Tournaments {
     const t = T.get.get(String(id));
     if (!t || t.status !== 'reg') throw new Error('Регистрация закрыта');
     if (T.isReg.get(t.id, user.id)) return;
+    if (t.club_id && clubOf(user.id) !== t.club_id) throw new Error('Только для участников клуба');
     if (user.rating < t.min_rating) throw new Error(`Нужен рейтинг ${t.min_rating}`);
     if (T.count.get(t.id).n >= t.max_players) throw new Error('Мест нет');
     if (!debit(user.id, t.buyin, 'tour_buyin', t.id)) throw new Error('Не хватает фишек — пополни кошелёк');
@@ -120,6 +131,21 @@ export class Tournaments {
     });
     for (const r of T.regs.all(t.id)) this.hub.sendMe(r.user_id);
     this.hub.lobbyChanged();
+  }
+
+  // фраза в лобби турнира — видят все зарегистрированные
+  say(user, id, i) {
+    const t = T.get.get(String(id));
+    if (!t) throw new Error('Нет турнира');
+    if (!T.isReg.get(t.id, user.id)) throw new Error('Писать могут только участники');
+    const text = TOUR_PHRASES[Number(i)];
+    if (!text) throw new Error('Нет такой фразы');
+    const list = this.chats.get(t.id) || [];
+    const last = list[list.length - 1];
+    if (last?.uid === user.id && Date.now() - last.at < 3000) return; // не чаще раза в 3 секунды
+    list.push({ uid: user.id, name: user.name, text, at: Date.now() });
+    this.chats.set(t.id, list.slice(-20));
+    for (const r of T.regs.all(t.id)) this.hub.send(r.user_id, { t: 'tour', tour: this.one(t.id, r.user_id) });
   }
 
   // ---------- Расписание ----------

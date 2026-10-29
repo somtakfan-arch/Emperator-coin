@@ -482,6 +482,16 @@ export class GameTable {
     queueMicrotask(() => {
       this.bcastQueued = false;
       for (const p of this.humans()) this.hub.send(p.id, { t: 'table', table: this.snapshot(p.id) });
+      // зрители (друзья) видят стол без чужих карт
+      if (this.spectators?.size) {
+        if (this.closed) {
+          for (const id of this.spectators.keys()) this.hub.send(id, { t: 'watchEnd' });
+          this.spectators.clear();
+        } else {
+          const base = this.snapshot(0);
+          for (const [id, focus] of this.spectators) this.hub.send(id, { t: 'table', table: { ...base, watching: true, focus } });
+        }
+      }
     });
   }
 }

@@ -17,6 +17,9 @@ import { botHandsWon } from './game/table.js';
 import { botRating } from './game/elo.js';
 import * as progress from './progress.js';
 import * as cosmetics from './cosmetics.js';
+import * as social from './social.js';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 
 const PUBLIC = new URL('../public/', import.meta.url).pathname;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json' };
@@ -67,7 +70,22 @@ const hub = {
     hub.sendMe(uid);
   },
   // прогресс: итог раздачи, турнира, «обыграл всех ботов»
-  onHandResult: (uid, h) => progress.onHand(uid, h),
+  onHandResult(uid, h) {
+    progress.onHand(uid, h);
+    // реферал: новичок сыграл 20 раздач — награда пригласившему
+    const hands = progress.progressView(uid)?.stats.hands ?? 0;
+    const inviter = social.checkRef(uid, hands);
+    if (inviter) {
+      hub.send(inviter, { t: 'toast', text: `Твой друг сыграл 20 раздач: +${social.REF_BONUS_INVITER} фишек и редкий сундук!` });
+      notify(inviter, `Друг, которого ты позвал, сыграл 20 раздач — тебе <b>+${social.REF_BONUS_INVITER}</b> фишек и редкий сундук!`);
+      hub.sendMe(inviter);
+    }
+  },
+  // друг сел за стол — друзьям онлайн маленькое уведомление
+  onSeated(uid) {
+    const u = getUser(uid);
+    for (const f of social.friendIds(uid)) if (hub.isOnline(f)) hub.send(f, { t: 'toast', text: `${u.name} сел за стол — можно посмотреть в «Друзьях»` });
+  },
   onTourDone: (uid, ev) => progress.onEvent(uid, { type: 'tour', ...ev }),
   onBeatAll: (uid) => progress.onEvent(uid, { type: 'beatAll' }),
   onBotVs: (uid, bots, won, net) => progress.recordVs(uid, bots, won, net),
@@ -102,6 +120,8 @@ const hub = {
   },
 };
 hooks.onBalance = (uid) => hub.sendMe(uid);
+hooks.onRef = (uid, refBy) => social.registerRef(uid, refBy);
+hooks.refBonus = social.REF_BONUS_NEW;
 progress.setProgressNotifier((uid, text) => {
   hub.send(uid, { t: 'toast', text });
   hub.sendMe(uid);
@@ -129,6 +149,16 @@ function adminBotTable(uid) {
   if (!ok || at.table.players.some((p) => !p.isBot && p.id !== uid)) throw new Error('Только в играх с ботами');
   return at.table;
 }
+
+// где сейчас друг: онлайн и за каким столом (за чужим столом можно только смотреть)
+function presence(id) {
+  const a = activeTable(id);
+  return {
+    online: hub.isOnline(id),
+    table: a ? { kind: a.table.kind, title: a.table.title, mixedId: a.table.kind === 'mixed' ? a.table.id.slice(1) : null } : null,
+  };
+}
+const watching = new Map(); // uid -> стол, за которым он наблюдает
 
 function activeTable(uid) {
   const room = botRooms.get(uid);
@@ -182,6 +212,105 @@ const handlers = {
         : db.prepare('SELECT name, rating AS value, rating FROM users WHERE games > 0 OR rating <> 1500 ORDER BY rating DESC LIMIT 20').all();
     return { t: 'top', kind, rating: rows.map((r) => ({ name: r.name, value: Math.round(r.value), rank: progress.rankOf(r.rating).name, rankColor: progress.rankOf(r.rating).color })) };
   },
+  // ---------- друзья, клубы, подарки, приглашения ----------
+  friends: (uid) => ({ t: 'friends', ...social.friendsView(uid, presence), ref: { ...social.refStats(uid), link: bot.username ? `https://t.me/${bot.username}?start=r_${uid}` : null, bonusNew: social.REF_BONUS_NEW, bonusInviter: social.REF_BONUS_INVITER } }),
+  addFriend(uid, m) {
+    const r = social.addFriend(uid, m.ref);
+    const me = getUser(uid);
+    if (r.accepted) {
+      hub.send(r.target.id, { t: 'toast', text: `${me.name} теперь твой друг` });
+      notify(r.target.id, `<b>${me.name}</b> принял заявку — теперь вы друзья 🤝`);
+    } else {
+      hub.send(r.target.id, { t: 'toast', text: `${me.name} хочет добавить тебя в друзья` });
+      notify(r.target.id, `<b>${me.name}</b> хочет добавить тебя в друзья. Открой «Друзья» в игре, чтобы принять.`);
+    }
+    return handlers.friends(uid);
+  },
+  removeFriend(uid, m) {
+    social.removeFriend(uid, Number(m.id));
+    return handlers.friends(uid);
+  },
+  gift(uid, m) {
+    social.gift(uid, Number(m.id), { chips: m.chips, hints: m.hints });
+    const me = getUser(uid);
+    const what = [m.chips > 0 && `${Number(m.chips).toLocaleString('ru')} фишек`, m.hints > 0 && `${m.hints} подсказки`].filter(Boolean).join(' и ');
+    hub.send(Number(m.id), { t: 'toast', text: `🎁 ${me.name} подарил тебе ${what}` });
+    notify(Number(m.id), `🎁 <b>${me.name}</b> подарил тебе ${what}!`);
+    hub.sendMe(uid);
+    hub.sendMe(Number(m.id));
+    return { ...handlers.friends(uid), text: 'Подарок отправлен' };
+  },
+  // позвать друга за свой стол с друзьями
+  inviteFriend(uid, m) {
+    const room = botRooms.get(uid);
+    if (!(room instanceof MixedRoom)) throw new Error('Сначала создай стол с друзьями');
+    const id = Number(m.id);
+    if (!social.areFriends(uid, id)) throw new Error('Это не твой друг');
+    const me = getUser(uid);
+    hub.send(id, { t: 'invite', from: me.name, mixedId: room.id, duel: room.duel?.total ?? null });
+    notify(id, `<b>${me.name}</b> зовёт тебя ${room.duel ? `на дуэль (${room.duel.total} раздач)` : 'за стол'} 🃏`, openButton('Сесть за стол', `#m=${room.id}`, 'success'));
+    return { t: 'ok' };
+  },
+  // дуэль с другом: стол на двоих на N раздач
+  duelFriend(uid, m) {
+    if (activeTable(uid)) throw new Error('Ты уже за столом');
+    const id = Number(m.id);
+    if (!social.areFriends(uid, id)) throw new Error('Это не твой друг');
+    const room = MixedRoom.open(hub, getUser(uid), { buyin: Number(m.buyin), bots: 0, duel: Number(m.hands) || 20, variant: m.variant });
+    mixedRooms.set(room.id, room);
+    botRooms.set(uid, room);
+    handlers.inviteFriend(uid, { id });
+    hub.sendMe(uid);
+    return { t: 'ok' };
+  },
+  // смотреть за столом друга (чужие карты не видны)
+  watch(uid, m) {
+    const id = Number(m.id);
+    if (!social.areFriends(uid, id)) throw new Error('Смотреть можно только за друзьями');
+    if (activeTable(uid)) throw new Error('Сначала выйди из-за своего стола');
+    const a = activeTable(id);
+    if (!a) throw new Error('Друг сейчас не за столом');
+    watching.get(uid)?.spectators?.delete(uid);
+    a.table.spectators ||= new Map(); // зритель -> за кем смотрит
+    a.table.spectators.set(uid, id);
+    watching.set(uid, a.table);
+    a.table.broadcast();
+    return { t: 'ok' };
+  },
+  unwatch(uid) {
+    watching.get(uid)?.spectators?.delete(uid);
+    watching.delete(uid);
+    return { t: 'ok' };
+  },
+  club: (uid) => ({ t: 'club', ...social.clubView(uid) }),
+  createClub(uid, m) {
+    social.createClub(uid, m.name);
+    return handlers.club(uid);
+  },
+  joinClub(uid, m) {
+    social.joinClub(uid, m.code);
+    return handlers.club(uid);
+  },
+  leaveClub(uid) {
+    social.leaveClub(uid);
+    return handlers.club(uid);
+  },
+  tourSay(uid, m) {
+    tournaments.say(getUser(uid), m.id, m.i);
+    return null;
+  },
+  // картинка «поделиться»: сохраняем PNG и отдаём ссылку
+  shareImage(uid, m) {
+    const data = String(m.data || '');
+    if (!data.startsWith('data:image/png;base64,')) throw new Error('Нужна картинка PNG');
+    const buf = Buffer.from(data.slice(22), 'base64');
+    if (buf.length > 700_000) throw new Error('Картинка слишком большая');
+    const dir = join(config.dataDir, 'shares');
+    mkdirSync(dir, { recursive: true });
+    const id = randomBytes(8).toString('hex');
+    writeFileSync(join(dir, `${id}.png`), buf);
+    return { t: 'shared', url: `${(config.webAppUrl || '').replace(/\/?$/, '/')}s/${id}.png` };
+  },
   // внешний вид: аватар, рамка, рубашка
   look: (uid) => ({ t: 'look', look: cosmetics.lookView(uid) }),
   equip(uid, m) {
@@ -217,7 +346,7 @@ const handlers = {
     return {
       t: 'card',
       card: {
-        bot: false, name: u.name, rank: P.rank.name, rankColor: P.rank.color, rating: Math.round(u.rating), handsWon: u.hands_won,
+        bot: false, id: p.id, friend: social.areFriends(uid, p.id), name: u.name, rank: P.rank.name, rankColor: P.rank.color, rating: Math.round(u.rating), handsWon: u.hands_won,
         achievements: P.achievements.filter((a) => a.at).length, tourWins: u.wins, look: cosmetics.publicLook(p.id),
         stats: { hands: P.stats.hands, wins: P.stats.wins, bestCat: P.stats.bestCat },
       },
@@ -255,6 +384,7 @@ const handlers = {
       mode: ['6', '9', 'rush'].includes(m.mode) ? m.mode : 'hu', botName: m.botName, variant: m.variant === 'short' ? 'short' : null, chaos: !!m.chaos, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0, fast: !!m.fast,
       level: m.level || 'normal', shadow: progress.shadowLevel(uid),
     }));
+    hub.onSeated(uid);
     hub.sendMe(uid);
     return { t: 'ok' };
   },
@@ -336,6 +466,7 @@ const handlers = {
     if (activeTable(uid)) throw new Error('Ты уже за другим столом');
     room.join(getUser(uid), m.password ? String(m.password) : null);
     botRooms.set(uid, room);
+    hub.onSeated(uid);
     hub.sendMe(uid);
     return { t: 'ok' };
   },
@@ -344,6 +475,7 @@ const handlers = {
     if (activeTable(uid) || solos.get(uid)) throw new Error('Ты уже за столом');
     const tour = SoloTour.open(hub, getUser(uid), { buyin: m.buyin, size: m.size, blindMin: m.blindMin, demo: !!m.demo, ko: !!m.ko });
     solos.set(uid, tour);
+    if (!m.demo) hub.onSeated(uid);
     hub.sendMe(uid);
     return { t: 'ok', id: tour.id };
   },
@@ -459,6 +591,15 @@ const BUILD = Date.now().toString(36); // версия файлов мини-а�
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   if (url.pathname === '/health') return res.end('ok');
+  // картинки «поделиться»
+  const sm = /^\/s\/([a-f0-9]{16})\.png$/.exec(url.pathname);
+  if (sm) {
+    try {
+      const data = await readFile(join(config.dataDir, 'shares', `${sm[1]}.png`));
+      res.writeHead(200, { 'content-type': 'image/png', 'cache-control': 'public, max-age=31536000' });
+      return res.end(data);
+    } catch { return res.writeHead(404).end('not found'); }
+  }
   let path = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, '');
   if (path === '/' || path === '') path = '/index.html';
   const file = join(PUBLIC, path);
@@ -511,6 +652,7 @@ wss.on('connection', (ws) => {
   });
   ws.on('close', () => {
     if (!uid) return;
+    if ((sockets.get(uid)?.size ?? 0) <= 1) handlers.unwatch(uid);
     seen.set(uid, Date.now());
     const set = sockets.get(uid);
     set?.delete(ws);

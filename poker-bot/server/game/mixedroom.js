@@ -13,8 +13,10 @@ const AWAY_MS = 10 * 60 * 1000;
 const setInPlay = db.prepare('UPDATE users SET in_play = ? WHERE id = ?');
 
 export class MixedRoom {
-  constructor(hub, host, { buyin, bots, seats = 6, password = null, variant = null }) {
-    this.maxSeats = seats === 9 ? 9 : MAX_SEATS;
+  constructor(hub, host, { buyin, bots, seats = 6, password = null, variant = null, duel = 0 }) {
+    this.maxSeats = duel ? 2 : seats === 9 ? 9 : MAX_SEATS;
+    // дуэль: двое, N раздач, потом стол закрывается и стеки — на баланс
+    this.duel = duel ? { total: duel, left: duel, started: false } : null;
     this.password = password || null; // приватный стол
     this.variant = variant;
     this.hub = hub;
@@ -27,7 +29,7 @@ export class MixedRoom {
     const sb = Math.max(1, Math.floor(bb / 2));
     this.table = new GameTable({
       id: `m${this.id}`, kind: 'mixed', hub, sb, bb, variant,
-      title: `${this.password ? '🔒 ' : ''}Стол ${host.name} · ${sb}/${bb}${variant === 'short' ? ' · Short Deck' : ''}${this.maxSeats === 9 ? ' · на 9' : ''}`,
+      title: `${this.password ? '🔒 ' : ''}${duel ? `Дуэль на ${duel} раздач · ` : ''}Стол ${host.name} · ${sb}/${bb}${variant === 'short' ? ' · Short Deck' : ''}${this.maxSeats === 9 ? ' · на 9' : ''}`,
     });
     this.bots = [];
     // боты на свободные места: от сильного к слабому, без повторов
@@ -41,6 +43,7 @@ export class MixedRoom {
     this.table.extra = (uid) => {
       const h = this.humans.get(uid);
       return {
+        duel: this.duel ? { hand: this.duel.total - this.duel.left + (this.table.inHand ? 1 : 0), total: this.duel.total } : null,
         roomId: this.id, host: this.hostName, isHost: uid === this.hostId, buyin, invite: this.hub.mixedInvite?.(this.id) ?? null,
         canRebuy: h ? h.player.stack === 0 : false, leaving: !!h?.leaving,
         humans: this.humans.size, seatsFree: this.maxSeats - this.table.players.length, private: !!this.password,
@@ -58,7 +61,8 @@ export class MixedRoom {
     if (!(bots >= 0 && bots <= seats - 2)) throw new Error(`Ботов — от 0 до ${seats - 2}`);
     const password = opts.password ? String(opts.password).trim().slice(0, 20) : null;
     if (opts.password && !/^[\p{L}\p{N}]{3,20}$/u.test(password)) throw new Error('Пароль — от 3 до 20 букв или цифр');
-    const room = new MixedRoom(hub, host, { buyin: opts.buyin, bots, seats, password, variant: opts.variant === 'short' ? 'short' : null });
+    const duel = opts.duel ? Math.max(5, Math.min(200, Math.floor(Number(opts.duel)))) : 0;
+    const room = new MixedRoom(hub, host, { buyin: opts.buyin, bots: duel ? 0 : bots, seats, password, variant: opts.variant === 'short' ? 'short' : null, duel });
     room.join(host);
     room.table.run();
     return room;
@@ -160,6 +164,15 @@ export class MixedRoom {
   }
 
   afterHand() {
+    // дуэль: считаем раздачи, после последней — все встают
+    if (this.duel && this.humans.size === 2) {
+      this.duel.left--;
+      if (this.duel.left <= 0) {
+        for (const uid of [...this.humans.keys()]) this.cashOut(uid);
+        this.table.closed = true;
+        return;
+      }
+    }
     for (const [uid, h] of this.humans) {
       setInPlay.run(h.player.stack, uid);
       this.hub.sendMe(uid);
