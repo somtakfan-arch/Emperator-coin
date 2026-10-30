@@ -6,7 +6,7 @@ import { WebSocketServer } from 'ws';
 import { config, payoutShares, NOT_ADMIN } from './config.js';
 import { db, upsertUser, getUser, ranks, credit, recoverAfterRestart, addWinnings, WIN_REWARDS, useHint } from './db.js';
 import { verifyInitData, startBot, createInvoice, hooks, inviteLink, bot, notify, openButton, findPack, api } from './telegram.js';
-import { BotRoom, DemoRoom } from './game/botroom.js';
+import { BotRoom, DemoRoom, ladderStep, LADDER_STEPS } from './game/botroom.js';
 import { MixedRoom } from './game/mixedroom.js';
 import { Tournaments } from './game/tournament.js';
 import { SoloTour, SOLO_SIZES, SOLO_BLINDS } from './game/solotour.js';
@@ -91,6 +91,25 @@ const hub = {
   onTourDone: (uid, ev) => progress.onEvent(uid, { type: 'tour', ...ev }),
   onBeatAll: (uid) => progress.onEvent(uid, { type: 'beatAll' }),
   onBotVs: (uid, bots, won, net) => progress.recordVs(uid, bots, won, net),
+  // лестница: новая ступень — фишки, вся лестница — эпический сундук
+  onLadderStep(uid, step, of) {
+    const chips = step * 200;
+    if (config.progressRewards) credit(uid, chips, 'ladder', String(step));
+    if (step >= of) progress.grantChest(uid, 'epic');
+    hub.send(uid, { t: 'toast', text: step >= of ? `Лестница пройдена! +${chips} фишек и эпический сундук` : `Новая ступень ${step + 1}! +${chips} фишек` });
+    hub.sendMe(uid);
+  },
+  // команда 2 на 2 победила: редкий сундук
+  onTeamWin(uid) {
+    progress.grantChest(uid, 'rare');
+    hub.send(uid, { t: 'toast', text: 'Команда победила! Редкий сундук твой' });
+    hub.sendMe(uid);
+  },
+  // марафон: 1000 раздач сыграно — итог и обычный сундук
+  onMarathonDone(uid, net) {
+    progress.grantChest(uid, 'common');
+    hub.send(uid, { t: 'toast', text: `Марафон окончен! Итог за 1000 раздач: ${net >= 0 ? '+' : '−'}${Math.abs(net).toLocaleString('ru')} фишек. Сундук твой` });
+  },
   // босс-раш пройден: эпический сундук и фишки ×3 от бай-ина
   onRushDone(uid, buyin) {
     progress.grantChest(uid, 'epic');
@@ -450,7 +469,7 @@ const handlers = {
   sitBots(uid, m) {
     if (activeTable(uid)) throw new Error('Ты уже за столом');
     botRooms.set(uid, BotRoom.open(hub, getUser(uid), {
-      mode: ['6', '9', 'rush', 'mega'].includes(m.mode) ? m.mode : 'hu', botName: m.botName, variant: m.variant === 'short' ? 'short' : null, chaos: !!m.chaos, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0, fast: !!m.fast,
+      mode: ['6', '9', 'rush', 'mega', 'ladder', 'team'].includes(m.mode) ? m.mode : 'hu', jokers: !!m.jokers, marathon: !!m.marathon, botName: m.botName, variant: m.variant === 'short' ? 'short' : null, chaos: !!m.chaos, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0, fast: !!m.fast,
       level: m.level || 'normal', shadow: progress.shadowLevel(uid),
     }));
     hub.onSeated(uid);
@@ -483,6 +502,7 @@ const handlers = {
     }),
     vs: progress.vsStats(uid),
     shadow: progress.shadowLevel(uid),
+    ladder: { ...ladderStep(uid), steps: LADDER_STEPS },
   }),
   // эмодзи над собой за столом
   emote(uid, m) {
@@ -639,6 +659,7 @@ const handlers = {
     const at = activeTable(uid);
     if (!at) throw new Error('Ты не за столом');
     if (at.table.mega) throw new Error('За огромным столом подсказок нет');
+    if (at.table.jokers) throw new Error('С джокерами подсказок нет');
     const pending = at.seat.pending;
     if (!pending) throw new Error('Подсказка доступна в твой ход');
     const room = botRooms.get(uid);

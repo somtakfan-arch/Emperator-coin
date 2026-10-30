@@ -102,6 +102,35 @@ export class HumanSeat {
 }
 
 // Бот с паузой «на подумать», чтобы игра выглядела живой.
+// Джокеры: боты (их «мозг» знает только 52 карты) видят вместо джокера лучшую замену
+function dejoke(cards, others = []) {
+  if (!cards.some((c) => c >= 52)) return cards;
+  const out = cards.slice();
+  for (let i = 0; i < out.length; i++) {
+    if (out[i] < 52) continue;
+    const used = new Set([...out, ...others]);
+    let best = -1, pick = 48;
+    for (let c = 0; c < 52; c++) {
+      if (used.has(c)) continue;
+      const trial = out.slice(); trial[i] = c;
+      const v = trial.filter((x) => x < 52).length >= 5 ? evaluate(trial.filter((x) => x < 52).concat(others.filter((x) => x < 52))) : c;
+      if (v > best) { best = v; pick = c; }
+    }
+    out[i] = pick;
+  }
+  return out;
+}
+function dejokeState(s) {
+  if (!s.hole.some((c) => c >= 52) && !s.board.some((c) => c >= 52)) return s;
+  const board = dejoke(s.board);
+  return { ...s, board, hole: dejoke(s.hole, board) };
+}
+function dejokeEvent(e) {
+  if (e.type === 'street') return { ...e, board: dejoke(e.board) };
+  if (e.type === 'showdown') return { ...e, board: dejoke(e.board), reveals: e.reveals.map((r) => ({ ...r, cards: dejoke(r.cards, dejoke(e.board)) })) };
+  return e;
+}
+
 export function botSeat(bot, table) {
   return {
     id: bot.id,
@@ -120,9 +149,9 @@ export function botSeat(bot, table) {
         table.dumped.add(bot.id);
         return { type: 'raise', to: state.myBet + state.stack - 1 };
       }
-      return bot.act(state);
+      return bot.act(table.jokers ? dejokeState(state) : state);
     },
-    observe: (e) => bot.observe(e),
+    observe: (e) => bot.observe(table.jokers ? dejokeEvent(e) : e),
   };
 }
 
@@ -253,7 +282,7 @@ export class GameTable {
     for (const p of live) if (p.bot.hole) holes[p.id] = p.bot.hole;
     if (Object.keys(holes).length < 2) return;
     for (const [id, cards] of Object.entries(holes)) v.shown[id] = v.shown[id] || { cards, hand: null };
-    if (this.mega) return; // 40 игроков и 6 колод — шансы не считаем
+    if (this.mega || this.jokers) return; // огромный стол и джокеры — шансы не считаем
     v.equity = knownEquity(holes, v.board, this.variant === 'short' ? evaluateShort : evaluate, this.variant === 'short');
   }
 
@@ -374,7 +403,7 @@ export class GameTable {
         if (p.isBot || !p.bot.decisions?.length) continue;
         const ds = p.bot.decisions;
         p.bot.decisions = [];
-        if (!this.mega) setTimeout(() => this.coachReview(p, ds, log), 30);
+        if (!this.mega && !this.jokers) setTimeout(() => this.coachReview(p, ds, log), 30);
       }
       for (const p of this.players) {
         if (!v.dealt.has(p.id)) continue;
@@ -418,7 +447,7 @@ export class GameTable {
   snapshot(uid) {
     const v = this.v;
     return {
-      id: this.id, kind: this.kind, title: this.title, sb: this.sb, bb: this.bb, mega: !!this.mega,
+      id: this.id, kind: this.kind, title: this.title, sb: this.sb, bb: this.bb, mega: !!this.mega, jokers: !!this.jokers,
       board: v.board, pot: v.pot, actor: v.actor, deadline: v.deadline, buttonId: v.buttonId,
       handId: v.handId, result: v.result, inHand: this.inHand, fast: !!this.fast, variant: this.variant, chaos: this.chaos?.text ?? null,
       winCards: v.result ? v.winCards : null, ...this.extra(uid),
@@ -440,6 +469,7 @@ export class GameTable {
           away: !p.isBot && p.bot.sittingOut,
           handsWon: p.isBot ? botHandsWon(p.name) : p.handsWon ?? 0,
           streak: p.streak || 0,
+          team: this.teams?.get(p.id) ?? null,
           look: p.isBot ? null : p.look || null,
           equity: v.equity?.[p.id] ?? null,
           emote: v.emotes[p.id]?.e ?? null,

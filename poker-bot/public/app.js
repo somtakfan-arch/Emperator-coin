@@ -1111,6 +1111,13 @@ function botsScreen() {
         h('button', { class: S.botMode === 'mixed' ? 'on' : '', onclick: () => { S.botMode = 'mixed'; render(); } }, 'С друзьями')),
       h('div', { class: 'seg', style: 'margin-top:6px' },
         h('button', { class: S.botMode === 'mega' ? 'on' : '', onclick: () => { S.botMode = 'mega'; render(); } }, 'Огромный стол · 101')),
+      h('div', { class: 'seg', style: 'margin-top:6px' },
+        h('button', { class: S.botMode === 'ladder' ? 'on' : '', onclick: () => { S.botMode = 'ladder'; render(); } }, 'Лестница'),
+        h('button', { class: S.botMode === 'team' ? 'on' : '', onclick: () => { S.botMode = 'team'; render(); } }, 'Команда 2 на 2')),
+      S.botMode === 'ladder' && h('div', { class: 'small soft', style: 'line-height:1.45' },
+        `12 ступеней 1 на 1: от слабых ботов до Короля. Обыграл — следующая ступень и +200 фишек за каждую новую. Проиграл стек — ступень сохраняется, приходи снова. Сейчас ты на ступени ${(S.botsInfo?.ladder?.step ?? 0) + 1}${S.botsInfo?.ladder?.steps ? `: ${S.botsInfo.ladder.steps[S.botsInfo.ladder.step || 0]}` : ''}.`),
+      S.botMode === 'team' && h('div', { class: 'small soft', style: 'line-height:1.45' },
+        'Ты и бот-напарник Профессор против Акулы и Охотника. Напарник сидит напротив. Выбили обоих соперников — команда победила, редкий сундук. Выбыл ты — команда проиграла.'),
       S.botMode === 'mega' && h('div', { class: 'small soft', style: 'line-height:1.45' },
         'Ты и 100 ботов за одним столом. Играют сразу 6 колод — карты могут повторяться, бывает даже пять одинаковых (считается как каре). Боты ходят почти мгновенно. Проигравшие боты выбывают. Подсказок здесь нет.'),
       S.botMode === 'rush' && h('div', { class: 'small soft', style: 'line-height:1.45' },
@@ -1121,7 +1128,13 @@ function botsScreen() {
         h('span', {}, 'Short Deck'), h('span', { class: 'small muted' }, 'без 2–5, флеш старше фулл-хауса')),
       S.botMode !== 'mixed' && h('label', { class: 'toggle-row' },
         h('input', { type: 'checkbox', checked: !!S.chaos, onchange: (e) => { S.chaos = e.target.checked; } }),
-        h('span', {}, 'Хаос'), h('span', { class: 'small muted' }, 'случайное событие каждую раздачу'))),
+        h('span', {}, 'Хаос'), h('span', { class: 'small muted' }, 'случайное событие каждую раздачу')),
+      S.botMode !== 'mixed' && h('label', { class: 'toggle-row' },
+        h('input', { type: 'checkbox', checked: !!S.jokers, onchange: (e) => { S.jokers = e.target.checked; } }),
+        h('span', {}, 'Джокеры'), h('span', { class: 'small muted' }, 'два джокера в колоде, заменяют любую карту')),
+      ['6', '9'].includes(S.botMode) && h('label', { class: 'toggle-row' },
+        h('input', { type: 'checkbox', checked: !!S.marathon, onchange: (e) => { S.marathon = e.target.checked; } }),
+        h('span', {}, 'Марафон'), h('span', { class: 'small muted' }, '1000 раздач, в конце итог и сундук'))),
     S.botMode === 'mixed' && h('div', { class: 'field' },
       h('div', { class: 'label' }, 'Мест за столом'),
       h('div', { class: 'choices' }, [6, 9].map((n) => h('button', { class: (S.mixedSeats || 6) === n ? 'on' : '', onclick: () => { S.mixedSeats = n; S.mixedBots = Math.min(S.mixedBots ?? 2, n - 2); render(); } }, n))),
@@ -1131,7 +1144,7 @@ function botsScreen() {
       h('input', { class: 'buyin-input', type: 'text', maxlength: 20, placeholder: 'Пароль стола (необязательно)', 'aria-label': 'Пароль стола', value: S.mixedPass || '', id: 'mixed-pass', oninput: (e) => { S.mixedPass = e.target.value; } }),
       h('div', { class: 'small muted', style: 'line-height:1.45' },
         'Создаёшь стол и зовёшь друзей по ссылке — каждый садится со своими фишками. Боты занимают свободные места (всего до 6). Встать можно в любой момент.')),
-    S.botMode !== 'mixed' && S.botMode !== 'mega' && h('div', { class: 'field' },
+    !['mixed', 'mega', 'ladder', 'team'].includes(S.botMode) && h('div', { class: 'field' },
       h('div', { class: 'label' }, S.botMode === 'hu' ? 'Соперник' : 'За столом все пятеро (Король — только 1 на 1)'),
       Object.entries(BOT_INFO).map(([name, info]) => h('button', {
         class: `bot ${info.boss ? 'boss' : ''} ${S.botMode === 'hu' && S.botName === name ? 'on' : ''}`,
@@ -1251,7 +1264,7 @@ function mixedScreen() {
 }
 
 async function sitBots() {
-  const r = await run({ t: 'sitBots', mode: S.botMode, botName: S.botName, buyin: S.buyin, minutes: S.botMinutes, fast: !!S.botFast, level: S.botLevel || 'normal', variant: S.shortDeck ? 'short' : null, chaos: !!S.chaos });
+  const r = await run({ t: 'sitBots', mode: S.botMode, botName: S.botName, buyin: S.buyin, minutes: S.botMinutes, fast: !!S.botFast, level: S.botLevel || 'normal', variant: S.shortDeck ? 'short' : null, chaos: !!S.chaos, jokers: !!S.jokers, marathon: ['6', '9'].includes(S.botMode) && !!S.marathon });
   if (r) go('table');
 }
 
@@ -1262,7 +1275,7 @@ async function sitDemo() {
 
 // ---------- Демо-стол: выбор карт на следующую раздачу (только админ) ----------
 
-const cardText = (c) => (RANKS[c >> 2] === 'T' ? '10' : RANKS[c >> 2]) + SUITS[c & 3];
+const cardText = (c) => c >= 52 ? '🃏' : (RANKS[c >> 2] === 'T' ? '10' : RANKS[c >> 2]) + SUITS[c & 3];
 
 function openPicker(target) {
   const plan = S.table?.plan || { holes: {}, board: [] };
@@ -1319,6 +1332,7 @@ const RANKS = '23456789TJQKA';
 const SUITS = ['♠', '♥', '♦', '♣'];
 function pcard(c, size = '', extra = '') {
   if (c == null) return h('div', { class: `pcard back ${size} ${extra}` });
+  if (c >= 52) return h('div', { class: `pcard joker ${size} ${extra}`, 'aria-label': 'Джокер' }, h('div', { class: 'r' }, 'J★'), h('div', { class: 's' }, '🃏'));
   const red = (c & 3) === 1 || (c & 3) === 2;
   const r = RANKS[c >> 2] === 'T' ? '10' : RANKS[c >> 2];
   return h('div', { class: `pcard ${size} ${red ? 'red' : ''} s${c & 3} ${extra}`, 'aria-label': r + SUITS[c & 3] },
@@ -1398,7 +1412,7 @@ function tableScreen() {
       seatAvatar(s),
       h('div', { class: 'col', style: 'gap:0;min-width:0' },
         // ник окрашен цветом ранга
-        h('div', { class: 'nm', style: s.look?.rankColor ? `color:${s.look.rankColor}` : null }, s.me ? 'Ты' : s.name),
+        h('div', { class: 'nm', style: s.look?.rankColor ? `color:${s.look.rankColor}` : null }, s.team ? (s.team === 'A' ? '🔵 ' : '🔴 ') : '', s.me ? 'Ты' : s.name),
         // стек и рядом значок выигранных раздач (у людей и у ботов) — внутри таблички, ничего не закрывает
         h('div', { class: 'st' }, s.allIn ? 'олл-ин' : fmt(s.stack),
           s.handsWon > 0 && h('span', { class: 'wins-badge', title: 'Выиграно раздач', 'aria-label': `Выиграно раздач: ${s.handsWon}` },
@@ -1474,6 +1488,10 @@ function tableScreen() {
       h('div', { class: 'title' }, info,
         // Хаос / босс-раш — строкой в шапке, чтобы не закрывать игроков
         (T.chaos || T.rush) && h('div', { class: 'mode-line' }, T.rush ? `Босс ${T.rush.i} из ${T.rush.of}: ${T.rush.name}` : T.chaos),
+        T.ladder && h('div', { class: 'mode-line' }, `Ступень ${T.ladder.step} из ${T.ladder.of}: ${T.ladder.name}`),
+        T.marathon && h('div', { class: 'mode-line' }, `Марафон: раздача ${Math.min(T.marathon.hand, T.marathon.of)} из ${T.marathon.of} · итог ${T.marathon.net >= 0 ? '+' : '−'}${fmt(Math.abs(T.marathon.net))}`),
+        T.team && h('div', { class: 'mode-line' }, '🔵 твоя команда · 🔴 соперники'),
+        T.target && h('div', { class: 'mode-line' }, `🎯 Цель: ${T.target} — за неё двойная награда`),
         sessionLine),
       // подсказка — круглая кнопка в шапке, чтобы не закрывать игроков
       myTurn && !S.hint && !T.mega && h('button', { class: 'icon-btn hint-ico', 'aria-label': 'Подсказка', onclick: askHint },
@@ -2104,7 +2122,7 @@ function soloScreen() {
       size > 9 && h('div', { class: 'label' }, 'Игроков за столом'),
       size > 9 && h('div', { class: 'choices', style: 'margin-bottom:8px' }, [6, 9].map((n) => h('button', { class: (S.soloSeats ?? 6) === n ? 'on' : '', onclick: () => { S.soloSeats = n; render(); } }, `по ${n}`))),
       h('div', { class: 'label' }, 'Блайнды растут каждые'),
-      h('div', { class: 'choices' }, cfg.blinds.map((n) => h('button', { class: blind === n ? 'on' : '', onclick: () => { S.soloBlind = n; render(); } }, `${n} мин`)))),
+      h('div', { class: 'choices' }, cfg.blinds.map((n) => h('button', { class: blind === n ? 'on' : '', onclick: () => { S.soloBlind = n; render(); } }, n < 1 ? `${n * 60} с · турбо` : `${n} мин`)))),
     h('div', { class: 'field' },
       h('div', { class: 'label' }, 'Взнос'),
       h('div', { class: 'choices' }, presets.map((b) => h('button', { class: buyin === b ? 'on' : '', onclick: () => { S.soloBuyin = b; render(); } }, fmt(b))),

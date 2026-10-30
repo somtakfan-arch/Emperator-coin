@@ -950,3 +950,57 @@ test('админ: вся косметика открыта, в таблицах 
   db.prepare('UPDATE users SET rating = 1500, hands_won = 0, biggest_pot = 0 WHERE id = 7001').run();
   a.close();
 });
+
+test('режимы: джокеры, лестница, команда 2 на 2, марафон, турбо-нокаут с целью', async () => {
+  // джокеры: несколько раздач без падений, джокер реально бывает в колоде
+  const j = new Client(9501, { autoplay: 'call' });
+  await j.ready;
+  await j.req({ t: 'invoice', pack: 'p1' });
+  await j.req({ t: 'sitBots', mode: '6', buyin: 500, jokers: true, fast: true });
+  const s0 = await j.waitFor((m) => m.t === 'table' && m.table?.jokers && m.table.inHand);
+  await assert.rejects(j.req({ t: 'hint' }), /джокерами/);
+  await j.waitFor((m) => m.t === 'table' && m.table?.handId >= s0.table.handId + 3, 90000).catch(() => {});
+  j.ws.send(JSON.stringify({ t: 'leave' })); await j.waitFor((m) => m.t === 'left', 30000);
+  assertLedger(9501);
+  j.close();
+
+  // лестница: соперник — первая ступень
+  const l = new Client(9502);
+  await l.ready;
+  await l.req({ t: 'invoice', pack: 'p1' });
+  const info = await l.req({ t: 'botsInfo' });
+  assert.equal(info.ladder.steps.length, 12);
+  await l.req({ t: 'sitBots', mode: 'ladder', buyin: 500 });
+  const ls = await l.waitFor((m) => m.t === 'table' && m.table?.ladder);
+  assert.equal(ls.table.ladder.step, 1);
+  assert.equal(ls.table.seats.length, 2);
+  assert.equal(ls.table.seats.find((s) => !s.me).name, info.ladder.steps[0]);
+  l.ws.send(JSON.stringify({ t: 'leave' })); await l.waitFor((m) => m.t === 'left', 30000);
+  l.close();
+
+  // команда: 4 места, две команды через одного
+  const t = new Client(9503);
+  await t.ready;
+  await t.req({ t: 'invoice', pack: 'p1' });
+  await t.req({ t: 'sitBots', mode: 'team', buyin: 500, marathon: true });
+  const ts = await t.waitFor((m) => m.t === 'table' && m.table?.team);
+  assert.deepEqual(ts.table.seats.map((s) => s.team), ['A', 'B', 'A', 'B']);
+  assert.equal(ts.table.marathon, null, 'марафон только на столах 6 и 9');
+  t.ws.send(JSON.stringify({ t: 'leave' })); await t.waitFor((m) => m.t === 'left', 30000);
+  t.close();
+
+  // марафон на столе 6 + турбо-нокаут с целью
+  const m = new Client(9504);
+  await m.ready;
+  await m.req({ t: 'invoice', pack: 'p1' });
+  await m.req({ t: 'sitBots', mode: '6', buyin: 500, marathon: true });
+  const ms = await m.waitFor((x) => x.t === 'table' && x.table?.marathon);
+  assert.equal(ms.table.marathon.of, 1000);
+  m.ws.send(JSON.stringify({ t: 'leave' })); await m.waitFor((x) => x.t === 'left', 30000);
+  await m.req({ t: 'startSolo', buyin: 500, size: 9, blindMin: 0.5, ko: true });
+  const so = await m.waitFor((x) => x.t === 'table' && x.table?.solo);
+  assert.ok(so.table.target, 'есть цель');
+  assert.ok(so.table.seats.some((s) => s.name === so.table.target));
+  m.ws.send(JSON.stringify({ t: 'leave' })); await m.waitFor((x) => x.t === 'left' || x.t === 'finished', 30000);
+  m.close();
+});

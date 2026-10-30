@@ -13,7 +13,7 @@ import { checkPlan, arrangeDeck } from './demoplan.js';
 
 const MAX_SEATS = 6;
 export const SOLO_SIZES = [6, 9, 18, 60]; // 9 — один стол до последнего
-export const SOLO_BLINDS = [2, 3, 6]; // минут на уровень
+export const SOLO_BLINDS = [0.5, 2, 3, 6]; // минут на уровень (0.5 — турбо: каждые 30 секунд)
 const setInPlay = db.prepare('UPDATE users SET in_play = ? WHERE id = ?');
 
 export class SoloTour {
@@ -96,6 +96,8 @@ export class SoloTour {
     const entries = [{ id: user.id, name: user.name, stack, bot: new HumanSeat(user.id, this.hub), isBot: false }];
     const k = Math.ceil(this.n / this.seats);
     for (let i = 0; i < k; i++) this.tables.push(this.newTable(i + 1));
+    // нокаут: один из ботов — «цель», за него двойная награда
+    if (this.bounty) this.target = this.botNames[(Math.random() * this.botNames.length) | 0];
     this.botNames.forEach((name, i) => {
       const bot = makeBot(name, { iters: 200 });
       bot.id = -(i + 1);
@@ -122,7 +124,7 @@ export class SoloTour {
     tb.extra = () => ({
       ...(this.demo && tb.players.some((p) => p.id === this.userId) ? { demo: true, plan: this.plan } : {}),
       tournamentId: this.id, solo: true, alive: this.alive(), total: this.n, ...this.levelInfo(),
-      prizePool: this.n * (this.buyin - this.bounty), tableNo: num, ko: !!this.bounty, bounty: this.bounty,
+      prizePool: this.n * (this.buyin - this.bounty), tableNo: num, ko: !!this.bounty, bounty: this.bounty, target: this.target && this.tables.some((t) => !t.closed && t.players.some((x) => x.name === this.target)) ? this.target : null,
     });
     tb.beforeHand = () => {
       if (tb.players.length < 2 && !this.done) this.rebalance(tb);
@@ -147,8 +149,10 @@ export class SoloTour {
       if (this.bounty && !this.demo) {
         const w = (tb.v.result || []).filter((x) => x.id !== p.id).sort((a, b) => b.amount - a.amount)[0];
         if (w?.id === this.userId) {
-          credit(this.userId, this.bounty, 'solo_bounty', this.id);
-          this.hub.send(this.userId, { t: 'toast', text: `Нокаут! Ты выбил ${p.name}: +${this.bounty.toLocaleString('ru')} фишек` });
+          // охота за головой: за бота-цель — двойная награда
+          const amount = p.name === this.target ? this.bounty * 2 : this.bounty;
+          credit(this.userId, amount, 'solo_bounty', this.id);
+          this.hub.send(this.userId, { t: 'toast', text: `${p.name === this.target ? '🎯 Цель выбита!' : 'Нокаут!'} Ты выбил ${p.name}: +${amount.toLocaleString('ru')} фишек` });
           this.hub.sendMe(this.userId);
         }
       }

@@ -5,6 +5,15 @@ import { makeBot, isBotName, CROWD } from '../../core/crowd.js';
 
 // босс-раш: шесть сильнейших по очереди
 const RUSH = ['Скала', 'Маньяк', 'Хамелеон', 'Акула', 'Охотник', 'Король'];
+// Лестница 1 на 1: 12 ступеней от слабых ботов к Королю; ступень сохраняется между заходами
+const LADDER = [...[...CROWD].sort((a, b) => a.elo - b.elo).filter((_, i, a) => i % Math.ceil(a.length / 6) === 0).slice(0, 6).map((c) => c.name),
+  'Скала', 'Маньяк', 'Хамелеон', 'Акула', 'Охотник', 'Король'];
+export const LADDER_STEPS = LADDER;
+db.exec('CREATE TABLE IF NOT EXISTS ladder (user_id INTEGER PRIMARY KEY, step INTEGER NOT NULL DEFAULT 0, best INTEGER NOT NULL DEFAULT 0)');
+export const ladderStep = (uid) => db.prepare('SELECT step, best FROM ladder WHERE user_id = ?').get(uid) || { step: 0, best: 0 };
+const setLadder = (uid, step) => db.prepare(`INSERT INTO ladder (user_id, step, best) VALUES (?, ?, ?)
+  ON CONFLICT (user_id) DO UPDATE SET step = excluded.step, best = MAX(best, excluded.step)`).run(uid, step, step);
+const MARATHON = 1000; // раздач в марафоне
 // Хаос: одно событие на раздачу
 const CHAOS = [
   { kind: 'double', text: 'Хаос: двойные блайнды' },
@@ -35,7 +44,7 @@ const saveMemory = db.prepare(`INSERT INTO bot_memory (user_id, bot, data, at) V
   ON CONFLICT (user_id, bot) DO UPDATE SET data = excluded.data, at = excluded.at`);
 
 export class BotRoom {
-  constructor(hub, user, { mode, botName, buyin, minutes = 0, fast = false, level = 'normal', shadow = 0, variant = null, chaos = false }) {
+  constructor(hub, user, { mode, botName, buyin, minutes = 0, fast = false, level = 'normal', shadow = 0, variant = null, chaos = false, jokers = false, marathon = false }) {
     this.mode = mode;
     this.chaosOn = chaos;
     this.level = level;
@@ -49,19 +58,25 @@ export class BotRoom {
     const sb = Math.max(1, Math.floor(bb / 2));
     // стол на 9: пятеро сильных и трое обычных; босс-раш: боссы по очереди 1 на 1
     const pros = BOT_CLASSES.map((C) => new C({}).name);
-    const mega = mode === 'mega'; // огромный стол: ты и 40 ботов, 6 колод
+    const mega = mode === 'mega'; // огромный стол: ты и 100 ботов, 6 колод
+    // лестница: соперник — твоя текущая ступень
+    if (mode === 'ladder') this.ladder = { step: Math.min(ladderStep(user.id).step, LADDER.length - 1) };
+    // команда 2 на 2: ты и напарник против двух ботов (места через одного)
+    if (mode === 'team') this.team = { partner: 'Профессор' };
     const names = mode === 'hu' ? [botName]
       : mode === '9' ? [...pros, ...CROWD.map((c) => c.name).sort(() => Math.random() - 0.5).slice(0, 3)]
-        : mode === 'rush' ? [RUSH[0]] : mega ? [...CROWD.map((c) => c.name), ...MEGA_EXTRA].sort(() => Math.random() - 0.5).slice(0, MEGA_BOTS) : pros;
+        : mode === 'rush' ? [RUSH[0]] : mode === 'ladder' ? [LADDER[this.ladder.step]] : mode === 'team' ? ['Акула', 'Профессор', 'Охотник'] : mega ? [...CROWD.map((c) => c.name), ...MEGA_EXTRA].sort(() => Math.random() - 0.5).slice(0, MEGA_BOTS) : pros;
     if (mode === 'rush') this.rush = { i: 0 };
-    const label = { hu: '1 на 1', 6: 'Стол на 6', 9: 'Стол на 9', rush: 'Босс-раш', mega: `Огромный стол · ${MEGA_BOTS + 1} игрок · 6 колод` }[mode];
+    const label = { hu: '1 на 1', 6: 'Стол на 6', 9: 'Стол на 9', rush: 'Босс-раш', mega: `Огромный стол · ${MEGA_BOTS + 1} игрок · 6 колод`, ladder: 'Лестница', team: 'Команда 2 на 2' }[mode];
     this.table = new GameTable({
       id: `b${user.id}`, kind: 'bots', hub, sb, bb, variant,
-      title: `${label} · ${sb}/${bb}${variant === 'short' ? ' · Short Deck' : ''}${chaos ? ' · Хаос' : ''}${minutes ? ` · ${minutes} мин` : ''}${fast ? ' · быстрый' : ''}`,
+      title: `${label} · ${sb}/${bb}${variant === 'short' ? ' · Short Deck' : ''}${chaos ? ' · Хаос' : ''}${jokers ? ' · Джокеры' : ''}${marathon && ['6', '9'].includes(mode) ? ' · Марафон' : ''}${minutes ? ` · ${minutes} мин` : ''}${fast ? ' · быстрый' : ''}`,
     });
     this.baseBlinds = [sb, bb];
     this.table.fast = fast || mega; // боты думают меньше, паузы короче
     if (mega) { this.table.mega = true; this.table.engine.decks = 6; }
+    if (jokers) { this.table.jokers = true; this.table.engine.jokers = true; } // два джокера в колоде
+    if (marathon && ['6', '9'].includes(mode)) this.marathon = { left: MARATHON }; // марафон — только столы на 6 и 9
     this.bots = [];
     this.advisor = makeAdvisor(user.id);
     this.hands = 0;
@@ -77,8 +92,14 @@ export class BotRoom {
       this.bots.push(bot);
       this.table.addPlayer({ id: bot.id, name: bot.name, stack: buyin, bot: botSeat(bot, this.table), isBot: true });
     });
+    if (this.team) {
+      this.table.teams = new Map(this.table.players.map((p) => [p.id, p.id === this.me.id || p.name === 'Профессор' ? 'A' : 'B']));
+    }
     this.table.extra = () => ({
-      buyin, canRebuy: this.me.stack === 0 && !this.rush, leaving: !!this.leaving,
+      ladder: this.ladder ? { step: this.ladder.step + 1, of: LADDER.length, name: LADDER[this.ladder.step] } : null,
+      marathon: this.marathon ? { hand: MARATHON - this.marathon.left + 1, of: MARATHON, net: this.me.stack - this.invested } : null,
+      team: !!this.team,
+      buyin, canRebuy: this.me.stack === 0 && !this.rush && !this.ladder && !this.team, leaving: !!this.leaving,
       rush: this.rush ? { i: this.rush.i + 1, of: RUSH.length, name: RUSH[this.rush.i] } : null,
       endsAt: this.endsAt || null, locked: this.locked(), eloDelta: this.lastElo ?? null,
     });
@@ -92,7 +113,7 @@ export class BotRoom {
     if (!(Number.isSafeInteger(opts.buyin) && opts.buyin >= config.buyinMin)) throw new Error(`Бай-ин — от ${config.buyinMin} фишек`); // сверху — сколько есть на балансе
     if (opts.minutes && !config.timedMinutes.includes(opts.minutes)) throw new Error('Неверное время стола');
     if (opts.mode === 'hu' && !isBotName(opts.botName)) throw new Error('Нет такого бота');
-    if (!['hu', '6', '9', 'rush', 'mega'].includes(opts.mode)) throw new Error('Неверный стол');
+    if (!['hu', '6', '9', 'rush', 'mega', 'ladder', 'team'].includes(opts.mode)) throw new Error('Неверный стол');
     if (opts.variant && opts.variant !== 'short') throw new Error('Неверный вариант');
     if (!['easy', 'normal', 'master'].includes(opts.level || 'normal')) throw new Error('Неверная сложность');
     if (!debit(user.id, opts.buyin, 'bots_buyin')) throw new Error('Не хватает фишек — пополни кошелёк');
@@ -133,11 +154,46 @@ export class BotRoom {
         this.hub.send(this.userId, { t: 'toast', text: `Босс ${this.rush.i + 1} из ${RUSH.length}: ${name}` });
       }
     }
+    // лестница: обыграл — следующая ступень (награда за новую), проиграл стек — заход окончен, ступень сохраняется
+    if (this.ladder) {
+      if (this.me.stack === 0) {
+        this.hub.send(this.userId, { t: 'toast', text: `Лестница: ты остаёшься на ступени ${this.ladder.step + 1} из ${LADDER.length}` });
+        return this.close();
+      }
+      if (!this.table.players.some((p) => p.isBot)) {
+        const prevBest = ladderStep(this.userId).best;
+        this.ladder.step++;
+        setLadder(this.userId, Math.min(this.ladder.step, LADDER.length - 1));
+        if (this.ladder.step > prevBest) this.hub.onLadderStep?.(this.userId, this.ladder.step, LADDER.length);
+        if (this.ladder.step >= LADDER.length) {
+          setLadder(this.userId, 0); // прошёл всю — начинаешь заново
+          return this.close();
+        }
+        const name = LADDER[this.ladder.step];
+        const bot = makeBot(name, { iters: 300, level: this.level });
+        bot.id = -(this.ladder.step + 1);
+        this.bots.push(bot);
+        this.table.addPlayer({ id: bot.id, name, stack: this.buyin, bot: botSeat(bot, this.table), isBot: true });
+        this.hub.send(this.userId, { t: 'toast', text: `Ступень ${this.ladder.step + 1} из ${LADDER.length}: ${name}` });
+      }
+    }
+    // команда: оба соперника выбыли — победа; ты выбыл — поражение
+    if (this.team) {
+      const opps = this.table.players.filter((p) => this.table.teams.get(p.id) === 'B');
+      if (this.me.stack === 0) {
+        this.hub.send(this.userId, { t: 'toast', text: 'Команда проиграла — ты выбыл' });
+        return this.close();
+      }
+      if (!opps.length) {
+        this.hub.onTeamWin?.(this.userId);
+        return this.close();
+      }
+    }
     // Хаос: случайное событие на каждую раздачу
     this.table.setBlinds(...this.baseBlinds);
     this.table.chaos = this.chaosOn ? CHAOS[(Math.random() * CHAOS.length) | 0] : null;
     if (this.table.chaos?.kind === 'double') this.table.setBlinds(this.baseBlinds[0] * 2, this.baseBlinds[1] * 2);
-    if (!this.table.players.some((p) => p.isBot)) {
+    if (!this.ladder && !this.team && !this.table.players.some((p) => p.isBot)) {
       this.beatAll = true; // обыграл всех ботов — стол закрывается, стек на баланс
       this.hub.onBeatAll?.(this.userId);
       return this.close();
@@ -164,13 +220,19 @@ export class BotRoom {
     }
     setInPlay.run(this.me.stack, this.userId);
     if (++this.hands % 10 === 0) this.saveMemory();
+    // марафон: 1000 раздач, потом итог и стол закрывается
+    if (this.marathon && --this.marathon.left <= 0) {
+      const net = this.me.stack - this.invested;
+      this.hub.onMarathonDone?.(this.userId, net);
+      this.leaving = true;
+    }
     this.hub.sendMe(this.userId);
   }
 
   // Эло за раздачу: играл (колл/рейз или вскрытие) — выиграл/проиграл против ботов в раздаче
   // (сколько — в elo.js). Сбросил блайнд без игры — без изменений.
   onTableEvent(e) {
-    this.advisor.observe(e);
+    if (!this.table.jokers && !this.table.mega) this.advisor.observe(e);
     if (e.type === 'handStart') {
       this.lastElo = null;
       this.played = false;

@@ -493,3 +493,6 @@ textarea.buyin-input { resize: vertical; font: inherit; }
 .mdot { position: absolute; transform: translate(-50%, -50%); width: 9px; height: 9px; border-radius: 50%; background: #cfd8dc; border: 1px solid rgba(0,0,0,0.5); z-index: 2; }
 .mdot.out { background: rgba(255,255,255,0.25); }
 .mseat.turn { z-index: 5; }
+/* джокер */
+.pcard.joker { background: linear-gradient(135deg, #fff 0%, #ffe9a8 100%); color: #7a2fd0; }
+.pcard.joker .r { font-size: 0.8em; letter-spacing: -0.5px; }

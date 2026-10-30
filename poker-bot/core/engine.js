@@ -45,7 +45,7 @@ export class Table {
     // Short Deck: только 6–A (36 карт)
     // огромный стол: несколько колод сразу (карты могут повторяться)
     const one = this.variant === 'short' ? newDeck().filter((c) => c >> 2 >= 4) : newDeck();
-    let deck = shuffle(Array.from({ length: this.decks || 1 }, () => one).flat(), this.deckRng);
+    let deck = shuffle(Array.from({ length: this.decks || 1 }, () => one).flat().concat(this.jokers ? [52, 53] : []), this.deckRng);
     // только демо-стол админа задаёт этот хук; на обычных столах и в турнирах его нет
     if (this.demoDeck) deck = this.demoDeck(deck, ps.map((p) => p.id));
     for (const h of hs) h.hole = [deck.pop(), deck.pop()];

@@ -7,7 +7,7 @@ const SUIT_ICONS = ['♠', '♥', '♦', '♣'];
 
 export const cardRank = (c) => c >> 2;
 export const cardSuit = (c) => c & 3;
-export const cardStr = (c) => RANKS[c >> 2] + SUIT_ICONS[c & 3];
+export const cardStr = (c) => (c >= 52 ? 'Джокер' : RANKS[c >> 2] + SUIT_ICONS[c & 3]);
 export const parseCard = (s) =>
   RANKS.indexOf(s[0].toUpperCase()) * 4 + SUITS.indexOf(s[1].toLowerCase());
 
@@ -53,12 +53,27 @@ function topBits(mask, n) {
 }
 
 // Чем больше число — тем сильнее рука.
+// Джокер (52, 53) заменяет любую карту: берём лучшую замену
+export const JOKERS = [52, 53];
+export const isJoker = (c) => c >= 52;
+function evaluateWild(cards) {
+  const i = cards.findIndex(isJoker);
+  const rest = cards.slice(0, i).concat(cards.slice(i + 1));
+  let best = -1;
+  for (let c = 0; c < 52; c++) {
+    const v = evaluate(rest.concat(c));
+    if (v > best) best = v;
+  }
+  return best;
+}
+
 export function evaluate(cards) {
   const rc = new Array(13).fill(0);
   const sm = [0, 0, 0, 0];
   const sc = [0, 0, 0, 0];
   let rankMask = 0;
   for (const c of cards) {
+    if (c >= 52) return evaluateWild(cards);
     const r = c >> 2, s = c & 3;
     rc[r]++; sm[s] |= 1 << r; sc[s]++; rankMask |= 1 << r;
   }
