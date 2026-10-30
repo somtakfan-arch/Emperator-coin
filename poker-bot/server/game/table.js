@@ -101,7 +101,7 @@ export class HumanSeat {
     if (!type) return;
     this.timeouts = 0;
     const to = Math.floor(Number(a.to) || 0);
-    if (this.hub.coachOn?.(this.id)) this.decisions.push({ state: s, type, logLen: this.table?.handLog?.length ?? 0 });
+    this.decisions.push({ state: s, type, logLen: this.table?.handLog?.length ?? 0 }); // для тренера и разбора раздачи
     this.pending.finish(type === 'raise' ? { type, to: Math.max(s.minRaiseTo, Math.min(to, s.myBet + s.stack)) } : { type });
   }
 
@@ -290,6 +290,29 @@ export class GameTable {
   }
 
   // Тренер: после раздачи разбирает твои ходы (только по открытой информации — как честная подсказка)
+  // полный разбор раздачи по шагам (по запросу из повтора)
+  static review(uid, dec, raw) {
+    const out = [];
+    for (const d of dec || []) {
+      const s = d.state;
+      const adv = new Hunter({ iters: 500 });
+      adv.id = uid;
+      for (const e of (raw || []).slice(0, d.logLen)) adv.observe(e);
+      let a;
+      try { a = adv.analyze(s); } catch { continue; }
+      const eq = Math.round(a.eq * 100), need = Math.round(a.potOdds * 100), st = STREET_RU[s.street] || 'префлопе';
+      const name = { fold: 'Фолд', check: 'Чек', call: 'Колл', raise: 'Ставка' }[d.type];
+      let verdict = 'ok', why = `шансы ~${eq}%${s.toCall > 0 ? `, для колла нужно ${need}%` : ''}`;
+      if (d.type === 'fold' && s.toCall > 0 && a.eq >= a.potOdds + 0.1) { verdict = 'bad'; why += ' — сбросил зря, колл окупался'; }
+      else if (d.type === 'call' && a.eq < a.potOdds - 0.1) { verdict = 'bad'; why += ' — колл дорогой, лучше было сбросить'; }
+      else if (d.type === 'check' && a.eq > 0.75 && a.action.type === 'raise') { verdict = 'meh'; why += ' — с такой рукой стоило ставить'; }
+      else if (d.type === 'raise' && a.eq < 0.25 && a.action.type !== 'raise') { verdict = 'meh'; why += ' — это блеф, рискованно'; }
+      else why += ' — нормальный ход';
+      out.push({ street: s.street, text: `${name} на ${st}: ${why}`, verdict, best: { fold: 'фолд', check: 'чек', call: 'колл', raise: 'рейз' }[a.action.type] });
+    }
+    return out;
+  }
+
   coachReview(p, decisions, log) {
     const tips = [];
     for (const d of decisions) {
@@ -446,7 +469,7 @@ export class GameTable {
         if (p.isBot || !p.bot.decisions?.length) continue;
         const ds = p.bot.decisions;
         p.bot.decisions = [];
-        if (!this.mega && !this.jokers) setTimeout(() => this.coachReview(p, ds, log), 30);
+        if (!this.mega && !this.jokers && this.hub.coachOn?.(p.id)) setTimeout(() => this.coachReview(p, ds, log), 30);
       }
       for (const p of this.players) {
         if (!v.dealt.has(p.id)) continue;
@@ -541,6 +564,9 @@ export class GameTable {
         const sc = v.shown[p.id]?.score;
         this.hub.onReplay(p.id, {
           title: this.title, bb: this.bb, hole: p.bot.hole || [], board: v.board.slice(), net: got - put,
+          // для разбора: твои решения и события до каждого из них (без чужих закрытых карт)
+          dec: this.mega || this.jokers ? [] : (p.bot.decisions || []).map((d) => ({ state: d.state, type: d.type, logLen: d.logLen })),
+          raw: this.mega || this.jokers || !p.bot.decisions?.length ? null : log.slice(0, Math.max(...p.bot.decisions.map((d) => d.logLen))),
           hand: sc != null ? describeHand(sc) : null,
           players: (log.find((x) => x.type === 'handStart')?.players || []).map((x) => ({ id: x.id, name: x.name, stack: x.stack })),
           events: log.filter((x) => ['blinds', 'action', 'street', 'showdown', 'handEnd'].includes(x.type)).map((x) => (
@@ -567,6 +593,7 @@ export class GameTable {
         royal: won && score != null && describeHand(score) === 'Роял-флеш',
         vpip: log.some((x) => x.type === 'action' && x.id === p.id && x.street === 'preflop' && (x.action === 'call' || x.action === 'raise')),
         allIn: log.some((x) => x.type === 'action' && x.id === p.id && x.allIn),
+        riverCall: log.some((x) => x.type === 'action' && x.id === p.id && x.street === 'river' && x.action === 'call'),
         vsKing: won && !!king && (e.contributions.find((c) => c.id === king.id)?.total ?? 0) > 0,
         handsWon: p.handsWon ?? 0,
         bb: this.bb,

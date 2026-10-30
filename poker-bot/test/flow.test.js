@@ -1038,7 +1038,9 @@ test('боты пачки 9: свой бот, банк бота, шоу бото
   await c.req({ t: 'sitBots', mode: 'hu', botName: 'Шулер', buyin: 500 });
   const ch = await c.waitFor((m) => m.t === 'table' && m.table?.seats?.some((s) => s.cheat));
   assert.ok(ch);
-  c.ws.send(JSON.stringify({ t: 'leave' })); await c.waitFor((m) => m.msgs === undefined && m.t === 'left' && m !== c.msgs.find((x) => x.t === 'left'), 30000).catch(() => {});
+  const lefts = c.msgs.filter((m) => m.t === 'left').length;
+  c.ws.send(JSON.stringify({ t: 'leave' }));
+  await c.waitFor((m) => m.t === 'left' && c.msgs.filter((x) => x.t === 'left').length > lefts, 30000);
   // рейтинг ботов за неделю
   const top = await c.req({ t: 'top', kind: 'bots' });
   assert.equal(top.kind, 'bots');
@@ -1105,4 +1107,36 @@ test('друзья пачки 12: повтор раздачи, пари, сюр�
   assert.ok(Array.isArray(war.week));
   assertLedger(9801); assertLedger(9802);
   a.close(); b.close();
+});
+
+test('обучение пачки 13: разбор раздачи, слабые места, викторина, экзамен', async () => {
+  const c = new Client(9901, { autoplay: 'call' });
+  await c.ready;
+  await c.req({ t: 'invoice', pack: 'p1' });
+  await c.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 500 });
+  await c.waitFor((m) => m.t === 'left' || (m.t === 'table' && m.table?.handId >= 3), 60000);
+  c.ws.send(JSON.stringify({ t: 'leave' })); await c.waitFor((m) => m.t === 'left', 30000);
+  const hist = await c.req({ t: 'history' });
+  const withDec = [];
+  for (const x of hist.hands) { const r = await c.req({ t: 'replay', id: x.id }); if (r.replay.canReview) withDec.push(x.id); assert.equal(r.replay.raw, undefined); }
+  assert.ok(withDec.length > 0, 'есть раздача с решениями');
+  const rv = await c.req({ t: 'review', id: withDec[0] });
+  assert.ok(rv.steps.length > 0 && rv.steps.every((s) => ['ok', 'bad', 'meh'].includes(s.verdict)));
+  const other = new Client(9902);
+  await other.ready;
+  await assert.rejects(other.req({ t: 'review', id: withDec[0] }), /свои раздачи/);
+  other.close();
+  const weak = await c.req({ t: 'weakSpots' });
+  assert.equal(weak.ready, false);
+  const q = await c.req({ t: 'quiz' });
+  assert.equal(q.questions.length, 10);
+  assert.ok(q.questions.every((x) => ['a', 'b', 'tie'].includes(x.answer)));
+  const ex = await c.req({ t: 'exam' });
+  assert.equal(ex.questions.length, 15);
+  assert.ok(ex.questions.every((x) => x.ok === undefined), 'ответы не уходят клиенту');
+  await assert.rejects(c.req({ t: 'examSubmit', answers: {} }), /все 15/);
+  const res = await c.req({ t: 'examSubmit', answers: Object.fromEntries(ex.questions.map((x) => [x.id, 99])) });
+  assert.equal(res.passed, false);
+  assert.equal(res.right, 0);
+  c.close();
 });

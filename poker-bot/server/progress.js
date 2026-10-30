@@ -78,6 +78,7 @@ export const ACHIEVEMENTS = [
   { key: 'collector', name: 'Коллекционер', text: 'Собери все 52 карты в коллекцию', chips: 10000, chest: 'epic' },
   { key: 'album', name: 'Полный альбом', text: 'Выиграй со всеми комбинациями', chips: 5000, chest: 'epic' },
   { key: 'prestige', name: 'Престиж', text: 'Получи первую звезду престижа', chips: 5000 },
+  { key: 'exam', name: 'Знаток покера', text: 'Сдай экзамен по правилам', chips: 1000 },
   // секретные: не видно, пока не откроешь
   { key: 'seven_deuce', name: 'Наглость', text: 'Выиграй с 7-2 на руках', chips: 1000, secret: true },
   { key: 'night_owl', name: 'Сова', text: 'Выиграй раздачу между 2 и 5 часами ночи', chips: 700, secret: true },
@@ -204,6 +205,7 @@ export function onHand(uid, h) {
     s.hands++;
     if (h.vpip) s.vpip++;
     if (h.showdown) s.showdowns++;
+    if (h.riverCall) { s.rc = (s.rc || 0) + 1; if (h.won) s.rcw = (s.rcw || 0) + 1; } // коллы на ривере — для «слабых мест»
     addXp(p, 1);
     const evs = { hand: 1 };
     if (h.won) {
@@ -295,6 +297,7 @@ export function onEvent(uid, ev) {
     if (ev.type === 'beatAll') unlock(uid, p, 'beat_all', out);
     if (ev.type === 'beatAll' && ev.bots?.includes('Призрак')) unlock(uid, p, 'ghost', out);
     if (ev.type === 'caughtCheater') unlock(uid, p, 'cheater', out);
+    if (ev.type === 'exam') unlock(uid, p, 'exam', out);
     if (ev.type === 'rating' && ev.rating >= 1900) unlock(uid, p, 'gold', out);
     bumpQuests(p, evs, out);
     save(uid, p);
@@ -643,4 +646,23 @@ export function fameView() {
     WHERE f.week = ? AND ${NOT_ADMIN.replace('id', 'u.id')} ORDER BY f.points DESC LIMIT ?`).all(w, n);
   const weeks = db.prepare('SELECT DISTINCT week FROM fame WHERE week < ? ORDER BY week DESC LIMIT 8').all(week).map((r) => r.week);
   return { week: q(week, 10), hall: weeks.map((w) => ({ week: w, top: q(w, 3) })) };
+}
+
+// ---------- Слабые места: по статистике игры ----------
+
+export function weakSpots(uid) {
+  const s = load(uid)?.stats;
+  if (!s || s.hands < 30) return { ready: false, need: 30 - (s?.hands || 0), tips: [] };
+  const tips = [];
+  const vpip = s.vpip / s.hands;
+  const sdw = s.showdowns ? s.showdownWins / s.showdowns : 0;
+  const rcw = s.rc ? (s.rcw || 0) / s.rc : 1;
+  if (vpip > 0.45) tips.push({ bad: true, text: `Играешь слишком много рук: заходишь в ${Math.round(vpip * 100)}% раздач. Хорошие игроки — в 20–30%. Сбрасывай слабые руки до флопа.` });
+  else if (vpip < 0.12) tips.push({ bad: true, text: `Играешь слишком мало рук: ${Math.round(vpip * 100)}%. Соперники легко понимают, что у тебя сильная рука. Добавь руки на поздних позициях.` });
+  else tips.push({ bad: false, text: `Отбор рук в норме: заходишь в ${Math.round(vpip * 100)}% раздач.` });
+  if (s.showdowns >= 15 && sdw < 0.42) tips.push({ bad: true, text: `На вскрытии выигрываешь только ${Math.round(sdw * 100)}%. Часто доходишь до конца со слабой рукой — сбрасывай раньше.` });
+  if ((s.rc || 0) >= 8 && rcw < 0.35) tips.push({ bad: true, text: `Коллы на ривере выигрывают лишь ${Math.round(rcw * 100)}%. Крупная ставка на ривере чаще значит сильную руку — сбрасывай средние.` });
+  if (s.hands >= 100 && s.wins / s.hands < 0.12) tips.push({ bad: true, text: 'Выигрываешь мало банков. Попробуй чаще ставить первым с хорошими руками, а не только коллировать.' });
+  if (tips.every((t) => !t.bad)) tips.push({ bad: false, text: 'Явных дыр не видно — так держать!' });
+  return { ready: true, tips, stats: { vpip: Math.round(vpip * 100), showdownWin: Math.round(sdw * 100), riverCallWin: s.rc ? Math.round(rcw * 100) : null } };
 }

@@ -216,6 +216,7 @@ function onMessage(m) {
         title: m.beatAll ? 'Ты обыграл всех ботов!' : m.kicked ? 'Тебя убрали со стола: 2 хода подряд пропущено' : m.timed ? 'Время стола вышло' : 'Ты встал из-за стола',
         hands: m.hands, won: m.won, net: m.demo ? null : m.net, stack: m.stack,
         minutes: S.session ? Math.max(1, Math.round((Date.now() - S.session.start) / 60000)) : null,
+        graph: S.session?.stacks?.length > 1 ? S.session.stacks.slice() : null,
       };
       S.session = null;
       go('lobby');
@@ -239,7 +240,7 @@ function onMessage(m) {
 function trackSession(prev, next) {
   if (!next) return;
   const key = next.tournamentId || next.id;
-  if (!S.session || S.session.key !== key) S.session = { key, start: Date.now(), hands: 0, won: 0, lastHand: null };
+  if (!S.session || S.session.key !== key) S.session = { key, start: Date.now(), hands: 0, won: 0, lastHand: null, stacks: [], lastRes: null };
   const ss = S.session;
   if (next.handId && next.handId !== ss.lastHand && next.seats.some((x) => x.me && (x.inHand || x.folded))) {
     ss.lastHand = next.handId;
@@ -248,6 +249,9 @@ function trackSession(prev, next) {
     S.pre = null;
   }
   if (next.result && !(prev?.result && prev.handId === next.handId) && next.result.some((w) => w.id === S.me?.id)) ss.won++;
+  // график стека: точка после каждой раздачи
+  const me = next.seats.find((x) => x.me);
+  if (me && next.result && ss.lastRes !== next.handId) { ss.lastRes = next.handId; ss.stacks.push(me.stack); if (ss.stacks.length > 300) ss.stacks.shift(); }
 }
 
 // ---------- Звуки (синтез, без файлов) ----------
@@ -530,7 +534,7 @@ function leaveTableScreen(tournamentId) {
 
 // ---------- Навигация ----------
 
-const BACK = { history: 'friends', replay: 'history', botlab: 'lobby', training: 'lobby', tutorial: 'lobby', admin: 'profile', friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
+const BACK = { school: 'lobby', chart: 'school', quiz: 'school', exam: 'school', history: 'friends', replay: 'history', botlab: 'lobby', training: 'lobby', tutorial: 'lobby', admin: 'profile', friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
 
 function go(screen) {
   if (screen !== 'table' && S.screen === 'table' && S.table) S.tableHidden = true;
@@ -722,7 +726,7 @@ const TUTORIAL = [
         LI(B_('Ауты'), ' — карты, которые улучшат твою руку.'),
         LI(B_('Стек'), ' — сколько фишек у игрока за столом.'),
       ),
-      P_('Всё! Дальше — тренировка: 4 раздачи против бота-учителя. Он ходит, ты отвечаешь, а после каждого хода объясняется, правильно ли ты сыграл. Фишки там учебные.'),
+      P_('Всё! Дальше — тренировка: 14 раздач-уроков против бота-учителя. Он ходит, ты отвечаешь, а после каждого хода объясняется, правильно ли ты сыграл. Фишки там учебные.'),
     ],
   },
 ];
@@ -856,6 +860,156 @@ const LESSONS = [
       { t: 'done', text: 'Урок пройден.\n\nГлавное: олл-ин соперника уравнивай только с очень сильной рукой. Со средней — лучше сбросить.' },
     ],
   },
+  {
+    title: 'Позиция',
+    steps: [
+      { t: 'info', set: { hole: 'K♠ J♦', botCards: '9♣ 4♦', board: '', me: 995, bot: 990, pot: 15, botShow: false, mySay: 'МБ 5', botSay: 'ББ 10' },
+        text: 'Чем позже ты ходишь, тем больше знаешь о соперниках. Это называется позиция.\n\nУ тебя K♠ J♦, ты на баттоне (в игре один на один баттон — это малый блайнд).' },
+      { t: 'ask', text: 'Что сделаешь?', opts: [['fold', 'Фолд'], ['call', 'Колл 5'], ['raise', 'Рейз до 30']], right: 'raise',
+        why: { fold: 'K-J на баттоне — сильная рука. Сбрасывать её с поздней позиции — ошибка.', call: 'Колл можно, но на баттоне выгоднее атаковать рейзом.' } },
+      { t: 'info', set: { me: 970, bot: 970, pot: 60, mySay: 'Рейз 30', botSay: 'Колл' }, text: '✓ Бот уравнял. В банке 60.' },
+      { t: 'info', set: { board: 'Q♥ 7♣ 2♠', mySay: '', botSay: 'Чек' }, text: 'Флоп Q♥ 7♣ 2♠ — у тебя ничего, кроме двух старших карт. Но бот ходит первым и сделал чек — это знак слабости.' },
+      { t: 'ask', text: 'Ты ходишь последним. Что сделаешь?', opts: [['check', 'Чек'], ['bet', 'Бет 30']], right: 'bet',
+        why: { check: 'Можно, но позиция — твоё преимущество: после чека соперника небольшая ставка часто забирает банк.' } },
+      { t: 'info', set: { me: 940, pot: 90, mySay: 'Бет 30', botSay: 'Фолд', botShow: true }, text: '✓ Бот сбросил 9♣ 4♦. Банк твой — без вскрытия!' },
+      { t: 'done', set: { me: 1030, pot: 0 }, text: 'Урок пройден.\n\nГлавное: на поздней позиции играй больше рук и пользуйся тем, что ходишь последним.' },
+    ],
+  },
+  {
+    title: 'Блеф',
+    steps: [
+      { t: 'info', set: { hole: '8♠ 7♠', botCards: 'A♦ 3♣', board: '', me: 970, bot: 970, pot: 60, botShow: false, mySay: '', botSay: '' }, text: 'Раздача уже идёт: до флопа вы оба поставили по 30. У тебя 8♠ 7♠.' },
+      { t: 'info', set: { board: 'K♦ K♣ 4♥', botSay: 'Чек' }, text: 'Флоп K♦ K♣ 4♥. У тебя ничего. Бот сделал чек.' },
+      { t: 'ask', text: 'Короли на столе пугают — у бота вряд ли король, он чекнул. Что сделаешь?', opts: [['check', 'Чек'], ['bet', 'Бет 25']], right: 'bet',
+        why: { check: 'Можно, но это хорошее место для блефа: стол «страшный», а бот показал слабость.' } },
+      { t: 'info', set: { me: 945, bot: 945, pot: 110, mySay: 'Бет 25', botSay: 'Колл' }, text: 'Бот уравнял. Значит, у него что-то есть.' },
+      { t: 'info', set: { board: 'K♦ K♣ 4♥ 2♦', mySay: '', botSay: 'Чек' }, text: 'Тёрн 2♦ — ничего не изменил. Бот снова чек.' },
+      { t: 'ask', text: 'Блефовать второй раз?', opts: [['check', 'Чек'], ['bet', 'Бет 80']], right: 'check',
+        why: { bet: 'Бот уже уравнял одну ставку — сбрасывать он не хочет. Второй блеф в того, кто коллирует, — дорогая ошибка.' } },
+      { t: 'info', set: { board: 'K♦ K♣ 4♥ 2♦ J♠', mySay: 'Чек', botSay: 'Чек' }, text: '✓ Ривер J♠. Оба чек — вскрытие.' },
+      { t: 'info', set: { botShow: true, mySay: '', botSay: '' }, text: 'У бота A♦ 3♣ — старший туз. У тебя только восьмёрка, банк забирает бот.\n\nНо ты потерял немного: не стал вкладываться во второй блеф.' },
+      { t: 'done', text: 'Урок пройден.\n\nГлавное: блефуй, когда стол страшный, а соперник показал слабость. Если он уравнял — второй раз не блефуй.' },
+    ],
+  },
+  {
+    title: 'Шансы банка',
+    steps: [
+      { t: 'info', set: { hole: 'J♣ 10♣', botCards: 'A♠ K♥', board: 'Q♦ 9♠ 3♥', me: 900, bot: 900, pot: 200, botShow: false, mySay: '', botSay: '' },
+        text: 'У тебя J♣ 10♣, на столе Q♦ 9♠ 3♥. Любая восьмёрка или король дадут стрит — это 8 аутов.' },
+      { t: 'info', set: { bot: 850, pot: 250, botSay: 'Бет 50' }, text: 'Бот поставил 50. В банке 250.' },
+      { t: 'info', text: 'Считаем: доплатить 50, чтобы бороться за банк 300 (250 + твои 50). Цена — 50 из 300, примерно 17%.\n\nШанс собрать стрит за две карты с 8 аутами — около 32%. Это больше 17%.' },
+      { t: 'ask', text: 'Выгодно ли доплачивать?', opts: [['fold', 'Фолд'], ['call', 'Колл 50']], right: 'call', why: { fold: 'Шанс (~32%) больше цены (~17%) — колл окупается.' } },
+      { t: 'info', set: { me: 850, pot: 300, mySay: 'Колл', botSay: '' }, text: '✓ Правильно! Колл выгоден, когда шанс собрать руку больше доли, которую доплачиваешь.' },
+      { t: 'info', set: { board: 'Q♦ 9♠ 3♥ 8♥', bot: 550, pot: 600, mySay: '', botSay: 'Бет 300' }, text: 'Тёрн 8♥ — стрит: Q-J-10-9-8! Бот ставит 300.' },
+      { t: 'ask', text: 'У тебя стрит. Что сделаешь?', opts: [['fold', 'Фолд'], ['call', 'Колл 300'], ['raise', 'Олл-ин']], right: 'raise',
+        why: { fold: 'Сбрасывать стрит — нельзя!', call: 'Колл не ошибка, но с готовым стритом давим сильнее.' } },
+      { t: 'info', set: { me: 0, bot: 0, pot: 2000, mySay: 'Олл-ин', botSay: 'Колл', botShow: true, board: 'Q♦ 9♠ 3♥ 8♥ 2♣' }, text: 'Бот уравнял с A♠ K♥. Ривер 2♣. Стрит сильнее старшей карты — банк 2000 твой!' },
+      { t: 'done', set: { me: 2000, pot: 0 }, text: 'Урок пройден.\n\nГлавное: сравнивай шанс собрать руку с ценой колла. Примерно: каждый аут ≈ 2% на одну карту и ≈ 4% на две.' },
+    ],
+  },
+  {
+    title: 'Кикер',
+    steps: [
+      { t: 'info', set: { hole: 'A♥ 4♣', botCards: 'A♠ Q♦', board: '', me: 990, bot: 995, pot: 15, botShow: false, mySay: 'ББ 10', botSay: 'МБ 5' }, text: 'У тебя A♥ 4♣. Туз — хорошо, но вторая карта слабая.' },
+      { t: 'info', set: { bot: 970, pot: 40, botSay: 'Рейз 30' }, text: 'Бот повысил до 30.' },
+      { t: 'ask', text: 'Доплатить 20?', opts: [['fold', 'Фолд'], ['call', 'Колл 20']], right: 'call', why: { fold: 'Один на один туз с любой картой — нормальная рука. Можно посмотреть флоп.' } },
+      { t: 'info', set: { me: 970, pot: 60, mySay: 'Колл', botSay: '', board: 'A♦ 9♣ 6♠' }, text: '✓ Флоп A♦ 9♣ 6♠. У тебя пара тузов!' },
+      { t: 'info', set: { bot: 910, pot: 120, mySay: '', botSay: 'Бет 60' }, text: 'Но бот ставит 60, а до флопа он повышал. Если у него тоже туз — всё решит кикер.' },
+      { t: 'ask', text: 'Твой кикер — четвёрка, очень слабый. Что сделаешь?', opts: [['fold', 'Фолд'], ['call', 'Колл 60'], ['raise', 'Рейз до 200']], right: 'call',
+        why: { fold: 'Пара тузов — это много, сбрасывать сразу рано.', raise: 'Рейз с худшим кикером опасен: если у бота туз, у него почти всегда кикер лучше.' } },
+      { t: 'info', set: { me: 910, pot: 180, mySay: 'Колл', botSay: '', board: 'A♦ 9♣ 6♠ K♥' }, text: '✓ Тёрн K♥.' },
+      { t: 'info', set: { bot: 760, pot: 330, botSay: 'Бет 150' }, text: 'Бот ставит 150 — второй раз крупно.' },
+      { t: 'ask', text: 'Он ставит снова и снова. Что сделаешь?', opts: [['fold', 'Фолд'], ['call', 'Колл 150']], right: 'fold',
+        why: { call: 'Рейз до флопа и две большие ставки — почти наверняка туз с кикером лучше твоего. Сбрасывай.' } },
+      { t: 'info', set: { botShow: true, mySay: 'Фолд', botSay: '' }, text: '✓ Правильно. У бота A♠ Q♦ — та же пара тузов, но кикер дама старше четвёрки. Ты сэкономил 150 фишек.' },
+      { t: 'done', text: 'Урок пройден.\n\nГлавное: с парой и слабым кикером не вкладывай много — при равной паре побеждает старший кикер.' },
+    ],
+  },
+  {
+    title: 'Слоуплей',
+    steps: [
+      { t: 'info', set: { hole: '9♠ 9♥', botCards: 'K♣ Q♣', board: '', me: 970, bot: 970, pot: 60, botShow: false, mySay: '', botSay: '' }, text: 'До флопа вы оба поставили по 30. У тебя 9♠ 9♥.' },
+      { t: 'info', set: { board: '9♦ 4♣ 2♥' }, text: 'Флоп 9♦ 4♣ 2♥ — у тебя сет девяток! А стол «сухой»: стрита или флеша тут почти не бывает.' },
+      { t: 'info', set: { botSay: 'Чек' }, text: 'Бот сделал чек.' },
+      { t: 'ask', text: 'С монстром иногда выгодно притвориться слабым (слоуплей). Что сделаешь?', opts: [['check', 'Чек'], ['bet', 'Бет 40']], right: 'check',
+        why: { bet: 'Можно и так, но на сухом столе чек даёт боту шанс что-то поймать или сблефовать — и вложить больше.' } },
+      { t: 'info', set: { board: '9♦ 4♣ 2♥ K♦', mySay: 'Чек', bot: 920, pot: 110, botSay: 'Бет 50' }, text: '✓ Тёрн K♦. Бот поймал пару королей и ставит 50!' },
+      { t: 'ask', text: 'Теперь у него есть рука. Что сделаешь?', opts: [['call', 'Колл 50'], ['raise', 'Рейз до 180']], right: 'raise', why: { call: 'Хватит прятаться: у бота пара, он заплатит. Повышай!' } },
+      { t: 'info', set: { me: 790, bot: 790, pot: 420, mySay: 'Рейз 180', botSay: 'Колл' }, text: '✓ Бот уравнял. В банке 420.' },
+      { t: 'info', set: { board: '9♦ 4♣ 2♥ K♦ 5♠', botShow: true, mySay: '', botSay: '' }, text: 'Ривер 5♠. У бота K♣ Q♣ — пара королей. Сет девяток сильнее — банк 420 твой!' },
+      { t: 'done', set: { me: 1210, pot: 0 }, text: 'Урок пройден.\n\nГлавное: с очень сильной рукой на сухом столе можно чекнуть и дать сопернику поставить. Но как только у него появилась рука — повышай.' },
+    ],
+  },
+  {
+    title: 'Маленькая пара',
+    steps: [
+      { t: 'info', set: { hole: '5♣ 5♦', botCards: 'A♥ K♠', board: '', me: 995, bot: 990, pot: 15, botShow: false, mySay: 'МБ 5', botSay: 'ББ 10' },
+        text: 'У тебя 5♣ 5♦ — маленькая пара. Сама по себе слабая, но если на флопе выйдет пятёрка — будет сет. Это бывает примерно 1 раз из 8.' },
+      { t: 'ask', text: 'Доплатить 5, чтобы посмотреть флоп?', opts: [['fold', 'Фолд'], ['call', 'Колл 5'], ['raise', 'Рейз до 30']], right: 'call',
+        why: { fold: 'Дёшево посмотреть флоп с парой — выгодно: если выйдет сет, можно выиграть много.', raise: 'Можно, но цель — дёшево увидеть флоп. Колл.' } },
+      { t: 'info', set: { me: 990, bot: 960, pot: 50, mySay: 'Колл', botSay: 'Рейз 40' }, text: 'Бот повысил до 40.' },
+      { t: 'ask', text: 'Доплатить 30. Если флоп мимо — сбросишь. Что сделаешь?', opts: [['fold', 'Фолд'], ['call', 'Колл 30']], right: 'call',
+        why: { fold: 'Колл 30 — всего 3% стека. Шанс сета ~12%, а выиграть можно весь стек соперника. Выгодно.' } },
+      { t: 'info', set: { me: 960, pot: 80, mySay: 'Колл', botSay: '', board: 'K♥ 5♠ 8♦' }, text: '✓ Флоп K♥ 5♠ 8♦ — сет пятёрок! А у бота, похоже, король.' },
+      { t: 'info', set: { bot: 880, pot: 160, botSay: 'Бет 80' }, text: 'Бот ставит 80.' },
+      { t: 'ask', text: 'Что сделаешь?', opts: [['call', 'Колл 80'], ['raise', 'Рейз до 250']], right: 'raise', why: { call: 'Колл неплох, но бот с королём заплатит рейз — растим банк.' } },
+      { t: 'info', set: { me: 710, bot: 710, pot: 580, mySay: 'Рейз 250', botSay: 'Колл' }, text: '✓ Бот уравнял. В банке 580.' },
+      { t: 'info', set: { board: 'K♥ 5♠ 8♦ 2♣ 3♦', botShow: true, mySay: '', botSay: '' }, text: 'Тёрн и ривер ничего не изменили. У бота A♥ K♠ — пара королей. Сет сильнее — банк 580 твой!' },
+      { t: 'done', set: { me: 1290, pot: 0 }, text: 'Урок пройден.\n\nГлавное: маленькие пары играй дёшево ради сета. Не попал на флопе — сбрасывай.' },
+    ],
+  },
+  {
+    title: 'Турнир: короткий стек',
+    steps: [
+      { t: 'info', set: { hole: 'A♣ 9♦', botCards: 'K♥ J♣', board: '', me: 800, bot: 2800, pot: 300, botShow: false, mySay: 'ББ 200', botSay: 'МБ 100' },
+        text: 'Турнир. Блайнды 100/200, у тебя было 1000 фишек — всего 5 больших блайндов. Ты на большом блайнде, у тебя A♣ 9♦.' },
+      { t: 'info', set: { bot: 0, pot: 3100, botSay: 'Олл-ин' }, text: 'Бот пошёл олл-ин.' },
+      { t: 'ask', text: 'С коротким стеком ждать нельзя — блайнды съедят фишки. Туз — хорошая рука. Что сделаешь?', opts: [['fold', 'Фолд'], ['call', 'Колл (олл-ин 800)']], right: 'call',
+        why: { fold: 'При 5 блайндах туз с девяткой — отличная рука для олл-ина. Сбросишь — останется 800, и блайнды быстро добьют.' } },
+      { t: 'info', set: { me: 0, bot: 1900, pot: 2000, mySay: 'Колл', botShow: true }, text: '✓ Карты открыты: у бота K♥ J♣. Твой туз впереди — примерно 60% на победу.\n\nЛишние 1900 фишек бота сверх твоего стека ему просто вернулись.' },
+      { t: 'info', set: { board: 'A♥ 7♠ 3♦ 10♣ 2♥', mySay: '', botSay: '' }, text: 'Стол: A♥ 7♠ 3♦ 10♣ 2♥ — у тебя пара тузов!' },
+      { t: 'info', set: { me: 2000, pot: 0 }, text: 'Ты удвоился: было 1000, стало 2000.' },
+      { t: 'done', text: 'Урок пройден.\n\nГлавное: в турнире с коротким стеком (до 10 блайндов) играют «олл-ин или фолд». Хорошая рука — сразу всё.' },
+    ],
+  },
+  {
+    title: 'Продолженная ставка',
+    steps: [
+      { t: 'info', set: { hole: 'A♠ Q♠', botCards: '7♦ 7♣', board: '', me: 970, bot: 970, pot: 60, botShow: false, mySay: '', botSay: '' }, text: 'Ты повысил до флопа с A♠ Q♠, бот уравнял. В банке 60.' },
+      { t: 'info', set: { board: 'K♣ 8♥ 3♦', botSay: 'Чек' }, text: 'Флоп K♣ 8♥ 3♦ — мимо. Но бот чекнул.' },
+      { t: 'ask', text: 'Кто повышал до флопа, часто ставит снова — это «продолженная ставка». Соперник думает, что у тебя сильная рука. Что сделаешь?', opts: [['check', 'Чек'], ['bet', 'Бет 30']], right: 'bet',
+        why: { check: 'Можно, но маленькая продолженная ставка тут часто забирает банк: король на столе пугает соперника.' } },
+      { t: 'info', set: { me: 940, pot: 90, mySay: 'Бет 30', botSay: 'Фолд', botShow: true }, text: '✓ Бот сбросил 7♦ 7♣ — пару семёрок, которая была лучше твоей руки! Банк 90 твой.' },
+      { t: 'done', set: { me: 1030, pot: 0 }, text: 'Урок пройден.\n\nГлавное: если повышал до флопа — небольшая ставка на флопе часто выигрывает банк, даже без попадания.' },
+    ],
+  },
+  {
+    title: 'Повторный рейз (3-бет)',
+    steps: [
+      { t: 'info', set: { hole: 'Q♥ Q♣', botCards: 'A♦ 10♠', board: '', me: 990, bot: 995, pot: 15, botShow: false, mySay: 'ББ 10', botSay: 'МБ 5' }, text: 'У тебя Q♥ Q♣ — пара дам. Ты на большом блайнде.' },
+      { t: 'info', set: { bot: 970, pot: 40, botSay: 'Рейз 30' }, text: 'Бот повысил до 30.' },
+      { t: 'ask', text: 'Ответное повышение называется 3-бет. С сильной рукой это лучший ход. Что сделаешь?', opts: [['fold', 'Фолд'], ['call', 'Колл 20'], ['raise', 'Рейз до 90']], right: 'raise',
+        why: { fold: 'Дамы — третья по силе стартовая рука, сбрасывать нельзя.', call: 'Колл возможен, но 3-бет делает банк больше и отсекает слабые руки.' } },
+      { t: 'info', set: { me: 910, bot: 910, pot: 180, mySay: 'Рейз 90', botSay: 'Колл' }, text: '✓ Бот уравнял. В банке 180.' },
+      { t: 'info', set: { board: 'J♠ 6♥ 2♣', mySay: '', botSay: 'Чек' }, text: 'Флоп J♠ 6♥ 2♣ — твои дамы выше всех карт на столе (это «оверпара»). Бот чек.' },
+      { t: 'ask', text: 'Что сделаешь?', opts: [['check', 'Чек'], ['bet', 'Бет 100']], right: 'bet', why: { check: 'Оверпара — это сильно. Ставь, пока соперник не поймал туза или короля.' } },
+      { t: 'info', set: { me: 810, bot: 810, pot: 380, mySay: 'Бет 100', botSay: 'Колл' }, text: '✓ Бот уравнял.' },
+      { t: 'info', set: { board: 'J♠ 6♥ 2♣ 4♦ 8♣', botShow: true, mySay: '', botSay: '' }, text: 'Тёрн 4♦, ривер 8♣ — туз не пришёл. У бота A♦ 10♠ — старшая карта. Дамы выигрывают банк 380!' },
+      { t: 'done', set: { me: 1190, pot: 0 }, text: 'Урок пройден.\n\nГлавное: с очень сильной рукой на рейз соперника отвечай повторным рейзом.' },
+    ],
+  },
+  {
+    title: 'Когда сбросить дро',
+    steps: [
+      { t: 'info', set: { hole: '6♥ 5♥', botCards: 'A♣ A♦', board: 'K♥ 9♥ 2♠', me: 900, bot: 900, pot: 200, botShow: false, mySay: '', botSay: '' },
+        text: 'У тебя 6♥ 5♥, на столе K♥ 9♥ 2♠ — четыре червы, флеш-дро (9 аутов).' },
+      { t: 'info', set: { bot: 0, pot: 1100, botSay: 'Олл-ин 900' }, text: 'Бот пошёл олл-ин на 900 — в 4 раза больше банка.' },
+      { t: 'info', text: 'Считаем: доплатить 900, чтобы бороться за 2000. Цена — 45%.\n\nШанс собрать флеш за две карты — около 35%. Это меньше 45%.' },
+      { t: 'ask', text: 'Выгодно ли?', opts: [['fold', 'Фолд'], ['call', 'Колл 900']], right: 'fold', why: { call: 'Шанс (~35%) меньше цены (45%). В долгую такой колл проигрывает.' } },
+      { t: 'info', set: { botShow: true, mySay: 'Фолд', botSay: '' }, text: '✓ Правильно. У бота A♣ A♦. Иногда флеш приходит, но в среднем такой колл теряет фишки.' },
+      { t: 'done', text: 'Урок пройден.\n\nГлавное: с дро коллируй маленькие ставки и сбрасывай огромные. Всегда сравнивай шанс с ценой.' },
+    ],
+  },
 ];
 
 function openTraining(n = 0) {
@@ -873,6 +1027,7 @@ const tsplit = (s) => (s ? s.split(' ') : []);
 
 function trainingScreen() {
   const tr = S.tr || (S.tr = { lesson: 0, step: 0, wrong: null });
+  if (tr.lesson >= LESSONS.length) tr.lesson = 0;
   const L = LESSONS[tr.lesson];
   const step = L.steps[tr.step];
   const st = Object.assign({}, ...L.steps.slice(0, tr.step + 1).map((s) => s.set || {}));
@@ -1062,8 +1217,142 @@ function replayScreen() {
       h('button', { class: 'btn-ghost', disabled: step === 0, onclick: () => { R.step = Math.max(0, step - 1); render(); } }, 'Назад'),
       step < evs.length ? h('button', { class: 'btn', onclick: () => { R.step = step + 1; render(); } }, 'Дальше')
         : h('button', { class: 'btn', onclick: () => { R.step = 0; render(); } }, 'Сначала')),
+    R.canReview && R.ownerId === S.me.id && h('button', { class: 'btn-ghost', onclick: async () => { const r = await run({ t: 'review', id: R.id }); if (r) { R.review = r.steps; render(); } } }, '🔍 Разбор моих ходов'),
+    R.review && h('div', { class: 'glass card', style: 'gap:6px' }, R.review.length ? R.review.map((x) => h('div', { class: 'small', style: `line-height:1.45;color:${x.verdict === 'bad' ? '#ffb4b4' : x.verdict === 'meh' ? '#f5d37a' : 'var(--green)'}` }, `${x.verdict === 'bad' ? '❌' : x.verdict === 'meh' ? '⚠️' : '✅'} ${x.text}${x.verdict !== 'ok' ? ` · лучше: ${x.best}` : ''}`)) : h('div', { class: 'small muted' }, 'В этой раздаче ты не принимал решений')),
     friends.length > 0 && h('div', { class: 'label' }, 'Отправить другу'),
     friends.length > 0 && h('div', { class: 'choices wrap' }, friends.map((f) => h('button', { onclick: async () => { if (await run({ t: 'shareReplay', id: R.id, to: f.id })) toast(`Отправлено: ${f.name}`); } }, f.name))));
+}
+
+// график стека за сессию (SVG, без библиотек)
+function stackGraph(pts) {
+  const W = 300, H = 70, min = Math.min(...pts), max = Math.max(...pts), span = max - min || 1;
+  const xy = pts.map((v, i) => `${((i / (pts.length - 1)) * W).toFixed(1)},${(H - 4 - ((v - min) / span) * (H - 8)).toFixed(1)}`);
+  const up = pts[pts.length - 1] >= pts[0];
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('class', 'stack-graph');
+  svg.innerHTML = `<polyline points="${xy.join(' ')}" fill="none" stroke="${up ? '#6fdc8c' : '#ff8a80'}" stroke-width="2.5" stroke-linejoin="round"/>`;
+  return h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 'small muted' }, `Стек по раздачам: от ${fmt(min)} до ${fmt(max)}`), svg);
+}
+
+// ---------- Школа покера: таблица рук, викторина, экзамен, слабые места ----------
+
+function openSchool() { go('school'); run({ t: 'weakSpots' }).then((r) => { if (r) { S.weak = r; render(); } }); }
+
+function schoolScreen() {
+  const W = S.weak;
+  const item = (title, sub, onclick) => h('button', { class: 'item', onclick }, h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, title), h('div', { class: 'small muted' }, sub)), icon('chev'));
+  return h('div', { class: 'screen' },
+    header('Школа покера'),
+    item('Как играть', 'Правила с нуля — простыми словами', () => openTutorial(0)),
+    item('Тренировка', `${LESSONS.length} уроков против бота-учителя`, () => openTraining(0)),
+    item('Таблица стартовых рук', 'Какие руки играть с какой позиции', () => go('chart')),
+    item('Викторина', 'Какая рука сильнее — на скорость', openQuiz),
+    item('Экзамен', 'Сдай — получишь значок «Знаток покера»', openExam),
+    h('div', { class: 'label' }, 'Мои слабые места'),
+    h('div', { class: 'glass card', style: 'gap:8px' },
+      !W ? h('div', { class: 'small muted' }, 'Загрузка…')
+        : !W.ready ? h('div', { class: 'small muted' }, `Сыграй ещё ${W.need} раздач — и я скажу, где ты теряешь фишки`)
+          : [W.tips.map((t) => h('div', { class: 'small', style: `line-height:1.45;color:${t.bad ? '#ffb4b4' : 'var(--green)'}` }, `${t.bad ? '⚠️' : '✅'} ${t.text}`)),
+            h('div', { class: 'small muted' }, 'Бот Тень учится как раз на таких привычках — исправь их, и обыграть его станет проще.')]));
+}
+
+// таблица 13×13: пары по диагонали, сверху одномастные, снизу разномастные
+const CHART_POS = [['early', 'Ранняя'], ['middle', 'Средняя'], ['late', 'Поздняя (баттон)'], ['blinds', 'Блайнды']];
+// формула Чена: очки старшей карты, пары, масть, разрыв между картами
+function handScore(hi, lo, suited) {
+  const pts = (r) => (r === 12 ? 10 : r === 11 ? 8 : r === 10 ? 7 : r === 9 ? 6 : (r + 2) / 2);
+  if (hi === lo) return Math.max(5, pts(hi) * 2);
+  const gap = hi - lo - 1;
+  let s = pts(hi) + (suited ? 2 : 0) - [0, 1, 2, 4][Math.min(gap, 3)] - (gap >= 4 ? 1 : 0);
+  if (gap <= 1 && hi < 10) s += 1;
+  return Math.ceil(s);
+}
+function chartScreen() {
+  const pos = S.chartPos || 'middle';
+  const need = { early: 8, middle: 7, late: 5, blinds: 6 }[pos];
+  const R = 'AKQJT98765432';
+  const cells = [];
+  for (let i = 0; i < 13; i++) for (let j = 0; j < 13; j++) {
+    const hi = 12 - Math.min(i, j), lo = 12 - Math.max(i, j), suited = j > i;
+    const sc = handScore(hi, lo, suited);
+    const cls = sc >= need + 3 ? 'raise' : sc >= need ? 'play' : 'fold';
+    cells.push(h('div', { class: `ch-cell ${cls}` }, `${R[Math.min(i, j)]}${R[Math.max(i, j)]}${i === j ? '' : suited ? 's' : 'o'}`));
+  }
+  return h('div', { class: 'screen' },
+    header('Стартовые руки'),
+    h('div', { class: 'choices wrap' }, CHART_POS.map(([k, n]) => h('button', { class: pos === k ? 'on' : '', onclick: () => { S.chartPos = k; render(); } }, n))),
+    h('div', { class: 'chart-grid' }, cells),
+    h('div', { class: 'small soft', style: 'line-height:1.5' }, '🟩 играй смело, можно рейзить · 🟨 можно играть · ⬛ лучше сбросить. «s» — одной масти, «o» — разных мастей. Чем позже твоя позиция, тем больше рук можно играть.'));
+}
+
+// викторина
+async function openQuiz() {
+  const r = await run({ t: 'quiz' });
+  if (!r) return;
+  S.quiz = { qs: r.questions, i: 0, score: 0, start: Date.now(), picked: null };
+  go('quiz');
+}
+function quizScreen() {
+  const Q = S.quiz;
+  if (!Q) return h('div', { class: 'screen' }, header('Викторина'));
+  let best = 0;
+  try { best = Number(localStorage.getItem('quizBest')) || 0; } catch {}
+  if (Q.i >= Q.qs.length) {
+    const sec = Math.round((Q.end - Q.start) / 1000);
+    if (Q.score > best) { best = Q.score; try { localStorage.setItem('quizBest', String(best)); } catch {} }
+    return h('div', { class: 'screen' }, header('Викторина'),
+      h('div', { class: 'glass card', style: 'gap:8px;align-items:center' },
+        h('div', { style: 'font-size:40px;font-weight:800' }, `${Q.score} / ${Q.qs.length}`),
+        h('div', { class: 'small muted' }, `за ${sec} с · рекорд ${best}`)),
+      h('button', { class: 'btn', onclick: openQuiz }, 'Ещё раз'));
+  }
+  const q = Q.qs[Q.i];
+  const pick = (x) => {
+    if (Q.picked) return;
+    Q.picked = x;
+    if (x === q.answer) Q.score++;
+    render();
+    setTimeout(() => { Q.i++; Q.picked = null; if (Q.i >= Q.qs.length) Q.end = Date.now(); render(); }, 1200);
+  };
+  const side = (k, cards, name) => h('button', { class: `quiz-side ${Q.picked ? (q.answer === k || q.answer === 'tie' ? 'right' : Q.picked === k ? 'wrong' : '') : ''}`, onclick: () => pick(k) },
+    h('div', { class: 'tut-cards' }, cards.map((c) => pcard(c))), Q.picked && h('div', { class: 'small' }, name));
+  return h('div', { class: 'screen' }, header('Викторина'),
+    h('div', { class: 'small muted' }, `Вопрос ${Q.i + 1} из ${Q.qs.length} · верно ${Q.score}`),
+    h('div', { class: 'b' }, 'Стол:'),
+    h('div', { class: 'tut-cards' }, q.board.map((c) => pcard(c))),
+    h('div', { class: 'b' }, 'Чья рука сильнее?'),
+    h('div', { class: 'grid2' }, side('a', q.a, q.aName), side('b', q.b, q.bName)),
+    h('button', { class: 'btn-ghost', onclick: () => pick('tie') }, 'Ничья'));
+}
+
+// экзамен
+async function openExam() {
+  const r = await run({ t: 'exam' });
+  if (!r) return;
+  S.exam = { qs: r.questions, pass: r.pass, answers: {}, result: null };
+  go('exam');
+}
+function examScreen() {
+  const E = S.exam;
+  if (!E) return h('div', { class: 'screen' }, header('Экзамен'));
+  if (E.result) {
+    const R = E.result;
+    return h('div', { class: 'screen' }, header('Экзамен'),
+      h('div', { class: 'glass card', style: 'gap:8px;align-items:center' },
+        h('div', { style: 'font-size:40px;font-weight:800' }, `${R.right} / ${R.total}`),
+        h('div', { class: 'b', style: `color:${R.passed ? 'var(--green)' : '#ff8a80'}` }, R.passed ? 'Сдал! Значок «Знаток покера» твой' : `Не сдал — нужно ${E.pass} правильных`)),
+      R.wrong.length > 0 && h('div', { class: 'label' }, 'Ошибки'),
+      R.wrong.map((w) => h('div', { class: 'glass card', style: 'gap:4px' }, h('div', { class: 'small' }, w.q), h('div', { class: 'small', style: 'color:var(--green)' }, `Правильно: ${w.right}`))),
+      h('button', { class: 'btn', onclick: openExam }, 'Пройти снова'));
+  }
+  const done = Object.keys(E.answers).length;
+  return h('div', { class: 'screen' }, header('Экзамен'),
+    h('div', { class: 'small muted' }, `Отвечено ${done} из ${E.qs.length} · сдать — от ${E.pass} правильных`),
+    E.qs.map((q, n) => h('div', { class: 'glass card', style: 'gap:6px' },
+      h('div', { class: 'b', style: 'font-size:14px' }, `${n + 1}. ${q.q}`),
+      h('div', { class: 'col', style: 'gap:4px' }, q.a.map((a, i) => h('button', { class: `exam-opt ${E.answers[q.id] === i ? 'on' : ''}`, onclick: () => { E.answers[q.id] = i; render(); } }, a))))),
+    h('button', { class: 'btn', disabled: done < E.qs.length, onclick: async () => { const r = await run({ t: 'examSubmit', answers: E.answers }); if (r) { E.result = r; render(); window.scrollTo(0, 0); } } }, 'Сдать'));
 }
 
 function openCombos() {
@@ -1251,6 +1540,7 @@ function lobbyScreen() {
       h('div', { class: 'grid3' },
         stat('Раздач', fmt(S.summary.hands || 0)), stat('Выиграно', fmt(S.summary.won || 0)),
         S.summary.net != null ? stat('Итог', `${S.summary.net >= 0 ? '+' : '−'}${fmt(Math.abs(S.summary.net))}`) : stat('Минут', S.summary.minutes ?? '—')),
+      S.summary.graph && stackGraph(S.summary.graph),
       S.summary.stack > 0 && h('div', { class: 'small soft' }, `На баланс вернулось ${fmt(S.summary.stack)} фишек${S.summary.minutes ? ` · ${S.summary.minutes} мин за столом` : ''}`)),
     me.table && h('div', { class: 'glass card at-table' },
       h('button', { class: 'at-table-back', onclick: () => { send({ t: 'table' }); go('table'); } },
@@ -1273,6 +1563,9 @@ function lobbyScreen() {
       icon('chev')),
     h('button', { class: 'item', onclick: () => openTutorial(0) },
       h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, 'Как играть'), h('div', { class: 'small muted' }, 'Правила покера с нуля — простыми словами')),
+      icon('chev')),
+    h('button', { class: 'item', onclick: openSchool },
+      h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, 'Школа покера'), h('div', { class: 'small muted' }, 'Таблица рук, викторина, экзамен, твои слабые места')),
       icon('chev')),
     h('button', { class: 'item', onclick: openBotLab },
       h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, 'Мастерская ботов'), h('div', { class: 'small muted' }, 'Свой бот, бот-заменитель, шоу ботов')),
@@ -2767,7 +3060,7 @@ function combosScreen() {
 
 // ---------- Рендер ----------
 
-const SCREENS = { history: historyScreen, replay: replayScreen, botlab: botLabScreen, training: trainingScreen, tutorial: tutorialScreen, admin: adminScreen, friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
+const SCREENS = { school: schoolScreen, chart: chartScreen, quiz: quizScreen, exam: examScreen, history: historyScreen, replay: replayScreen, botlab: botLabScreen, training: trainingScreen, tutorial: tutorialScreen, admin: adminScreen, friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
 
 function render() {
   const app = document.getElementById('app');

@@ -32,7 +32,8 @@ const DAY = 86400000;
 export function saveReplay(uid, data) {
   const id = randomBytes(6).toString('base64url');
   db.prepare('INSERT INTO replays (id, user_id, at, data) VALUES (?, ?, ?, ?)').run(id, uid, Date.now(), JSON.stringify(data));
-  db.prepare('DELETE FROM replays WHERE user_id = ? AND (at < ? OR id NOT IN (SELECT id FROM replays WHERE user_id = ? ORDER BY at DESC LIMIT 50))').run(uid, Date.now() - DAY, uid);
+  // старые чистим не каждый раз, а примерно раз в 10 раздач
+  if (Math.random() < 0.1) db.prepare('DELETE FROM replays WHERE user_id = ? AND (at < ? OR id NOT IN (SELECT id FROM replays WHERE user_id = ? ORDER BY at DESC LIMIT 50))').run(uid, Date.now() - DAY, uid);
   return id;
 }
 export const historyOf = (uid) => db.prepare('SELECT id, at, data FROM replays WHERE user_id = ? AND at > ? ORDER BY at DESC').all(uid, Date.now() - DAY)
@@ -40,7 +41,15 @@ export const historyOf = (uid) => db.prepare('SELECT id, at, data FROM replays W
 export function replay(id) {
   const r = db.prepare('SELECT user_id, at, data FROM replays WHERE id = ?').get(String(id));
   if (!r) throw new Error('Повтор не найден — они хранятся сутки');
-  return { id, owner: getUser(r.user_id)?.name, at: r.at, ...JSON.parse(r.data) };
+  const { dec, raw, ...d } = JSON.parse(r.data);
+  return { id, owner: getUser(r.user_id)?.name, ownerId: r.user_id, at: r.at, canReview: !!dec?.length, ...d };
+}
+// для разбора: решения игрока в этой раздаче
+export function replayDecisions(id) {
+  const r = db.prepare('SELECT user_id, data FROM replays WHERE id = ?').get(String(id));
+  if (!r) throw new Error('Повтор не найден');
+  const d = JSON.parse(r.data);
+  return { uid: r.user_id, dec: d.dec || [], raw: d.raw || [] };
 }
 
 // ---------- Пари с другом: кто выиграет больше раздач за 3 часа ----------

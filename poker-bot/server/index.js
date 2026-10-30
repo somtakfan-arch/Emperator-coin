@@ -17,6 +17,8 @@ import { evaluate, evaluateShort } from '../core/cards.js';
 import { botHandsWon, botWeekTop } from './game/table.js';
 import * as botsx from './botsx.js';
 import * as social2 from './social2.js';
+import * as learn from './learn.js';
+import { GameTable } from './game/table.js';
 import { ghostHour } from '../core/bots.js';
 import { BOT_KINDS } from '../core/crowd.js';
 import { botRating } from './game/elo.js';
@@ -523,6 +525,20 @@ const handlers = {
     ladder: { ...ladderStep(uid), steps: LADDER_STEPS },
     myBot: botsx.myBot(uid), kinds: BOT_KINDS, bank: botsx.bankView(uid), showPool: botsx.showPool(),
   }),
+  // ---------- обучение: разбор раздачи, слабые места, викторина, экзамен ----------
+  review(uid, m) {
+    const d = social2.replayDecisions(m.id);
+    if (d.uid !== uid) throw new Error('Разбирать можно только свои раздачи');
+    return { t: 'review', steps: GameTable.review(uid, d.dec, d.raw) };
+  },
+  weakSpots: (uid) => ({ t: 'weak', ...progress.weakSpots(uid) }),
+  quiz: () => ({ t: 'quiz', questions: learn.quiz(10) }),
+  exam: () => ({ t: 'exam', questions: learn.examQuestions(), pass: learn.EXAM_PASS }),
+  examSubmit(uid, m) {
+    const r = learn.gradeExam(m.answers);
+    if (r.passed) progress.onEvent(uid, { type: 'exam' });
+    return { t: 'examResult', ...r };
+  },
   // ---------- пачка 12: повторы, пари, клубные войны и банк, статус, сюрпризы, наставник ----------
   history: (uid) => ({ t: 'history', hands: social2.historyOf(uid) }),
   replay: (uid, m) => ({ t: 'replay', replay: social2.replay(m.id) }),
