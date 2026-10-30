@@ -879,3 +879,28 @@ test('пранк работает и в турнире с другом на дв
   assertLedger(9160);
   admin.close(); friend.close();
 });
+
+test('тихий пранк: у друга тузы, админ выигрывает на ривере, другу ×1.5', async () => {
+  const admin = new Client(7001);
+  const friend = new Client(9170);
+  await admin.ready; await friend.ready;
+  await admin.req({ t: 'invoice', pack: 'p1' }).catch(() => {});
+  await friend.req({ t: 'invoice', pack: 'p1' });
+  const created = await admin.req({ t: 'createMixed', buyin: 500, bots: 0 });
+  await friend.req({ t: 'joinMixed', id: created.id });
+  await admin.req({ t: 'prank', kind: 'cooler' });
+  const start = friend.msgs.length;
+  const toast = await friend.waitFor((m) => m.t === 'toast' && /пранк/.test(m.text), 60000);
+  assert.ok(!friend.msgs.slice(start).some((m) => m.t === 'prank'), 'никаких эффектов на экране');
+  // в пранк-раздаче у друга были два туза, а банк забрал админ
+  // раздача, после которой пришёл возврат: первая завершённая после включения пранка
+  const shown = friend.msgs.slice(start).find((m) => m.t === 'table' && m.table?.result && m.table.seats.find((x) => x.me)?.cards).table;
+  const me = shown.seats.find((s) => s.me);
+  assert.deepEqual(me.cards.map((c) => c >> 2), [12, 12]);
+  assert.ok(shown.result.every((w) => w.id === 7001));
+  admin.ws.send(JSON.stringify({ t: 'leave' })); await admin.waitFor((m) => m.t === 'left', 30000);
+  friend.ws.send(JSON.stringify({ t: 'leave' })); await friend.waitFor((m) => m.t === 'left', 30000).catch(() => {});
+  await new Promise((r) => setTimeout(r, 50));
+  assertLedger(9170);
+  admin.close(); friend.close();
+});

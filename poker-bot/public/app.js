@@ -1484,7 +1484,8 @@ function tableScreen() {
         }, 'A A')),
       // пранк админа: только за столом с другом
       S.me.isAdmin && T.seats.some((s) => !s.isBot && !s.me && s.id > 0) && h('div', { class: 'admin-btns' },
-        h('button', { class: 'jam-btn', 'aria-label': 'Пранк в следующей раздаче', onclick: async () => { if (await run({ t: 'prank' })) toast('😈 Пранк в следующей раздаче'); } }, '😈')),
+        h('button', { class: 'jam-btn', 'aria-label': 'Пранк в следующей раздаче', onclick: async () => { if (await run({ t: 'prank' })) toast('😈 Пранк в следующей раздаче'); } }, '😈'),
+        h('button', { class: 'jam-btn', 'aria-label': 'Тихий пранк: у друга тузы, выигрываешь ты', onclick: async () => { if (await run({ t: 'prank', kind: 'cooler' })) toast('🤫 Тихий пранк: у друга будут тузы, а выиграешь ты'); } }, '🤫')),
       S.emoteOpen && emoteTray(),
       S.coachTips && h('div', { class: 'coach-card' },
         h('div', { class: 'row between' }, h('div', { class: 'b', style: 'font-size:13px' }, '🎓 Тренер'),

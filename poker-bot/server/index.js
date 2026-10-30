@@ -13,6 +13,7 @@ import { SoloTour, SOLO_SIZES, SOLO_BLINDS } from './game/solotour.js';
 import { BOT_CLASSES, BOSS_CLASSES, Hunter } from '../core/bots.js';
 import { CROWD } from '../core/crowd.js';
 import { arrangeDeck } from './game/demoplan.js';
+import { evaluate, evaluateShort } from '../core/cards.js';
 import { botHandsWon } from './game/table.js';
 import { botRating } from './game/elo.js';
 import * as progress from './progress.js';
@@ -140,6 +141,29 @@ const tournaments = new Tournaments(hub);
 
 // Стол, где работают кнопки админа: только админ и только без других людей
 // (столы с ботами, демо, сольные турниры)
+// Пранк «тузы»: тебе два туза, ещё два — на тёрне и ривере
+function acesPlan(uid) {
+  const suits = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
+  return { holes: { [uid]: [48 + suits[0], 48 + suits[1]] }, board: [undefined, undefined, undefined, 48 + suits[2], 48 + suits[3]] };
+}
+
+// Пранк «кулер»: у друга два туза, до ривера он впереди, а на ривере ты его обыгрываешь
+function coolerPlan(deck, uid, friend, ev) {
+  const aces = deck.filter((c) => c >> 2 === 12);
+  const rest = deck.filter((c) => c >> 2 !== 12);
+  if (aces.length < 2 || rest.length < 7) return null;
+  for (let i = 0; i < 20000; i++) {
+    const fa = [...aces].sort(() => Math.random() - 0.5).slice(0, 2);
+    const pick = [...rest].sort(() => Math.random() - 0.5).slice(0, 7);
+    const mine = pick.slice(0, 2), board = pick.slice(2);
+    const turn = board.slice(0, 4);
+    if (ev([...mine, ...turn]) >= ev([...fa, ...turn])) continue; // до ривера друг впереди
+    if (ev([...mine, ...board]) <= ev([...fa, ...board])) continue; // на ривере выигрываешь ты
+    return { holes: { [uid]: mine, [friend]: fa }, board };
+  }
+  return null;
+}
+
 function adminBotTable(uid) {
   if (!config.adminIds.includes(uid)) throw new Error('Нет доступа');
   const at = activeTable(uid);
@@ -556,25 +580,27 @@ const handlers = {
   // Пранк админа за столом с друзьями: в следующей раздаче у всех на экране «чёрный экран и глаза»,
   // админу приходят два туза, ещё два — на тёрне и ривере. После раздачи каждый, кто проиграл,
   // получает на баланс ×1.5 от проигранного и сообщение, что это был пранк.
-  prank(uid) {
+  // kind 'cooler' — другу приходят два туза, но ты обыгрываешь его на ривере; без эффектов на экране
+  prank(uid, m) {
     if (!config.adminIds.includes(uid)) throw new Error('Нет доступа');
     const at = activeTable(uid);
     if (!at) throw new Error('Ты не за столом');
     const table = at.table;
     if (!table.players.some((p) => !p.isBot && p.id !== uid)) throw new Error('Только когда за столом есть друг');
     if (table.prank) throw new Error('Пранк уже заряжен');
+    const cooler = m?.kind === 'cooler';
     const engine = table.engine;
-    const suits = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
-    const aces = [12 * 4 + suits[0], 12 * 4 + suits[1]];
-    const board = [undefined, undefined, undefined, 12 * 4 + suits[2], 12 * 4 + suits[3]];
     const prev = engine.demoDeck;
     table.prank = { adminId: uid, live: false };
     engine.demoDeck = (deck, ids) => {
       engine.demoDeck = prev;
-      if (!ids.includes(uid)) { table.prank = null; return prev ? prev(deck, ids) : deck; }
+      const d = prev ? prev(deck, ids) : deck;
+      const friend = ids.find((id) => id !== uid && table.players.find((p) => p.id === id && !p.isBot));
+      const plan = ids.includes(uid) && (cooler ? friend && coolerPlan(d, uid, friend, table.variant === 'short' ? evaluateShort : evaluate) : acesPlan(uid));
+      if (!plan) { table.prank = null; return d; }
       table.prank.live = true;
-      for (const p of table.players) if (!p.isBot) hub.send(p.id, { t: 'prank', admin: uid, cards: aces });
-      return arrangeDeck({ holes: { [uid]: aces }, board }, prev ? prev(deck, ids) : deck, ids);
+      if (!cooler) for (const p of table.players) if (!p.isBot) hub.send(p.id, { t: 'prank', admin: uid, cards: plan.holes[uid] });
+      return arrangeDeck(plan, d, ids);
     };
     return { t: 'ok' };
   },
