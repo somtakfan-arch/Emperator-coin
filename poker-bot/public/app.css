@@ -466,3 +466,17 @@ textarea.buyin-input { resize: vertical; font: inherit; }
 .tr-wrong { font-size: 14px; line-height: 1.5; color: #ffb4b4; border-left: 3px solid var(--red); padding-left: 10px; }
 .tr-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 8px; }
 .tr-opts button { height: 50px; font-size: 14px; }
+/* ---------- Пранк ---------- */
+.prank { position: fixed; inset: 0; z-index: 9999; background: #000; display: flex; align-items: center; justify-content: center; pointer-events: none; transition: background .4s; }
+.prank-eyes { display: flex; gap: 56px; animation: prankBlink 1s steps(1) both; }
+.prank-eye { width: 46px; height: 22px; border-radius: 50%; background: radial-gradient(circle, #ff2a2a 0 30%, #b00000 55%, transparent 72%); box-shadow: 0 0 30px 10px rgba(255,0,0,.55); }
+@keyframes prankBlink { 0% { opacity: 0 } 10% { opacity: 1 } 45% { opacity: .2 } 55% { opacity: 1 } }
+.prank-aces { position: absolute; left: 50%; display: flex; gap: 10px; opacity: 0; transform: translateX(-50%) scale(1.6); }
+.prank-aces.down { top: 10%; }
+.prank-aces.up { bottom: 10%; }
+.prank.crawl { background: rgba(0,0,0,.25); }
+.prank.crawl .prank-eyes { opacity: 0; transition: opacity .3s; }
+.prank.crawl .prank-aces.down { animation: prankDown 2.4s ease-in forwards; }
+.prank.crawl .prank-aces.up { animation: prankUp 2.4s ease-in forwards; }
+@keyframes prankDown { 0% { opacity: 1; top: 10%; } 20% { transform: translateX(-52%) rotate(-6deg) scale(1.6); } 40% { transform: translateX(-48%) rotate(6deg) scale(1.6); } 60% { transform: translateX(-52%) rotate(-6deg) scale(1.6); } 85% { opacity: 1; } 100% { opacity: 0; top: 70%; transform: translateX(-50%) scale(1); } }
+@keyframes prankUp { 0% { opacity: 1; bottom: 10%; } 20% { transform: translateX(-52%) rotate(-6deg) scale(1.6); } 40% { transform: translateX(-48%) rotate(6deg) scale(1.6); } 60% { transform: translateX(-52%) rotate(-6deg) scale(1.6); } 85% { opacity: 1; } 100% { opacity: 0; bottom: 70%; transform: translateX(-50%) scale(1); } }

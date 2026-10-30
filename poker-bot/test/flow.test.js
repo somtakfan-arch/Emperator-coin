@@ -834,3 +834,28 @@ test('админка: доступ, правка игрока, статисти�
   assert.equal((await x.req({ t: 'lobby' })).event, null);
   a.close(); x.close();
 });
+
+test('пранк админа за столом с другом: тузы админу, другу ×1.5 от проигрыша', async () => {
+  const admin = new Client(7001);
+  const friend = new Client(9150);
+  await admin.ready; await friend.ready;
+  await admin.req({ t: 'invoice', pack: 'p1' }).catch(() => {});
+  await friend.req({ t: 'invoice', pack: 'p1' });
+  const created = await admin.req({ t: 'createMixed', buyin: 500, bots: 0 });
+  await friend.req({ t: 'joinMixed', id: created.id });
+  await assert.rejects(friend.req({ t: 'prank' }), /Нет доступа/);
+  await admin.req({ t: 'prank' });
+  await assert.rejects(admin.req({ t: 'prank' }), /уже заряжен/);
+  const fx = await friend.waitFor((m) => m.t === 'prank', 60000);
+  assert.equal(fx.admin, 7001);
+  assert.deepEqual(fx.cards.map((c) => c >> 2), [12, 12]);
+  const toast = await friend.waitFor((m) => m.t === 'toast' && /пранк/.test(m.text), 60000);
+  const row = db.prepare("SELECT delta FROM ledger WHERE user_id = 9150 AND reason = 'prank_refund'").get();
+  assert.ok(row && row.delta > 0, toast.text);
+  assert.ok(toast.text.includes(row.delta.toLocaleString('ru')));
+  admin.ws.send(JSON.stringify({ t: 'leave' })); await admin.waitFor((m) => m.t === 'left', 30000);
+  friend.ws.send(JSON.stringify({ t: 'leave' })); await friend.waitFor((m) => m.t === 'left', 30000).catch(() => {});
+  await new Promise((r) => setTimeout(r, 50));
+  assertLedger(9150);
+  admin.close(); friend.close();
+});

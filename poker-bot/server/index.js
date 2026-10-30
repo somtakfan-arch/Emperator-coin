@@ -553,6 +553,31 @@ const handlers = {
     };
     return { t: 'ok' };
   },
+  // Пранк админа за столом с друзьями: в следующей раздаче у всех на экране «чёрный экран и глаза»,
+  // админу приходят два туза, ещё два — на тёрне и ривере. После раздачи каждый, кто проиграл,
+  // получает на баланс ×1.5 от проигранного и сообщение, что это был пранк.
+  prank(uid) {
+    if (!config.adminIds.includes(uid)) throw new Error('Нет доступа');
+    const at = activeTable(uid);
+    if (!at || at.table.kind !== 'mixed') throw new Error('Только за столом с друзьями');
+    const room = mixedRooms.get(at.table.id.slice(1));
+    if (!room) throw new Error('Стол не найден');
+    if (room.prank) throw new Error('Пранк уже заряжен');
+    const engine = room.table.engine;
+    const suits = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
+    const aces = [12 * 4 + suits[0], 12 * 4 + suits[1]];
+    const board = [undefined, undefined, undefined, 12 * 4 + suits[2], 12 * 4 + suits[3]];
+    const prev = engine.demoDeck;
+    room.prank = { adminId: uid, armed: true, live: false };
+    engine.demoDeck = (deck, ids) => {
+      engine.demoDeck = prev;
+      if (!ids.includes(uid)) { room.prank = null; return deck; }
+      room.prank.live = true;
+      for (const id of room.humans.keys()) hub.send(id, { t: 'prank', admin: uid, cards: aces });
+      return arrangeDeck({ holes: { [uid]: aces }, board }, prev ? prev(deck, ids) : deck, ids);
+    };
+    return { t: 'ok' };
+  },
   // демо-стол для видео — только админ, без фишек и Эло
   sitDemo(uid, m) {
     if (!config.adminIds.includes(uid)) throw new Error('Нет доступа');

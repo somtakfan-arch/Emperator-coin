@@ -228,6 +228,7 @@ function onMessage(m) {
       break;
     case 'paid': toast('Фишки зачислены (тестовый режим)'); break;
     case 'toast': toast(m.text); break;
+    case 'prank': prankFx(m); break;
   }
   render();
 }
@@ -840,6 +841,19 @@ function trainingScreen() {
       h('summary', {}, 'Все уроки'),
       LESSONS.map((l, n) => h('button', { class: `tut-toc-item ${n === tr.lesson ? 'on' : ''}`, onclick: () => openTraining(n) },
         `${trainingDone().includes(n) ? '✓ ' : ''}${n + 1}. ${l.title}`))));
+}
+
+// Пранк: чёрный экран, красные глаза, потом к админу ползут два туза.
+// Рисуется поверх всего, отдельно от render() — перерисовка стола его не сбивает.
+function prankFx(m) {
+  const mine = m.admin === S.me?.id;
+  const el = h('div', { class: 'prank' },
+    h('div', { class: 'prank-eyes' }, h('div', { class: 'prank-eye' }), h('div', { class: 'prank-eye' })),
+    h('div', { class: `prank-aces ${mine ? 'down' : 'up'}` }, (m.cards || [48, 49]).map((c) => pcard(c))));
+  document.body.appendChild(el);
+  try { navigator.vibrate?.([80, 60, 200]); } catch {}
+  setTimeout(() => el.classList.add('crawl'), 1000);
+  setTimeout(() => el.remove(), 3600);
 }
 
 function openCombos() {
@@ -1468,6 +1482,9 @@ function tableScreen() {
         h('button', {
           class: 'jam-btn aces-btn', 'aria-label': 'Два туза в следующей раздаче, ещё два на тёрне и ривере', onclick: async () => { if (await run({ t: 'forceAces' })) toast('Следующая раздача: тузы у тебя и на тёрне с ривером'); },
         }, 'A A')),
+      // пранк админа: только за столом с другом
+      S.me.isAdmin && T.kind === 'mixed' && T.humans >= 2 && h('div', { class: 'admin-btns' },
+        h('button', { class: 'jam-btn', 'aria-label': 'Пранк в следующей раздаче', onclick: async () => { if (await run({ t: 'prank' })) toast('😈 Пранк в следующей раздаче'); } }, '😈')),
       S.emoteOpen && emoteTray(),
       S.coachTips && h('div', { class: 'coach-card' },
         h('div', { class: 'row between' }, h('div', { class: 'b', style: 'font-size:13px' }, '🎓 Тренер'),
