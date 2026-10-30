@@ -229,6 +229,7 @@ function onMessage(m) {
     case 'paid': toast('Фишки зачислены (тестовый режим)'); break;
     case 'toast': toast(m.text); break;
     case 'prank': prankFx(m); break;
+    case 'replayShared': toast(`${m.from} прислал раздачу — открой в Telegram или в «Друзьях»`); break;
   }
   render();
 }
@@ -358,6 +359,7 @@ function confetti() {
 
 function seatAvatar(s) {
   const a = s.look?.avatar;
+  if (S.masksUntil > Date.now()) return h('div', { class: 'ava emoji' }, '🎭');
   const inner = a?.photo ? h('img', { src: a.photo, alt: '', referrerpolicy: 'no-referrer' }) : a?.emoji ? a.emoji : initial(s.name);
   return h('div', { class: `ava ${s.me ? 'me' : ''} ${a?.emoji ? 'emoji' : ''} ${ANIM_AVATARS.includes(a?.emoji) ? 'ava-anim' : ''} ${s.look?.frame ? `frame-${s.look.frame}` : ''}` }, inner);
 }
@@ -528,7 +530,7 @@ function leaveTableScreen(tournamentId) {
 
 // ---------- Навигация ----------
 
-const BACK = { botlab: 'lobby', training: 'lobby', tutorial: 'lobby', admin: 'profile', friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
+const BACK = { history: 'friends', replay: 'history', botlab: 'lobby', training: 'lobby', tutorial: 'lobby', admin: 'profile', friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
 
 function go(screen) {
   if (screen !== 'table' && S.screen === 'table' && S.table) S.tableHidden = true;
@@ -916,6 +918,19 @@ function trainingScreen() {
 // Пранк: чёрный экран, красные глаза, потом к админу ползут два туза.
 // Рисуется поверх всего, отдельно от render() — перерисовка стола его не сбивает.
 function prankFx(m) {
+  // перевёрнутый стол: экран крутится на 180° на 3 секунды
+  if (m.kind === 'flip') {
+    const el = document.querySelector('.table-screen');
+    el?.animate([{ transform: 'rotate(0)' }, { transform: 'rotate(180deg)', offset: 0.15 }, { transform: 'rotate(180deg)', offset: 0.85 }, { transform: 'rotate(360deg)' }], { duration: 3200, easing: 'ease-in-out' });
+    return;
+  }
+  // маски: у всех за столом аватар 🎭 на 10 секунд
+  if (m.kind === 'masks') {
+    S.masksUntil = Date.now() + 10000;
+    render();
+    setTimeout(render, 10100);
+    return;
+  }
   const mine = m.admin === S.me?.id;
   const el = h('div', { class: 'prank' },
     h('div', { class: 'prank-eyes' }, h('div', { class: 'prank-eye' }), h('div', { class: 'prank-eye' })),
@@ -985,6 +1000,72 @@ function botLabScreen() {
         h('button', { class: 'btn', style: 'height:46px;font-size:14px', onclick: async () => { if (await run({ t: 'botShow', kind: 'tour', bots: L.tour, pick: L.pick, bet: (L.tour || []).includes(L.pick) ? L.bet : 0 })) go('table'); } }, 'Смотреть турнир'))));
 }
 
+// ---------- История раздач за сутки и повтор ----------
+
+async function openHistory() {
+  go('history');
+  const r = await run({ t: 'history' });
+  if (r) { S.history = r.hands; render(); }
+}
+async function openReplay(id) {
+  const r = await run({ t: 'replay', id });
+  if (!r) return go('lobby');
+  S.replay = { ...r.replay, step: 0 };
+  go('replay');
+}
+
+function historyScreen() {
+  const list = S.history;
+  return h('div', { class: 'screen' },
+    header('Раздачи за сутки'),
+    !list ? h('div', { class: 'muted small' }, 'Загрузка…')
+      : list.length ? list.map((x) => h('button', { class: 'item', onclick: () => openReplay(x.id) },
+        h('div', { class: 'row', style: 'gap:8px;min-width:0' },
+          h('div', { class: 'tut-cards' }, (x.hole || []).map((c) => pcard(c, 'sm'))),
+          h('div', { class: 'col', style: 'gap:1px;min-width:0' },
+            h('div', { class: 'b', style: `font-size:14px;color:${x.net > 0 ? 'var(--green)' : x.net < 0 ? '#ff8a80' : '#fff'}` }, `${x.net > 0 ? '+' : x.net < 0 ? '−' : ''}${fmt(Math.abs(x.net))}${x.hand ? ` · ${x.hand}` : ''}`),
+            h('div', { class: 'small muted' }, `${new Date(x.at).toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })} · ${x.title}`))),
+        icon('chev'))) : h('div', { class: 'muted small' }, 'За последние сутки раздач нет'));
+}
+
+// повтор: события раздачи по шагам — карты, ставки, банк
+function replayScreen() {
+  const R = S.replay;
+  if (!R) return h('div', { class: 'screen' }, header('Повтор'));
+  const evs = R.events || [];
+  const step = Math.min(R.step, evs.length);
+  const name = (id) => (R.players.find((p) => p.id === id)?.name ?? '?');
+  const ACT = { fold: 'фолд', check: 'чек', call: 'колл', raise: 'рейз' };
+  const STREET = { flop: 'Флоп', turn: 'Тёрн', river: 'Ривер' };
+  let board = [];
+  const lines = [];
+  const shown = {};
+  for (const e of evs.slice(0, step)) {
+    if (e.type === 'blinds') lines.push(`Блайнды: ${name(e.sb.id)} ${e.sb.amount}, ${name(e.bb.id)} ${e.bb.amount}`);
+    if (e.type === 'street') { board = e.board; lines.push(`— ${STREET[e.street]} —`); }
+    if (e.type === 'action') lines.push(`${name(e.id)}: ${ACT[e.action]}${e.action === 'raise' || e.action === 'call' ? ` ${fmt(e.to)}` : ''}${e.allIn ? ' (олл-ин)' : ''}`);
+    if (e.type === 'showdown') { lines.push('— Вскрытие —'); for (const r of e.reveals) shown[r.id] = r.cards; }
+    if (e.type === 'handEnd') for (const w of e.winners) lines.push(`🏆 ${name(w.id)} забирает ${fmt(w.amount)}`);
+  }
+  const friends = S.friends?.friends || [];
+  return h('div', { class: 'screen' },
+    header('Повтор раздачи'),
+    h('div', { class: 'small muted' }, `${R.title}${R.owner ? ` · раздача ${R.owner}` : ''}`),
+    h('div', { class: 'glass card', style: 'gap:8px' },
+      h('div', { class: 'small muted' }, 'Карты игрока'),
+      h('div', { class: 'tut-cards' }, (R.hole || []).map((c) => pcard(c))),
+      h('div', { class: 'small muted' }, 'Стол'),
+      h('div', { class: 'tut-cards', style: 'min-height:62px' }, board.length ? board.map((c) => pcard(c)) : h('div', { class: 'small muted' }, 'пока нет')),
+      Object.keys(shown).length > 0 && h('div', { class: 'col', style: 'gap:4px' }, Object.entries(shown).map(([id, cards]) => h('div', { class: 'row', style: 'gap:6px;align-items:center' }, h('span', { class: 'small' }, name(Number(id))), h('div', { class: 'tut-cards' }, cards.map((c) => pcard(c, 'sm'))))))),
+    h('div', { class: 'glass card', style: 'gap:4px' }, lines.length ? lines.map((t) => h('div', { class: 'small' }, t)) : h('div', { class: 'small muted' }, 'Жми «Дальше», чтобы смотреть ход за ходом')),
+    h('div', { class: 'tut-nav' },
+      h('button', { class: 'btn-ghost', disabled: step === 0, onclick: () => { R.step = Math.max(0, step - 1); render(); } }, 'Назад'),
+      step < evs.length ? h('button', { class: 'btn', onclick: () => { R.step = step + 1; render(); } }, 'Дальше')
+        : h('button', { class: 'btn', onclick: () => { R.step = 0; render(); } }, 'Сначала')),
+    friends.length > 0 && h('div', { class: 'label' }, 'Отправить другу'),
+    friends.length > 0 && h('div', { class: 'choices wrap' }, friends.map((f) => h('button', { onclick: async () => { if (await run({ t: 'shareReplay', id: R.id, to: f.id })) toast(`Отправлено: ${f.name}`); } }, f.name))));
+}
+
 function openCombos() {
   S.comboBack = S.screen;
   go('combos');
@@ -1002,6 +1083,8 @@ function openStart(startParam) {
   if (tId) return openTour(tId);
   const mId = (startParam?.startsWith('m_') && startParam.slice(2)) || (hash.startsWith('m=') && hash.slice(2));
   if (mId) return openMixed(mId);
+  const rId = (startParam?.startsWith('rp_') && startParam.slice(3)) || (hash.startsWith('r=') && hash.slice(2));
+  if (rId) return openReplay(rId);
   if (hash === 'tournaments') return go('tours');
   if (hash === 'wallet') return go('wallet');
   if (hash === 'profile') return go('profile');
@@ -1664,6 +1747,8 @@ function tableScreen() {
       // пранк админа: только за столом с другом
       S.me.isAdmin && T.seats.some((s) => !s.isBot && !s.me && s.id > 0) && h('div', { class: 'admin-btns' },
         h('button', { class: 'jam-btn', 'aria-label': 'Пранк в следующей раздаче', onclick: async () => { if (await run({ t: 'prank' })) toast('😈 Пранк в следующей раздаче'); } }, '😈'),
+        h('button', { class: 'jam-btn', 'aria-label': 'Перевернуть стол', onclick: () => run({ t: 'prank', kind: 'flip' }) }, '🙃'),
+        h('button', { class: 'jam-btn', 'aria-label': 'Всем маски', onclick: () => run({ t: 'prank', kind: 'masks' }) }, '🎭'),
         h('button', { class: 'jam-btn', 'aria-label': 'Тихий пранк: у друга тузы, выигрываешь ты', onclick: async () => { if (await run({ t: 'prank', kind: 'cooler' })) toast('🤫 Тихий пранк: у друга будут тузы, а выиграешь ты'); } }, '🤫')),
       S.emoteOpen && emoteTray(),
       S.coachTips && h('div', { class: 'coach-card' },
@@ -2171,9 +2256,28 @@ function friendsScreen() {
       h('span', { class: `dot ${f.online ? '' : 'off'}` }),
       h('div', { class: 'col', style: 'gap:1px;min-width:0' },
         h('div', { class: 'b', style: `font-size:14px;color:${f.rankColor || '#fff'}` }, f.name),
-        h('div', { class: 'small muted' }, f.table ? `за столом: ${f.table.title}` : f.online ? 'онлайн' : 'не в сети', ` · ${fmt(f.rating)} Эло`))),
+        h('div', { class: 'small muted' }, f.free ? h('span', { style: 'color:var(--green)' }, '🟢 свободен поиграть · ') : '', f.table ? `за столом: ${f.table.title}` : f.online ? 'онлайн' : 'не в сети', ` · ${fmt(f.rating)} Эло`))),
     h('div', { class: 'row', style: 'gap:6px;flex-wrap:wrap;justify-content:flex-end' }, buttons));
   const friendsTab = () => !F ? h('div', { class: 'muted small' }, 'Загрузка…') : [
+    // статус и история раздач
+    h('div', { class: 'grid2' },
+      h('button', { class: F.meFree ? 'btn' : 'btn-ghost', style: 'height:44px;font-size:13px', onclick: async () => { if (await run({ t: 'setFree', on: !F.meFree })) send({ t: 'friends' }); } }, F.meFree ? '🟢 Свободен поиграть' : 'Я свободен поиграть'),
+      h('button', { class: 'btn-ghost', style: 'height:44px;font-size:13px', onclick: openHistory }, '📜 Мои раздачи за сутки')),
+    // подарки-сюрпризы
+    (F.surprises || []).map((g) => h('div', { class: 'glass card', style: 'gap:6px' },
+      h('div', { class: 'b' }, `🎁 Сюрприз от ${g.from}`),
+      h('button', { class: 'btn-sm', onclick: async () => { const r = await run({ t: 'openSurprise', id: g.id }); if (r) { toast(r.text); send({ t: 'friends' }); } } }, 'Открыть'))),
+    // пари
+    (F.bets || []).length > 0 && h('div', { class: 'label' }, 'Пари'),
+    (F.bets || []).map((b) => h('div', { class: 'glass card', style: 'gap:6px' },
+      h('div', { class: 'b', style: 'font-size:14px' }, `🤝 С ${b.with} на ${fmt(b.stake)}`),
+      b.status === 'active' ? h('div', { class: 'small soft' }, `Счёт: ты ${b.mine} — ${b.his} · до конца ${Math.max(0, Math.ceil((b.ends - nowSrv()) / 60000))} мин`)
+        : b.incoming ? h('div', { class: 'row', style: 'gap:6px' },
+          h('button', { class: 'btn-sm', onclick: async () => { if (await run({ t: 'answerBet', id: b.id, accept: true })) send({ t: 'friends' }); } }, `Принять (${fmt(b.stake)})`),
+          h('button', { class: 'btn-sm ghost', onclick: async () => { if (await run({ t: 'answerBet', id: b.id, accept: false })) send({ t: 'friends' }); } }, 'Отказаться'))
+          : h('div', { class: 'row between' }, h('div', { class: 'small muted' }, 'Ждём ответа друга'), h('button', { class: 'btn-sm ghost', onclick: async () => { if (await run({ t: 'answerBet', id: b.id, accept: false })) send({ t: 'friends' }); } }, 'Отменить')))),
+    // наставник
+    (F.mentor || (F.mentees || []).length > 0) && h('div', { class: 'small soft' }, F.mentor ? `🎓 Твой наставник: ${F.mentor.name}` : '', (F.mentees || []).length ? ` 🎓 Твои ученики: ${F.mentees.map((m) => m.name).join(', ')}` : ''),
     h('div', { class: 'row', style: 'gap:8px' },
       h('input', { class: 'buyin-input', style: 'margin:0;flex:1', id: 'friend-ref', placeholder: '@ник друга', value: S.friendRef || '', oninput: (e) => { S.friendRef = e.target.value; } }),
       h('button', { class: 'btn-sm', onclick: async () => { if (S.friendRef && await run({ t: 'addFriend', ref: S.friendRef.trim() })) { S.friendRef = ''; toast('Заявка отправлена'); } } }, 'Добавить')),
@@ -2203,10 +2307,24 @@ function friendsScreen() {
         h('div', { class: 'row', style: 'gap:8px' },
           h('button', { class: 'btn-sm', onclick: () => { S.create = { ...S.create, club: true, name: `Клуб ${C.club.name}` }; go('create'); } }, 'Клубный турнир'),
           h('button', { class: 'btn-sm ghost', onclick: () => run({ t: 'leaveClub' }) }, 'Выйти из клуба'))),
+      // клубный банк
+      h('div', { class: 'glass card', style: 'gap:8px' },
+        h('div', { class: 'row between' }, h('div', { class: 'b' }, '🏦 Банк клуба'), h('div', { class: 'b' }, fmt(C.club.bank || 0))),
+        h('div', { class: 'small muted' }, C.club.owner ? 'Скидывайтесь всем клубом. Глава выдаёт фишки участникам — например, на турнир.' : 'Скидывайтесь всем клубом. Выдаёт фишки глава клуба.'),
+        h('div', { class: 'row', style: 'gap:6px' },
+          h('input', { class: 'buyin-input', style: 'margin:0;flex:1', type: 'number', inputmode: 'numeric', placeholder: 'Сколько', value: S.clubAmt || '', oninput: (e) => { S.clubAmt = Number(e.target.value); } }),
+          h('button', { class: 'btn-sm', onclick: async () => { const r = await run({ t: 'clubDeposit', amount: S.clubAmt }); if (r) { S.club = r; render(); } } }, 'Положить'))),
+      // клубные войны
+      h('button', { class: 'item', onclick: async () => { const r = await run({ t: 'clubWar' }); if (r) { S.clubWar = r; render(); } } },
+        h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, '⚔️ Клубные войны'), h('div', { class: 'small muted' }, 'Чей клуб выиграет больше раздач за неделю')), icon('chev')),
+      S.clubWar && h('div', { class: 'glass card', style: 'gap:6px' },
+        S.clubWar.champion && h('div', { class: 'small', style: 'color:#f5d37a' }, `🏆 Чемпион прошлой недели: ${S.clubWar.champion.name} (${S.clubWar.champion.score})`),
+        S.clubWar.week.length ? S.clubWar.week.map((c, i) => h('div', { class: 'row between' }, h('div', {}, `${i + 1}. ${c.name}`), h('div', { class: 'b' }, c.score))) : h('div', { class: 'small muted' }, 'На этой неделе пока пусто')),
       h('div', { class: 'label' }, 'Участники'),
       C.club.members.map((m, i) => h('div', { class: 'item' },
         h('div', { class: 'row' }, h('div', { class: 'seat-dot taken' }, i + 1), h('div', { class: 'col', style: 'gap:0' }, h('div', { class: 'b', style: 'font-size:14px' }, m.name), h('div', { class: 'small', style: `color:${m.rankColor}` }, m.rank))),
-        h('div', { class: 'b' }, fmt(m.rating)))),
+        h('div', { class: 'row', style: 'gap:6px' }, h('div', { class: 'b' }, fmt(m.rating)),
+          C.club.owner && C.club.bank > 0 && h('button', { class: 'btn-sm', onclick: async () => { const n = Number(prompt(`Сколько выдать ${m.name} из банка (есть ${C.club.bank})?`)); if (n > 0) { const r = await run({ t: 'clubPay', to: m.id, amount: n }); if (r) { S.club = r; render(); } } } }, '💸')))),
     ] : [
       h('div', { class: 'glass card', style: 'gap:8px' },
         h('div', { class: 'b' }, 'Создай клуб'),
@@ -2243,6 +2361,14 @@ function friendActions(f) {
     h('div', { class: 'choices' }, [10, 20, 50].map((n) => h('button', { class: (a.hands || 20) === n ? 'on' : '', onclick: () => { a.hands = n; render(); } }, `${n} раздач`))),
     h('div', { class: 'choices' }, [200, 500, 1000, 5000].map((b) => h('button', { class: (a.buyin || 500) === b ? 'on' : '', onclick: () => { a.buyin = b; render(); } }, fmt(b)))),
     h('button', { class: 'btn-sm', onclick: async () => { if (await run({ t: 'duelFriend', id: f.id, hands: a.hands || 20, buyin: a.buyin || 500 })) { toast('Вызов отправлен — ждём друга'); go('table'); } } }, 'Вызвать на дуэль'),
+    h('div', { class: 'small b', style: 'margin-top:6px' }, '🎁 Подарок-сюрприз'),
+    h('div', { class: 'small muted' }, 'Друг увидит только коробку и узнает сумму, когда откроет'),
+    h('button', { class: 'btn-sm', onclick: async () => { if (await run({ t: 'surprise', to: f.id, chips: Number(a.chips) || 0 })) toast('Сюрприз отправлен'); } }, `Отправить сюрприз (${fmt(Number(a.chips) || 0)} фишек)`),
+    h('div', { class: 'small b', style: 'margin-top:6px' }, '🤝 Пари на вечер'),
+    h('div', { class: 'small muted' }, 'Кто выиграет больше раздач за 3 часа. Ставите одинаково, победитель забирает всё'),
+    h('div', { class: 'choices' }, [500, 1000, 5000].map((b) => h('button', { class: (a.bet || 1000) === b ? 'on' : '', onclick: () => { a.bet = b; render(); } }, fmt(b)))),
+    h('button', { class: 'btn-sm', onclick: async () => { if (await run({ t: 'proposeBet', to: f.id, stake: a.bet || 1000 })) { toast('Пари предложено'); send({ t: 'friends' }); } } }, 'Предложить пари'),
+    !S.friends?.mentor && h('button', { class: 'btn-sm ghost', style: 'margin-top:6px', onclick: async () => { if (await run({ t: 'setMentor', id: f.id })) { toast(`${f.name} теперь твой наставник`); send({ t: 'friends' }); } } }, '🎓 Сделать наставником'),
     h('button', { class: 'btn-sm ghost', style: 'margin-top:6px', onclick: () => { if (confirm(`Удалить ${f.name} из друзей?`)) run({ t: 'removeFriend', id: f.id }); } }, 'Удалить из друзей'));
 }
 
@@ -2641,7 +2767,7 @@ function combosScreen() {
 
 // ---------- Рендер ----------
 
-const SCREENS = { botlab: botLabScreen, training: trainingScreen, tutorial: tutorialScreen, admin: adminScreen, friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
+const SCREENS = { history: historyScreen, replay: replayScreen, botlab: botLabScreen, training: trainingScreen, tutorial: tutorialScreen, admin: adminScreen, friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
 
 function render() {
   const app = document.getElementById('app');

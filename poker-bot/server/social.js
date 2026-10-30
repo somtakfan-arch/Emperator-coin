@@ -70,6 +70,7 @@ export function friendsView(uid, presence) {
 // ---------- Подарки друзьям ----------
 
 const GIFT_DAY_LIMIT = 10000; // фишек в сутки от одного игрока — чтобы подарки не превращались в торговлю
+export const giftLeftOf = (uid) => giftLeft(uid);
 function giftLeft(uid) {
   const sent = db.prepare('SELECT COALESCE(SUM(chips), 0) AS s FROM gifts WHERE from_id = ? AND at > ?').get(uid, Date.now() - 86400000).s;
   return Math.max(0, GIFT_DAY_LIMIT - sent);
@@ -183,7 +184,7 @@ export function clubView(uid) {
   const club = db.prepare('SELECT * FROM clubs WHERE id = ?').get(id);
   const members = db.prepare('SELECT u.id, u.name, u.rating, u.hands_won FROM club_members m JOIN users u ON u.id = m.user_id WHERE m.club_id = ? ORDER BY u.rating DESC').all(id)
     .map((u) => ({ id: u.id, name: u.name, rating: Math.round(u.rating), handsWon: u.hands_won, rank: rankOf(u.rating).name, rankColor: rankOf(u.rating).color }));
-  return { club: { id: club.id, name: club.name, owner: club.owner === uid, code: club.id, members }, top };
+  return { club: { id: club.id, name: club.name, owner: club.owner === uid, code: club.id, members, bank: club.bank ?? 0 }, top };
 }
 
 export const clubMembers = (clubId) => db.prepare('SELECT user_id FROM club_members WHERE club_id = ?').all(clubId).map((r) => r.user_id);

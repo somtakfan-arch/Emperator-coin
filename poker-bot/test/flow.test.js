@@ -1062,3 +1062,47 @@ test('прогресс пачки 10: колесо, навыки, испытан
   assertLedger(9701);
   c.close();
 });
+
+test('друзья пачки 12: повтор раздачи, пари, сюрприз, клубный банк, статус, наставник', async () => {
+  const a = new Client(9801), b = new Client(9802);
+  await a.ready; await b.ready;
+  await a.req({ t: 'invoice', pack: 'p1' }); await b.req({ t: 'invoice', pack: 'p1' });
+  await a.req({ t: 'addFriend', ref: 9802 }); await b.req({ t: 'addFriend', ref: 9801 });
+  // повтор: сыграем пару раздач с ботом
+  await a.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 500 });
+  await a.waitFor((m) => m.t === 'left' || (m.t === 'table' && m.table?.handId >= 3), 60000);
+  a.ws.send(JSON.stringify({ t: 'leave' })); await a.waitFor((m) => m.t === 'left', 30000);
+  const hist = await a.req({ t: 'history' });
+  assert.ok(hist.hands.length >= 1, 'история есть');
+  const rp = await a.req({ t: 'replay', id: hist.hands[0].id });
+  assert.ok(rp.replay.events.length > 0 && rp.replay.hole.length === 2);
+  await a.req({ t: 'shareReplay', id: hist.hands[0].id, to: 9802 });
+  await b.waitFor((m) => m.t === 'replayShared');
+  // пари
+  await a.req({ t: 'proposeBet', to: 9802, stake: 500 });
+  const fb = await b.req({ t: 'friends' });
+  const bet = fb.bets.find((x) => x.incoming);
+  assert.ok(bet);
+  await b.req({ t: 'answerBet', id: bet.id, accept: true });
+  // сюрприз
+  await a.req({ t: 'surprise', to: 9802, chips: 300 });
+  const fb2 = await b.req({ t: 'friends' });
+  assert.equal(fb2.surprises.length, 1);
+  const op = await b.req({ t: 'openSurprise', id: fb2.surprises[0].id });
+  assert.match(op.text, /300/);
+  // статус
+  await a.req({ t: 'setFree', on: true });
+  const fb3 = await b.req({ t: 'friends' });
+  assert.ok(fb3.friends.find((f) => f.id === 9801).free);
+  // наставник: у a мало раздач — нельзя
+  await assert.rejects(b.req({ t: 'setMentor', id: 9801 }), /от 500 раздач/);
+  // клубный банк
+  await a.req({ t: 'createClub', name: 'Тузы' });
+  const cl = await a.req({ t: 'clubDeposit', amount: 1000 });
+  assert.equal(cl.club.bank, 1000);
+  await a.req({ t: 'clubPay', to: 9801, amount: 400 });
+  const war = await a.req({ t: 'clubWar' });
+  assert.ok(Array.isArray(war.week));
+  assertLedger(9801); assertLedger(9802);
+  a.close(); b.close();
+});

@@ -534,6 +534,23 @@ export class GameTable {
     for (const p of this.players) {
       if (p.isBot || !v.dealt.has(p.id)) continue;
       const won = winners.has(p.id);
+      // повтор раздачи: только открытая информация + свои карты
+      if (!this.noStats && this.hub.onReplay) {
+        const put = e.contributions.find((c) => c.id === p.id)?.total ?? 0;
+        const got = e.winners.filter((w) => w.id === p.id).reduce((a, w) => a + w.amount, 0);
+        const sc = v.shown[p.id]?.score;
+        this.hub.onReplay(p.id, {
+          title: this.title, bb: this.bb, hole: p.bot.hole || [], board: v.board.slice(), net: got - put,
+          hand: sc != null ? describeHand(sc) : null,
+          players: (log.find((x) => x.type === 'handStart')?.players || []).map((x) => ({ id: x.id, name: x.name, stack: x.stack })),
+          events: log.filter((x) => ['blinds', 'action', 'street', 'showdown', 'handEnd'].includes(x.type)).map((x) => (
+            x.type === 'action' ? { type: 'action', street: x.street, id: x.id, action: x.action, to: x.to, allIn: x.allIn }
+              : x.type === 'street' ? { type: 'street', street: x.street, board: x.board }
+                : x.type === 'blinds' ? { type: 'blinds', sb: x.sb, bb: x.bb }
+                  : x.type === 'showdown' ? { type: 'showdown', reveals: x.reveals.map((r) => ({ id: r.id, cards: r.cards })) }
+                    : { type: 'handEnd', winners: x.winners })),
+        });
+      }
       // статистика против каждого бота за столом (итог в фишках — только 1 на 1)
       if (botsIn.length) {
         const mine = e.contributions.find((c) => c.id === p.id)?.total ?? 0;

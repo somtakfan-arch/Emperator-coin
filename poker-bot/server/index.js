@@ -16,6 +16,7 @@ import { arrangeDeck } from './game/demoplan.js';
 import { evaluate, evaluateShort } from '../core/cards.js';
 import { botHandsWon, botWeekTop } from './game/table.js';
 import * as botsx from './botsx.js';
+import * as social2 from './social2.js';
 import { ghostHour } from '../core/bots.js';
 import { BOT_KINDS } from '../core/crowd.js';
 import { botRating } from './game/elo.js';
@@ -75,8 +76,17 @@ const hub = {
     hub.sendMe(uid);
   },
   // прогресс: итог раздачи, турнира, «обыграл всех ботов»
+  onReplay: (uid, data) => social2.saveReplay(uid, data),
   onHandResult(uid, h) {
     progress.onHand(uid, h);
+    if (h.won) social2.countWeekWin(uid); // клубные войны
+    // наставник: новичок дошёл до ступени — награда обоим
+    const mt = social2.mentorCheck(uid, (progress.progressView(uid)?.stats.hands ?? 0));
+    if (mt) {
+      hub.send(mt.mentor, { t: 'toast', text: `🎓 Твой ученик сыграл ${mt.hands} раздач: +${mt.mentor} фишек` });
+      hub.send(uid, { t: 'toast', text: `🎓 ${mt.hands} раздач с наставником: +${mt.mentee} фишек` });
+      hub.sendMe(mt.mentor); hub.sendMe(uid);
+    }
     // реферал: новичок сыграл 20 раздач — награда пригласившему
     const hands = progress.progressView(uid)?.stats.hands ?? 0;
     const inviter = social.checkRef(uid, hands);
@@ -203,6 +213,7 @@ function presence(id) {
   const a = activeTable(id);
   return {
     online: hub.isOnline(id),
+    free: social2.isFree(id),
     table: a ? { kind: a.table.kind, title: a.table.title, mixedId: a.table.kind === 'mixed' ? a.table.id.slice(1) : null } : null,
   };
 }
@@ -306,7 +317,7 @@ const handlers = {
     throw new Error('Неизвестное действие');
   },
   // ---------- друзья, клубы, подарки, приглашения ----------
-  friends: (uid) => ({ t: 'friends', ...social.friendsView(uid, presence), ref: { ...social.refStats(uid), link: bot.username ? `https://t.me/${bot.username}?start=r_${uid}` : null, bonusNew: social.REF_BONUS_NEW, bonusInviter: social.REF_BONUS_INVITER } }),
+  friends: (uid) => ({ t: 'friends', ...social.friendsView(uid, presence), bets: social2.betsOf(uid), surprises: social2.surprisesFor(uid), mentor: social2.mentorOf(uid), mentees: social2.menteesOf(uid), meFree: social2.isFree(uid), ref: { ...social.refStats(uid), link: bot.username ? `https://t.me/${bot.username}?start=r_${uid}` : null, bonusNew: social.REF_BONUS_NEW, bonusInviter: social.REF_BONUS_INVITER } }),
   addFriend(uid, m) {
     const r = social.addFriend(uid, m.ref);
     const me = getUser(uid);
@@ -512,6 +523,49 @@ const handlers = {
     ladder: { ...ladderStep(uid), steps: LADDER_STEPS },
     myBot: botsx.myBot(uid), kinds: BOT_KINDS, bank: botsx.bankView(uid), showPool: botsx.showPool(),
   }),
+  // ---------- пачка 12: повторы, пари, клубные войны и банк, статус, сюрпризы, наставник ----------
+  history: (uid) => ({ t: 'history', hands: social2.historyOf(uid) }),
+  replay: (uid, m) => ({ t: 'replay', replay: social2.replay(m.id) }),
+  shareReplay(uid, m) {
+    const id = Number(m.to);
+    if (!social.areFriends(uid, id)) throw new Error('Отправить можно только другу');
+    const r = social2.replay(m.id);
+    const me = getUser(uid);
+    hub.send(id, { t: 'replayShared', id: r.id, from: me.name });
+    notify(id, `<b>${me.name}</b> прислал тебе раздачу 🃏 — посмотри повтор`, openButton('Смотреть повтор', `#r=${r.id}`, 'primary'));
+    return { t: 'ok' };
+  },
+  proposeBet(uid, m) {
+    social2.proposeBet(uid, Number(m.to), m.stake);
+    const me = getUser(uid);
+    hub.send(Number(m.to), { t: 'toast', text: `🤝 ${me.name} предлагает пари на ${Number(m.stake).toLocaleString('ru')}: кто выиграет больше раздач за 3 часа. Ответь в «Друзьях»` });
+    hub.sendMe(uid);
+    return { t: 'ok' };
+  },
+  answerBet(uid, m) {
+    const b = social2.answerBet(uid, m.id, !!m.accept);
+    const other = b.a === uid ? b.b : b.a;
+    hub.send(other, { t: 'toast', text: m.accept && b.b === uid ? `🤝 Пари принято! 3 часа — кто выиграет больше раздач` : 'Пари отменено, ставка вернулась' });
+    hub.sendMe(b.a); hub.sendMe(b.b);
+    return { t: 'ok' };
+  },
+  clubWar: () => ({ t: 'clubWar', ...social2.clubWar() }),
+  clubDeposit(uid, m) { social2.clubDeposit(uid, m.amount); hub.sendMe(uid); return { t: 'club', ...social.clubView(uid) }; },
+  clubPay(uid, m) {
+    social2.clubPay(uid, m.to, m.amount);
+    hub.send(Number(m.to), { t: 'toast', text: `🏦 Глава клуба выдал тебе ${Number(m.amount).toLocaleString('ru')} фишек из банка клуба` });
+    hub.sendMe(Number(m.to));
+    return { t: 'club', ...social.clubView(uid) };
+  },
+  setFree(uid, m) { social2.setFree(uid, !!m.on); return { t: 'ok' }; },
+  surprise(uid, m) {
+    social2.surpriseGift(uid, Number(m.to), m.chips, social.giftLeftOf);
+    hub.send(Number(m.to), { t: 'toast', text: `🎁 ${getUser(uid).name} прислал тебе подарок-сюрприз! Открой в «Друзьях»` });
+    hub.sendMe(uid);
+    return { t: 'ok' };
+  },
+  openSurprise(uid, m) { const r = social2.openSurprise(uid, m.id); hub.sendMe(uid); return { t: 'ok', text: `🎁 Внутри было ${r.chips.toLocaleString('ru')} фишек от ${r.from}!` }; },
+  setMentor(uid, m) { social2.setMentor(uid, m.id, (id) => progress.progressView(id)?.stats.hands ?? 0); return { t: 'ok' }; },
   // ---------- прогресс: навыки, престиж, колесо, зал славы, титулы ----------
   learnSkill(uid, m) { progress.learnSkill(uid, String(m.key)); return { t: 'progress', progress: progress.progressView(uid) }; },
   prestige(uid) { const n = progress.doPrestige(uid); return { t: 'ok', text: `★ Престиж ${n}! Уровень и навыки сброшены, звезда навсегда твоя`, progress: progress.progressView(uid) }; },
@@ -641,6 +695,11 @@ const handlers = {
     if (!at) throw new Error('Ты не за столом');
     const table = at.table;
     if (!table.players.some((p) => !p.isBot && p.id !== uid)) throw new Error('Только когда за столом есть друг');
+    // чисто визуальные пранки: перевёрнутый стол и маски — сразу, на раздачу не влияют
+    if (m?.kind === 'flip' || m?.kind === 'masks') {
+      for (const p of table.players) if (!p.isBot) hub.send(p.id, { t: 'prank', kind: m.kind, admin: uid });
+      return { t: 'ok' };
+    }
     if (table.prank) throw new Error('Пранк уже заряжен');
     const cooler = m?.kind === 'cooler';
     const engine = table.engine;
@@ -823,6 +882,16 @@ recoverAfterRestart();
 tournaments.ensureBig();
 setInterval(() => {
   try { tournaments.tick(); } catch (e) { console.error('tick', e); }
+  // пари с другом: время вышло — итог
+  try {
+    for (const b of social2.resolveBets()) {
+      for (const id of [b.a, b.b]) {
+        const mine = id === b.a ? b.da : b.db, his = id === b.a ? b.db : b.da;
+        hub.send(id, { t: 'toast', text: b.win ? (b.win === id ? `🤝 Пари выиграно ${mine}:${his}! +${(b.stake * 2).toLocaleString('ru')}` : `🤝 Пари проиграно ${mine}:${his}`) : `🤝 Пари вничью ${mine}:${his} — ставки вернулись` });
+        hub.sendMe(id);
+      }
+    }
+  } catch (e) { console.error('bets', e); }
   // новый сезон: награды по рангу и мягкий сброс Эло
   try {
     progress.checkSeason((list) => {
