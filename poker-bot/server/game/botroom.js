@@ -45,7 +45,8 @@ const saveMemory = db.prepare(`INSERT INTO bot_memory (user_id, bot, data, at) V
   ON CONFLICT (user_id, bot) DO UPDATE SET data = excluded.data, at = excluded.at`);
 
 export class BotRoom {
-  constructor(hub, user, { mode, botName, buyin, minutes = 0, fast = false, level = 'normal', shadow = 0, variant = null, chaos = false, jokers = false, marathon = false, mirror = null, myBot = null }) {
+  constructor(hub, user, { mode, botName, buyin, minutes = 0, fast = false, level = 'normal', shadow = 0, variant = null, chaos = false, jokers = false, marathon = false, mirror = null, myBot = null, stopLoss = 0 }) {
+    this.stopLoss = stopLoss; // авто-стоп: встать, если стек упал на эту долю от вложенного
     this.mode = mode;
     this.chaosOn = chaos;
     this.level = level;
@@ -222,6 +223,11 @@ export class BotRoom {
     }
     setInPlay.run(this.me.stack, this.userId);
     if (++this.hands % 10 === 0) this.saveMemory();
+    // авто-стоп: проиграл заданную долю — встаём
+    if (this.stopLoss && !this.leaving && this.me.stack <= this.invested * (1 - this.stopLoss)) {
+      this.hub.send(this.userId, { t: 'toast', text: `🛑 Авто-стоп: проиграно ${Math.round(this.stopLoss * 100)}% — встаёшь из-за стола` });
+      this.leaving = true;
+    }
     // марафон: 1000 раздач, потом итог и стол закрывается
     if (this.marathon && --this.marathon.left <= 0) {
       const net = this.me.stack - this.invested;

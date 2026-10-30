@@ -13,6 +13,41 @@ CREATE TABLE IF NOT EXISTS promo_uses (code TEXT NOT NULL, user_id INTEGER NOT N
 CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `);
 
+for (const c of ['banned', 'muted', 'no_remind']) if (!new Set(db.prepare('PRAGMA table_info(users)').all().map((x) => x.name)).has(c)) db.exec(`ALTER TABLE users ADD COLUMN ${c} INTEGER NOT NULL DEFAULT 0`);
+db.exec(`
+CREATE TABLE IF NOT EXISTS online_hours (hour TEXT PRIMARY KEY, peak INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS prank_log (id INTEGER PRIMARY KEY AUTOINCREMENT, at INTEGER NOT NULL, admin_id INTEGER NOT NULL, kind TEXT NOT NULL, text TEXT NOT NULL);
+`);
+
+// ---------- Бан и мут ----------
+export const isBanned = (uid) => !!db.prepare('SELECT banned FROM users WHERE id = ?').get(uid)?.banned;
+export const isMuted = (uid) => !!db.prepare('SELECT muted FROM users WHERE id = ?').get(uid)?.muted;
+export function setFlag(id, flag, on) {
+  if (!['banned', 'muted'].includes(flag)) throw new Error('Неверный флаг');
+  if (!getUser(Number(id))) throw new Error('Игрок не найден');
+  db.prepare(`UPDATE users SET ${flag} = ? WHERE id = ?`).run(on ? 1 : 0, Number(id));
+  return brief(getUser(Number(id)));
+}
+
+// ---------- Онлайн по часам: пик за каждый час (храним 3 дня) ----------
+export function recordOnline(n) {
+  const hour = new Date(Date.now() + 3 * 3600000).toISOString().slice(0, 13);
+  db.prepare('INSERT INTO online_hours (hour, peak) VALUES (?, ?) ON CONFLICT (hour) DO UPDATE SET peak = MAX(peak, excluded.peak)').run(hour, n);
+}
+export const onlineHours = () => db.prepare('SELECT hour, peak FROM online_hours ORDER BY hour DESC LIMIT 24').all().reverse();
+
+// ---------- Логи пранков ----------
+export const logPrank = (adminId, kind, text) => db.prepare('INSERT INTO prank_log (at, admin_id, kind, text) VALUES (?, ?, ?, ?)').run(Date.now(), adminId, kind, text);
+export const prankLog = () => db.prepare('SELECT at, kind, text FROM prank_log ORDER BY id DESC LIMIT 50').all();
+
+// ---------- Поиск игроков (для всех): имя или @ник ----------
+export function findPlayers(q, me) {
+  q = String(q || '').trim().replace(/^@/, '').toLowerCase();
+  if (q.length < 2) throw new Error('Минимум 2 буквы');
+  return db.prepare('SELECT id, name, username, rating FROM users WHERE banned = 0 AND id <> ? AND (LOWER(name) LIKE ? OR LOWER(username) LIKE ?) ORDER BY last_seen DESC LIMIT 15')
+    .all(me, `%${q}%`, `%${q}%`).map((u) => ({ id: u.id, name: u.name, username: u.username, rating: Math.round(u.rating) }));
+}
+
 export const touch = (uid) => db.prepare('UPDATE users SET last_seen = ? WHERE id = ?').run(Date.now(), uid);
 
 // ---------- Игроки ----------
@@ -25,7 +60,7 @@ export function searchUsers(q) {
 }
 const brief = (u) => ({
   id: u.id, name: u.name, username: u.username, chips: u.chips, inPlay: u.in_play, rating: Math.round(u.rating),
-  hints: u.hints, handsWon: u.hands_won, games: u.games, wins: u.wins, lastSeen: u.last_seen, created: u.created,
+  hints: u.hints, handsWon: u.hands_won, games: u.games, wins: u.wins, lastSeen: u.last_seen, created: u.created, banned: !!u.banned, muted: !!u.muted,
 });
 
 const FIELDS = { chips: 'chips', rating: 'rating', hints: 'hints', handsWon: 'hands_won' };

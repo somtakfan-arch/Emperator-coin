@@ -237,7 +237,7 @@ function meView(uid) {
   if (!u) return null;
   const act = activeTable(uid);
   return {
-    id: u.id, name: u.name, chips: u.chips, inPlay: u.in_play, rating: Math.round(u.rating),
+    id: u.id, name: u.name, chips: u.chips, inPlay: u.in_play, rating: Math.round(u.rating), remind: !u.no_remind,
     isAdmin: config.adminIds.includes(u.id),
     rank: (({ name, color }) => ({ name, color }))(progress.rankOf(u.rating)),
     vip: cosmetics.vipEmotes(u.id),
@@ -311,6 +311,13 @@ const handlers = {
       admin.deletePromo(m.code);
       return { t: 'admin', promos: admin.listPromos() };
     }
+    if (a === 'ban' || a === 'mute') {
+      const u = admin.setFlag(m.id, a === 'ban' ? 'banned' : 'muted', !!m.on);
+      if (a === 'ban' && m.on) for (const ws of sockets.get(u.id) || []) ws.close();
+      return { t: 'admin', user: u, text: a === 'ban' ? (m.on ? 'Забанен' : 'Разбанен') : m.on ? 'В муте' : 'Мут снят' };
+    }
+    if (a === 'online') return { t: 'admin', online: admin.onlineHours() };
+    if (a === 'pranks') return { t: 'admin', pranks: admin.prankLog() };
     if (a === 'event') {
       const e = admin.setEvent(m.kind || null, m.hours, m.title);
       hub.lobbyChanged();
@@ -402,6 +409,7 @@ const handlers = {
     return handlers.club(uid);
   },
   tourSay(uid, m) {
+    if (admin.isMuted(uid)) throw new Error('Ты в муте — фразы и эмодзи недоступны');
     tournaments.say(getUser(uid), m.id, m.i);
     return null;
   },
@@ -489,7 +497,7 @@ const handlers = {
   sitBots(uid, m) {
     if (activeTable(uid)) throw new Error('Ты уже за столом');
     botRooms.set(uid, BotRoom.open(hub, getUser(uid), {
-      mode: ['6', '9', 'rush', 'mega', 'ladder', 'team'].includes(m.mode) ? m.mode : 'hu', jokers: !!m.jokers, marathon: !!m.marathon, botName: m.botName, variant: m.variant === 'short' ? 'short' : null, chaos: !!m.chaos, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0, fast: !!m.fast,
+      mode: ['6', '9', 'rush', 'mega', 'ladder', 'team'].includes(m.mode) ? m.mode : 'hu', jokers: !!m.jokers, marathon: !!m.marathon, stopLoss: [0.5, 0.75].includes(Number(m.stopLoss)) ? Number(m.stopLoss) : 0, botName: m.botName, variant: m.variant === 'short' ? 'short' : null, chaos: !!m.chaos, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0, fast: !!m.fast,
       level: m.level || 'normal', shadow: progress.shadowLevel(uid), mirror: progress.mirrorStats(uid), myBot: m.botName === '__my' ? botsx.myBot(uid) : null,
     }));
     hub.onSeated(uid);
@@ -525,6 +533,9 @@ const handlers = {
     ladder: { ...ladderStep(uid), steps: LADDER_STEPS },
     myBot: botsx.myBot(uid), kinds: BOT_KINDS, bank: botsx.bankView(uid), showPool: botsx.showPool(),
   }),
+  // ---------- удобство: поиск игроков, напоминания ----------
+  findPlayers: (uid, m) => ({ t: 'players', players: admin.findPlayers(m.q, uid) }),
+  setRemind(uid, m) { db.prepare('UPDATE users SET no_remind = ? WHERE id = ?').run(m.on ? 0 : 1, uid); return { t: 'ok' }; },
   // ---------- обучение: разбор раздачи, слабые места, викторина, экзамен ----------
   review(uid, m) {
     const d = social2.replayDecisions(m.id);
@@ -609,6 +620,7 @@ const handlers = {
   },
   // эмодзи над собой за столом
   emote(uid, m) {
+    if (admin.isMuted(uid)) return { t: 'error', text: 'Ты в муте — эмодзи недоступны' };
     activeTable(uid)?.table.emote(uid, String(m.e));
     return null;
   },
@@ -711,6 +723,8 @@ const handlers = {
     if (!at) throw new Error('Ты не за столом');
     const table = at.table;
     if (!table.players.some((p) => !p.isBot && p.id !== uid)) throw new Error('Только когда за столом есть друг');
+    const victims = table.players.filter((p) => !p.isBot && p.id !== uid).map((p) => p.name).join(', ');
+    admin.logPrank(uid, m?.kind || 'aces', `${table.title} · против: ${victims}`);
     // чисто визуальные пранки: перевёрнутый стол и маски — сразу, на раздачу не влияют
     if (m?.kind === 'flip' || m?.kind === 'masks') {
       for (const p of table.players) if (!p.isBot) hub.send(p.id, { t: 'prank', kind: m.kind, admin: uid });
@@ -858,6 +872,7 @@ wss.on('connection', (ws) => {
         const auth = authenticate(m);
         if (!auth?.user?.id) return reply({ t: 'error', text: 'Открой приложение через Telegram' });
         const u = upsertUser(auth.user);
+        if (admin.isBanned(u.id)) return reply({ t: 'error', text: 'Аккаунт заблокирован' });
         uid = u.id;
         admin.touch(uid); // для статистики «активные за сутки»
         if (!sockets.has(uid)) sockets.set(uid, new Set());
@@ -898,6 +913,20 @@ recoverAfterRestart();
 tournaments.ensureBig();
 setInterval(() => {
   try { tournaments.tick(); } catch (e) { console.error('tick', e); }
+  // онлайн по часам — для графика в админке
+  try { admin.recordOnline(sockets.size); } catch {}
+  // напоминание про бонус дня: раз в день в 18:00 по Москве тем, кто заходил на неделе, но не сегодня
+  try {
+    const d = new Date(Date.now() + 3 * 3600000);
+    const day = d.toISOString().slice(0, 10);
+    const sent = db.prepare("SELECT value FROM meta WHERE key = 'remind_day'").get()?.value;
+    if (d.getUTCHours() === 18 && sent !== day && bot.username) {
+      db.prepare("INSERT INTO meta (key, value) VALUES ('remind_day', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").run(day);
+      const now = Date.now();
+      const ids = db.prepare('SELECT id FROM users WHERE no_remind = 0 AND banned = 0 AND last_seen BETWEEN ? AND ?').all(now - 7 * 86400000, now - 20 * 3600000).map((r) => r.id);
+      (async () => { for (const id of ids) { notify(id, '🎁 Бонус дня ждёт тебя! Зайди и забери фишки — а ещё колесо удачи и испытание дня.', openButton('Забрать', '#progress', 'success')); await new Promise((r) => setTimeout(r, 60)); } })();
+    }
+  } catch (e) { console.error('remind', e); }
   // пари с другом: время вышло — итог
   try {
     for (const b of social2.resolveBets()) {

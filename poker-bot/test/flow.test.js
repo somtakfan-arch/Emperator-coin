@@ -69,7 +69,7 @@ class Client {
     const hit = this.msgs.find(pred);
     if (hit) return Promise.resolve(hit);
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error(`таймаут у P${this.id}`)), ms);
+      const timer = setTimeout(() => reject(new Error(`таймаут у P${this.id}: ${this.msgs.slice(-4).map((m) => `${m.t}${m.table ? `#${m.table.handId}:${m.table.actor}` : ''}${m.text ? `:${m.text}` : ''}`).join(' | ')}`)), ms);
       this.waiters.push((m) => (pred(m) ? (clearTimeout(timer), resolve(m), true) : false));
     });
   }
@@ -1072,7 +1072,7 @@ test('друзья пачки 12: повтор раздачи, пари, сюр�
   await a.req({ t: 'addFriend', ref: 9802 }); await b.req({ t: 'addFriend', ref: 9801 });
   // повтор: сыграем пару раздач с ботом
   await a.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 500 });
-  await a.waitFor((m) => m.t === 'left' || (m.t === 'table' && m.table?.handId >= 3), 60000);
+  await a.waitFor((m) => m.t === 'left' || (m.t === 'table' && (m.table?.handId >= 3 || m.table?.canRebuy)), 60000);
   a.ws.send(JSON.stringify({ t: 'leave' })); await a.waitFor((m) => m.t === 'left', 30000);
   const hist = await a.req({ t: 'history' });
   assert.ok(hist.hands.length >= 1, 'история есть');
@@ -1114,7 +1114,7 @@ test('обучение пачки 13: разбор раздачи, слабые 
   await c.ready;
   await c.req({ t: 'invoice', pack: 'p1' });
   await c.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 500 });
-  await c.waitFor((m) => m.t === 'left' || (m.t === 'table' && m.table?.handId >= 3), 60000);
+  await c.waitFor((m) => m.t === 'left' || (m.t === 'table' && (m.table?.handId >= 3 || m.table?.canRebuy)), 60000);
   c.ws.send(JSON.stringify({ t: 'leave' })); await c.waitFor((m) => m.t === 'left', 30000);
   const hist = await c.req({ t: 'history' });
   const withDec = [];
@@ -1139,4 +1139,32 @@ test('обучение пачки 13: разбор раздачи, слабые 
   assert.equal(res.passed, false);
   assert.equal(res.right, 0);
   c.close();
+});
+
+test('пачка 14: поиск игроков, бан и мут, онлайн, логи пранков, авто-стоп', async () => {
+  const a = new Client(7001), u = new Client(9951, { autoplay: 'shove' });
+  await a.ready; await u.ready;
+  const f = await u.req({ t: 'findPlayers', q: 'P7001' });
+  assert.ok(f.players.some((p) => p.id === 7001));
+  await assert.rejects(u.req({ t: 'findPlayers', q: 'x' }), /2 буквы/);
+  // мут: эмодзи и фразы нельзя
+  await a.req({ t: 'admin', a: 'mute', id: 9951, on: true });
+  await assert.rejects(u.req({ t: 'emote', e: '👍' }), /муте/);
+  await a.req({ t: 'admin', a: 'mute', id: 9951, on: false });
+  // онлайн и логи
+  const on = await a.req({ t: 'admin', a: 'online' });
+  assert.ok(Array.isArray(on.online));
+  const pl = await a.req({ t: 'admin', a: 'pranks' });
+  assert.ok(Array.isArray(pl.pranks) && pl.pranks.length > 0, 'пранки из прошлых тестов записаны');
+  // авто-стоп: олл-ин каждую раздачу, стоп на половине — встаёт сам
+  await u.req({ t: 'invoice', pack: 'p1' });
+  await u.req({ t: 'sitBots', mode: '6', buyin: 500, stopLoss: 0.5, fast: true });
+  await u.waitFor((m) => m.t === 'left', 120000);
+  assertLedger(9951);
+  // бан: вход закрыт
+  await a.req({ t: 'admin', a: 'ban', id: 9951, on: true });
+  const banned = new Client(9951);
+  await assert.rejects(banned.ready, /заблокирован/);
+  await a.req({ t: 'admin', a: 'ban', id: 9951, on: false });
+  a.close(); u.close(); banned.close();
 });

@@ -154,6 +154,8 @@ function onMessage(m) {
       if (S.turn && m.table && m.table.actor !== S.me?.id) S.turn = null;
       break;
     case 'turn':
+      // вибрация на твой ход (можно выключить в быстрых настройках)
+      if (loadUi().vibro !== false) { try { if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred('warning'); else navigator.vibrate?.(80); } catch {} }
       S.turn = m;
       S.hint = null;
       S.raiseTo = clampRaise(m.currentBet + 0.66 * (m.pot + m.toCall), m);
@@ -257,6 +259,10 @@ function trackSession(prev, next) {
 // ---------- Звуки (синтез, без файлов) ----------
 
 let audioCtx = null;
+function setSound(on) {
+  try { localStorage.setItem('sound', on ? 'on' : 'off'); } catch {}
+  if (on) sfx('win');
+}
 function soundOn() {
   try { return localStorage.getItem('sound') !== 'off'; } catch { return true; }
 }
@@ -406,7 +412,7 @@ const BANNER_NAMES = { none: 'Без баннера', sunset: 'Закат', ocea
 const ANIM_AVATARS = ['🔥', '⚡', '🌀', '💫', '🌈', '👾'];
 const MODES = [['normal', 'Обычный'], ['minimal', 'Минимализм'], ['large', 'Крупный'], ['stream', 'Стрим']];
 function loadUi() {
-  const def = { deck4: false, scene: 'felt', chips: 'classic', anim: false, mode: 'normal', winFx: 'gold', cardFont: 'classic', deal: 'pretty' };
+  const def = { deck4: false, scene: 'felt', chips: 'classic', anim: false, mode: 'normal', winFx: 'gold', cardFont: 'classic', deal: 'pretty', oneHand: false, vibro: true };
   try { return { ...def, ...JSON.parse(localStorage.getItem('ui') || '{}') }; } catch { return def; }
 }
 function setUi(patch) {
@@ -425,6 +431,7 @@ function applyUi() {
   document.documentElement.classList.toggle('deck4', !!ui.deck4);
   document.documentElement.classList.toggle('anim', !!ui.anim);
   d.cardfont = ui.cardFont;
+  document.documentElement.classList.toggle('onehand', !!ui.oneHand);
   d.deal = ui.deal;
   // своё фото на фоне стола (хранится только на этом устройстве)
   let bg = null;
@@ -1355,6 +1362,22 @@ function examScreen() {
     h('button', { class: 'btn', disabled: done < E.qs.length, onclick: async () => { const r = await run({ t: 'examSubmit', answers: E.answers }); if (r) { E.result = r; render(); window.scrollTo(0, 0); } } }, 'Сдать'));
 }
 
+// быстрые настройки прямо за столом
+function quickSettings() {
+  const ui = loadUi();
+  const tog = (label, on, fn) => h('label', { class: 'toggle-row' }, h('input', { type: 'checkbox', checked: !!on, onchange: (e) => { fn(e.target.checked); render(); } }), h('span', {}, label));
+  return h('div', { class: 'quick-set glass card' },
+    h('div', { class: 'row between' }, h('div', { class: 'b' }, 'Быстрые настройки'), h('button', { class: 'hint-x', 'aria-label': 'Закрыть', onclick: () => { S.quickSet = false; render(); } }, '✕')),
+    tog('Звуки', soundOn(), (v) => setSound(v)),
+    tog('Вибрация на мой ход', ui.vibro !== false, (v) => setUi({ vibro: v })),
+    tog('Колода в 4 цвета', ui.deck4, (v) => setUi({ deck4: v })),
+    tog('Режим одной рукой', ui.oneHand, (v) => setUi({ oneHand: v })),
+    h('div', { class: 'small muted' }, 'Раздача карт'),
+    h('div', { class: 'choices wrap' }, DEAL_ANIM.map(([k, n]) => h('button', { class: ui.deal === k ? 'on' : '', onclick: () => { setUi({ deal: k }); render(); } }, n))),
+    h('div', { class: 'small muted' }, 'Сцена'),
+    h('div', { class: 'choices wrap' }, SCENES.filter(([k]) => k !== 'photo').map(([k, n]) => h('button', { class: ui.scene === k ? 'on' : '', onclick: () => { setUi({ scene: k }); render(); } }, n))));
+}
+
 function openCombos() {
   S.comboBack = S.screen;
   go('combos');
@@ -1377,6 +1400,7 @@ function openStart(startParam) {
   if (hash === 'tournaments') return go('tours');
   if (hash === 'wallet') return go('wallet');
   if (hash === 'profile') return go('profile');
+  if (hash === 'progress') return go('progress');
   go('lobby');
 }
 
@@ -1491,6 +1515,11 @@ function settingsCard() {
     h('div', { class: 'label' }, 'Настройки'),
     h('label', { class: 'toggle-row glass', style: 'padding:12px 14px;border-radius:14px' },
       h('input', { type: 'checkbox', checked: soundOn(), onchange: (e) => { try { localStorage.setItem('sound', e.target.checked ? 'on' : 'off'); } catch {} if (e.target.checked) sfx('win'); } }),
+    // напоминания в Telegram (бонус дня)
+    h('label', { class: 'toggle-row glass', style: 'padding:12px 14px;border-radius:14px' },
+      h('input', { type: 'checkbox', checked: S.me.remind !== false, onchange: async (e) => { await run({ t: 'setRemind', on: e.target.checked }); S.me.remind = e.target.checked; } }),
+      h('span', {}, 'Напоминания в Telegram'), h('span', { class: 'small muted' }, 'бонус дня и турниры')),
+    h('button', { class: 'item', onclick: openHistory }, h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, 'История раздач'), h('div', { class: 'small muted' }, 'Все раздачи за сутки с повтором и разбором')), icon('chev')),
       h('span', {}, 'Звуки за столом')),
     h('label', { class: 'toggle-row glass', style: 'padding:12px 14px;border-radius:14px' },
       h('input', { type: 'checkbox', checked: coachOn(), onchange: (e) => { try { localStorage.setItem('coach', e.target.checked ? 'on' : 'off'); } catch {} send({ t: 'coach', on: e.target.checked }); } }),
@@ -1642,7 +1671,10 @@ function botsScreen() {
         h('span', {}, 'Джокеры'), h('span', { class: 'small muted' }, 'два джокера в колоде, заменяют любую карту')),
       ['6', '9'].includes(S.botMode) && h('label', { class: 'toggle-row' },
         h('input', { type: 'checkbox', checked: !!S.marathon, onchange: (e) => { S.marathon = e.target.checked; } }),
-        h('span', {}, 'Марафон'), h('span', { class: 'small muted' }, '1000 раздач, в конце итог и сундук'))),
+        h('span', {}, 'Марафон'), h('span', { class: 'small muted' }, '1000 раздач, в конце итог и сундук')),
+      !['mixed', 'ladder', 'rush'].includes(S.botMode) && h('div', { class: 'col', style: 'gap:4px;margin-top:6px' },
+        h('div', { class: 'small muted' }, 'Авто-стоп: встать, если проиграл'),
+        h('div', { class: 'choices' }, [[0, 'Выкл'], [0.5, 'половину'], [0.75, '¾ бай-ина']].map(([v, l]) => h('button', { class: (S.stopLoss || 0) === v ? 'on' : '', onclick: () => { S.stopLoss = v; render(); } }, l))))),
     S.botMode === 'mixed' && h('div', { class: 'field' },
       h('div', { class: 'label' }, 'Мест за столом'),
       h('div', { class: 'choices' }, [6, 9].map((n) => h('button', { class: (S.mixedSeats || 6) === n ? 'on' : '', onclick: () => { S.mixedSeats = n; S.mixedBots = Math.min(S.mixedBots ?? 2, n - 2); render(); } }, n))),
@@ -1772,7 +1804,7 @@ function mixedScreen() {
 }
 
 async function sitBots() {
-  const r = await run({ t: 'sitBots', mode: S.botMode, botName: S.botName, buyin: S.buyin, minutes: S.botMinutes, fast: !!S.botFast, level: S.botLevel || 'normal', variant: S.shortDeck ? 'short' : null, chaos: !!S.chaos, jokers: !!S.jokers, marathon: ['6', '9'].includes(S.botMode) && !!S.marathon });
+  const r = await run({ t: 'sitBots', mode: S.botMode, botName: S.botName, buyin: S.buyin, minutes: S.botMinutes, fast: !!S.botFast, level: S.botLevel || 'normal', variant: S.shortDeck ? 'short' : null, chaos: !!S.chaos, jokers: !!S.jokers, marathon: ['6', '9'].includes(S.botMode) && !!S.marathon, stopLoss: S.stopLoss || 0 });
   if (r) go('table');
 }
 
@@ -2006,7 +2038,9 @@ function tableScreen() {
       // подсказка — круглая кнопка в шапке, чтобы не закрывать игроков
       myTurn && !S.hint && !T.mega && h('button', { class: 'icon-btn hint-ico', 'aria-label': 'Подсказка', onclick: askHint },
         icon('bulb', 18), h('span', { class: 'hint-ico-count' }, T.demo ? '∞' : S.me.hints ? S.me.hints : '5⭐')),
+      h('button', { class: 'icon-btn', 'aria-label': 'Быстрые настройки', onclick: () => { S.quickSet = !S.quickSet; render(); } }, '⚙️'),
       h('button', { class: 'icon-btn', 'aria-label': 'Справочник комбинаций', onclick: openCombos, style: 'font-weight:800;font-size:17px' }, '?')),
+    S.quickSet && quickSettings(),
     h('div', { class: 'felt-wrap' },
       h('div', { class: 'felt' }),
       h('div', { class: 'center' },
@@ -2025,6 +2059,12 @@ function tableScreen() {
     myTurn && hintFloat(T),
     // низ экрана: кнопки админа (только в играх с ботами) над панелью хода
     h('div', { class: 'bottom-dock' },
+      // режим одной рукой: кнопки шапки — над панелью хода, под большим пальцем
+      loadUi().oneHand && h('div', { class: 'onehand-row' },
+        myTurn && !S.hint && !T.mega && h('button', { class: 'icon-btn', 'aria-label': 'Подсказка', onclick: askHint }, icon('bulb', 18)),
+        h('button', { class: 'icon-btn', 'aria-label': 'Справочник комбинаций', onclick: openCombos, style: 'font-weight:800;font-size:17px' }, '?'),
+        h('button', { class: 'icon-btn', 'aria-label': 'Быстрые настройки', onclick: () => { S.quickSet = !S.quickSet; render(); } }, '⚙️'),
+        h('button', { class: 'icon-btn', 'aria-label': 'Встать', onclick: back }, icon('back', 18))),
       // только админ, только игры с ботами: все боты в раздаче — олл-ин
       adminDock && h('div', { class: 'admin-btns' },
         T.inHand && h('button', {
@@ -2481,6 +2521,18 @@ function adminScreen() {
         h('div', { class: 'small muted', style: 'font-size:9px' }, d.day.slice(3))))),
       h('div', { class: 'small muted' }, 'Новых игроков по дням: ' + st.days.map((d) => d.newUsers).join(' · ')),
       h('button', { class: 'btn-ghost', onclick: () => send({ t: 'admin', a: 'stats' }) }, 'Обновить'),
+      // онлайн по часам
+      h('button', { class: 'btn-ghost', onclick: () => send({ t: 'admin', a: 'online' }) }, '📈 Онлайн по часам'),
+      A.online && h('div', { class: 'glass card bars' }, A.online.map((x) => {
+        const mx = Math.max(1, ...A.online.map((y) => y.peak));
+        return h('div', { class: 'bar-col', title: `${x.hour.slice(11)}:00 — ${x.peak}` },
+          h('div', { class: 'small', style: 'font-size:9px' }, x.peak || ''),
+          h('div', { class: 'bar', style: `height:${Math.round((x.peak / mx) * 90)}px` }),
+          h('div', { class: 'small muted', style: 'font-size:9px' }, x.hour.slice(11)));
+      })),
+      // логи пранков
+      h('button', { class: 'btn-ghost', onclick: () => send({ t: 'admin', a: 'pranks' }) }, '😈 Логи пранков'),
+      A.pranks && h('div', { class: 'glass card', style: 'gap:4px' }, A.pranks.length ? A.pranks.map((x) => h('div', { class: 'small' }, `${new Date(x.at).toLocaleString('ru', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · ${{ aces: '😈 тузы', cooler: '🤫 тихий', flip: '🙃 стол', masks: '🎭 маски' }[x.kind] || x.kind} · ${x.text}`)) : h('div', { class: 'small muted' }, 'Пранков пока не было')),
     ];
   } else if (tab === 'users') {
     body = [
@@ -2491,7 +2543,10 @@ function adminScreen() {
       (A.users || []).map((u) => h('div', { class: 'glass card', style: 'gap:6px' },
         h('div', { class: 'row between' }, h('div', { class: 'b' }, `${u.name}${u.username ? ` @${u.username}` : ''}`), h('div', { class: 'small muted' }, `id ${u.id}`)),
         h('div', { class: 'small soft' }, `Фишки ${fmt(u.chips)} (в игре ${fmt(u.inPlay)}) · Эло ${u.rating} · подсказок ${u.hints} · раздач ${fmt(u.handsWon)} · турниров ${u.games}/${u.wins}`),
-        adj(u, 'chips', 'Фишки'), adj(u, 'rating', 'Эло'), adj(u, 'hints', 'Подсказки'), adj(u, 'handsWon', 'Раздачи'))),
+        adj(u, 'chips', 'Фишки'), adj(u, 'rating', 'Эло'), adj(u, 'hints', 'Подсказки'), adj(u, 'handsWon', 'Раздачи'),
+        h('div', { class: 'row', style: 'gap:6px' },
+          h('button', { class: `btn-sm ${u.banned ? '' : 'ghost'}`, onclick: () => { if (u.banned || confirm(`Забанить ${u.name}?`)) run({ t: 'admin', a: 'ban', id: u.id, on: !u.banned }); } }, u.banned ? '🔓 Разбанить' : '⛔ Бан'),
+          h('button', { class: `btn-sm ${u.muted ? '' : 'ghost'}`, onclick: () => run({ t: 'admin', a: 'mute', id: u.id, on: !u.muted }) }, u.muted ? '🔊 Снять мут' : '🔇 Мут')))),
     ];
   } else if (tab === 'promo') {
     const P = S.admPromo || (S.admPromo = { code: '', chips: 1000, hints: 0, chest: '', maxUses: 100, days: 7 });
@@ -2556,6 +2611,13 @@ function friendsScreen() {
     h('div', { class: 'grid2' },
       h('button', { class: F.meFree ? 'btn' : 'btn-ghost', style: 'height:44px;font-size:13px', onclick: async () => { if (await run({ t: 'setFree', on: !F.meFree })) send({ t: 'friends' }); } }, F.meFree ? '🟢 Свободен поиграть' : 'Я свободен поиграть'),
       h('button', { class: 'btn-ghost', style: 'height:44px;font-size:13px', onclick: openHistory }, '📜 Мои раздачи за сутки')),
+    // поиск игроков по имени
+    h('div', { class: 'row', style: 'gap:8px' },
+      h('input', { class: 'buyin-input', style: 'margin:0;flex:1', placeholder: 'Найти игрока по имени', value: S.findQ || '', oninput: (e) => { S.findQ = e.target.value; } }),
+      h('button', { class: 'btn-sm', onclick: async () => { const r = await run({ t: 'findPlayers', q: S.findQ }); if (r) { S.found = r.players; render(); } } }, 'Найти')),
+    S.found && (S.found.length ? S.found.map((p) => h('div', { class: 'item' },
+      h('div', { class: 'col', style: 'gap:0' }, h('div', { class: 'b', style: 'font-size:14px' }, p.name), h('div', { class: 'small muted' }, `${p.username ? `@${p.username} · ` : ''}${fmt(p.rating)} Эло`)),
+      h('button', { class: 'btn-sm', onclick: async () => { if (await run({ t: 'addFriend', ref: p.id })) toast('Заявка отправлена'); } }, 'В друзья'))) : h('div', { class: 'small muted' }, 'Никого не нашли')),
     // подарки-сюрпризы
     (F.surprises || []).map((g) => h('div', { class: 'glass card', style: 'gap:6px' },
       h('div', { class: 'b' }, `🎁 Сюрприз от ${g.from}`),
