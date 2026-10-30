@@ -1483,7 +1483,7 @@ function tableScreen() {
           class: 'jam-btn aces-btn', 'aria-label': 'Два туза в следующей раздаче, ещё два на тёрне и ривере', onclick: async () => { if (await run({ t: 'forceAces' })) toast('Следующая раздача: тузы у тебя и на тёрне с ривером'); },
         }, 'A A')),
       // пранк админа: только за столом с другом
-      S.me.isAdmin && T.kind === 'mixed' && T.humans >= 2 && h('div', { class: 'admin-btns' },
+      S.me.isAdmin && T.seats.some((s) => !s.isBot && !s.me && s.id > 0) && h('div', { class: 'admin-btns' },
         h('button', { class: 'jam-btn', 'aria-label': 'Пранк в следующей раздаче', onclick: async () => { if (await run({ t: 'prank' })) toast('😈 Пранк в следующей раздаче'); } }, '😈')),
       S.emoteOpen && emoteTray(),
       S.coachTips && h('div', { class: 'coach-card' },

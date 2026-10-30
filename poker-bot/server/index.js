@@ -559,21 +559,21 @@ const handlers = {
   prank(uid) {
     if (!config.adminIds.includes(uid)) throw new Error('Нет доступа');
     const at = activeTable(uid);
-    if (!at || at.table.kind !== 'mixed') throw new Error('Только за столом с друзьями');
-    const room = mixedRooms.get(at.table.id.slice(1));
-    if (!room) throw new Error('Стол не найден');
-    if (room.prank) throw new Error('Пранк уже заряжен');
-    const engine = room.table.engine;
+    if (!at) throw new Error('Ты не за столом');
+    const table = at.table;
+    if (!table.players.some((p) => !p.isBot && p.id !== uid)) throw new Error('Только когда за столом есть друг');
+    if (table.prank) throw new Error('Пранк уже заряжен');
+    const engine = table.engine;
     const suits = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
     const aces = [12 * 4 + suits[0], 12 * 4 + suits[1]];
     const board = [undefined, undefined, undefined, 12 * 4 + suits[2], 12 * 4 + suits[3]];
     const prev = engine.demoDeck;
-    room.prank = { adminId: uid, armed: true, live: false };
+    table.prank = { adminId: uid, live: false };
     engine.demoDeck = (deck, ids) => {
       engine.demoDeck = prev;
-      if (!ids.includes(uid)) { room.prank = null; return deck; }
-      room.prank.live = true;
-      for (const id of room.humans.keys()) hub.send(id, { t: 'prank', admin: uid, cards: aces });
+      if (!ids.includes(uid)) { table.prank = null; return prev ? prev(deck, ids) : deck; }
+      table.prank.live = true;
+      for (const p of table.players) if (!p.isBot) hub.send(p.id, { t: 'prank', admin: uid, cards: aces });
       return arrangeDeck({ holes: { [uid]: aces }, board }, prev ? prev(deck, ids) : deck, ids);
     };
     return { t: 'ok' };

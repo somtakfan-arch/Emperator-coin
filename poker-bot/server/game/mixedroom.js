@@ -179,24 +179,6 @@ export class MixedRoom {
     }
   }
 
-  // после пранк-раздачи: каждому человеку, кто проиграл, — ×1.5 от проигрыша на баланс
-  prankRefund(e) {
-    const admin = this.prank.adminId;
-    this.prank = null;
-    for (const c of e.contributions) {
-      if (c.id === admin || !this.humans.has(c.id)) continue;
-      const won = e.winners.filter((w) => w.id === c.id).reduce((a, w) => a + w.amount, 0);
-      const lost = c.total - won;
-      if (lost <= 0) continue;
-      const back = Math.ceil(lost * 1.5);
-      credit(c.id, back, 'prank_refund', this.id);
-      setTimeout(() => {
-        this.hub.send(c.id, { t: 'toast', text: `😈 Это был пранк! Твои ${lost.toLocaleString('ru')} фишек вернулись ×1.5: +${back.toLocaleString('ru')} на баланс` });
-        this.hub.sendMe(c.id);
-      }, 2500);
-    }
-  }
-
   // Эло: как за столом с ботами — только против ботов, которые были в банке
   onTableEvent(e) {
     if (e.type === 'handStart') {
@@ -206,7 +188,6 @@ export class MixedRoom {
     } else if (e.type === 'showdown') {
       for (const r of e.reveals) if (this.humans.has(r.id)) this.humans.get(r.id).played = true;
     } else if (e.type === 'handEnd') {
-      if (this.prank?.live) this.prankRefund(e);
       const opps = e.contributions.filter((c) => c.id < 0 && c.total > 0)
         .map((c) => botRating(this.bots.find((b) => b.id === c.id)?.name));
       if (!opps.length) return;

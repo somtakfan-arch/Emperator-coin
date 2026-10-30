@@ -6,7 +6,7 @@ import { randomInt } from 'node:crypto';
 import { Table } from '../../core/engine.js';
 import { describeHand, evaluate, evaluateShort, handCategory } from '../../core/cards.js';
 import { config } from '../config.js';
-import { db } from '../db.js';
+import { db, credit } from '../db.js';
 import { knownEquity, bestFive, outs } from './tablefx.js';
 import { publicLook, vipEmotes, VIP_EMOTES } from '../cosmetics.js';
 import { botPhrase } from '../../core/phrases.js';
@@ -389,8 +389,29 @@ export class GameTable {
         hand: v.shown[w.id]?.hand ?? null,
       }));
     }
+    if (e.type === 'handEnd' && this.prank?.live) this.prankRefund(e);
     this.eventHook?.(e);
     this.broadcast();
+  }
+
+  // после пранк-раздачи: каждому живому игроку, кто проиграл, — ×1.5 от проигрыша на баланс
+  // (за турнирным столом — тоже обычными фишками на баланс)
+  prankRefund(e) {
+    const admin = this.prank.adminId;
+    this.prank = null;
+    for (const c of e.contributions) {
+      const p = this.players.find((x) => x.id === c.id);
+      if (c.id === admin || !p || p.isBot) continue;
+      const won = e.winners.filter((w) => w.id === c.id).reduce((a, w) => a + w.amount, 0);
+      const lost = c.total - won;
+      if (lost <= 0) continue;
+      const back = Math.ceil(lost * 1.5);
+      credit(c.id, back, 'prank_refund', this.id);
+      setTimeout(() => {
+        this.hub.send(c.id, { t: 'toast', text: `😈 Это был пранк! Твои ${lost.toLocaleString('ru')} фишек вернулись ×1.5: +${back.toLocaleString('ru')} на баланс` });
+        this.hub.sendMe(c.id);
+      }, 2500);
+    }
   }
 
   snapshot(uid) {

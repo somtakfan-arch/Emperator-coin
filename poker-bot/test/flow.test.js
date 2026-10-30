@@ -859,3 +859,23 @@ test('пранк админа за столом с другом: тузы адм
   assertLedger(9150);
   admin.close(); friend.close();
 });
+
+test('пранк работает и в турнире с другом на двоих', async () => {
+  const admin = new Client(7001);
+  const friend = new Client(9160);
+  await admin.ready; await friend.ready;
+  await admin.req({ t: 'invoice', pack: 'p1' }).catch(() => {});
+  await friend.req({ t: 'invoice', pack: 'p1' });
+  const { id } = await admin.req({ t: 'createT', tour: { name: 'Пранк', maxPlayers: 2, buyin: 1000, blindMin: 3, startMode: 'full' } });
+  await friend.req({ t: 'reg', id });
+  await admin.waitFor((m) => m.t === 'table' && m.table?.kind === 'tour', 60000);
+  await admin.req({ t: 'prank' });
+  const fx = await friend.waitFor((m) => m.t === 'prank', 60000);
+  assert.deepEqual(fx.cards.map((c) => c >> 2), [12, 12]);
+  await friend.waitFor((m) => m.t === 'toast' && /пранк/.test(m.text), 60000);
+  assert.ok(db.prepare("SELECT delta FROM ledger WHERE user_id = 9160 AND reason = 'prank_refund'").get());
+  await Promise.all([admin, friend].map((c) => c.waitFor((m) => m.t === 'finished' && m.tournamentId === id, 180000)));
+  await new Promise((r) => setTimeout(r, 50));
+  assertLedger(9160);
+  admin.close(); friend.close();
+});
