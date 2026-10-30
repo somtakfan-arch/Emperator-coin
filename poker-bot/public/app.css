@@ -442,3 +442,17 @@ textarea.buyin-input { resize: vertical; font: inherit; }
 :root[data-mode="stream"] .bottom-dock { bottom: calc(26px + env(safe-area-inset-bottom)); }
 :root[data-mode="stream"] .panel { background: rgba(12,24,26,0.5); }
 :root[data-mode="stream"] .pick-btn { opacity: 0.25; } /* выбор карт остаётся, но почти не виден на записи */
+/* ---------- Обучение: обычный текст, без эффектов ---------- */
+.tut { gap: 12px; padding-bottom: 40px; }
+.tut-title { font-size: 22px; font-weight: 800; margin: 0; line-height: 1.25; }
+.tut-p { margin: 0; font-size: 15px; line-height: 1.55; color: var(--text); }
+.tut-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; font-size: 15px; line-height: 1.5; }
+.tut-cards { display: flex; gap: 4px; flex-wrap: wrap; }
+.tut-cards .pcard { box-shadow: none; }
+.tut-ex { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--line); background: rgba(255,255,255,0.03); }
+.tut-toc { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
+.tut-toc summary { font-size: 14px; font-weight: 600; cursor: pointer; }
+.tut-toc-item { display: block; width: 100%; text-align: left; background: none; border: 0; color: var(--soft); padding: 7px 0; font-size: 14px; }
+.tut-toc-item.on { color: #fff; font-weight: 700; }
+.tut-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+.tut-nav .btn-ghost { height: 50px; }
