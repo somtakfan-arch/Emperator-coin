@@ -8,7 +8,11 @@ const cols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.n
 if (!cols.has('photo')) db.exec('ALTER TABLE users ADD COLUMN photo TEXT');
 if (!cols.has('cosmetics')) db.exec("ALTER TABLE users ADD COLUMN cosmetics TEXT NOT NULL DEFAULT '{}'");
 
-export const AVATARS = ['🦁', '🐺', '🦊', '🐯', '🐼', '🦅', '🐉', '👑', '😎', '🤠', '👽', '🤖', '🎩', '🃏', '💀', '🦈'];
+export const AVATARS = ['🦁', '🐺', '🦊', '🐯', '🐼', '🦅', '🐉', '👑', '😎', '🤠', '👽', '🤖', '🎩', '🃏', '💀', '🦈',
+  // анимированные
+  '🔥', '⚡', '🌀', '💫', '🌈', '👾'];
+// баннеры профиля: полоса-обложка в карточке игрока
+export const BANNERS = ['none', 'sunset', 'ocean', 'forest', 'royal', 'fire', 'night', 'gold'];
 
 // Рамки и рубашки: как открываются
 export const FRAMES = [
@@ -72,6 +76,7 @@ export function publicLook(uid) {
     frame: d.c.frame && d.c.frame !== 'none' ? d.c.frame : null,
     rankColor: r.color, rankName: r.name,
     title: d.c.title || null,
+    banner: d.c.banner && d.c.banner !== 'none' ? d.c.banner : null,
   };
 }
 
@@ -85,6 +90,7 @@ export function lookView(uid) {
     backs: BACKS.map((b) => ({ id: b.id, name: b.name, how: b.how, owned: unlocked(b, d, 'back') })),
     vip: vipEmotes(uid), vipEmotes: VIP_EMOTES,
     title: d.c.title || null, titles: titlesOf(uid),
+    banner: d.c.banner || 'none', banners: BANNERS,
   };
 }
 
@@ -101,6 +107,9 @@ export function equip(uid, kind, id) {
     if (!item) throw new Error('Нет такого предмета');
     if (!unlocked(item, d, kind)) throw new Error(`Ещё закрыто: ${item.how}`);
     d.c[kind] = id;
+  } else if (kind === 'banner') {
+    if (!BANNERS.includes(id)) throw new Error('Нет такого баннера');
+    d.c.banner = id;
   } else if (kind === 'title') {
     if (id !== null && !titlesOf(uid).includes(id)) throw new Error('Этот титул ещё не открыт');
     d.c.title = id;

@@ -441,6 +441,8 @@ const handlers = {
       card: {
         bot: false, id: p.id, friend: social.areFriends(uid, p.id), name: u.name, rank: P.rank.name, rankColor: P.rank.color, rating: Math.round(u.rating), handsWon: u.hands_won,
         achievements: P.achievements.filter((a) => a.at).length, tourWins: u.wins, look: cosmetics.publicLook(p.id),
+        // витрина: медали, коллекция, альбом, лучшая рука, престиж
+        showcase: { medals: P.medals, cards: P.cards.length, album: Object.keys(P.album).length, best: P.best, prestige: P.level.prestige, level: P.level.lvl },
         stats: { hands: P.stats.hands, wins: P.stats.wins, bestCat: P.stats.bestCat },
       },
     };

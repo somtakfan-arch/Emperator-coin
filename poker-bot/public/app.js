@@ -292,7 +292,7 @@ function tableSounds(prev, next) {
   if (next.result && !prev.result && next.result.some((w) => w.id === S.me?.id)) {
     sfx('win');
     const mine = next.result.find((w) => w.id === S.me?.id);
-    goldFlash(); // эффект победы
+    winEffect(); // эффект победы (выбирается в настройках)
     if (mine.amount >= 30 * next.bb) setTimeout(() => confetti(), 400); // большой банк — салют
   }
 }
@@ -359,13 +359,14 @@ function confetti() {
 function seatAvatar(s) {
   const a = s.look?.avatar;
   const inner = a?.photo ? h('img', { src: a.photo, alt: '', referrerpolicy: 'no-referrer' }) : a?.emoji ? a.emoji : initial(s.name);
-  return h('div', { class: `ava ${s.me ? 'me' : ''} ${a?.emoji ? 'emoji' : ''} ${s.look?.frame ? `frame-${s.look.frame}` : ''}` }, inner);
+  return h('div', { class: `ava ${s.me ? 'me' : ''} ${a?.emoji ? 'emoji' : ''} ${ANIM_AVATARS.includes(a?.emoji) ? 'ava-anim' : ''} ${s.look?.frame ? `frame-${s.look.frame}` : ''}` }, inner);
 }
 
 function playerCardModal(c) {
   const close = () => { S.card = null; render(); };
   return h('div', { class: 'card-modal', onclick: (e) => { if (e.target === e.currentTarget) close(); } },
     h('div', { class: 'glass card', style: 'gap:10px;background:rgba(12,24,26,0.96)' },
+      c.look?.banner && h('div', { class: `pc-banner banner-${c.look.banner}` }),
       h('div', { class: 'row between' },
         h('div', { class: 'row' },
           c.bot ? h('div', { class: 'ava', style: 'width:44px;height:44px;font-size:18px' }, initial(c.name)) : seatAvatar({ name: c.name, look: c.look }),
@@ -381,15 +382,26 @@ function playerCardModal(c) {
       c.bot && c.vs?.hands > 0 && h('div', { class: 'small soft' }, `Против тебя: раздач ${fmt(c.vs.hands)}, ты выиграл ${fmt(c.vs.wins)} (${Math.round((c.vs.wins / c.vs.hands) * 100)}%)${c.vs.net ? ` · итог 1 на 1: ${c.vs.net > 0 ? '+' : '−'}${fmt(Math.abs(c.vs.net))}` : ''}`),
       c.bot && c.level && c.level !== 'normal' && h('div', { class: 'small muted' }, `Сложность: ${c.level === 'easy' ? 'лёгкий' : 'мастер'}`),
       !c.bot && c.id !== S.me.id && !c.friend && h('button', { class: 'btn-sm', onclick: async () => { if (await run({ t: 'addFriend', ref: c.id })) toast('Заявка в друзья отправлена'); } }, 'Добавить в друзья'),
+      // витрина
+      !c.bot && c.showcase && h('div', { class: 'showcase' },
+        h('div', { class: 'small' }, `Уровень ${c.showcase.level}${c.showcase.prestige ? ` · ★${c.showcase.prestige}` : ''} · 🥇${c.showcase.medals.gold} 🥈${c.showcase.medals.silver} 🥉${c.showcase.medals.bronze}`),
+        h('div', { class: 'small muted' }, `Коллекция карт ${c.showcase.cards}/52 · альбом ${c.showcase.album}/10`),
+        c.showcase.best?.cards && h('div', { class: 'row', style: 'gap:6px;align-items:center' }, h('span', { class: 'small muted' }, 'Лучшая рука:'), h('div', { class: 'tut-cards' }, c.showcase.best.cards.map((x) => pcard(x, 'sm'))))),
       !c.bot && c.stats && h('div', { class: 'small muted' }, `Сыграно раздач: ${fmt(c.stats.hands)}${c.stats.bestCat >= 0 ? ` · лучшая рука: ${HAND_CATS[c.stats.bestCat]}` : ''}`)));
 }
 
 // Настройки экрана на этом устройстве: колода, сцена, фишки, анимация, режим
-const SCENES = [['felt', 'Сукно'], ['casino', 'Казино'], ['city', 'Ночной город'], ['space', 'Космос'], ['sakura', 'Сакура']];
-const CHIP_STYLES = [['classic', 'Классика'], ['neon', 'Неон'], ['gold', 'Золото']];
+const SCENES = [['felt', 'Сукно'], ['casino', 'Казино'], ['city', 'Ночной город'], ['space', 'Космос'], ['sakura', 'Сакура'], ['vegas', 'Вегас'], ['yacht', 'Яхта'], ['dungeon', 'Подземелье'], ['neon', 'Неон-ночь'], ['photo', 'Своё фото']];
+const CHIP_STYLES = [['classic', 'Классика'], ['neon', 'Неон'], ['gold', 'Золото'], ['halloween', 'Хэллоуин'], ['newyear', 'Новый год'], ['valentine', 'Валентин']];
+const WIN_FX = [['gold', 'Золотая вспышка'], ['rain', 'Золотой дождь'], ['lightning', 'Молния'], ['crown', 'Корона'], ['none', 'Без эффекта']];
+const CARD_FONTS = [['classic', 'Классика'], ['minimal', 'Минимализм'], ['large', 'Крупные']];
+const DEAL_ANIM = [['pretty', 'Красиво'], ['fast', 'Быстро'], ['off', 'Без анимации']];
+const BANNER_NAMES = { none: 'Без баннера', sunset: 'Закат', ocean: 'Океан', forest: 'Лес', royal: 'Королевский', fire: 'Огонь', night: 'Ночь', gold: 'Золото' };
+const ANIM_AVATARS = ['🔥', '⚡', '🌀', '💫', '🌈', '👾'];
 const MODES = [['normal', 'Обычный'], ['minimal', 'Минимализм'], ['large', 'Крупный'], ['stream', 'Стрим']];
 function loadUi() {
-  try { return { deck4: false, scene: 'felt', chips: 'classic', anim: false, mode: 'normal', ...JSON.parse(localStorage.getItem('ui') || '{}') }; } catch { return { deck4: false, scene: 'felt', chips: 'classic', anim: false, mode: 'normal' }; }
+  const def = { deck4: false, scene: 'felt', chips: 'classic', anim: false, mode: 'normal', winFx: 'gold', cardFont: 'classic', deal: 'pretty' };
+  try { return { ...def, ...JSON.parse(localStorage.getItem('ui') || '{}') }; } catch { return def; }
 }
 function setUi(patch) {
   const ui = { ...loadUi(), ...patch };
@@ -406,6 +418,45 @@ function applyUi() {
   d.back = S.look?.back || 'classic';
   document.documentElement.classList.toggle('deck4', !!ui.deck4);
   document.documentElement.classList.toggle('anim', !!ui.anim);
+  d.cardfont = ui.cardFont;
+  d.deal = ui.deal;
+  // своё фото на фоне стола (хранится только на этом устройстве)
+  let bg = null;
+  try { bg = localStorage.getItem('tableBg'); } catch {}
+  document.documentElement.style.setProperty('--tbg', bg ? `url("${bg}")` : 'none');
+}
+
+// фото для фона стола: уменьшаем до 900px и сохраняем на устройстве
+function pickTableBg() {
+  const inp = h('input', { type: 'file', accept: 'image/*' });
+  inp.onchange = () => {
+    const f = inp.files?.[0];
+    if (!f) return;
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, 900 / Math.max(img.width, img.height));
+      const cv = document.createElement('canvas');
+      cv.width = Math.round(img.width * k); cv.height = Math.round(img.height * k);
+      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+      try { localStorage.setItem('tableBg', cv.toDataURL('image/jpeg', 0.8)); setUi({ scene: 'photo' }); toast('Фон стола обновлён'); } catch { toast('Фото слишком большое'); }
+      URL.revokeObjectURL(img.src);
+    };
+    img.src = URL.createObjectURL(f);
+  };
+  inp.click();
+}
+
+// эффект победы — на выбор в настройках
+function winEffect() {
+  const fx = loadUi().winFx;
+  if (fx === 'none' || document.hidden) return;
+  if (fx === 'gold') return goldFlash();
+  const box = h('div', { class: `win-fx win-${fx}`, 'aria-hidden': 'true' });
+  if (fx === 'rain') for (let i = 0; i < 24; i++) box.append(h('span', { style: `left:${Math.random() * 100}%;animation-delay:${Math.random() * 0.6}s` }, '🪙'));
+  if (fx === 'crown') box.append(h('span', {}, '👑'));
+  if (fx === 'lightning') box.append(h('span', {}, '⚡'));
+  document.body.append(box);
+  setTimeout(() => box.remove(), 1600);
 }
 
 function goldFlash() {
@@ -419,7 +470,7 @@ function lookCard() {
   const L = S.look;
   if (!L) return null;
   const ui = loadUi();
-  const pick = (list, cur, onPick) => h('div', { class: 'choices' }, list.map(([id, name]) => h('button', { class: cur === id ? 'on' : '', onclick: () => onPick(id) }, name)));
+  const pick = (list, cur, onPick) => h('div', { class: 'choices wrap' }, list.map(([id, name]) => h('button', { class: cur === id ? 'on' : '', onclick: () => onPick(id) }, name)));
   return h('div', { class: 'col', style: 'gap:10px' },
     // титул под ником — из открытых достижений
     h('div', { class: 'label' }, 'Титул'),
@@ -440,8 +491,16 @@ function lookCard() {
     h('div', { class: 'item-grid' }, L.backs.map((b) => h('button', {
       class: `item-pick ${L.back === b.id ? 'on' : ''} ${b.owned ? '' : 'locked'}`, onclick: () => (b.owned ? run({ t: 'equip', kind: 'back', id: b.id }) : toast(`Закрыто: ${b.how}`)),
     }, h('div', { class: `pcard back sm back-${b.id}` }), h('div', { class: 'small' }, b.name), !b.owned && h('div', { class: 'small muted', style: 'font-size:10px' }, `🔒 ${b.how}`)))),
+    h('div', { class: 'label' }, 'Баннер профиля'),
+    h('div', { class: 'choices wrap' }, (L.banners || []).map((b) => h('button', { class: `banner-pick banner-${b} ${L.banner === b ? 'on' : ''}`, onclick: () => run({ t: 'equip', kind: 'banner', id: b }) }, BANNER_NAMES[b] || b))),
     h('div', { class: 'label' }, 'Сцена стола'),
-    pick(SCENES, ui.scene, (id) => setUi({ scene: id })),
+    pick(SCENES, ui.scene, (id) => (id === 'photo' ? pickTableBg() : setUi({ scene: id }))),
+    h('div', { class: 'label' }, 'Эффект победы'),
+    pick(WIN_FX, ui.winFx, (id) => { setUi({ winFx: id }); winEffect(); }),
+    h('div', { class: 'label' }, 'Шрифт карт'),
+    pick(CARD_FONTS, ui.cardFont, (id) => setUi({ cardFont: id })),
+    h('div', { class: 'label' }, 'Раздача карт'),
+    pick(DEAL_ANIM, ui.deal, (id) => setUi({ deal: id })),
     h('div', { class: 'label' }, 'Фишки'),
     pick(CHIP_STYLES, ui.chips, (id) => setUi({ chips: id })),
     h('div', { class: 'label' }, 'Режим экрана'),

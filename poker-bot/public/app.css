@@ -508,3 +508,45 @@ textarea.buyin-input { resize: vertical; font: inherit; }
 .coll-card { font-size: 9px; text-align: center; padding: 3px 0; border-radius: 4px; background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.25); }
 .coll-card.got { background: #fff; color: #111; font-weight: 700; }
 .coll-card.got.red { color: #d33; }
+/* ---------- Пачка 11: сцены, фишки, эффекты, шрифты, баннеры ---------- */
+:root[data-scene="vegas"] .table-screen { background: radial-gradient(circle, rgba(255,210,90,0.7) 0 2px, transparent 3px) 0 6px / 18px 18px repeat-x, radial-gradient(circle, rgba(255,80,150,0.6) 0 2px, transparent 3px) 9px 100% / 18px 18px repeat-x, radial-gradient(120% 70% at 50% 40%, #3a0f2a 0%, #1c0716 55%, #080308 100%); }
+:root[data-scene="vegas"] .felt { background: radial-gradient(ellipse at 50% 45%, #9a1c2c 0%, #6a101e 70%, #400812 100%); border-color: #2a0a10; box-shadow: 0 0 0 3px #f2c94c, 0 0 30px rgba(255,80,140,0.35); }
+:root[data-scene="yacht"] .table-screen { background: linear-gradient(180deg, #8fd3ff 0%, #4aa6d8 35%, #1d6a9a 60%, #0b3550 100%); }
+:root[data-scene="yacht"] .felt { background: radial-gradient(ellipse at 50% 45%, #c9a26a 0%, #a07a45 70%, #6e5028 100%); border-color: #f4f6f7; box-shadow: 0 0 0 3px #fff, 0 20px 50px rgba(0,0,0,0.4); }
+:root[data-scene="dungeon"] .table-screen { background: repeating-linear-gradient(0deg, rgba(0,0,0,0.25) 0 2px, transparent 2px 28px), repeating-linear-gradient(90deg, rgba(0,0,0,0.2) 0 2px, transparent 2px 56px), radial-gradient(120% 70% at 50% 40%, #3a3328 0%, #1e1a14 60%, #0a0806 100%); }
+:root[data-scene="dungeon"] .felt { background: radial-gradient(ellipse at 50% 45%, #3d4a2a 0%, #2a331c 70%, #161b0f 100%); border-color: #4a3a22; box-shadow: 0 0 0 3px #6a5432, 0 0 40px rgba(255,140,40,0.25); }
+:root[data-scene="neon"] .table-screen { background: radial-gradient(120% 70% at 50% 40%, #0a0a1a 0%, #05050d 70%, #000 100%); }
+:root[data-scene="neon"] .felt { background: #06060f; border-color: #ff2bd6; box-shadow: 0 0 0 2px #ff2bd6, 0 0 24px #ff2bd6, inset 0 0 40px rgba(0,240,255,0.25); }
+:root[data-scene="photo"] .table-screen { background: center / cover no-repeat var(--tbg), #0b1012; }
+:root[data-scene="photo"] .felt { background: rgba(20,60,40,0.55); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
+:root[data-chips="halloween"] .chip, :root[data-chips="halloween"] .fly-chip { background: #ff7a1a !important; box-shadow: inset 0 0 0 2px #1a1a1a, inset 0 0 0 4px #ff7a1a !important; }
+:root[data-chips="newyear"] .chip, :root[data-chips="newyear"] .fly-chip { background: repeating-conic-gradient(#d92b2b 0 25%, #fff 0 50%) !important; box-shadow: inset 0 0 0 2px #1f8a4a !important; }
+:root[data-chips="valentine"] .chip, :root[data-chips="valentine"] .fly-chip { background: #ff5a8a !important; box-shadow: inset 0 0 0 2px #fff0f5 !important; }
+.ava-anim { animation: avaPulse 1.6s ease-in-out infinite; }
+@keyframes avaPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12) rotate(-6deg); } }
+.win-fx { position: fixed; inset: 0; pointer-events: none; z-index: 900; overflow: hidden; }
+.win-rain span { position: absolute; top: -40px; font-size: 22px; animation: coinFall 1.4s ease-in forwards; }
+@keyframes coinFall { to { transform: translateY(110vh) rotate(360deg); } }
+.win-crown span, .win-lightning span { position: absolute; left: 50%; top: 40%; font-size: 96px; transform: translate(-50%, -50%); animation: bigPop 1.4s ease-out forwards; }
+@keyframes bigPop { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); } 25% { opacity: 1; transform: translate(-50%, -50%) scale(1.2); } 100% { opacity: 0; transform: translate(-50%, -60%) scale(1); } }
+.win-lightning { animation: flashW 0.5s steps(2) 2; }
+@keyframes flashW { 50% { background: rgba(200,220,255,0.35); } }
+:root[data-cardfont="minimal"] .pcard { font-weight: 500; }
+:root[data-cardfont="minimal"] .pcard .s { font-size: 12px; opacity: 0.8; }
+:root[data-cardfont="large"] .pcard .r { font-size: 23px; }
+:root[data-cardfont="large"] .pcard .s { font-size: 13px; }
+:root[data-deal="fast"] .pcard.deal { animation-duration: 0.18s; }
+:root[data-deal="off"] .pcard.deal { animation: none; }
+.pc-banner { height: 46px; margin: -14px -14px 0; border-radius: 16px 16px 0 0; }
+.banner-sunset { background: linear-gradient(90deg, #ff7e5f, #feb47b) !important; }
+.banner-ocean { background: linear-gradient(90deg, #2193b0, #6dd5ed) !important; }
+.banner-forest { background: linear-gradient(90deg, #134e5e, #71b280) !important; }
+.banner-royal { background: linear-gradient(90deg, #4b2a8a, #c9a227) !important; }
+.banner-fire { background: linear-gradient(90deg, #8e0e00, #f12711, #f5af19) !important; }
+.banner-night { background: linear-gradient(90deg, #0f2027, #2c5364) !important; }
+.banner-gold { background: linear-gradient(90deg, #b8892a, #f7dd8a, #b8892a) !important; color: #111; }
+.banner-pick { color: #fff; }
+.showcase { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); }
+
+.choices.wrap { display: flex; flex-wrap: wrap; }
+.choices.wrap > button { flex: 0 0 auto; min-width: 0; padding: 8px 12px; height: auto; white-space: nowrap; }
