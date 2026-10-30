@@ -71,7 +71,7 @@ export function evaluate(cards) {
   let quad = -1;
   const trips = [], pairs = [];
   for (let r = 12; r >= 0; r--) {
-    if (rc[r] === 4) quad = r;
+    if (rc[r] >= 4) { if (quad < 0) quad = r; } // ≥4 — на столе из нескольких колод
     else if (rc[r] === 3) trips.push(r);
     else if (rc[r] === 2) pairs.push(r);
   }

@@ -480,3 +480,13 @@ textarea.buyin-input { resize: vertical; font: inherit; }
 .prank.crawl .prank-aces.up { animation: prankUp 2.4s ease-in forwards; }
 @keyframes prankDown { 0% { opacity: 1; top: 10%; } 20% { transform: translateX(-52%) rotate(-6deg) scale(1.6); } 40% { transform: translateX(-48%) rotate(6deg) scale(1.6); } 60% { transform: translateX(-52%) rotate(-6deg) scale(1.6); } 85% { opacity: 1; } 100% { opacity: 0; top: 70%; transform: translateX(-50%) scale(1); } }
 @keyframes prankUp { 0% { opacity: 1; bottom: 10%; } 20% { transform: translateX(-52%) rotate(-6deg) scale(1.6); } 40% { transform: translateX(-48%) rotate(6deg) scale(1.6); } 60% { transform: translateX(-52%) rotate(-6deg) scale(1.6); } 85% { opacity: 1; } 100% { opacity: 0; bottom: 70%; transform: translateX(-50%) scale(1); } }
+/* ---------- Огромный стол на 41 ---------- */
+.mseat { position: absolute; transform: translate(-50%, -50%); width: 40px; padding: 2px 1px; border-radius: 9px; background: rgba(10,14,16,0.82); border: 1px solid rgba(255,255,255,0.14); text-align: center; z-index: 3; line-height: 1.1; }
+.mseat .mnm { font-size: 8px; color: var(--soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mseat .mst { font-size: 9px; font-weight: 700; color: #fff; }
+.mseat.turn { border-color: #f5d37a; box-shadow: 0 0 0 2px rgba(245,211,122,0.5); }
+.mseat.out { opacity: 0.4; }
+.mseat.win { border-color: #6fdc8c; }
+.mseat .mbet { position: absolute; left: 50%; top: 100%; transform: translateX(-50%); margin-top: 1px; font-size: 8px; font-weight: 700; padding: 0 4px; border-radius: 6px; background: #f5d37a; color: #111; white-space: nowrap; }
+.mseat .mdealer { position: absolute; right: -5px; top: -5px; width: 12px; height: 12px; border-radius: 50%; background: #fff; color: #111; font-size: 8px; font-weight: 800; line-height: 12px; }
+.mseat .mcards { position: absolute; left: 50%; bottom: 100%; transform: translateX(-50%); font-size: 9px; font-weight: 700; background: #fff; color: #111; border-radius: 4px; padding: 0 3px; white-space: nowrap; }

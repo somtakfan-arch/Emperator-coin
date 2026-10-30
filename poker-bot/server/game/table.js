@@ -111,7 +111,7 @@ export function botSeat(bot, table) {
     },
     act: async (state) => {
       table.setActor(bot.id, state);
-      await sleep(table.fast ? 150 + Math.random() * 250 : 500 + Math.random() * 900); // быстрый стол — боты думают меньше
+      await sleep(table.mega ? 30 + Math.random() * 60 : table.fast ? 150 + Math.random() * 250 : 500 + Math.random() * 900); // быстрый стол — боты думают меньше
       // кнопка админа «все ва-банк»: до конца раздачи боты идут олл-ин
       if (table.forceJam) return state.stack > state.toCall ? { type: 'raise', to: state.myBet + state.stack } : { type: 'call' };
       // кнопка админа «почти ва-банк и фолд»: бот ставит всё, кроме 1 фишки, а дальше сбрасывает
@@ -138,7 +138,7 @@ export class GameTable {
     this.engine = new Table({
       players: this.players, smallBlind: sb, bigBlind: bb, deckRng: cryptoRng,
       onEvent: (e) => this.onEvent(e),
-      pause: (k) => sleep((k === 'street' ? 700 : 450) * (this.fast ? 0.4 : 1)),
+      pause: (k) => sleep(this.mega ? (k === 'street' ? 500 : 40) : (k === 'street' ? 700 : 450) * (this.fast ? 0.4 : 1)),
     });
     this.variant = variant; // 'short' — Short Deck (без 2–5)
     this.engine.variant = variant;
@@ -253,6 +253,7 @@ export class GameTable {
     for (const p of live) if (p.bot.hole) holes[p.id] = p.bot.hole;
     if (Object.keys(holes).length < 2) return;
     for (const [id, cards] of Object.entries(holes)) v.shown[id] = v.shown[id] || { cards, hand: null };
+    if (this.mega) return; // 40 игроков и 6 колод — шансы не считаем
     v.equity = knownEquity(holes, v.board, this.variant === 'short' ? evaluateShort : evaluate, this.variant === 'short');
   }
 
@@ -373,7 +374,7 @@ export class GameTable {
         if (p.isBot || !p.bot.decisions?.length) continue;
         const ds = p.bot.decisions;
         p.bot.decisions = [];
-        setTimeout(() => this.coachReview(p, ds, log), 30);
+        if (!this.mega) setTimeout(() => this.coachReview(p, ds, log), 30);
       }
       for (const p of this.players) {
         if (!v.dealt.has(p.id)) continue;
@@ -417,7 +418,7 @@ export class GameTable {
   snapshot(uid) {
     const v = this.v;
     return {
-      id: this.id, kind: this.kind, title: this.title, sb: this.sb, bb: this.bb,
+      id: this.id, kind: this.kind, title: this.title, sb: this.sb, bb: this.bb, mega: !!this.mega,
       board: v.board, pot: v.pot, actor: v.actor, deadline: v.deadline, buttonId: v.buttonId,
       handId: v.handId, result: v.result, inHand: this.inHand, fast: !!this.fast, variant: this.variant, chaos: this.chaos?.text ?? null,
       winCards: v.result ? v.winCards : null, ...this.extra(uid),

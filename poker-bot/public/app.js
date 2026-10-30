@@ -1109,6 +1109,10 @@ function botsScreen() {
       h('div', { class: 'seg', style: 'margin-top:6px' },
         h('button', { class: S.botMode === 'rush' ? 'on' : '', onclick: () => { S.botMode = 'rush'; render(); } }, 'Босс-раш'),
         h('button', { class: S.botMode === 'mixed' ? 'on' : '', onclick: () => { S.botMode = 'mixed'; render(); } }, 'С друзьями')),
+      h('div', { class: 'seg', style: 'margin-top:6px' },
+        h('button', { class: S.botMode === 'mega' ? 'on' : '', onclick: () => { S.botMode = 'mega'; render(); } }, 'Огромный стол · 41')),
+      S.botMode === 'mega' && h('div', { class: 'small soft', style: 'line-height:1.45' },
+        'Ты и 40 ботов за одним столом. Играют сразу 6 колод — карты могут повторяться, бывает даже пять одинаковых (считается как каре). Боты ходят почти мгновенно. Проигравшие боты выбывают. Подсказок здесь нет.'),
       S.botMode === 'rush' && h('div', { class: 'small soft', style: 'line-height:1.45' },
         'Шесть сильнейших по очереди: Скала → Маньяк → Хамелеон → Акула → Охотник → Король. Обыграл одного — садится следующий, твой стек сохраняется. Проиграл стек — забег окончен, докупки нет. Прошёл всех — фишки ×3 от бай-ина и эпический сундук.'),
       // варианты игры
@@ -1127,7 +1131,7 @@ function botsScreen() {
       h('input', { class: 'buyin-input', type: 'text', maxlength: 20, placeholder: 'Пароль стола (необязательно)', 'aria-label': 'Пароль стола', value: S.mixedPass || '', id: 'mixed-pass', oninput: (e) => { S.mixedPass = e.target.value; } }),
       h('div', { class: 'small muted', style: 'line-height:1.45' },
         'Создаёшь стол и зовёшь друзей по ссылке — каждый садится со своими фишками. Боты занимают свободные места (всего до 6). Встать можно в любой момент.')),
-    S.botMode !== 'mixed' && h('div', { class: 'field' },
+    S.botMode !== 'mixed' && S.botMode !== 'mega' && h('div', { class: 'field' },
       h('div', { class: 'label' }, S.botMode === 'hu' ? 'Соперник' : 'За столом все пятеро (Король — только 1 на 1)'),
       Object.entries(BOT_INFO).map(([name, info]) => h('button', {
         class: `bot ${info.boss ? 'boss' : ''} ${S.botMode === 'hu' && S.botName === name ? 'on' : ''}`,
@@ -1332,6 +1336,22 @@ const LAYOUT = {
   6: ['bl9', 'l9', 'tc9l', 'tc9r', 'r9', 'br9'], 7: ['bl9', 'l9', 'tl9', 'top', 'tr9', 'r9', 'br9'], 8: ['bl9', 'l9', 'tl9', 'tc9l', 'tc9r', 'tr9', 'r9', 'br9'],
 };
 
+// Место за огромным столом: кружок с именем и стеком по овалу (снизу — ты)
+function megaSeat(s, i, n, T) {
+  const a = (115 + (i + 0.5) * (310 / n)) * Math.PI / 180; // от низа-слева по часовой до низа-справа
+  const x = 50 + 46 * Math.cos(a), y = 50 + 46 * Math.sin(a);
+  const won = !T.inHand && T.result?.some((w) => w.id === s.id);
+  return h('div', {
+    class: `mseat ${T.actor === s.id ? 'turn' : ''} ${s.folded || !s.inHand ? 'out' : ''} ${won ? 'win' : ''}`,
+    style: `left:${x}%;top:${y}%`, 'aria-label': `${s.name}, ${fmt(s.stack)}`,
+  },
+    h('div', { class: 'mnm' }, s.name.slice(0, 7)),
+    h('div', { class: 'mst' }, s.allIn ? 'олл-ин' : fmtShort(s.stack)),
+    s.bet > 0 && h('div', { class: 'mbet' }, fmtShort(s.bet)),
+    T.buttonId === s.id && h('div', { class: 'mdealer' }, 'D'),
+    s.cards && h('div', { class: 'mcards' }, s.cards.map(cardText).join(' ')));
+}
+
 function clampRaise(x, t) {
   return Math.round(Math.max(t.minRaiseTo, Math.min(t.maxTo, x)));
 }
@@ -1349,6 +1369,7 @@ function tableScreen() {
   const bottomSeat = mySeat ? null : ordered[0];
   const others = ordered.slice(1);
   const spots = LAYOUT[Math.min(others.length, 8)] || [];
+  const mega = others.length > 8; // огромный стол: маленькие места по овалу
   const nine = others.length > 5; // стол на 9 — компактнее
   const myTurn = S.turn && T.actor === S.me.id && S.turn.tableId === T.id;
 
@@ -1439,7 +1460,7 @@ function tableScreen() {
     : null;
 
   const adminDock = S.me.isAdmin && (T.kind === 'bots' || T.solo);
-  return h('div', { class: `table-screen ${adminDock ? 'with-admin' : ''} ${nine ? 'nine' : ''}` },
+  return h('div', { class: `table-screen ${adminDock ? 'with-admin' : ''} ${nine ? 'nine' : ''} ${mega ? 'mega' : ''}` },
     // режим стрима: водяной знак для записи
     h('div', { class: 'stream-mark', 'aria-hidden': 'true' }, '♠ Покер в Telegram · @pokergamebetbot'),
     h('div', { class: 'table-top' },
@@ -1449,7 +1470,7 @@ function tableScreen() {
         (T.chaos || T.rush) && h('div', { class: 'mode-line' }, T.rush ? `Босс ${T.rush.i} из ${T.rush.of}: ${T.rush.name}` : T.chaos),
         sessionLine),
       // подсказка — круглая кнопка в шапке, чтобы не закрывать игроков
-      myTurn && !S.hint && h('button', { class: 'icon-btn hint-ico', 'aria-label': 'Подсказка', onclick: askHint },
+      myTurn && !S.hint && !T.mega && h('button', { class: 'icon-btn hint-ico', 'aria-label': 'Подсказка', onclick: askHint },
         icon('bulb', 18), h('span', { class: 'hint-ico-count' }, T.demo ? '∞' : S.me.hints ? S.me.hints : '5⭐')),
       h('button', { class: 'icon-btn', 'aria-label': 'Справочник комбинаций', onclick: openCombos, style: 'font-weight:800;font-size:17px' }, '?')),
     h('div', { class: 'felt-wrap' },
@@ -1461,7 +1482,7 @@ function tableScreen() {
         h('div', { class: 'board', style: 'align-items:center' },
           T.demo && h('button', { class: 'pick-btn', 'aria-label': 'Выбрать карты стола', onclick: () => openPicker({ board: true }) }, '✎'),
           board)),
-      others.map((s, i) => spots[i] && seatEl(s, spots[i])),
+      mega ? others.map((s, i) => megaSeat(s, i, others.length, T)) : others.map((s, i) => spots[i] && seatEl(s, spots[i])),
       mySeat && seatEl(mySeat, 'bottom'),
       bottomSeat && seatEl(bottomSeat, 'bottom')),
     result,

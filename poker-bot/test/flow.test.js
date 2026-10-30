@@ -916,3 +916,22 @@ test('сольный турнир на 18 со столами по 9', async () 
   await c.waitFor((m) => m.t === 'left' || m.t === 'finished', 30000);
   c.close();
 });
+
+test('огромный стол: 40 ботов, 6 колод, без подсказок, фишки сходятся', async () => {
+  const c = new Client(9401);
+  await c.ready;
+  await c.req({ t: 'invoice', pack: 'p1' });
+  await c.req({ t: 'sitBots', mode: 'mega', buyin: 1000 });
+  const snap = await c.waitFor((m) => m.t === 'table' && m.table?.mega && m.table.inHand);
+  assert.equal(snap.table.seats.length, 41);
+  await c.waitFor((m) => m.t === 'turn', 60000);
+  await assert.rejects(c.req({ t: 'hint' }), /подсказок нет/);
+  await c.waitFor((m) => m.t === 'table' && m.table?.handId >= snap.table.handId + 2, 90000);
+  c.ws.send(JSON.stringify({ t: 'leave' }));
+  const l = await c.waitFor((m) => m.t === 'left', 30000);
+  await new Promise((r) => setTimeout(r, 50));
+  const u = assertLedger(9401);
+  assert.equal(u.in_play, 0);
+  assert.equal(u.chips, 4000 + l.stack);
+  c.close();
+});

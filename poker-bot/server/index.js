@@ -449,7 +449,7 @@ const handlers = {
   sitBots(uid, m) {
     if (activeTable(uid)) throw new Error('Ты уже за столом');
     botRooms.set(uid, BotRoom.open(hub, getUser(uid), {
-      mode: ['6', '9', 'rush'].includes(m.mode) ? m.mode : 'hu', botName: m.botName, variant: m.variant === 'short' ? 'short' : null, chaos: !!m.chaos, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0, fast: !!m.fast,
+      mode: ['6', '9', 'rush', 'mega'].includes(m.mode) ? m.mode : 'hu', botName: m.botName, variant: m.variant === 'short' ? 'short' : null, chaos: !!m.chaos, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0, fast: !!m.fast,
       level: m.level || 'normal', shadow: progress.shadowLevel(uid),
     }));
     hub.onSeated(uid);
@@ -637,6 +637,7 @@ const handlers = {
   hint(uid) {
     const at = activeTable(uid);
     if (!at) throw new Error('Ты не за столом');
+    if (at.table.mega) throw new Error('За огромным столом подсказок нет');
     const pending = at.seat.pending;
     if (!pending) throw new Error('Подсказка доступна в твой ход');
     const room = botRooms.get(uid);

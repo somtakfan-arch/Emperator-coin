@@ -21,6 +21,9 @@ function makeAdvisor(userId) {
   return a;
 }
 import { GameTable, HumanSeat, botSeat } from './table.js';
+import { MegaBot } from '../../core/megabot.js';
+
+const MEGA_BOTS = 40;
 import { handElo, botRating } from './elo.js';
 import { checkPlan, arrangeDeck } from './demoplan.js';
 import { config } from '../config.js';
@@ -46,17 +49,19 @@ export class BotRoom {
     const sb = Math.max(1, Math.floor(bb / 2));
     // стол на 9: пятеро сильных и трое обычных; босс-раш: боссы по очереди 1 на 1
     const pros = BOT_CLASSES.map((C) => new C({}).name);
+    const mega = mode === 'mega'; // огромный стол: ты и 40 ботов, 6 колод
     const names = mode === 'hu' ? [botName]
       : mode === '9' ? [...pros, ...CROWD.map((c) => c.name).sort(() => Math.random() - 0.5).slice(0, 3)]
-        : mode === 'rush' ? [RUSH[0]] : pros;
+        : mode === 'rush' ? [RUSH[0]] : mega ? CROWD.map((c) => c.name).sort(() => Math.random() - 0.5).slice(0, MEGA_BOTS) : pros;
     if (mode === 'rush') this.rush = { i: 0 };
-    const label = { hu: '1 на 1', 6: 'Стол на 6', 9: 'Стол на 9', rush: 'Босс-раш' }[mode];
+    const label = { hu: '1 на 1', 6: 'Стол на 6', 9: 'Стол на 9', rush: 'Босс-раш', mega: `Огромный стол · ${MEGA_BOTS + 1} игрок · 6 колод` }[mode];
     this.table = new GameTable({
       id: `b${user.id}`, kind: 'bots', hub, sb, bb, variant,
       title: `${label} · ${sb}/${bb}${variant === 'short' ? ' · Short Deck' : ''}${chaos ? ' · Хаос' : ''}${minutes ? ` · ${minutes} мин` : ''}${fast ? ' · быстрый' : ''}`,
     });
     this.baseBlinds = [sb, bb];
-    this.table.fast = fast; // боты думают меньше, паузы короче
+    this.table.fast = fast || mega; // боты думают меньше, паузы короче
+    if (mega) { this.table.mega = true; this.table.engine.decks = 6; }
     this.bots = [];
     this.advisor = makeAdvisor(user.id);
     this.hands = 0;
@@ -64,11 +69,11 @@ export class BotRoom {
     this.me = { id: user.id, name: user.name, stack: buyin, bot: this.seat, isBot: false };
     this.table.addPlayer(this.me);
     names.forEach((name, i) => {
-      const bot = makeBot(name, { iters: 300, level, shadowLevel: shadow });
+      const bot = mega ? new MegaBot(name, i % 3) : makeBot(name, { iters: 300, level, shadowLevel: shadow });
       bot.id = -(i + 1); // у ботов отрицательные id — не пересекаются с Telegram
       // бот помнит этого игрока с прошлых столов: как часто он рейзит, фолдит, блефует
       const mem = loadMemory.get(user.id, bot.name);
-      if (mem) bot.model.importPlayer(user.id, mem.data);
+      if (mem && bot.model) bot.model.importPlayer(user.id, mem.data);
       this.bots.push(bot);
       this.table.addPlayer({ id: bot.id, name: bot.name, stack: buyin, bot: botSeat(bot, this.table), isBot: true });
     });
@@ -87,7 +92,7 @@ export class BotRoom {
     if (!(Number.isSafeInteger(opts.buyin) && opts.buyin >= config.buyinMin)) throw new Error(`Бай-ин — от ${config.buyinMin} фишек`); // сверху — сколько есть на балансе
     if (opts.minutes && !config.timedMinutes.includes(opts.minutes)) throw new Error('Неверное время стола');
     if (opts.mode === 'hu' && !isBotName(opts.botName)) throw new Error('Нет такого бота');
-    if (!['hu', '6', '9', 'rush'].includes(opts.mode)) throw new Error('Неверный стол');
+    if (!['hu', '6', '9', 'rush', 'mega'].includes(opts.mode)) throw new Error('Неверный стол');
     if (opts.variant && opts.variant !== 'short') throw new Error('Неверный вариант');
     if (!['easy', 'normal', 'master'].includes(opts.level || 'normal')) throw new Error('Неверная сложность');
     if (!debit(user.id, opts.buyin, 'bots_buyin')) throw new Error('Не хватает фишек — пополни кошелёк');
@@ -192,7 +197,7 @@ export class BotRoom {
 
   saveMemory() {
     for (const bot of this.bots) {
-      const data = bot.model.exportPlayer(this.userId);
+      const data = bot.model?.exportPlayer(this.userId);
       if (data) saveMemory.run(this.userId, bot.name, data, Date.now());
     }
   }
