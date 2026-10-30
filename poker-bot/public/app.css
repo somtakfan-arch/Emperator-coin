@@ -456,3 +456,13 @@ textarea.buyin-input { resize: vertical; font: inherit; }
 .tut-toc-item.on { color: #fff; font-weight: 700; }
 .tut-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
 .tut-nav .btn-ghost { height: 50px; }
+/* ---------- Тренировка ---------- */
+.tr-table { gap: 12px; }
+.tr-seat { display: flex; flex-direction: column; gap: 6px; }
+.tr-board { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.tr-say { font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--line); background: rgba(255,255,255,0.06); white-space: nowrap; }
+.tr-coach { gap: 10px; }
+.tr-text { font-size: 15px; line-height: 1.55; white-space: pre-line; }
+.tr-wrong { font-size: 14px; line-height: 1.5; color: #ffb4b4; border-left: 3px solid var(--red); padding-left: 10px; }
+.tr-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 8px; }
+.tr-opts button { height: 50px; font-size: 14px; }
