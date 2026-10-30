@@ -917,13 +917,13 @@ test('сольный турнир на 18 со столами по 9', async () 
   c.close();
 });
 
-test('огромный стол: 40 ботов, 6 колод, без подсказок, фишки сходятся', async () => {
+test('огромный стол: 100 ботов, 6 колод, без подсказок, фишки сходятся', async () => {
   const c = new Client(9401);
   await c.ready;
   await c.req({ t: 'invoice', pack: 'p1' });
   await c.req({ t: 'sitBots', mode: 'mega', buyin: 1000 });
   const snap = await c.waitFor((m) => m.t === 'table' && m.table?.mega && m.table.inHand);
-  assert.equal(snap.table.seats.length, 41);
+  assert.equal(snap.table.seats.length, 101);
   await c.waitFor((m) => m.t === 'turn', 60000);
   await assert.rejects(c.req({ t: 'hint' }), /подсказок нет/);
   await c.waitFor((m) => m.t === 'table' && m.table?.handId >= snap.table.handId + 2, 90000);

@@ -1110,9 +1110,9 @@ function botsScreen() {
         h('button', { class: S.botMode === 'rush' ? 'on' : '', onclick: () => { S.botMode = 'rush'; render(); } }, 'Босс-раш'),
         h('button', { class: S.botMode === 'mixed' ? 'on' : '', onclick: () => { S.botMode = 'mixed'; render(); } }, 'С друзьями')),
       h('div', { class: 'seg', style: 'margin-top:6px' },
-        h('button', { class: S.botMode === 'mega' ? 'on' : '', onclick: () => { S.botMode = 'mega'; render(); } }, 'Огромный стол · 41')),
+        h('button', { class: S.botMode === 'mega' ? 'on' : '', onclick: () => { S.botMode = 'mega'; render(); } }, 'Огромный стол · 101')),
       S.botMode === 'mega' && h('div', { class: 'small soft', style: 'line-height:1.45' },
-        'Ты и 40 ботов за одним столом. Играют сразу 6 колод — карты могут повторяться, бывает даже пять одинаковых (считается как каре). Боты ходят почти мгновенно. Проигравшие боты выбывают. Подсказок здесь нет.'),
+        'Ты и 100 ботов за одним столом. Играют сразу 6 колод — карты могут повторяться, бывает даже пять одинаковых (считается как каре). Боты ходят почти мгновенно. Проигравшие боты выбывают. Подсказок здесь нет.'),
       S.botMode === 'rush' && h('div', { class: 'small soft', style: 'line-height:1.45' },
         'Шесть сильнейших по очереди: Скала → Маньяк → Хамелеон → Акула → Охотник → Король. Обыграл одного — садится следующий, твой стек сохраняется. Проиграл стек — забег окончен, докупки нет. Прошёл всех — фишки ×3 от бай-ина и эпический сундук.'),
       // варианты игры
@@ -1341,6 +1341,12 @@ function megaSeat(s, i, n, T) {
   const a = (115 + (i + 0.5) * (310 / n)) * Math.PI / 180; // от низа-слева по часовой до низа-справа
   const x = 50 + 46 * Math.cos(a), y = 50 + 46 * Math.sin(a);
   const won = !T.inHand && T.result?.some((w) => w.id === s.id);
+  // при 100 местах подписаны только те, кто сейчас важен: ходит, поставил, ещё в игре после флопа, выиграл
+  const shown = n <= 45 || T.actor === s.id || s.bet > 0 || won || s.cards || (T.board.length > 0 && s.inHand && !s.folded);
+  if (!shown) {
+    return h('div', { class: `mdot ${s.folded || !s.inHand ? 'out' : ''}`, style: `left:${x}%;top:${y}%`, 'aria-label': `${s.name}, ${fmt(s.stack)}`,
+      onclick: () => run({ t: 'playerCard', id: s.id }) });
+  }
   return h('div', {
     class: `mseat ${T.actor === s.id ? 'turn' : ''} ${s.folded || !s.inHand ? 'out' : ''} ${won ? 'win' : ''}`,
     style: `left:${x}%;top:${y}%`, 'aria-label': `${s.name}, ${fmt(s.stack)}`,

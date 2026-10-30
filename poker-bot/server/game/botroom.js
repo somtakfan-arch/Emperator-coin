@@ -21,9 +21,9 @@ function makeAdvisor(userId) {
   return a;
 }
 import { GameTable, HumanSeat, botSeat } from './table.js';
-import { MegaBot } from '../../core/megabot.js';
+import { MegaBot, MEGA_EXTRA } from '../../core/megabot.js';
 
-const MEGA_BOTS = 40;
+const MEGA_BOTS = 100;
 import { handElo, botRating } from './elo.js';
 import { checkPlan, arrangeDeck } from './demoplan.js';
 import { config } from '../config.js';
@@ -52,7 +52,7 @@ export class BotRoom {
     const mega = mode === 'mega'; // огромный стол: ты и 40 ботов, 6 колод
     const names = mode === 'hu' ? [botName]
       : mode === '9' ? [...pros, ...CROWD.map((c) => c.name).sort(() => Math.random() - 0.5).slice(0, 3)]
-        : mode === 'rush' ? [RUSH[0]] : mega ? CROWD.map((c) => c.name).sort(() => Math.random() - 0.5).slice(0, MEGA_BOTS) : pros;
+        : mode === 'rush' ? [RUSH[0]] : mega ? [...CROWD.map((c) => c.name), ...MEGA_EXTRA].sort(() => Math.random() - 0.5).slice(0, MEGA_BOTS) : pros;
     if (mode === 'rush') this.rush = { i: 0 };
     const label = { hu: '1 на 1', 6: 'Стол на 6', 9: 'Стол на 9', rush: 'Босс-раш', mega: `Огромный стол · ${MEGA_BOTS + 1} игрок · 6 колод` }[mode];
     this.table = new GameTable({

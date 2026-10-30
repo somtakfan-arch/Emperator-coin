@@ -111,7 +111,7 @@ export function botSeat(bot, table) {
     },
     act: async (state) => {
       table.setActor(bot.id, state);
-      await sleep(table.mega ? 30 + Math.random() * 60 : table.fast ? 150 + Math.random() * 250 : 500 + Math.random() * 900); // быстрый стол — боты думают меньше
+      await sleep(table.mega ? 10 + Math.random() * 30 : table.fast ? 150 + Math.random() * 250 : 500 + Math.random() * 900); // быстрый стол — боты думают меньше
       // кнопка админа «все ва-банк»: до конца раздачи боты идут олл-ин
       if (table.forceJam) return state.stack > state.toCall ? { type: 'raise', to: state.myBet + state.stack } : { type: 'call' };
       // кнопка админа «почти ва-банк и фолд»: бот ставит всё, кроме 1 фишки, а дальше сбрасывает
@@ -138,7 +138,7 @@ export class GameTable {
     this.engine = new Table({
       players: this.players, smallBlind: sb, bigBlind: bb, deckRng: cryptoRng,
       onEvent: (e) => this.onEvent(e),
-      pause: (k) => sleep(this.mega ? (k === 'street' ? 500 : 40) : (k === 'street' ? 700 : 450) * (this.fast ? 0.4 : 1)),
+      pause: (k) => sleep(this.mega ? (k === 'street' ? 500 : 15) : (k === 'street' ? 700 : 450) * (this.fast ? 0.4 : 1)),
     });
     this.variant = variant; // 'short' — Short Deck (без 2–5)
     this.engine.variant = variant;
