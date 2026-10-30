@@ -1,6 +1,7 @@
 // Внешний вид игрока: аватар, рамка, рубашка карт, VIP-эмодзи.
 // Аватар и рамку видят все за столом; рубашку — только ты (она в настройках устройства, но открывается здесь).
 import { db } from './db.js';
+import { config } from './config.js';
 import { rankOf, setChestCosmetic } from './progress.js';
 
 const cols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
@@ -34,7 +35,7 @@ export const BACKS = [
 export const VIP_EMOTES = ['💎', '🦈', '🃏', '💸', '🥶', '🫡'];
 
 function load(uid) {
-  const u = db.prepare('SELECT rating, progress, cosmetics, photo FROM users WHERE id = ?').get(uid);
+  const u = db.prepare('SELECT id, rating, progress, cosmetics, photo FROM users WHERE id = ?').get(uid);
   if (!u) return null;
   let c = {}, p = {};
   try { c = JSON.parse(u.cosmetics || '{}'); } catch {}
@@ -45,6 +46,7 @@ function load(uid) {
 
 function unlocked(item, { u, c, p }, kind) {
   if (!item.rank && !item.ach && !item.chest) return true;
+  if (config.adminIds.includes(u.id)) return true; // у админа открыто всё
   if (item.rank && u.rating >= item.rank) return true;
   if (item.ach && p.ach?.[item.ach]) return true;
   return c.owned.includes(`${kind}:${item.id}`);
@@ -55,7 +57,7 @@ export function vipEmotes(uid) {
   const d = load(uid);
   if (!d) return false;
   const level = Math.floor((d.p.pass?.xp || 0) / 100);
-  return d.u.rating >= 1900 || level >= 10;
+  return d.u.rating >= 1900 || level >= 10 || config.adminIds.includes(d.u.id);
 }
 
 // То, что видят другие за столом

@@ -1,6 +1,6 @@
 // Друзья, клубы, подарки и приглашения.
 import { db, tx, credit, getUser } from './db.js';
-import { config } from './config.js';
+import { config, NOT_ADMIN } from './config.js';
 import { grantChest, rankOf } from './progress.js';
 
 db.exec(`
@@ -176,7 +176,7 @@ export function clubView(uid) {
   const id = clubOf(uid);
   const top = db.prepare(`SELECT c.id, c.name, AVG(r) AS score, COUNT(*) AS n FROM (
       SELECT m.club_id, u.rating AS r, ROW_NUMBER() OVER (PARTITION BY m.club_id ORDER BY u.rating DESC) AS rn
-      FROM club_members m JOIN users u ON u.id = m.user_id) x JOIN clubs c ON c.id = x.club_id
+      FROM club_members m JOIN users u ON u.id = m.user_id WHERE ${NOT_ADMIN.replace('id', 'u.id')}) x JOIN clubs c ON c.id = x.club_id
     WHERE x.rn <= 5 GROUP BY c.id ORDER BY score DESC LIMIT 20`).all()
     .map((c) => ({ id: c.id, name: c.name, score: Math.round(c.score), members: db.prepare('SELECT COUNT(*) AS n FROM club_members WHERE club_id = ?').get(c.id).n }));
   if (!id) return { club: null, top };

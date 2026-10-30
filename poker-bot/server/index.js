@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { WebSocketServer } from 'ws';
-import { config, payoutShares } from './config.js';
+import { config, payoutShares, NOT_ADMIN } from './config.js';
 import { db, upsertUser, getUser, ranks, credit, recoverAfterRestart, addWinnings, WIN_REWARDS, useHint } from './db.js';
 import { verifyInitData, startBot, createInvoice, hooks, inviteLink, bot, notify, openButton, findPack, api } from './telegram.js';
 import { BotRoom, DemoRoom } from './game/botroom.js';
@@ -229,13 +229,14 @@ const handlers = {
   me: (uid) => ({ t: 'me', me: meView(uid) }),
   tour: (uid, m) => ({ t: 'tour', tour: tournaments.one(m.id, uid), invite: bot.username ? inviteLink(m.id) : null }),
   // таблицы лидеров: по Эло, по выигранным раздачам, по самому большому банку
+  // админа в таблицах лидеров нет
   top: (uid, m) => {
     const kind = ['hands', 'pot'].includes(m.kind) ? m.kind : 'rating';
     const rows = kind === 'hands'
-      ? db.prepare('SELECT name, hands_won AS value, rating FROM users WHERE hands_won > 0 ORDER BY hands_won DESC LIMIT 20').all()
+      ? db.prepare(`SELECT name, hands_won AS value, rating FROM users WHERE hands_won > 0 AND ${NOT_ADMIN} ORDER BY hands_won DESC LIMIT 20`).all()
       : kind === 'pot'
-        ? db.prepare('SELECT name, biggest_pot AS value, rating FROM users WHERE biggest_pot > 0 ORDER BY biggest_pot DESC LIMIT 20').all()
-        : db.prepare('SELECT name, rating AS value, rating FROM users WHERE games > 0 OR rating <> 1500 ORDER BY rating DESC LIMIT 20').all();
+        ? db.prepare(`SELECT name, biggest_pot AS value, rating FROM users WHERE biggest_pot > 0 AND ${NOT_ADMIN} ORDER BY biggest_pot DESC LIMIT 20`).all()
+        : db.prepare(`SELECT name, rating AS value, rating FROM users WHERE (games > 0 OR rating <> 1500) AND ${NOT_ADMIN} ORDER BY rating DESC LIMIT 20`).all();
     return { t: 'top', kind, rating: rows.map((r) => ({ name: r.name, value: Math.round(r.value), rank: progress.rankOf(r.rating).name, rankColor: progress.rankOf(r.rating).color })) };
   },
   // ---------- промокод (для всех) ----------

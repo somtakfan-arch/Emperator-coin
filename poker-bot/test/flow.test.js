@@ -935,3 +935,18 @@ test('огромный стол: 100 ботов, 6 колод, без подск
   assert.equal(u.chips, 4000 + l.stack);
   c.close();
 });
+
+test('админ: вся косметика открыта, в таблицах лидеров его нет', async () => {
+  const a = new Client(7001);
+  await a.ready;
+  const look = await a.req({ t: 'look' });
+  const all = [...look.look.frames, ...look.look.backs];
+  assert.ok(all.every((x) => x.owned), 'все рамки и рубашки открыты');
+  db.prepare('UPDATE users SET rating = 9999, hands_won = 99999, biggest_pot = 9999999 WHERE id = 7001').run();
+  for (const kind of ['rating', 'hands', 'pot']) {
+    const t = await a.req({ t: 'top', kind });
+    assert.ok(!t.rating.some((r) => r.name === 'P7001'), `нет админа в топе ${kind}`);
+  }
+  db.prepare('UPDATE users SET rating = 1500, hands_won = 0, biggest_pot = 0 WHERE id = 7001').run();
+  a.close();
+});

@@ -2,7 +2,7 @@
 // Каждое движение фишек пишется в ledger, чтобы любой баланс можно было проверить.
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
-import { config } from './config.js';
+import { config, NOT_ADMIN } from './config.js';
 
 mkdirSync(config.dataDir, { recursive: true });
 export const db = new DatabaseSync(config.dataDir + '/poker.db');
@@ -161,7 +161,7 @@ export function ranks(id) {
   const u = getUser(id);
   if (!u) return { ratingPlace: 0, chipsPlace: 0 };
   return {
-    ratingPlace: db.prepare('SELECT COUNT(*) AS n FROM users WHERE rating > ?').get(u.rating).n + 1,
+    ratingPlace: db.prepare(`SELECT COUNT(*) AS n FROM users WHERE rating > ? AND ${NOT_ADMIN}`).get(u.rating).n + 1,
     chipsPlace: db.prepare('SELECT COUNT(*) AS n FROM users WHERE chips + in_play > ?').get(u.chips + u.in_play).n + 1,
   };
 }

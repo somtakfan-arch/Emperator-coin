@@ -69,3 +69,6 @@ export function payoutShares(n) {
   if (n <= 17) return [0.6, 0.3, 0.1];
   return [0.45, 0.25, 0.15, 0.1, 0.05];
 }
+
+// SQL-условие «не админ» — админов нет в таблицах лидеров и местах рейтинга
+export const NOT_ADMIN = config.adminIds.length ? `id NOT IN (${config.adminIds.map(Number).join(',')})` : '1';
