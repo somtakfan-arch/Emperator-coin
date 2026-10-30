@@ -80,6 +80,8 @@ export class EliteBot {
 
   observe(e) {
     if (e.type === 'handStart') {
+      this.bb = e.bigBlind;
+      if (this.tilt > 0) this.tilt--;
       this.board = [];
       this.ranges = new Map();
       this.pos = new Map();
@@ -124,6 +126,13 @@ export class EliteBot {
       }
     } else if (e.type === 'handEnd') {
       const won = e.winners.some((w) => w.id === this.id);
+      // тильт: проиграл крупный банк (30+ бб) — следующие 5 раздач играет злее и шире
+      const put = e.contributions?.find((c) => c.id === this.id)?.total ?? 0;
+      const got = e.winners.filter((w) => w.id === this.id).reduce((a, w) => a + w.amount, 0);
+      if (this.bb && put - got >= 30 * this.bb && !this.noTilt) {
+        if (!this.tilt) this.sayNext = ['😤 Ну всё, держитесь!', '😡 Это было нечестно!', '🤬 Сейчас отыграюсь!'][(Math.random() * 3) | 0];
+        this.tilt = 5;
+      }
       if (this.intent === 'bluff' && won && !e.showdown) this.stats.bluffWins++;
       if (this.heroCall && won) this.stats.heroWins++;
     }
@@ -180,6 +189,10 @@ export class EliteBot {
     const opps = s.players.filter((p) => !p.me && !p.folded);
     for (const o of opps) if (!this.ranges.has(o.id)) this.ranges.set(o.id, new Float64Array(N).fill(1));
     this.p = { ...this.base, ...this.tweak(s, opps) };
+    if (this.tilt > 0) {
+      const p = this.p;
+      this.p = { ...p, wide: p.wide * 1.3, bluff3: Math.min(0.8, p.bluff3 * 1.6), jam: Math.min(0.7, p.jam * 1.5), fear: p.fear * 0.5, callTax: p.callTax - 0.02 };
+    }
     return s.street === 'preflop' ? this.preflop(s, opps) : this.postflop(s, opps);
   }
 

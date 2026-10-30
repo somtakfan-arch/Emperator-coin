@@ -1,7 +1,8 @@
 // Стол против ботов (кэш-игра): бай-ин списывается с баланса, при выходе стек возвращается.
 // Два режима: свободный (встать можно в любой момент) и на время (встать нельзя, пока не кончится время).
 import { BOT_CLASSES, Hunter } from '../../core/bots.js';
-import { makeBot, isBotName, CROWD } from '../../core/crowd.js';
+import { makeBot, isBotName, CROWD, makeCustomBot } from '../../core/crowd.js';
+import { ghostHour } from '../../core/bots.js';
 
 // босс-раш: шесть сильнейших по очереди
 const RUSH = ['Скала', 'Маньяк', 'Хамелеон', 'Акула', 'Охотник', 'Король'];
@@ -44,7 +45,7 @@ const saveMemory = db.prepare(`INSERT INTO bot_memory (user_id, bot, data, at) V
   ON CONFLICT (user_id, bot) DO UPDATE SET data = excluded.data, at = excluded.at`);
 
 export class BotRoom {
-  constructor(hub, user, { mode, botName, buyin, minutes = 0, fast = false, level = 'normal', shadow = 0, variant = null, chaos = false, jokers = false, marathon = false }) {
+  constructor(hub, user, { mode, botName, buyin, minutes = 0, fast = false, level = 'normal', shadow = 0, variant = null, chaos = false, jokers = false, marathon = false, mirror = null, myBot = null }) {
     this.mode = mode;
     this.chaosOn = chaos;
     this.level = level;
@@ -84,7 +85,7 @@ export class BotRoom {
     this.me = { id: user.id, name: user.name, stack: buyin, bot: this.seat, isBot: false };
     this.table.addPlayer(this.me);
     names.forEach((name, i) => {
-      const bot = mega ? new MegaBot(name, i % 3) : makeBot(name, { iters: 300, level, shadowLevel: shadow });
+      const bot = mega ? new MegaBot(name, i % 3) : name === '__my' && myBot ? makeCustomBot(myBot, { level }) : makeBot(name, { iters: 300, level, shadowLevel: shadow, mirror });
       bot.id = -(i + 1); // у ботов отрицательные id — не пересекаются с Telegram
       // бот помнит этого игрока с прошлых столов: как часто он рейзит, фолдит, блефует
       const mem = loadMemory.get(user.id, bot.name);
@@ -112,7 +113,8 @@ export class BotRoom {
   static open(hub, user, opts) {
     if (!(Number.isSafeInteger(opts.buyin) && opts.buyin >= config.buyinMin)) throw new Error(`Бай-ин — от ${config.buyinMin} фишек`); // сверху — сколько есть на балансе
     if (opts.minutes && !config.timedMinutes.includes(opts.minutes)) throw new Error('Неверное время стола');
-    if (opts.mode === 'hu' && !isBotName(opts.botName)) throw new Error('Нет такого бота');
+    if (opts.mode === 'hu' && !isBotName(opts.botName) && !(opts.botName === '__my' && opts.myBot)) throw new Error('Нет такого бота');
+    if (opts.mode === 'hu' && opts.botName === 'Призрак' && !ghostHour()) throw new Error('Призрак приходит только с 3:00 до 4:00 ночи по Москве');
     if (!['hu', '6', '9', 'rush', 'mega', 'ladder', 'team'].includes(opts.mode)) throw new Error('Неверный стол');
     if (opts.variant && opts.variant !== 'short') throw new Error('Неверный вариант');
     if (!['easy', 'normal', 'master'].includes(opts.level || 'normal')) throw new Error('Неверная сложность');
@@ -195,7 +197,7 @@ export class BotRoom {
     if (this.table.chaos?.kind === 'double') this.table.setBlinds(this.baseBlinds[0] * 2, this.baseBlinds[1] * 2);
     if (!this.ladder && !this.team && !this.table.players.some((p) => p.isBot)) {
       this.beatAll = true; // обыграл всех ботов — стол закрывается, стек на баланс
-      this.hub.onBeatAll?.(this.userId);
+      this.hub.onBeatAll?.(this.userId, this.bots.map((b) => b.name));
       return this.close();
     }
     if (this.me.stack === 0) this.table.broadcast();
@@ -262,6 +264,29 @@ export class BotRoom {
       const data = bot.model?.exportPlayer(this.userId);
       if (data) saveMemory.run(this.userId, bot.name, data, Date.now());
     }
+  }
+
+  // Разоблачить Шулера: между раздачами, если он подглядывал в последней раздаче — пойман
+  expose() {
+    const ch = this.table.players.find((p) => p.isBot && p.bot.peeks);
+    if (!ch) throw new Error('Шулера за столом нет');
+    if (this.table.inHand) throw new Error('Дождись конца раздачи');
+    const lastHand = this.table.engine.handId;
+    if (this.table.peekedHand === lastHand) {
+      this.table.removePlayer(ch.id);
+      const bonus = Math.floor(this.buyin / 2);
+      if (config.progressRewards) this.me.stack += bonus;
+      this.hub.onCaughtCheater?.(this.userId);
+      this.table.broadcast();
+      return { caught: true, bonus };
+    }
+    // ошибся: штраф 10% бай-ина Шулеру
+    const fine = Math.min(this.me.stack, Math.floor(this.buyin / 10));
+    this.me.stack -= fine;
+    ch.stack += fine;
+    setInPlay.run(this.me.stack, this.userId);
+    this.table.broadcast();
+    return { caught: false, fine };
   }
 
   rebuy() {

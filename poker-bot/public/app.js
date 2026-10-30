@@ -275,6 +275,7 @@ function sfx(kind) {
     if (kind === 'card') tone(900, 0, 0.06, 'square', 0.025);
     if (kind === 'turn') { tone(660, 0, 0.12); tone(880, 0.1, 0.16); }
     if (kind === 'win') [523, 659, 784, 1047].forEach((f, i) => tone(f, i * 0.09, 0.22, 'triangle', 0.07));
+    if (kind === 'roar') { tone(110, 0, 0.25, 'sawtooth', 0.06); tone(90, 0.15, 0.3, 'sawtooth', 0.06); tone(70, 0.3, 0.35, 'square', 0.04); }
     if (kind === 'allin') { tone(196, 0, 0.3, 'sawtooth', 0.04); tone(147, 0.12, 0.35, 'sawtooth', 0.04); }
   } catch {}
 }
@@ -285,6 +286,9 @@ function tableSounds(prev, next) {
   const prevBet = Object.fromEntries(prev.seats.map((x) => [x.id, x.bet]));
   if (next.seats.some((x) => x.bet > (prevBet[x.id] || 0))) sfx('chip');
   if (next.seats.some((x) => x.allIn) && !prev.seats.some((x) => x.allIn)) sfx('allin');
+  // голос бота: рык, когда бот идёт олл-ин
+  const wasAll = new Set(prev.seats.filter((x) => x.allIn).map((x) => x.id));
+  if (next.seats.some((x) => x.isBot && x.allIn && !wasAll.has(x.id))) setTimeout(() => sfx('roar'), 250);
   if (next.result && !prev.result && next.result.some((w) => w.id === S.me?.id)) {
     sfx('win');
     const mine = next.result.find((w) => w.id === S.me?.id);
@@ -458,7 +462,7 @@ function leaveTableScreen(tournamentId) {
 
 // ---------- Навигация ----------
 
-const BACK = { training: 'lobby', tutorial: 'lobby', admin: 'profile', friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
+const BACK = { botlab: 'lobby', training: 'lobby', tutorial: 'lobby', admin: 'profile', friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
 
 function go(screen) {
   if (screen !== 'table' && S.screen === 'table' && S.table) S.tableHidden = true;
@@ -856,6 +860,65 @@ function prankFx(m) {
   setTimeout(() => el.remove(), 3600);
 }
 
+// ---------- Мастерская ботов: свой бот, бот-заменитель, шоу ботов ----------
+
+function openBotLab() {
+  go('botlab');
+  run({ t: 'botsInfo' }).then((r) => { if (r) { S.botsInfo = r; render(); } });
+}
+
+function botLabScreen() {
+  const I = S.botsInfo || {};
+  const my = I.myBot;
+  const kinds = I.kinds || [];
+  const pool = I.showPool || [];
+  S.lab ||= { name: my?.name || '', kind: my?.kind ?? 3, avatar: my?.avatar || '🤖', duel: ['Акула', 'Скала'], tour: null, pick: 'Акула', bet: 0, dep: 1000 };
+  const L = S.lab;
+  if (!L.tour && pool.length) L.tour = [...pool].sort(() => Math.random() - 0.5).slice(0, 6);
+  const sel = (value, onchange) => h('select', { class: 'buyin-input', onchange: (e) => onchange(e.target.value) },
+    pool.map((n) => h('option', { value: n, selected: n === value }, n)));
+  const bank = I.bank || { bank: 0 };
+  return h('div', { class: 'screen' },
+    header('Мастерская ботов'),
+    // свой бот
+    h('div', { class: 'glass card', style: 'gap:10px' },
+      h('div', { class: 'b', style: 'font-size:16px' }, my ? `${my.avatar} Твой бот: ${my.name}` : 'Создай своего бота'),
+      h('input', { class: 'buyin-input', placeholder: 'Имя бота', value: L.name, maxlength: 14, oninput: (e) => { L.name = e.target.value; } }),
+      h('div', { class: 'choices' }, ['🤖', '🦊', '🐺', '🦁', '🐉', '👽', '🎩', '💀'].map((a) => h('button', { class: L.avatar === a ? 'on' : '', onclick: () => { L.avatar = a; render(); } }, a))),
+      h('div', { class: 'label' }, 'Характер'),
+      h('div', { class: 'col', style: 'gap:6px' }, kinds.map((k) => h('button', { class: `item ${L.kind === k.id ? 'on' : ''}`, style: L.kind === k.id ? 'border-color:#f5d37a' : null, onclick: () => { L.kind = k.id; render(); } },
+        h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, k.kind), h('div', { class: 'small muted' }, k.text))))),
+      h('div', { class: 'grid2' },
+        h('button', { class: 'btn-ghost', onclick: async () => { const r = await run({ t: 'setMyBot', name: L.name, kind: L.kind, avatar: L.avatar }); if (r) { I.myBot = r.bot; toast('Бот сохранён'); render(); } } }, 'Сохранить'),
+        my && h('button', { class: 'btn', style: 'height:46px;font-size:14px', onclick: async () => { S.botMode = 'hu'; S.botName = '__my'; const r = await run({ t: 'sitBots', mode: 'hu', botName: '__my', buyin: S.buyin || 500 }); if (r) go('table'); } }, 'Играть против него'))),
+    // бот-заменитель
+    h('div', { class: 'glass card', style: 'gap:10px' },
+      h('div', { class: 'b', style: 'font-size:16px' }, '🤖 Бот-заменитель'),
+      h('div', { class: 'small soft', style: 'line-height:1.45' }, 'Пока тебя нет в игре, твой бот играет за тебя — по 30 раздач в час, максимум 12 часов. Играет на отдельный банк: положи туда фишки, забрать можно в любой момент. Он может и выиграть, и проиграть.'),
+      h('div', { class: 'row between' }, h('div', {}, 'В банке бота'), h('div', { class: 'b' }, fmt(bank.bank))),
+      bank.log && h('div', { class: 'small muted' }, `Последний раз: ${bank.log.hands} раздач, ${bank.log.net >= 0 ? '+' : '−'}${fmt(Math.abs(bank.log.net))}`),
+      h('div', { class: 'grid2' },
+        h('input', { class: 'buyin-input', type: 'number', inputmode: 'numeric', min: 100, value: L.dep, oninput: (e) => { L.dep = Number(e.target.value); } }),
+        h('button', { class: 'btn-ghost', onclick: async () => { const r = await run({ t: 'bankDeposit', amount: L.dep }); if (r) { I.bank = r.bank; render(); } } }, 'Положить')),
+      bank.bank > 0 && h('button', { class: 'btn-ghost', onclick: async () => { const r = await run({ t: 'bankWithdraw' }); if (r) { I.bank = r.bank; toast(`+${fmt(r.got)} на баланс`); render(); } } }, 'Забрать всё на баланс')),
+    // шоу ботов
+    h('div', { class: 'glass card', style: 'gap:10px' },
+      h('div', { class: 'b', style: 'font-size:16px' }, '🍿 Шоу ботов'),
+      h('div', { class: 'small soft', style: 'line-height:1.45' }, 'Смотри, как играют боты. Можно поставить фишки на победителя: дуэль — выигрыш ×1.9, турнир на 6 — ×5. Без ставки — просто смотришь.'),
+      h('div', { class: 'label' }, 'Дуэль 1 на 1'),
+      h('div', { class: 'grid2' }, sel(L.duel[0], (v) => { L.duel[0] = v; render(); }), sel(L.duel[1], (v) => { L.duel[1] = v; render(); })),
+      h('div', { class: 'label' }, 'Турнир на 6'),
+      h('div', { class: 'small soft' }, (L.tour || []).join(' · '), ' ', h('button', { class: 'btn-sm', onclick: () => { L.tour = null; render(); } }, '🔀')),
+      h('div', { class: 'label' }, 'Ставка на победителя'),
+      h('div', { class: 'grid2' },
+        h('select', { class: 'buyin-input', onchange: (e) => { L.pick = e.target.value; } },
+          [...new Set([...L.duel, ...(L.tour || [])])].map((n) => h('option', { value: n, selected: n === L.pick }, n))),
+        h('input', { class: 'buyin-input', type: 'number', inputmode: 'numeric', placeholder: '0 — без ставки', value: L.bet || '', oninput: (e) => { L.bet = Number(e.target.value) || 0; } })),
+      h('div', { class: 'grid2' },
+        h('button', { class: 'btn-ghost', onclick: async () => { if (await run({ t: 'botShow', kind: 'duel', bots: L.duel, pick: L.pick, bet: L.duel.includes(L.pick) ? L.bet : 0 })) go('table'); } }, 'Смотреть дуэль'),
+        h('button', { class: 'btn', style: 'height:46px;font-size:14px', onclick: async () => { if (await run({ t: 'botShow', kind: 'tour', bots: L.tour, pick: L.pick, bet: (L.tour || []).includes(L.pick) ? L.bet : 0 })) go('table'); } }, 'Смотреть турнир'))));
+}
+
 function openCombos() {
   S.comboBack = S.screen;
   go('combos');
@@ -1061,6 +1124,9 @@ function lobbyScreen() {
       icon('chev')),
     h('button', { class: 'item', onclick: () => openTutorial(0) },
       h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, 'Как играть'), h('div', { class: 'small muted' }, 'Правила покера с нуля — простыми словами')),
+      icon('chev')),
+    h('button', { class: 'item', onclick: openBotLab },
+      h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, 'Мастерская ботов'), h('div', { class: 'small muted' }, 'Свой бот, бот-заменитель, шоу ботов')),
       icon('chev')),
     h('button', { class: 'item', onclick: () => openTraining(0) },
       h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, 'Тренировка'), h('div', { class: 'small muted' }, 'Раздачи против бота-учителя с подсказками')),
@@ -1412,7 +1478,7 @@ function tableScreen() {
       seatAvatar(s),
       h('div', { class: 'col', style: 'gap:0;min-width:0' },
         // ник окрашен цветом ранга
-        h('div', { class: 'nm', style: s.look?.rankColor ? `color:${s.look.rankColor}` : null }, s.team ? (s.team === 'A' ? '🔵 ' : '🔴 ') : '', s.me ? 'Ты' : s.name),
+        h('div', { class: 'nm', style: s.look?.rankColor ? `color:${s.look.rankColor}` : null }, s.team ? (s.team === 'A' ? '🔵 ' : '🔴 ') : '', s.cheat ? '👁 ' : '', s.tilt ? '😤 ' : '', s.me ? 'Ты' : s.name),
         // стек и рядом значок выигранных раздач (у людей и у ботов) — внутри таблички, ничего не закрывает
         h('div', { class: 'st' }, s.allIn ? 'олл-ин' : fmt(s.stack),
           s.handsWon > 0 && h('span', { class: 'wins-badge', title: 'Выиграно раздач', 'aria-label': `Выиграно раздач: ${s.handsWon}` },
@@ -1488,9 +1554,11 @@ function tableScreen() {
       h('div', { class: 'title' }, info,
         // Хаос / босс-раш — строкой в шапке, чтобы не закрывать игроков
         (T.chaos || T.rush) && h('div', { class: 'mode-line' }, T.rush ? `Босс ${T.rush.i} из ${T.rush.of}: ${T.rush.name}` : T.chaos),
+        T.show && h('div', { class: 'mode-line' }, T.show.bet ? `Ставка ${fmt(T.show.bet)} на ${T.show.pick} · выигрыш ${fmt(T.show.win)}` : 'Шоу ботов — просто смотри'),
         T.ladder && h('div', { class: 'mode-line' }, `Ступень ${T.ladder.step} из ${T.ladder.of}: ${T.ladder.name}`),
         T.marathon && h('div', { class: 'mode-line' }, `Марафон: раздача ${Math.min(T.marathon.hand, T.marathon.of)} из ${T.marathon.of} · итог ${T.marathon.net >= 0 ? '+' : '−'}${fmt(Math.abs(T.marathon.net))}`),
         T.team && h('div', { class: 'mode-line' }, '🔵 твоя команда · 🔴 соперники'),
+        T.seats.some((s) => s.cheat) && !T.inHand && !T.watching && h('button', { class: 'invite-pill', onclick: async () => { const r = await run({ t: 'expose' }); if (r) toast(r.text); } }, '🕵️ Разоблачить Шулера'),
         T.target && h('div', { class: 'mode-line' }, `🎯 Цель: ${T.target} — за неё двойная награда`),
         sessionLine),
       // подсказка — круглая кнопка в шапке, чтобы не закрывать игроков
@@ -1694,7 +1762,7 @@ function hintCard(hnt, t, act) {
 function actionPanel(T, me, myTurn) {
   if (T.watching) {
     return h('div', { class: 'panel' },
-      h('div', { class: 'soft', style: 'text-align:center;font-size:14px' }, 'Ты смотришь игру друга · карты игроков скрыты'),
+      h('div', { class: 'soft', style: 'text-align:center;font-size:14px' }, T.show ? 'Шоу ботов · карты видно на вскрытии' : 'Ты смотришь игру друга · карты игроков скрыты'),
       h('button', { class: 'btn-ghost', onclick: stopWatching }, 'Перестать смотреть'));
   }
   if (myTurn) {
@@ -2389,7 +2457,7 @@ function profileScreen() {
       icon('chev')),
     // таблицы лидеров
     h('div', { class: 'label' }, 'Лучшие игроки'),
-    h('div', { class: 'seg' }, [['rating', 'Эло'], ['hands', 'Раздачи'], ['pot', 'Банк']].map(([k, label]) => h('button', {
+    h('div', { class: 'seg' }, [['rating', 'Эло'], ['hands', 'Раздачи'], ['pot', 'Банк'], ['bots', 'Боты']].map(([k, label]) => h('button', {
       class: (S.topKind || 'rating') === k ? 'on' : '', onclick: () => { S.topKind = k; S.top = null; send({ t: 'top', kind: k }); render(); },
     }, label))),
     S.top == null ? h('div', { class: 'muted small' }, 'Загрузка…')
@@ -2448,7 +2516,7 @@ function combosScreen() {
 
 // ---------- Рендер ----------
 
-const SCREENS = { training: trainingScreen, tutorial: tutorialScreen, admin: adminScreen, friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
+const SCREENS = { botlab: botLabScreen, training: trainingScreen, tutorial: tutorialScreen, admin: adminScreen, friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
 
 function render() {
   const app = document.getElementById('app');

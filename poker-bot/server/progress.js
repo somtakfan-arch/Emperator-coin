@@ -58,6 +58,8 @@ export const ACHIEVEMENTS = [
   { key: 'flush', name: 'Одной масти', text: 'Выиграй с флешем', chips: 300 },
   { key: 'full_house', name: 'Полный дом', text: 'Выиграй с фулл-хаусом', chips: 500 },
   { key: 'quads', name: 'Каре!', text: 'Выиграй с каре', chips: 1000, chest: 'rare' },
+  { key: 'ghost', name: 'Охотник за привидениями', text: 'Обыграй Призрака в 3 ночи', chips: 3000, chest: 'epic' },
+  { key: 'cheater', name: 'Детектив', text: 'Поймай Шулера', chips: 500 },
   { key: 'straight_flush', name: 'Стрит-флеш', text: 'Выиграй со стрит-флешем', chips: 3000, chest: 'epic' },
   { key: 'royal', name: 'Королевский', text: 'Собери флеш-рояль', chips: 10000, chest: 'epic' },
   { key: 'big_pot', name: 'Большой банк', text: 'Выиграй банк от 100 больших блайндов', chips: 500 },
@@ -246,6 +248,8 @@ export function onEvent(uid, ev) {
       }
     }
     if (ev.type === 'beatAll') unlock(uid, p, 'beat_all', out);
+    if (ev.type === 'beatAll' && ev.bots?.includes('Призрак')) unlock(uid, p, 'ghost', out);
+    if (ev.type === 'caughtCheater') unlock(uid, p, 'cheater', out);
     if (ev.type === 'rating' && ev.rating >= 1900) unlock(uid, p, 'gold', out);
     bumpQuests(p, evs, out);
     save(uid, p);
@@ -416,6 +420,12 @@ export function vsStats(uid, bot = null) {
 }
 
 // ---------- Тень: уровень растёт, когда ты её обыгрываешь ----------
+
+// для бота-Зеркала: в какой доле раздач ты заходишь в банк
+export function mirrorStats(uid) {
+  const s = load(uid)?.stats;
+  return { vpip: s && s.hands >= 20 ? s.vpip / s.hands : 0.3 };
+}
 
 export function shadowLevel(uid) {
   const p = load(uid);

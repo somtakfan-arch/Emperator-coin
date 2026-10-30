@@ -69,6 +69,13 @@ function applyLevel(bot, level) {
   return bot;
 }
 
+// Свой бот игрока: имя и характер выбирает он сам
+export const BOT_KINDS = KINDS.map((k, i) => ({ id: i, kind: k.kind, text: k.text }));
+export function makeCustomBot(my, opts = {}) {
+  const K = KINDS[my.kind] || KINDS[3];
+  return applyLevel(new EliteBot(my.name, `твой бот: ${K.kind}`, K.p, { iters: 200 }), opts.level);
+}
+
 export function makeBot(name, opts = {}) {
   const pro = PROS.find((x) => x.name === name);
   if (pro) return applyLevel(new pro.C(opts), opts.level);

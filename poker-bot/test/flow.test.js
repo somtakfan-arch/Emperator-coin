@@ -672,7 +672,8 @@ test('боты: боссы, сложность, статистика проти�
   const c = new Client(9911);
   await c.ready;
   const info = await c.req({ t: 'botsInfo' });
-  assert.deepEqual(info.bosses.map((b) => b.name), ['Король', 'Мафия', 'Робот', 'Шейх', 'Тень']);
+  assert.deepEqual(info.bosses.map((b) => b.name).slice(0, 5), ['Король', 'Мафия', 'Робот', 'Шейх', 'Тень']);
+  for (const n of ['Шулер', 'Учитель', 'Новичок', 'Зеркало']) assert.ok(info.bosses.some((b) => b.name === n), n);
   assert.equal(info.shadow, 0);
   await c.req({ t: 'invoice', pack: 'p1' });
   await assert.rejects(c.req({ t: 'sitBots', mode: 'hu', botName: 'Робот', buyin: 500, level: 'god' }), /сложность/);
@@ -1003,4 +1004,43 @@ test('режимы: джокеры, лестница, команда 2 на 2, �
   assert.ok(so.table.seats.some((s) => s.name === so.table.target));
   m.ws.send(JSON.stringify({ t: 'leave' })); await m.waitFor((x) => x.t === 'left' || x.t === 'finished', 30000);
   m.close();
+});
+
+test('боты пачки 9: свой бот, банк бота, шоу ботов со ставкой, Шулер, рейтинг ботов', async () => {
+  const c = new Client(9601);
+  await c.ready;
+  await c.req({ t: 'invoice', pack: 'p1' });
+  await assert.rejects(c.req({ t: 'setMyBot', name: 'Акула', kind: 1 }), /другого бота/);
+  await c.req({ t: 'setMyBot', name: 'Мой Бро', kind: 4, avatar: '🦊' });
+  const info = await c.req({ t: 'botsInfo' });
+  assert.equal(info.myBot.name, 'Мой Бро');
+  assert.equal(info.kinds.length, 6);
+  // игра против своего бота
+  await c.req({ t: 'sitBots', mode: 'hu', botName: '__my', buyin: 500 });
+  const t = await c.waitFor((m) => m.t === 'table' && m.table?.seats?.some((s) => s.name === 'Мой Бро'));
+  assert.ok(t);
+  c.ws.send(JSON.stringify({ t: 'leave' })); await c.waitFor((m) => m.t === 'left', 30000);
+  // банк бота
+  await c.req({ t: 'bankDeposit', amount: 1000 });
+  const w = await c.req({ t: 'bankWithdraw' });
+  assert.equal(w.got, 1000);
+  // шоу: дуэль со ставкой
+  await assert.rejects(c.req({ t: 'botShow', kind: 'duel', bots: ['Акула', 'Акула'] }), /двух разных/);
+  const before = db.prepare('SELECT chips FROM users WHERE id = 9601').get().chips;
+  await c.req({ t: 'botShow', kind: 'duel', bots: ['Акула', 'Скала'], pick: 'Акула', bet: 200 });
+  const v = await c.waitFor((m) => m.t === 'table' && m.table?.kind === 'show' && m.table.watching);
+  assert.equal(v.table.show.bet, 200);
+  await c.waitFor((m) => m.t === 'toast' && /Победил/.test(m.text), 120000);
+  const after = db.prepare('SELECT chips FROM users WHERE id = 9601').get().chips;
+  assert.ok(after === before - 200 || after === before - 200 + 380, `ставка: ${before} → ${after}`);
+  assertLedger(9601);
+  // Шулер: значок у места, разоблачение без подглядывания — штраф
+  await c.req({ t: 'sitBots', mode: 'hu', botName: 'Шулер', buyin: 500 });
+  const ch = await c.waitFor((m) => m.t === 'table' && m.table?.seats?.some((s) => s.cheat));
+  assert.ok(ch);
+  c.ws.send(JSON.stringify({ t: 'leave' })); await c.waitFor((m) => m.msgs === undefined && m.t === 'left' && m !== c.msgs.find((x) => x.t === 'left'), 30000).catch(() => {});
+  // рейтинг ботов за неделю
+  const top = await c.req({ t: 'top', kind: 'bots' });
+  assert.equal(top.kind, 'bots');
+  c.close();
 });

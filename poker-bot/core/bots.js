@@ -132,8 +132,97 @@ export class Shadow extends EliteBot {
   }
 }
 
+// 11. НОВИЧОК — слабый и иногда жмёт не ту кнопку
+export class Newbie extends EliteBot {
+  constructor(opts = {}) {
+    super('Новичок', 'учится играть: часто ошибается и сам над собой смеётся', {
+      wide: 1.45, aggr: -0.03, callTax: -0.03, temp: 0.15, readSkill: 0.1, bluff3: 0.05, bluff4: 0.02, jam: 0.05, fear: 0.6, priorN: 40,
+    }, { ...opts, iters: 80 });
+    this.noTilt = true;
+  }
+  act(s) {
+    const a = super.act(s);
+    if (Math.random() < 0.15) {
+      // «не туда нажал»: случайное другое действие
+      const opts = s.toCall > 0 ? [{ type: 'call' }, { type: 'fold' }] : [{ type: 'check' }, { type: 'raise', to: s.minRaiseTo }];
+      const other = opts.find((o) => o.type !== a.type) || opts[0];
+      this.sayNext = ['Ой, я не туда нажал 😅', 'Упс… это я случайно', 'Так, а какая кнопка колл? 🤔'][(Math.random() * 3) | 0];
+      return other;
+    }
+    return a;
+  }
+}
+
+// 12. ШУЛЕР — иногда подглядывает в твои карты (значок 👁 у него всегда). Поймал — выигрыш.
+export class Cheater extends EliteBot {
+  constructor(opts = {}) {
+    super('Шулер', 'иногда подглядывает в твои карты — поймай его кнопкой «Разоблачить»', {
+      wide: 1.1, aggr: 0.01, temp: 0.04, readSkill: 0.8, bluff3: 0.35, bluff4: 0.12, jam: 0.25, fear: 0.3, priorN: 10,
+    }, { ...opts, iters: Math.max(opts.iters ?? 0, 300) });
+    this.peeks = true;
+  }
+}
+
+// 13. УЧИТЕЛЬ — после каждого хода объясняет вслух, почему так сыграл
+export class Teacher extends EliteBot {
+  constructor(opts = {}) {
+    super('Учитель', 'объясняет каждый свой ход — учись у него', {
+      wide: 0.95, aggr: 0, temp: 0.04, readSkill: 0.7, bluff3: 0.25, bluff4: 0.08, jam: 0.15, fear: 0.4, priorN: 12,
+    }, { ...opts, iters: Math.max(opts.iters ?? 0, 300) });
+    this.explains = true;
+    this.noTilt = true;
+  }
+}
+
+// 14. БОСС МЕСЯЦА — каждый месяц новый, со своим характером
+const MONTH_BOSSES = [
+  ['Снеговик', 'холодный и терпеливый: ждёт сильную руку', { wide: 0.75, fear: 0.6, bluff3: 0.15 }],
+  ['Купидон', 'стреляет ставками в самое сердце', { wide: 1.1, aggr: 0.02, bluff3: 0.45 }],
+  ['Весна', 'оттаивает к риверу: чем дальше, тем агрессивнее', { wide: 1, bluff4: 0.3, jam: 0.3 }],
+  ['Шутник', 'никогда не знаешь, блефует он или нет', { wide: 1.15, temp: 0.08, bluff3: 0.5, bluff4: 0.25 }],
+  ['Садовник', 'медленно растит банк и собирает урожай', { wide: 1, trap: 0.2, sizes: [0.33, 0.5] }],
+  ['Солнце', 'жарит овербетами', { wide: 1.15, sizes: [1, 1.5, 2], jam: 0.35 }],
+  ['Пляжник', 'расслаблен, играет много рук', { wide: 1.35, callTax: -0.01, fear: 0.2 }],
+  ['Арбузник', 'давит олл-инами', { wide: 1.1, jam: 0.55, deepJam: true }],
+  ['Двоечник', 'учился плохо, но блефует отлично', { wide: 1.2, readSkill: 0.4, bluff3: 0.55 }],
+  ['Тыква', 'страшный босс Хэллоуина: ловушки и чек-рейзы', { wide: 0.95, trap: 0.28, bluff3: 0.35 }],
+  ['Листопад', 'сбрасывает слабое и бьёт сильным', { wide: 0.8, aggr: 0.015, fear: 0.5 }],
+  ['Санта', 'дарит фишки… или забирает все', { wide: 1.25, jam: 0.4, bluff3: 0.4 }],
+];
+export const monthIndex = () => new Date(Date.now() + 3 * 3600000).getUTCMonth(); // по Москве
+export class MonthBoss extends EliteBot {
+  constructor(opts = {}) {
+    const [name, style, p] = MONTH_BOSSES[monthIndex()];
+    super(name, `босс месяца: ${style}`, {
+      wide: 1, aggr: 0, temp: 0.02, readSkill: 0.9, bluff3: 0.35, bluff4: 0.12, jam: 0.25, fear: 0.25, priorN: 6, ...p,
+    }, { ...opts, iters: Math.max(opts.iters ?? 0, 600) });
+  }
+}
+
+// 15. ПРИЗРАК — появляется только с 3:00 до 4:00 ночи по Москве. Очень сильный.
+export const ghostHour = () => new Date(Date.now() + 3 * 3600000).getUTCHours() === 3;
+export class Ghost extends EliteBot {
+  constructor(opts = {}) {
+    super('Призрак', 'приходит только в 3 ночи… и забирает фишки тех, кто не спит', {
+      wide: 1.05, aggr: 0.01, trap: 0.15, temp: 0.015, priorN: 4, readSkill: 1, bluff3: 0.45, bluff4: 0.2, callTax: 0.01, jam: 0.35, fear: 0.15,
+    }, { ...opts, iters: Math.max(opts.iters ?? 0, 800) });
+    this.noTilt = true;
+  }
+}
+
+// 16. ЗЕРКАЛО — играет твоим стилем: сколько рук ты играешь, так и он
+export class Mirror extends EliteBot {
+  constructor(opts = {}) {
+    const m = opts.mirror || { vpip: 0.3 };
+    const wide = Math.max(0.6, Math.min(1.6, 0.6 + m.vpip * 2)); // 20% рук ≈ 1.0
+    super('Зеркало', `играет твоим стилем: заходит в ${Math.round(m.vpip * 100)}% раздач, как ты`, {
+      wide, aggr: 0, temp: 0.05, readSkill: 0.6, bluff3: 0.3, bluff4: 0.1, jam: 0.2, fear: 0.4, priorN: 12,
+    }, { ...opts, iters: Math.max(opts.iters ?? 0, 300) });
+  }
+}
+
 export const BOT_CLASSES = [Rock, Shark, Maniac, Hunter, Chameleon];
-export const BOSS_CLASSES = [King, Mafia, Robot, Sheikh, Shadow]; // отдельно: за стол на 6 не садится, только 1 на 1 и турниры
+export const BOSS_CLASSES = [King, Mafia, Robot, Sheikh, Shadow, MonthBoss, Ghost, Cheater, Teacher, Newbie, Mirror]; // отдельно: за стол на 6 не садится, только 1 на 1 и турниры
 
 export function createBots(opts) {
   return BOT_CLASSES.map((C) => new C(opts));

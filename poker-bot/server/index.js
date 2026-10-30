@@ -14,7 +14,10 @@ import { BOT_CLASSES, BOSS_CLASSES, Hunter } from '../core/bots.js';
 import { CROWD } from '../core/crowd.js';
 import { arrangeDeck } from './game/demoplan.js';
 import { evaluate, evaluateShort } from '../core/cards.js';
-import { botHandsWon } from './game/table.js';
+import { botHandsWon, botWeekTop } from './game/table.js';
+import * as botsx from './botsx.js';
+import { ghostHour } from '../core/bots.js';
+import { BOT_KINDS } from '../core/crowd.js';
 import { botRating } from './game/elo.js';
 import * as progress from './progress.js';
 import * as cosmetics from './cosmetics.js';
@@ -89,7 +92,8 @@ const hub = {
     for (const f of social.friendIds(uid)) if (hub.isOnline(f)) hub.send(f, { t: 'toast', text: `${u.name} сел за стол — можно посмотреть в «Друзьях»` });
   },
   onTourDone: (uid, ev) => progress.onEvent(uid, { type: 'tour', ...ev }),
-  onBeatAll: (uid) => progress.onEvent(uid, { type: 'beatAll' }),
+  onBeatAll: (uid, bots) => progress.onEvent(uid, { type: 'beatAll', bots }),
+  onCaughtCheater: (uid) => progress.onEvent(uid, { type: 'caughtCheater' }),
   onBotVs: (uid, bots, won, net) => progress.recordVs(uid, bots, won, net),
   // лестница: новая ступень — фишки, вся лестница — эпический сундук
   onLadderStep(uid, step, of) {
@@ -250,6 +254,7 @@ const handlers = {
   // таблицы лидеров: по Эло, по выигранным раздачам, по самому большому банку
   // админа в таблицах лидеров нет
   top: (uid, m) => {
+    if (m.kind === 'bots') return { t: 'top', kind: 'bots', rating: botWeekTop().map((r) => ({ name: r.name, value: r.value, rank: 'бот', rankColor: '#9ad' })) };
     const kind = ['hands', 'pot'].includes(m.kind) ? m.kind : 'rating';
     const rows = kind === 'hands'
       ? db.prepare(`SELECT name, hands_won AS value, rating FROM users WHERE hands_won > 0 AND ${NOT_ADMIN} ORDER BY hands_won DESC LIMIT 20`).all()
@@ -470,7 +475,7 @@ const handlers = {
     if (activeTable(uid)) throw new Error('Ты уже за столом');
     botRooms.set(uid, BotRoom.open(hub, getUser(uid), {
       mode: ['6', '9', 'rush', 'mega', 'ladder', 'team'].includes(m.mode) ? m.mode : 'hu', jokers: !!m.jokers, marathon: !!m.marathon, botName: m.botName, variant: m.variant === 'short' ? 'short' : null, chaos: !!m.chaos, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0, fast: !!m.fast,
-      level: m.level || 'normal', shadow: progress.shadowLevel(uid),
+      level: m.level || 'normal', shadow: progress.shadowLevel(uid), mirror: progress.mirrorStats(uid), myBot: m.botName === '__my' ? botsx.myBot(uid) : null,
     }));
     hub.onSeated(uid);
     hub.sendMe(uid);
@@ -496,14 +501,34 @@ const handlers = {
   // боссы и твоя статистика против каждого бота
   botsInfo: (uid) => ({
     t: 'botsInfo',
-    bosses: BOSS_CLASSES.map((C) => {
-      const b = new C({ shadowLevel: progress.shadowLevel(uid) });
+    bosses: BOSS_CLASSES.filter((C) => C.name !== 'Ghost' || ghostHour()).map((C) => {
+      const b = new C({ shadowLevel: progress.shadowLevel(uid), mirror: progress.mirrorStats(uid) });
       return { name: b.name, style: b.style, elo: botRating(b.name, 'normal', progress.shadowLevel(uid)) };
     }),
     vs: progress.vsStats(uid),
     shadow: progress.shadowLevel(uid),
     ladder: { ...ladderStep(uid), steps: LADDER_STEPS },
+    myBot: botsx.myBot(uid), kinds: BOT_KINDS, bank: botsx.bankView(uid), showPool: botsx.showPool(),
   }),
+  // ---------- свой бот, бот-заменитель, шоу ботов ----------
+  setMyBot(uid, m) { return { t: 'ok', bot: botsx.setMyBot(uid, m) }; },
+  bankDeposit(uid, m) { botsx.bankDeposit(uid, m.amount); hub.sendMe(uid); return { t: 'ok', bank: botsx.bankView(uid) }; },
+  bankWithdraw(uid) { const got = botsx.bankWithdraw(uid); hub.sendMe(uid); return { t: 'ok', got, bank: botsx.bankView(uid) }; },
+  botShow(uid, m) {
+    if (activeTable(uid)) throw new Error('Сначала выйди из-за стола');
+    watching.get(uid)?.spectators?.delete(uid);
+    const table = botsx.startShow(hub, uid, { kind: m.kind === 'duel' ? 'duel' : 'tour', bots: m.bots, pick: m.pick, bet: m.bet });
+    watching.set(uid, table);
+    hub.sendMe(uid);
+    return { t: 'ok' };
+  },
+  // разоблачить Шулера
+  expose(uid) {
+    const room = botRooms.get(uid);
+    if (!(room instanceof BotRoom)) throw new Error('Шулера за столом нет');
+    const r = room.expose();
+    return { t: 'ok', ...r, text: r.caught ? `🕵️ Поймал Шулера! Он уходит из-за стола${r.bonus && config.progressRewards ? `, +${r.bonus} фишек к стеку` : ''}` : `Ошибся — в последней раздаче он не подглядывал. Штраф ${r.fine} фишек` };
+  },
   // эмодзи над собой за столом
   emote(uid, m) {
     activeTable(uid)?.table.emote(uid, String(m.e));
@@ -755,6 +780,10 @@ wss.on('connection', (ws) => {
         if (!sockets.has(uid)) sockets.set(uid, new Set());
         sockets.get(uid).add(ws);
         reply({ t: 'hello', me: meView(uid), startParam: auth.startParam || null });
+        // бот-заменитель доигрывает за время, пока тебя не было
+        botsx.runOffline(uid).then((log) => {
+          if (log) hub.send(uid, { t: 'toast', text: `🤖 Пока тебя не было, твой бот сыграл ${log.hands} раздач: ${log.net >= 0 ? '+' : '−'}${Math.abs(log.net).toLocaleString('ru')} фишек в его банке` });
+        }).catch(() => {});
         reply({ t: 'lobby', ...lobbyView(uid) });
         const a = activeTable(uid);
         if (a) handlers.table(uid);

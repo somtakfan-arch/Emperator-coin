@@ -24,6 +24,14 @@ const getHandsWon = db.prepare('SELECT hands_won FROM users WHERE id = ?');
 const addBotWin = db.prepare('INSERT INTO bot_stats (bot, hands_won) VALUES (?, 1) ON CONFLICT (bot) DO UPDATE SET hands_won = hands_won + 1');
 const botWins = new Map(db.prepare('SELECT bot, hands_won FROM bot_stats').all().map((r) => [r.bot, r.hands_won]));
 export const botHandsWon = (name) => botWins.get(name) ?? 0;
+// недельный рейтинг ботов: выигранные раздачи за неделю (по Москве)
+db.exec('CREATE TABLE IF NOT EXISTS bot_week (bot TEXT NOT NULL, week TEXT NOT NULL, won INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (bot, week))');
+const weekKey = () => {
+  const d = new Date(Date.now() + 3 * 3600000);
+  return `${d.getUTCFullYear()}-${Math.ceil(((d - Date.UTC(d.getUTCFullYear(), 0, 1)) / 86400000 + 1) / 7)}`;
+};
+const addWeek = db.prepare('INSERT INTO bot_week (bot, week, won) VALUES (?, ?, 1) ON CONFLICT (bot, week) DO UPDATE SET won = won + 1');
+export const botWeekTop = () => db.prepare('SELECT bot AS name, won AS value FROM bot_week WHERE week = ? ORDER BY won DESC LIMIT 20').all(weekKey());
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms * config.speed));
 const cryptoRng = () => randomInt(0, 2 ** 32) / 2 ** 32; // колода тасуется криптостойко
@@ -131,6 +139,22 @@ function dejokeEvent(e) {
   return e;
 }
 
+// Объяснение хода для Учителя: простыми словами
+function explainMove(s, a) {
+  const cat = s.board.length ? handCategory(evaluate(s.hole.concat(s.board))) : -1;
+  const boardCat = s.board.length >= 3 ? handCategory(evaluate(s.board)) : -1;
+  const made = cat > boardCat ? cat : 0;
+  const names = ['ничего', 'пара', 'две пары', 'сет', 'стрит', 'флеш', 'фулл-хаус', 'каре', 'стрит-флеш'];
+  const odds = s.toCall > 0 ? Math.round((s.toCall / (s.pot + s.toCall)) * 100) : 0;
+  const hand = s.street === 'preflop' ? 'стартовая рука' : `у меня ${names[made]}`;
+  switch (a.type) {
+    case 'fold': return `Фолд: ${hand}, а доплатить надо много — ${odds}% банка. Не окупится.`;
+    case 'check': return `Чек: ${hand}. Смотрю следующую карту бесплатно.`;
+    case 'call': return `Колл: ${hand}. Доплатить ${odds}% банка — шансы того стоят.`;
+    default: return made >= 2 ? `Рейз: ${hand} — сильно, надо растить банк.` : made === 1 ? `Рейз: ${hand}, хочу забрать банк сейчас.` : s.street === 'preflop' ? 'Рейз: хорошая стартовая рука — давлю сразу.' : 'Рейз: это блеф 🤫 Хочу, чтобы ты сбросил.';
+  }
+}
+
 export function botSeat(bot, table) {
   return {
     id: bot.id,
@@ -149,9 +173,26 @@ export function botSeat(bot, table) {
         table.dumped.add(bot.id);
         return { type: 'raise', to: state.myBet + state.stack - 1 };
       }
-      return bot.act(table.jokers ? dejokeState(state) : state);
+      let a;
+      // Шулер: иногда подглядывает в карты живого соперника и решает по точным шансам
+      const victim = bot.peeks && table.players.find((p) => !p.isBot && p.bot.hole && state.players.some((x) => x.id === p.id && !x.folded));
+      if (victim && Math.random() < 0.35) {
+        table.peekedHand = state.handId;
+        const eq = knownEquity({ me: state.hole, him: victim.bot.hole }, state.board).me;
+        const pot = state.pot;
+        a = eq >= 65 ? { type: 'raise', to: Math.min(state.myBet + state.stack, state.currentBet + Math.max(state.minRaiseTo - state.currentBet, pot)) }
+          : eq >= 40 ? { type: state.toCall > 0 ? 'call' : 'check' }
+            : { type: state.toCall > 0 ? 'fold' : 'check' };
+        if (Math.random() < 0.3) bot.sayNext = '👀';
+      } else a = bot.act(table.jokers ? dejokeState(state) : state);
+      // Учитель объясняет ход
+      if (bot.explains) bot.sayNext = explainMove(state, a);
+      if (bot.sayNext) { table.say(bot.id, bot.sayNext); bot.sayNext = null; }
+      return a;
     },
     observe: (e) => bot.observe(table.jokers ? dejokeEvent(e) : e),
+    get tilt() { return bot.tilt > 0; },
+    peeks: !!bot.peeks,
   };
 }
 
@@ -341,6 +382,7 @@ export class GameTable {
         if (!p) continue;
         if (p.isBot) {
           addBotWin.run(p.name);
+          addWeek.run(p.name, weekKey());
           botWins.set(p.name, botHandsWon(p.name) + 1);
           continue;
         }
@@ -470,6 +512,7 @@ export class GameTable {
           handsWon: p.isBot ? botHandsWon(p.name) : p.handsWon ?? 0,
           streak: p.streak || 0,
           team: this.teams?.get(p.id) ?? null,
+          tilt: p.isBot && p.bot.tilt ? true : undefined, cheat: p.isBot && p.bot.peeks ? true : undefined,
           look: p.isBot ? null : p.look || null,
           equity: v.equity?.[p.id] ?? null,
           emote: v.emotes[p.id]?.e ?? null,
