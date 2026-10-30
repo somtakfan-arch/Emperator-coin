@@ -904,3 +904,15 @@ test('тихий пранк: у друга тузы, админ выигрыва
   assertLedger(9170);
   admin.close(); friend.close();
 });
+
+test('сольный турнир на 18 со столами по 9', async () => {
+  const c = new Client(9302);
+  await c.ready;
+  await c.req({ t: 'invoice', pack: 'p1' });
+  await c.req({ t: 'startSolo', buyin: 1000, size: 18, blindMin: 2, seats: 9 });
+  const snap = await c.waitFor((m) => m.t === 'table' && m.table?.solo);
+  assert.equal(snap.table.seats.length, 9, 'за столом 9 игроков');
+  c.ws.send(JSON.stringify({ t: 'leave' }));
+  await c.waitFor((m) => m.t === 'left' || m.t === 'finished', 30000);
+  c.close();
+});

@@ -17,8 +17,8 @@ export const SOLO_BLINDS = [2, 3, 6]; // минут на уровень
 const setInPlay = db.prepare('UPDATE users SET in_play = ? WHERE id = ?');
 
 export class SoloTour {
-  constructor(hub, user, { buyin, size, blindMin, demo = false, ko = false }) {
-    this.seats = size === 9 ? 9 : MAX_SEATS;
+  constructor(hub, user, { buyin, size, blindMin, demo = false, ko = false, seats = 6 }) {
+    this.seats = size === 9 || (seats === 9 && size > 9) ? 9 : MAX_SEATS; // столы по 6 или по 9
     this.bounty = ko ? Math.floor(buyin / 2) : 0; // нокаут: за каждого выбитого бота
     this.hub = hub;
     // демо — только админ, для видео: фишки ненастоящие, баланс/Эло/призы не трогаются,
@@ -48,7 +48,7 @@ export class SoloTour {
       if (!config.adminIds.includes(user.id)) throw new Error('Нет доступа');
       const size = SOLO_SIZES.includes(Number(o.size)) ? Number(o.size) : 60;
       const blindMin = SOLO_BLINDS.includes(Number(o.blindMin)) ? Number(o.blindMin) : 3;
-      const t = new SoloTour(hub, user, { buyin: 1000, size, blindMin, demo: true });
+      const t = new SoloTour(hub, user, { buyin: 1000, size, blindMin, demo: true, seats: Number(o.seats) });
       t.start(user);
       return t;
     }
@@ -60,7 +60,7 @@ export class SoloTour {
     if (!SOLO_BLINDS.includes(blindMin)) throw new Error('Неверная скорость блайндов');
     if (!debit(user.id, buyin, 'solo_buyin')) throw new Error('Не хватает фишек — пополни кошелёк');
     setInPlay.run(buyin, user.id); // при перезапуске сервера взнос вернётся
-    const t = new SoloTour(hub, user, { buyin, size, blindMin, ko: !!o.ko });
+    const t = new SoloTour(hub, user, { buyin, size, blindMin, ko: !!o.ko, seats: Number(o.seats) });
     t.start(user);
     return t;
   }

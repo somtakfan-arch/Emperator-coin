@@ -541,7 +541,7 @@ const handlers = {
   // сольный турнир с ботами — старт сразу
   startSolo(uid, m) {
     if (activeTable(uid) || solos.get(uid)) throw new Error('Ты уже за столом');
-    const tour = SoloTour.open(hub, getUser(uid), { buyin: m.buyin, size: m.size, blindMin: m.blindMin, demo: !!m.demo, ko: !!m.ko });
+    const tour = SoloTour.open(hub, getUser(uid), { buyin: m.buyin, size: m.size, blindMin: m.blindMin, demo: !!m.demo, ko: !!m.ko, seats: m.seats });
     solos.set(uid, tour);
     if (!m.demo) hub.onSeated(uid);
     hub.sendMe(uid);

@@ -2065,7 +2065,7 @@ function soloScreen() {
   return h('div', { class: 'screen' },
     header('Сольный турнир'),
     h('div', { class: 'small soft', style: 'line-height:1.5' },
-      'Ты и боты. Старт сразу. Столы по 6, блайнды растут, вылетевших пересаживают — как в Большом турнире. Вылетел — турнир для тебя закончен, приз по месту.'),
+      `Ты и боты. Старт сразу. Столы по ${size === 9 ? 9 : size === 6 ? 6 : (S.soloSeats ?? 6)}, блайнды растут, вылетевших пересаживают — как в Большом турнире. Вылетел — турнир для тебя закончен, приз по месту.`),
     h('div', { class: 'field' },
       h('div', { class: 'label' }, 'Мест'),
       h('div', { class: 'choices' }, cfg.sizes.map((n) => h('button', { class: size === n ? 'on' : '', onclick: () => { S.soloSize = n; render(); } }, n)))),
@@ -2073,6 +2073,9 @@ function soloScreen() {
       h('label', { class: 'toggle-row', style: 'margin-bottom:8px' },
         h('input', { type: 'checkbox', checked: !!S.soloKo, onchange: (e) => { S.soloKo = e.target.checked; render(); } }),
         h('span', {}, 'Нокаут'), h('span', { class: 'small muted' }, 'за каждого выбитого бота — полвзноса сразу')),
+      // на 18 и 60 мест можно выбрать размер столов
+      size > 9 && h('div', { class: 'label' }, 'Игроков за столом'),
+      size > 9 && h('div', { class: 'choices', style: 'margin-bottom:8px' }, [6, 9].map((n) => h('button', { class: (S.soloSeats ?? 6) === n ? 'on' : '', onclick: () => { S.soloSeats = n; render(); } }, `по ${n}`))),
       h('div', { class: 'label' }, 'Блайнды растут каждые'),
       h('div', { class: 'choices' }, cfg.blinds.map((n) => h('button', { class: blind === n ? 'on' : '', onclick: () => { S.soloBlind = n; render(); } }, `${n} мин`)))),
     h('div', { class: 'field' },
@@ -2104,12 +2107,12 @@ function soloScreen() {
 }
 
 async function startDemoSolo() {
-  const r = await run({ t: 'startSolo', demo: true, size: S.soloSize ?? 18, blindMin: S.soloBlind ?? 3 });
+  const r = await run({ t: 'startSolo', demo: true, size: S.soloSize ?? 18, blindMin: S.soloBlind ?? 3, seats: S.soloSeats ?? 6 });
   if (r) go('table');
 }
 
 async function startSolo() {
-  const r = await run({ t: 'startSolo', buyin: S.soloBuyin ?? 1000, size: S.soloSize ?? 18, blindMin: S.soloBlind ?? 3, ko: !!S.soloKo });
+  const r = await run({ t: 'startSolo', buyin: S.soloBuyin ?? 1000, size: S.soloSize ?? 18, blindMin: S.soloBlind ?? 3, ko: !!S.soloKo, seats: S.soloSeats ?? 6 });
   if (r) go('table');
 }
 
