@@ -2,7 +2,7 @@
 // сундуки, ранги, сезоны и пропуск (бесплатная линия наград).
 // Всё хранится в users.progress (JSON), для таблиц лидеров — отдельные колонки.
 import { db, tx, credit } from './db.js';
-import { config } from './config.js';
+import { config, NOT_ADMIN } from './config.js';
 import { eventMult } from './events.js';
 
 const cols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
@@ -72,6 +72,17 @@ export const ACHIEVEMENTS = [
   { key: 'streak_7', name: 'Неделя подряд', text: 'Заходи 7 дней подряд', chips: 1000 },
   { key: 'chest_10', name: 'Кладоискатель', text: 'Открой 10 сундуков', chips: 1000 },
   { key: 'gold', name: 'Золото', text: 'Дойди до ранга «Золото»', chips: 2000, chest: 'rare' },
+  { key: 'hands_100', name: 'Разогрев', text: 'Сыграй 100 раздач', chips: 500 },
+  { key: 'hands_1000', name: 'Тысяча раздач', text: 'Сыграй 1000 раздач', chips: 3000, chest: 'rare' },
+  { key: 'hands_10000', name: 'Десять тысяч', text: 'Сыграй 10 000 раздач', chips: 20000, chest: 'epic' },
+  { key: 'collector', name: 'Коллекционер', text: 'Собери все 52 карты в коллекцию', chips: 10000, chest: 'epic' },
+  { key: 'album', name: 'Полный альбом', text: 'Выиграй со всеми комбинациями', chips: 5000, chest: 'epic' },
+  { key: 'prestige', name: 'Престиж', text: 'Получи первую звезду престижа', chips: 5000 },
+  // секретные: не видно, пока не откроешь
+  { key: 'seven_deuce', name: 'Наглость', text: 'Выиграй с 7-2 на руках', chips: 1000, secret: true },
+  { key: 'night_owl', name: 'Сова', text: 'Выиграй раздачу между 2 и 5 часами ночи', chips: 700, secret: true },
+  { key: 'aces_cracked', name: 'Боль', text: 'Проиграй с тузами на руках', chips: 300, secret: true },
+  { key: 'wheel_jackpot', name: 'Джекпот', text: 'Выбей главный приз в колесе удачи', chips: 0, secret: true },
 ];
 
 // ---------- Задания ----------
@@ -153,7 +164,9 @@ export function setProgressNotifier(fn) {
 }
 
 function addXp(p, n) {
-  p.pass.xp += n * eventMult('x2xp'); // ивент «x2 опыт»
+  const v = Math.round(n * eventMult('x2xp') * (1 + 0.1 * (p.skills?.xp || 0))); // ивент «x2 опыт», навык «Опыт»
+  p.pass.xp += v;
+  p.xpTotal = (p.xpTotal || 0) + v; // опыт за всё время — уровень аккаунта
 }
 const x2 = (chips) => chips * eventMult('x2chips'); // ивент «x2 фишки»
 
@@ -220,7 +233,33 @@ export function onHand(uid, h) {
       if (s.streak >= 5) unlock(uid, p, 'streak_5', out);
       if (h.vsKing) unlock(uid, p, 'beat_king', out);
       if (h.allIn && h.showdown) unlock(uid, p, 'allin_win', out);
-    } else s.streak = 0;
+      // коллекция карт: каждая карта, с которой ты выиграл
+      p.cards ||= [];
+      for (const c of h.hole || []) if (c < 52 && !p.cards.includes(c)) p.cards.push(c);
+      if (p.cards.length >= 52) unlock(uid, p, 'collector', out);
+      // альбом комбинаций: первый выигрыш с каждой
+      if (h.cat != null) {
+        p.album ||= {};
+        const k = h.royal ? 'royal' : String(h.cat);
+        if (!p.album[k]) p.album[k] = Date.now();
+        if (Object.keys(p.album).length >= 10) unlock(uid, p, 'album', out);
+      }
+      // лучшая рука в жизни
+      if (h.score != null && h.score > (p.best?.score ?? -1)) p.best = { score: h.score, name: h.handName, cards: h.five, at: Date.now() };
+      // секретные
+      const ranks = (h.hole || []).map((c) => c >> 2).sort((a, b) => a - b);
+      if (ranks.length === 2 && ranks[0] === 0 && ranks[1] === 5 && ((h.hole[0] & 3) !== (h.hole[1] & 3))) unlock(uid, p, 'seven_deuce', out);
+      const hr = msk().getUTCHours();
+      if (hr >= 2 && hr < 5) unlock(uid, p, 'night_owl', out);
+      // испытание дня
+      checkChallenge(uid, p, h, out);
+    } else {
+      s.streak = 0;
+      if ((h.hole || []).length === 2 && h.hole.every((c) => c >> 2 === 12) && h.showdown) unlock(uid, p, 'aces_cracked', out);
+    }
+    if (s.hands >= 100) unlock(uid, p, 'hands_100', out);
+    if (s.hands >= 1000) unlock(uid, p, 'hands_1000', out);
+    if (s.hands >= 10000) unlock(uid, p, 'hands_10000', out);
     if (s.hands >= 500) unlock(uid, p, 'hands_500', out);
     if (getP.get(uid).rating >= 1900) unlock(uid, p, 'gold', out);
     bumpQuests(p, evs, out);
@@ -241,6 +280,12 @@ export function onEvent(uid, ev) {
       evs.tour = 1;
       addXp(p, 20);
       if (ev.place <= 3) evs.tourTop3 = 1;
+      // медали за турниры и очки недели для зала славы
+      p.medals ||= { gold: 0, silver: 0, bronze: 0 };
+      if (ev.place === 1) p.medals.gold++;
+      if (ev.place === 2) p.medals.silver++;
+      if (ev.place === 3) p.medals.bronze++;
+      addFame.run(uid, weekKey(), ev.place === 1 ? 10 : ev.place === 2 ? 6 : ev.place === 3 ? 4 : 1);
       if (ev.place === 1) {
         p.stats.tourWins++;
         unlock(uid, p, 'tour_win', out);
@@ -297,9 +342,20 @@ export function claimDaily(uid) {
       p.chests.rare++;
       msg = `День ${p.bonus.streak}: редкий сундук!`;
     } else {
-      credit(uid, x2(reward), 'daily_bonus');
-      msg = `День ${p.bonus.streak}: +${x2(reward)} фишек`;
+      const chips = Math.round(x2(reward) * (1 + 0.1 * (p.skills?.daily || 0))); // навык «Бонус дня»
+      credit(uid, chips, 'daily_bonus');
+      msg = `День ${p.bonus.streak}: +${chips} фишек`;
     }
+    // навык «Подсказка дня»
+    if (p.skills?.hint) { db.prepare('UPDATE users SET hints = hints + 1 WHERE id = ?').run(uid); msg += ' и подсказка'; }
+    // календарь месяца: отмечаем день, за 10/20/30 дней — сундуки
+    const month = seasonKey();
+    if (p.cal?.month !== month) p.cal = { month, days: [] };
+    const dom = msk().getUTCDate();
+    if (!p.cal.days.includes(dom)) p.cal.days.push(dom);
+    const n = p.cal.days.length;
+    if (n === 10 || n === 20) { p.chests.rare++; msg += ` · календарь: ${n} дней — редкий сундук`; }
+    if (n === 30) { p.chests.epic++; msg += ' · календарь: 30 дней — эпический сундук!'; }
     addXp(p, 10);
     if (p.bonus.streak >= 7) unlock(uid, p, 'streak_7', out);
     save(uid, p);
@@ -316,7 +372,7 @@ export function openChest(uid, kind) {
     const def = CHESTS[kind];
     if (!def || !(p.chests[kind] > 0)) throw new Error('Такого сундука нет');
     p.chests[kind]--;
-    const chips = x2(rnd(def.chips));
+    const chips = Math.round(x2(rnd(def.chips)) * (1 + 0.1 * (p.skills?.chest || 0))); // навык «Сундуки»
     const hints = rnd(def.hints);
     credit(uid, chips, 'chest', kind);
     if (hints) db.prepare('UPDATE users SET hints = hints + ? WHERE id = ?').run(hints, uid);
@@ -370,13 +426,24 @@ export function progressView(uid) {
   return {
     stats: p.stats,
     rank: { ...rank, next: next ? { name: next.name, from: next.from } : null, rating: Math.round(rating) },
-    achievements: ACHIEVEMENTS.map((a) => ({ ...a, at: p.ach[a.key] || null })),
+    achievements: ACHIEVEMENTS.map((a) => (a.secret && !p.ach[a.key] ? { key: a.key, name: '???', text: 'Секретное достижение', secret: true, at: null } : { ...a, at: p.ach[a.key] || null })),
     daily: q(p.daily.quests, DAILY),
     weekly: q(p.weekly.quests, WEEKLY),
     bonus: { streak: p.bonus.streak, today: p.bonus.day === dayKey(), table: DAILY_STREAK },
     chests: p.chests,
     pass: { xp: p.pass.xp, level, perLevel: XP_PER_LEVEL, claimed: p.pass.claimed, levels: PASS_LEVELS },
     season: seasonInfo(),
+    // пачка 10
+    level: { lvl: accLevel(p), xp: (p.xpTotal || 0) % XP_PER_ACC_LEVEL, per: XP_PER_ACC_LEVEL, points: accLevel(p) - spentPoints(p), prestige: p.prestige || 0, prestigeAt: PRESTIGE_LEVEL },
+    skills: SKILLS.map((s) => ({ ...s, lvl: p.skills?.[s.key] || 0 })),
+    cards: p.cards || [],
+    album: p.album || {},
+    best: p.best || null,
+    medals: p.medals || { gold: 0, silver: 0, bronze: 0 },
+    calendar: { month: seasonKey(), days: p.cal?.month === seasonKey() ? p.cal.days : [], today: msk().getUTCDate() },
+    wheel: { today: p.wheel === dayKey(), segments: WHEEL_SEGMENTS },
+    challenge: { text: todayChallenge().text, chips: x2(CHALLENGE_CHIPS), done: p.challenge?.day === dayKey() },
+    records: { biggestPot: db.prepare('SELECT biggest_pot FROM users WHERE id = ?').get(uid)?.biggest_pot || 0, bestStreak: p.stats.bestStreak || 0, wins: p.stats.wins, hands: p.stats.hands, tourWins: p.stats.tourWins },
   };
 }
 
@@ -447,4 +514,133 @@ export function grantChest(uid, kind) {
     p.chests[kind] = (p.chests[kind] || 0) + 1;
     save(uid, p);
   });
+}
+
+// ==================== Пачка 10: навыки, испытание дня, престиж, колесо, титулы, зал славы ====================
+
+// ---------- Уровень аккаунта и дерево навыков ----------
+
+const XP_PER_ACC_LEVEL = 300;
+export const SKILLS = [
+  { key: 'timebank', name: 'Запас времени', text: '+1 таймбанк за столом', max: 2 },
+  { key: 'daily', name: 'Бонус дня', text: '+10% к ежедневному бонусу', max: 3 },
+  { key: 'chest', name: 'Сундуки', text: '+10% фишек из сундуков', max: 3 },
+  { key: 'xp', name: 'Опыт', text: '+10% опыта', max: 3 },
+  { key: 'hint', name: 'Подсказка дня', text: 'бесплатная подсказка с ежедневным бонусом', max: 1 },
+];
+const accLevel = (p) => Math.floor((p.xpTotal || 0) / XP_PER_ACC_LEVEL);
+const spentPoints = (p) => Object.values(p.skills || {}).reduce((a, b) => a + b, 0);
+export function learnSkill(uid, key) {
+  tx(() => {
+    const p = load(uid);
+    const sk = SKILLS.find((x) => x.key === key);
+    if (!sk) throw new Error('Нет такого навыка');
+    p.skills ||= {};
+    if ((p.skills[key] || 0) >= sk.max) throw new Error('Навык уже на максимуме');
+    if (accLevel(p) - spentPoints(p) <= 0) throw new Error('Нет свободных очков — подними уровень');
+    p.skills[key] = (p.skills[key] || 0) + 1;
+    save(uid, p);
+  });
+}
+export const skillLevel = (uid, key) => load(uid)?.skills?.[key] || 0;
+
+// ---------- Престиж: уровень 30+ — сброс уровня и навыков ради звезды и рамки ----------
+
+const PRESTIGE_LEVEL = 30;
+export function doPrestige(uid) {
+  const out = [];
+  tx(() => {
+    const p = load(uid);
+    if (accLevel(p) < PRESTIGE_LEVEL) throw new Error(`Престиж — с ${PRESTIGE_LEVEL} уровня`);
+    p.prestige = (p.prestige || 0) + 1;
+    p.xpTotal = 0;
+    p.skills = {};
+    unlock(uid, p, 'prestige', out);
+    save(uid, p);
+  });
+  for (const t of out) notify(uid, t);
+  return load(uid).prestige;
+}
+export const prestigeOf = (uid) => load(uid)?.prestige || 0;
+
+// ---------- Испытание дня ----------
+
+const CHALLENGES = [
+  { key: 'c72', text: 'Выиграй раздачу с 7-2', test: (h) => sameRanks(h, [0, 5]) },
+  { key: 'cflush', text: 'Выиграй с флешем', test: (h) => h.cat === 5 },
+  { key: 'cset', text: 'Выиграй с сетом', test: (h) => h.cat === 3 },
+  { key: 'cstraight', text: 'Выиграй со стритом', test: (h) => h.cat === 4 },
+  { key: 'c2pair', text: 'Выиграй с двумя парами на вскрытии', test: (h) => h.cat === 2 && h.showdown },
+  { key: 'cbluff', text: 'Выиграй банк от 20 бб без вскрытия', test: (h) => !h.showdown && h.amount >= 20 * h.bb },
+  { key: 'csmall', text: 'Выиграй с картами не старше девятки', test: (h) => (h.hole || []).length === 2 && h.hole.every((c) => c >> 2 <= 7) },
+  { key: 'csuited', text: 'Выиграй с одномастными картами', test: (h) => (h.hole || []).length === 2 && (h.hole[0] & 3) === (h.hole[1] & 3) },
+];
+const CHALLENGE_CHIPS = 1000;
+function sameRanks(h, rs) {
+  const r = (h.hole || []).map((c) => c >> 2).sort((a, b) => a - b);
+  return r.length === 2 && r[0] === rs[0] && r[1] === rs[1];
+}
+function todayChallenge() {
+  const d = dayKey();
+  let x = 0;
+  for (const ch of d) x = (x * 31 + ch.charCodeAt(0)) >>> 0;
+  return CHALLENGES[x % CHALLENGES.length];
+}
+function checkChallenge(uid, p, h, out) {
+  const c = todayChallenge();
+  if (p.challenge?.day === dayKey() || !c.test(h)) return;
+  p.challenge = { day: dayKey() };
+  if (config.progressRewards) credit(uid, x2(CHALLENGE_CHIPS), 'challenge', c.key);
+  addXp(p, 50);
+  out.push(`🎯 Испытание дня выполнено: «${c.text}» — +${x2(CHALLENGE_CHIPS)} фишек`);
+}
+
+// ---------- Колесо удачи: раз в день ----------
+
+const WHEEL = [
+  { w: 30, chips: 200 }, { w: 22, chips: 500 }, { w: 14, chips: 1000 }, { w: 12, hints: 1 },
+  { w: 10, chest: 'common' }, { w: 6, chest: 'rare' }, { w: 4, chips: 3000 }, { w: 2, chips: 10000, jackpot: true },
+];
+export const WHEEL_SEGMENTS = WHEEL.map((s) => (s.chips ? `${s.chips}` : s.hints ? '💡' : s.chest === 'rare' ? '📦★' : '📦'));
+export function spinWheel(uid) {
+  let res = null;
+  const out = [];
+  tx(() => {
+    const p = load(uid);
+    if (p.wheel === dayKey()) throw new Error('Колесо уже крутил сегодня — приходи завтра');
+    p.wheel = dayKey();
+    let r = Math.random() * WHEEL.reduce((a, s) => a + s.w, 0);
+    let i = 0;
+    for (; i < WHEEL.length - 1; i++) { r -= WHEEL[i].w; if (r < 0) break; }
+    const s = WHEEL[i];
+    if (s.chips) credit(uid, x2(s.chips), 'wheel');
+    if (s.hints) db.prepare('UPDATE users SET hints = hints + ? WHERE id = ?').run(s.hints, uid);
+    if (s.chest) p.chests[s.chest]++;
+    if (s.jackpot) unlock(uid, p, 'wheel_jackpot', out);
+    save(uid, p);
+    res = { index: i, text: s.chips ? `+${x2(s.chips)} фишек` : s.hints ? '+1 подсказка' : CHESTS[s.chest].name };
+  });
+  for (const t of out) notify(uid, t);
+  return res;
+}
+
+// ---------- Титулы: из открытых достижений ----------
+
+export function titlesOf(uid) {
+  const p = load(uid);
+  const t = ACHIEVEMENTS.filter((a) => p?.ach?.[a.key]).map((a) => a.name);
+  if (p?.prestige) t.unshift(`★${p.prestige} Престиж`);
+  return t;
+}
+
+// ---------- Зал славы: очки за турниры за неделю ----------
+
+db.exec('CREATE TABLE IF NOT EXISTS fame (user_id INTEGER NOT NULL, week TEXT NOT NULL, points INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (user_id, week))');
+const addFame = db.prepare('INSERT INTO fame (user_id, week, points) VALUES (?, ?, ?) ON CONFLICT (user_id, week) DO UPDATE SET points = points + excluded.points');
+export function fameView() {
+  const week = weekKey();
+  const q = (w, n) => db.prepare(`SELECT u.name, f.points FROM fame f JOIN users u ON u.id = f.user_id
+    WHERE f.week = ? AND ${NOT_ADMIN.replace('id', 'u.id')} ORDER BY f.points DESC LIMIT ?`).all(w, n);
+  const weeks = db.prepare('SELECT DISTINCT week FROM fame WHERE week < ? ORDER BY week DESC LIMIT 8').all(week).map((r) => r.week);
+  return { week: q(week, 10), hall: weeks.map((w) => ({ week: w, top: q(w, 3) })) };
 }

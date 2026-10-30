@@ -2,7 +2,7 @@
 // Аватар и рамку видят все за столом; рубашку — только ты (она в настройках устройства, но открывается здесь).
 import { db } from './db.js';
 import { config } from './config.js';
-import { rankOf, setChestCosmetic } from './progress.js';
+import { rankOf, setChestCosmetic, titlesOf } from './progress.js';
 
 const cols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
 if (!cols.has('photo')) db.exec('ALTER TABLE users ADD COLUMN photo TEXT');
@@ -22,6 +22,7 @@ export const FRAMES = [
   { id: 'royal', name: 'Королевская', how: 'достижение «Королевский»', ach: 'royal' },
   { id: 'neon', name: 'Неон', how: 'из сундука', chest: true },
   { id: 'galaxy', name: 'Галактика', how: 'из сундука', chest: true },
+  { id: 'prestige', name: 'Престиж', how: 'звезда престижа', prestige: true },
 ];
 export const BACKS = [
   { id: 'classic', name: 'Классика', how: 'есть у всех' },
@@ -45,7 +46,8 @@ function load(uid) {
 }
 
 function unlocked(item, { u, c, p }, kind) {
-  if (!item.rank && !item.ach && !item.chest) return true;
+  if (!item.rank && !item.ach && !item.chest && !item.prestige) return true;
+  if (item.prestige && p.prestige) return true;
   if (config.adminIds.includes(u.id)) return true; // у админа открыто всё
   if (item.rank && u.rating >= item.rank) return true;
   if (item.ach && p.ach?.[item.ach]) return true;
@@ -69,6 +71,7 @@ export function publicLook(uid) {
     avatar: d.c.avatar === 'photo' && d.u.photo ? { photo: d.u.photo } : d.c.avatar && AVATARS.includes(d.c.avatar) ? { emoji: d.c.avatar } : null,
     frame: d.c.frame && d.c.frame !== 'none' ? d.c.frame : null,
     rankColor: r.color, rankName: r.name,
+    title: d.c.title || null,
   };
 }
 
@@ -81,6 +84,7 @@ export function lookView(uid) {
     frames: FRAMES.map((f) => ({ id: f.id, name: f.name, how: f.how, owned: unlocked(f, d, 'frame') })),
     backs: BACKS.map((b) => ({ id: b.id, name: b.name, how: b.how, owned: unlocked(b, d, 'back') })),
     vip: vipEmotes(uid), vipEmotes: VIP_EMOTES,
+    title: d.c.title || null, titles: titlesOf(uid),
   };
 }
 
@@ -97,6 +101,9 @@ export function equip(uid, kind, id) {
     if (!item) throw new Error('Нет такого предмета');
     if (!unlocked(item, d, kind)) throw new Error(`Ещё закрыто: ${item.how}`);
     d.c[kind] = id;
+  } else if (kind === 'title') {
+    if (id !== null && !titlesOf(uid).includes(id)) throw new Error('Этот титул ещё не открыт');
+    d.c.title = id;
   } else throw new Error('Неверный тип');
   db.prepare('UPDATE users SET cosmetics = ? WHERE id = ?').run(JSON.stringify(d.c), uid);
 }

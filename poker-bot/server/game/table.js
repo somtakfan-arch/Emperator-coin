@@ -7,6 +7,7 @@ import { Table } from '../../core/engine.js';
 import { describeHand, evaluate, evaluateShort, handCategory } from '../../core/cards.js';
 import { config } from '../config.js';
 import { db, credit } from '../db.js';
+import { skillLevel } from '../progress.js';
 import { knownEquity, bestFive, outs } from './tablefx.js';
 import { publicLook, vipEmotes, VIP_EMOTES } from '../cosmetics.js';
 import { botPhrase } from '../../core/phrases.js';
@@ -50,7 +51,7 @@ export class HumanSeat {
     this.pending = null;
     this.timeouts = 0;
     this.sittingOut = false;
-    this.timebanks = 3; // +15 с к ходу, 3 раза за стол
+    this.timebanks = 3 + (userId > 0 ? skillLevel(userId, 'timebank') : 0); // +15 с к ходу, 3 раза за стол (+ навык)
     this.decisions = []; // ходы этой раздачи — для тренера
     this.session = { hands: 0, won: 0 }; // для итога, когда встаёшь
   }
@@ -552,6 +553,10 @@ export class GameTable {
         vsKing: won && !!king && (e.contributions.find((c) => c.id === king.id)?.total ?? 0) > 0,
         handsWon: p.handsWon ?? 0,
         bb: this.bb,
+        hole: p.bot.hole || [],
+        score: won && score != null ? score : null,
+        handName: won && score != null ? describeHand(score) : null,
+        five: won && score != null && p.bot.hole ? bestFive(p.bot.hole.concat(v.board)) : null,
       });
     }
   }

@@ -496,3 +496,15 @@ textarea.buyin-input { resize: vertical; font: inherit; }
 /* джокер */
 .pcard.joker { background: linear-gradient(135deg, #fff 0%, #ffe9a8 100%); color: #7a2fd0; }
 .pcard.joker .r { font-size: 0.8em; letter-spacing: -0.5px; }
+/* ---------- Пачка 10: календарь, альбом, коллекция ---------- */
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-day { height: 30px; border-radius: 8px; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--muted); }
+.cal-day.done { background: rgba(111,220,140,0.18); border-color: rgba(111,220,140,0.6); color: #fff; }
+.cal-day.today { outline: 2px solid #f5d37a; }
+.album-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.album-item { padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+.album-item.got { color: #fff; border-color: rgba(245,211,122,0.7); background: rgba(245,211,122,0.1); }
+.coll-grid { display: grid; grid-template-columns: repeat(13, 1fr); gap: 2px; }
+.coll-card { font-size: 9px; text-align: center; padding: 3px 0; border-radius: 4px; background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.25); }
+.coll-card.got { background: #fff; color: #111; font-weight: 700; }
+.coll-card.got.red { color: #d33; }

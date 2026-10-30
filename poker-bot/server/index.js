@@ -510,6 +510,12 @@ const handlers = {
     ladder: { ...ladderStep(uid), steps: LADDER_STEPS },
     myBot: botsx.myBot(uid), kinds: BOT_KINDS, bank: botsx.bankView(uid), showPool: botsx.showPool(),
   }),
+  // ---------- прогресс: навыки, престиж, колесо, зал славы, титулы ----------
+  learnSkill(uid, m) { progress.learnSkill(uid, String(m.key)); return { t: 'progress', progress: progress.progressView(uid) }; },
+  prestige(uid) { const n = progress.doPrestige(uid); return { t: 'ok', text: `★ Престиж ${n}! Уровень и навыки сброшены, звезда навсегда твоя`, progress: progress.progressView(uid) }; },
+  spinWheel(uid) { const r = progress.spinWheel(uid); hub.sendMe(uid); return { t: 'ok', ...r, progress: progress.progressView(uid) }; },
+  fame: () => ({ t: 'fame', ...progress.fameView() }),
+  titles: (uid) => ({ t: 'titles', titles: progress.titlesOf(uid) }),
   // ---------- свой бот, бот-заменитель, шоу ботов ----------
   setMyBot(uid, m) { return { t: 'ok', bot: botsx.setMyBot(uid, m) }; },
   bankDeposit(uid, m) { botsx.bankDeposit(uid, m.amount); hub.sendMe(uid); return { t: 'ok', bank: botsx.bankView(uid) }; },

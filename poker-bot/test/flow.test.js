@@ -1044,3 +1044,21 @@ test('боты пачки 9: свой бот, банк бота, шоу бото
   assert.equal(top.kind, 'bots');
   c.close();
 });
+
+test('прогресс пачки 10: колесо, навыки, испытание, зал славы, титулы, секреты скрыты', async () => {
+  const c = new Client(9701);
+  await c.ready;
+  const w = await c.req({ t: 'spinWheel' });
+  assert.ok(w.text);
+  await assert.rejects(c.req({ t: 'spinWheel' }), /уже крутил/);
+  await assert.rejects(c.req({ t: 'learnSkill', key: 'xp' }), /Нет свободных очков/);
+  await assert.rejects(c.req({ t: 'prestige' }), /Престиж/);
+  const p = w.progress;
+  assert.ok(p.challenge.text && p.skills.length === 5 && p.calendar && p.records);
+  assert.ok(p.achievements.some((a) => a.secret && a.name === '???'));
+  const fame = await c.req({ t: 'fame' });
+  assert.ok(Array.isArray(fame.week));
+  await assert.rejects(c.req({ t: 'equip', kind: 'title', id: 'Коллекционер' }), /не открыт/);
+  assertLedger(9701);
+  c.close();
+});

@@ -370,7 +370,8 @@ function playerCardModal(c) {
         h('div', { class: 'row' },
           c.bot ? h('div', { class: 'ava', style: 'width:44px;height:44px;font-size:18px' }, initial(c.name)) : seatAvatar({ name: c.name, look: c.look }),
           h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 'b', style: 'font-size:17px' }, c.name),
-            h('div', { class: 'small', style: c.rankColor ? `color:${c.rankColor}` : '' }, c.bot ? `Бот · ${fmt(c.elo)} Эло` : `${c.rank} · ${fmt(c.rating)} Эло`))),
+            h('div', { class: 'small', style: c.rankColor ? `color:${c.rankColor}` : '' }, c.bot ? `Бот · ${fmt(c.elo)} Эло` : `${c.rank} · ${fmt(c.rating)} Эло`),
+            c.look?.title && h('div', { class: 'small', style: 'color:#f5d37a' }, `«${c.look.title}»`))),
         h('button', { class: 'hint-x', 'aria-label': 'Закрыть', onclick: close }, '✕')),
       c.bot && h('div', { class: 'small soft', style: 'line-height:1.45' }, c.style),
       h('div', { class: 'grid3' },
@@ -420,6 +421,12 @@ function lookCard() {
   const ui = loadUi();
   const pick = (list, cur, onPick) => h('div', { class: 'choices' }, list.map(([id, name]) => h('button', { class: cur === id ? 'on' : '', onclick: () => onPick(id) }, name)));
   return h('div', { class: 'col', style: 'gap:10px' },
+    // титул под ником — из открытых достижений
+    h('div', { class: 'label' }, 'Титул'),
+    (L.titles || []).length ? h('div', { class: 'choices' },
+      h('button', { class: !L.title ? 'on' : '', onclick: () => run({ t: 'equip', kind: 'title', id: null }) }, 'Без титула'),
+      L.titles.map((t) => h('button', { class: L.title === t ? 'on' : '', onclick: () => run({ t: 'equip', kind: 'title', id: t }) }, t)))
+      : h('div', { class: 'small muted' }, 'Титулы открываются с достижениями'),
     h('div', { class: 'label' }, 'Аватар'),
     h('div', { class: 'ava-grid' },
       h('button', { class: `ava-pick ${!L.avatar ? 'on' : ''}`, onclick: () => run({ t: 'equip', kind: 'avatar', id: null }) }, initial(S.me.name)),
@@ -1881,8 +1888,37 @@ function progressScreen() {
       h('div', { class: 'small muted' }, `${q.p}/${q.need} · +${fmt(q.chips)} фишек · +${q.xp} опыта${q.chest ? ` · ${CHEST_NAMES[q.chest].toLowerCase()} сундук` : ''}`)),
     q.claimed ? h('span', { class: 'small', style: 'color:var(--green)' }, 'Получено')
       : h('button', { class: 'btn-sm', disabled: q.p < q.need, onclick: () => run({ t: 'claimQuest', period, key: q.key }) }, 'Забрать'));
+  const setP = (r) => { if (r?.progress) { S.progress = r.progress; render(); } };
+  const L = P.level || { lvl: 0, xp: 0, per: 300, points: 0, prestige: 0, prestigeAt: 30 };
+  const cal = P.calendar || { days: [], today: 1 };
+  const daysInMonth = new Date(Number(cal.month?.slice(0, 4)), Number(cal.month?.slice(5, 7)), 0).getDate() || 30;
   return h('div', { class: 'screen' },
     header('Награды'),
+    // колесо удачи и испытание дня
+    h('div', { class: 'grid2' },
+      h('div', { class: 'glass card', style: 'gap:8px' },
+        h('div', { class: 'b' }, '🎡 Колесо удачи'),
+        h('div', { class: 'small muted', style: 'line-height:1.4' }, (P.wheel?.segments || []).join(' · ')),
+        P.wheel?.today ? h('div', { class: 'small', style: 'color:var(--green)' }, 'Уже крутил — завтра снова')
+          : h('button', { class: 'btn-sm', onclick: async () => { const r = await run({ t: 'spinWheel' }); if (r) { toast(`🎡 ${r.text}`); setP(r); } } }, 'Крутить')),
+      h('div', { class: 'glass card', style: 'gap:8px' },
+        h('div', { class: 'b' }, '🎯 Испытание дня'),
+        h('div', { class: 'small soft', style: 'line-height:1.4' }, P.challenge?.text || ''),
+        P.challenge?.done ? h('div', { class: 'small', style: 'color:var(--green)' }, 'Выполнено ✓') : h('div', { class: 'small muted' }, `+${fmt(P.challenge?.chips || 0)} фишек`))),
+    // уровень аккаунта и навыки
+    h('div', { class: 'label' }, `Уровень ${L.lvl}${L.prestige ? ` · ★${L.prestige} престиж` : ''} · очков навыков: ${L.points}`),
+    h('div', { class: 'glass card', style: 'gap:10px' },
+      h('div', { class: 'progress' }, h('div', { style: `width:${(L.xp / L.per) * 100}%` })),
+      h('div', { class: 'small muted' }, `${L.xp}/${L.per} опыта до уровня ${L.lvl + 1} · каждый уровень — очко навыка`),
+      (P.skills || []).map((sk) => h('div', { class: 'row between', style: 'gap:8px' },
+        h('div', { class: 'col', style: 'gap:2px;min-width:0' }, h('div', { class: 'b', style: 'font-size:14px' }, `${sk.name} · ${sk.lvl}/${sk.max}`), h('div', { class: 'small muted' }, sk.text)),
+        h('button', { class: 'btn-sm', disabled: sk.lvl >= sk.max || L.points <= 0, onclick: async () => setP(await run({ t: 'learnSkill', key: sk.key })) }, '+'))),
+      L.lvl >= L.prestigeAt && h('button', { class: 'btn-ghost', onclick: async () => { if (!confirm('Престиж: уровень и навыки сбросятся, взамен — звезда престижа и рамка. Точно?')) return; const r = await run({ t: 'prestige' }); if (r) { toast(r.text); setP(r); } } }, `★ Престиж (с ${L.prestigeAt} уровня)`)),
+    // календарь месяца
+    h('div', { class: 'label' }, `Календарь входа · ${cal.days.length} из ${daysInMonth} дней`),
+    h('div', { class: 'glass card', style: 'gap:8px' },
+      h('div', { class: 'cal-grid' }, Array.from({ length: daysInMonth }, (_, i) => i + 1).map((d) => h('div', { class: `cal-day ${cal.days.includes(d) ? 'done' : ''} ${d === cal.today ? 'today' : ''}` }, [10, 20, 30].includes(d) ? '📦' : d))),
+      h('div', { class: 'small muted' }, 'День засчитывается, когда забираешь бонус за вход. 10 и 20 дней — редкий сундук, 30 — эпический.')),
     // ранг
     h('div', { class: 'glass card' },
       h('div', { class: 'row between' },
@@ -1943,6 +1979,36 @@ function progressScreen() {
       h('div', { class: 'grid3' }, stat('Раздач', fmt(st.hands)), stat('Выиграно', pctOf(st.wins, st.hands)), stat('Вход в игру', pctOf(st.vpip, st.hands))),
       h('div', { class: 'grid3' }, stat('Вскрытий', fmt(st.showdowns)), stat('Победы на вскр.', pctOf(st.showdownWins, st.showdowns)), stat('Лучшая серия', st.bestStreak || 0)),
       h('div', { class: 'grid3' }, stat('Лучшая рука', st.bestCat >= 0 ? HAND_CATS[st.bestCat] : '—'), stat('Турниров', st.tours), stat('Побед в турн.', st.tourWins))),
+    // рекорды и медали
+    h('div', { class: 'label' }, 'Рекорды и медали'),
+    h('div', { class: 'glass card', style: 'gap:10px' },
+      h('div', { class: 'grid3' }, stat('🥇', P.medals?.gold || 0), stat('🥈', P.medals?.silver || 0), stat('🥉', P.medals?.bronze || 0)),
+      h('div', { class: 'grid3' }, stat('Самый большой банк', fmt(P.records?.biggestPot || 0)), stat('Серия побед', P.records?.bestStreak || 0), stat('Раздач выиграно', fmt(P.records?.wins || 0))),
+      P.best && h('div', { class: 'col', style: 'gap:6px' },
+        h('div', { class: 'small muted' }, `Лучшая рука в жизни: ${P.best.name}`),
+        P.best.cards && h('div', { class: 'tut-cards' }, P.best.cards.map((c) => pcard(c, 'sm'))))),
+    // альбом комбинаций
+    h('div', { class: 'label' }, `Альбом комбинаций · ${Object.keys(P.album || {}).length} из 10`),
+    h('div', { class: 'glass card' },
+      h('div', { class: 'album-grid' }, [...HAND_CATS.map((n, i) => [String(i), n]), ['royal', 'Флеш-рояль']].map(([k, n]) =>
+        h('div', { class: `album-item ${P.album?.[k] ? 'got' : ''}` }, P.album?.[k] ? '✓ ' : '', n)))),
+    // коллекция карт
+    h('div', { class: 'label' }, `Коллекция карт · ${(P.cards || []).length} из 52`),
+    h('div', { class: 'glass card', style: 'gap:8px' },
+      h('div', { class: 'small muted' }, 'Карта попадает в коллекцию, когда ты выигрываешь раздачу с ней на руках. Собери все 52 — эпический сундук.'),
+      // 4 ряда по мастям, в ряду — от двойки до туза
+      h('div', { class: 'coll-grid' }, Array.from({ length: 52 }, (_, i) => i).map((i) => {
+        const c = (i % 13) * 4 + Math.floor(i / 13);
+        return h('div', { class: `coll-card ${(P.cards || []).includes(c) ? 'got' : ''} ${(c & 3) === 1 || (c & 3) === 2 ? 'red' : ''}` }, cardText(c));
+      }))),
+    // зал славы
+    h('button', { class: 'item', onclick: async () => { const r = await run({ t: 'fame' }); if (r) { S.fame = r; render(); } } },
+      h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, '🏛 Зал славы'), h('div', { class: 'small muted' }, 'Очки за турниры за неделю: 1 место — 10, 2 — 6, 3 — 4, участие — 1')), icon('chev')),
+    S.fame && h('div', { class: 'glass card', style: 'gap:6px' },
+      h('div', { class: 'b' }, 'Эта неделя'),
+      S.fame.week.length ? S.fame.week.map((r, i) => h('div', { class: 'row between' }, h('div', {}, `${i + 1}. ${r.name}`), h('div', { class: 'b' }, r.points))) : h('div', { class: 'small muted' }, 'Пока никого — сыграй турнир'),
+      S.fame.hall.length > 0 && h('div', { class: 'b', style: 'padding-top:6px' }, 'Прошлые недели'),
+      S.fame.hall.map((w) => h('div', { class: 'small soft' }, `${w.week}: ${w.top.map((t, i) => `${['🥇', '🥈', '🥉'][i]} ${t.name}`).join('  ')}`))),
     h('div', { style: 'height:80px' }),
     nav());
 }
