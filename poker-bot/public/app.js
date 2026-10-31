@@ -487,7 +487,7 @@ function lookCard() {
   return h('div', { class: 'col', style: 'gap:10px' },
     // титул под ником — из открытых достижений
     h('div', { class: 'label' }, 'Титул'),
-    (L.titles || []).length ? h('div', { class: 'choices' },
+    (L.titles || []).length ? h('div', { class: 'choices wrap' },
       h('button', { class: !L.title ? 'on' : '', onclick: () => run({ t: 'equip', kind: 'title', id: null }) }, 'Без титула'),
       L.titles.map((t) => h('button', { class: L.title === t ? 'on' : '', onclick: () => run({ t: 'equip', kind: 'title', id: t }) }, t)))
       : h('div', { class: 'small muted' }, 'Титулы открываются с достижениями'),
