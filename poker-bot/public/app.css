@@ -196,19 +196,19 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
 .countdown.hurry .cd-bar > div { background: #ff6b5e; }
 
 /* ---------- Фишки ---------- */
-.c-white { --chip: #e9edf0; --edge: #9aa6ad; }
-.c-red { --chip: #c8423a; --edge: #f2d0cc; }
-.c-green { --chip: #2f8f5b; --edge: #c9ead6; }
-.c-black { --chip: #23272a; --edge: #9aa6ad; }
-.c-purple { --chip: #6b4bb8; --edge: #d9cdf5; }
-.c-gold { --chip: #c9a227; --edge: #fff1bf; }
+.c-white { --chip: var(--cw, #e9edf0); --edge: var(--cwe, #9aa6ad); }
+.c-red { --chip: var(--cr, #c8423a); --edge: var(--cre, #f2d0cc); }
+.c-green { --chip: var(--cg, #2f8f5b); --edge: var(--cge, #c9ead6); }
+.c-black { --chip: var(--ck, #23272a); --edge: var(--cke, #9aa6ad); }
+.c-purple { --chip: var(--cp, #6b4bb8); --edge: var(--cpe, #d9cdf5); }
+.c-gold { --chip: var(--cy, #c9a227); --edge: var(--cye, #fff1bf); }
 .pot-chips { display: flex; align-items: flex-end; justify-content: center; gap: 5px; min-height: 30px; }
 .stack { display: flex; flex-direction: column-reverse; align-items: center; }
-.chip { width: 24px; height: 7px; border-radius: 50%; background: var(--chip); border: 1px solid rgba(0,0,0,0.35); box-shadow: inset 0 0 0 2px var(--edge), 0 1px 0 rgba(0,0,0,0.35); margin-top: -3px; }
-.chip-ico { width: 13px; height: 13px; border-radius: 50%; background: var(--chip); box-shadow: inset 0 0 0 2px var(--edge); border: 1px solid rgba(0,0,0,0.3); display: inline-block; flex-shrink: 0; }
+.chip { width: 24px; height: 7px; border-radius: 50%; background: var(--chip-bg, var(--chip)); border: 1px solid rgba(0,0,0,0.35); box-shadow: var(--chip-sh, inset 0 0 0 2px var(--edge), 0 1px 0 rgba(0,0,0,0.35)); margin-top: -3px; }
+.chip-ico { width: 13px; height: 13px; border-radius: 50%; background: var(--chip-bg, var(--chip)); box-shadow: inset 0 0 0 2px var(--edge); border: 1px solid rgba(0,0,0,0.3); display: inline-block; flex-shrink: 0; }
 .chip-bet { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px 3px 4px; }
 #fx { position: fixed; inset: 0; pointer-events: none; z-index: 40; }
-.fly-chip { position: fixed; width: 18px; height: 18px; border-radius: 50%; background: var(--chip); box-shadow: inset 0 0 0 3px var(--edge), 0 3px 8px rgba(0,0,0,0.45); border: 1px dashed rgba(255,255,255,0.55); }
+.fly-chip { position: fixed; width: 18px; height: 18px; border-radius: 50%; background: var(--chip-bg, var(--chip)); box-shadow: var(--chip-sh, inset 0 0 0 3px var(--edge), 0 3px 8px rgba(0,0,0,0.45)); border: 1px dashed rgba(255,255,255,0.55); }
 .plate.win { border-color: #f2c94c; box-shadow: 0 0 0 2px rgba(242,201,76,0.45), 0 0 18px rgba(242,201,76,0.45); animation: winPulse 1.2s ease-in-out 2; }
 @keyframes winPulse { 50% { transform: scale(1.06); } }
 
@@ -352,12 +352,12 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
 .item-pick.on { border-color: var(--silver); background: var(--glass-2); }
 .item-pick.locked { opacity: 0.55; }
 /* рубашки карт */
-.pcard.back.back-red, :root[data-back="red"] .pcard.back { background: repeating-linear-gradient(45deg, #8a1f24 0 4px, #6d171b 4px 8px); border-color: rgba(255,255,255,0.4); }
-.pcard.back.back-blue, :root[data-back="blue"] .pcard.back { background: repeating-linear-gradient(45deg, #1f3f8a 0 4px, #172f6d 4px 8px); border-color: rgba(255,255,255,0.4); }
-.pcard.back.back-silver, :root[data-back="silver"] .pcard.back { background: linear-gradient(145deg, #e6ebee, #8a979d); border-color: #fff; }
-.pcard.back.back-neon, :root[data-back="neon"] .pcard.back { background: #0b1416; border: 1px solid #3df2c9; box-shadow: inset 0 0 8px #3df2c9, 0 0 6px rgba(61,242,201,0.6); }
-.pcard.back.back-gold, :root[data-back="gold"] .pcard.back { background: linear-gradient(145deg, #f7dd8a, #b8892a); border-color: #fff3c4; }
-.pcard.back.back-dragon, :root[data-back="dragon"] .pcard.back { background: radial-gradient(circle at 50% 40%, #e2483a, #5a0f12 70%); border-color: #f2c94c; }
+.pcard.back.back-red, :root[data-back="red"] .pcard.back:not(.preview) { background: repeating-linear-gradient(45deg, #8a1f24 0 4px, #6d171b 4px 8px); border-color: rgba(255,255,255,0.4); }
+.pcard.back.back-blue, :root[data-back="blue"] .pcard.back:not(.preview) { background: repeating-linear-gradient(45deg, #1f3f8a 0 4px, #172f6d 4px 8px); border-color: rgba(255,255,255,0.4); }
+.pcard.back.back-silver, :root[data-back="silver"] .pcard.back:not(.preview) { background: linear-gradient(145deg, #e6ebee, #8a979d); border-color: #fff; }
+.pcard.back.back-neon, :root[data-back="neon"] .pcard.back:not(.preview) { background: #0b1416; border: 1px solid #3df2c9; box-shadow: inset 0 0 8px #3df2c9, 0 0 6px rgba(61,242,201,0.6); }
+.pcard.back.back-gold, :root[data-back="gold"] .pcard.back:not(.preview) { background: linear-gradient(145deg, #f7dd8a, #b8892a); border-color: #fff3c4; }
+.pcard.back.back-dragon, :root[data-back="dragon"] .pcard.back:not(.preview) { background: radial-gradient(circle at 50% 40%, #e2483a, #5a0f12 70%); border-color: #f2c94c; }
 /* колода в 4 цвета */
 :root.deck4 .pcard.s2 { color: #1f6fd6; }
 :root.deck4 .pcard.s3 { color: #1e8a4a; }
@@ -375,8 +375,6 @@ input[type=range] { width: 100%; accent-color: #e6ebee; }
 .bottom-dock { z-index: 4; }
 .table-top { z-index: 3; }
 /* стили фишек */
-:root[data-chips="neon"] .chip, :root[data-chips="neon"] .fly-chip { background: #0b1416 !important; box-shadow: inset 0 0 0 2px #3df2c9, 0 0 6px #3df2c9 !important; }
-:root[data-chips="gold"] .chip, :root[data-chips="gold"] .fly-chip { background: linear-gradient(90deg, #b8892a, #f7dd8a, #b8892a) !important; box-shadow: inset 0 0 0 2px #fff3c4 !important; }
 /* живой фон: медленные огоньки */
 :root.anim .table-screen::before { content: ''; position: absolute; inset: -20%; background: radial-gradient(3px 3px at 20% 30%, rgba(255,255,255,0.35), transparent), radial-gradient(2px 2px at 60% 70%, rgba(242,201,76,0.4), transparent), radial-gradient(2px 2px at 80% 20%, rgba(127,209,168,0.4), transparent), radial-gradient(3px 3px at 35% 85%, rgba(255,255,255,0.25), transparent); animation: drift 18s linear infinite; pointer-events: none; z-index: 0; }
 @keyframes drift { from { transform: translateY(0); } to { transform: translateY(-20%); } }
@@ -519,9 +517,6 @@ textarea.buyin-input { resize: vertical; font: inherit; }
 :root[data-scene="neon"] .felt { background: #06060f; border-color: #ff2bd6; box-shadow: 0 0 0 2px #ff2bd6, 0 0 24px #ff2bd6, inset 0 0 40px rgba(0,240,255,0.25); }
 :root[data-scene="photo"] .table-screen { background: center / cover no-repeat var(--tbg), #0b1012; }
 :root[data-scene="photo"] .felt { background: rgba(20,60,40,0.55); backdrop-filter: blur(5px); -webkit-backdrop-filter: blur(5px); }
-:root[data-chips="halloween"] .chip, :root[data-chips="halloween"] .fly-chip { background: #ff7a1a !important; box-shadow: inset 0 0 0 2px #1a1a1a, inset 0 0 0 4px #ff7a1a !important; }
-:root[data-chips="newyear"] .chip, :root[data-chips="newyear"] .fly-chip { background: repeating-conic-gradient(#d92b2b 0 25%, #fff 0 50%) !important; box-shadow: inset 0 0 0 2px #1f8a4a !important; }
-:root[data-chips="valentine"] .chip, :root[data-chips="valentine"] .fly-chip { background: #ff5a8a !important; box-shadow: inset 0 0 0 2px #fff0f5 !important; }
 .ava-anim { animation: avaPulse 1.6s ease-in-out infinite; }
 @keyframes avaPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.12) rotate(-6deg); } }
 .win-fx { position: fixed; inset: 0; pointer-events: none; z-index: 900; overflow: hidden; }
@@ -564,239 +559,98 @@ textarea.buyin-input { resize: vertical; font: inherit; }
 .exam-opt.on { border-color: #f5d37a; background: rgba(245,211,122,0.12); }
 
 /* ---------- Пачка 14: быстрые настройки, одной рукой ---------- */
-.quick-set { position: absolute; top: calc(66px + env(safe-area-inset-top)); left: 12px; right: 12px; z-index: 30; gap: 8px; background: rgba(12,24,26,0.97) !important; }
+.quick-set { position: absolute; top: calc(66px + env(safe-area-inset-top)); left: 12px; right: 12px; z-index: 30; gap: 8px; max-height: 72vh; overflow-y: auto; background: rgba(12,24,26,0.97) !important; }
 .onehand .table-top .icon-btn { display: none; }
 .onehand-row { display: flex; gap: 8px; justify-content: flex-end; padding: 0 6px 6px; pointer-events: auto; }
 
 /* ---------- 50 новых рубашек (сгенерировано) ---------- */
-.pcard.back.back-casino_red, :root[data-back="casino_red"] .pcard.back { background: repeating-linear-gradient(45deg, #b3262b 0 1.5px, transparent 1.5px 6px), repeating-linear-gradient(-45deg, #b3262b 0 1.5px, #8e1b20 1.5px 6px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
-.pcard.back.back-casino_blue, :root[data-back="casino_blue"] .pcard.back { background: repeating-linear-gradient(45deg, #24489c 0 1.5px, transparent 1.5px 6px), repeating-linear-gradient(-45deg, #24489c 0 1.5px, #1b367a 1.5px 6px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
-.pcard.back.back-casino_black, :root[data-back="casino_black"] .pcard.back { background: repeating-linear-gradient(45deg, #3a3a3a 0 1.5px, transparent 1.5px 6px), repeating-linear-gradient(-45deg, #3a3a3a 0 1.5px, #161616 1.5px 6px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
-.pcard.back.back-casino_green, :root[data-back="casino_green"] .pcard.back { background: repeating-linear-gradient(45deg, #1f7a46 0 1.5px, transparent 1.5px 6px), repeating-linear-gradient(-45deg, #1f7a46 0 1.5px, #145a33 1.5px 6px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
-.pcard.back.back-casino_purple, :root[data-back="casino_purple"] .pcard.back { background: repeating-linear-gradient(45deg, #6a3fb3 0 1.5px, transparent 1.5px 6px), repeating-linear-gradient(-45deg, #6a3fb3 0 1.5px, #4d2a8a 1.5px 6px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
-.pcard.back.back-casino_gold, :root[data-back="casino_gold"] .pcard.back { background: repeating-linear-gradient(45deg, #d8b04a 0 1.5px, transparent 1.5px 6px), repeating-linear-gradient(-45deg, #d8b04a 0 1.5px, #9c7a22 1.5px 6px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
-.pcard.back.back-emblem_red, :root[data-back="emblem_red"] .pcard.back { background: radial-gradient(circle at 50% 50%, #fff 0 5px, #a3242a 5.5px 7px, transparent 7.5px), repeating-linear-gradient(45deg, #a3242a 0 2px, #7c1a1f 2px 5px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
-.pcard.back.back-emblem_blue, :root[data-back="emblem_blue"] .pcard.back { background: radial-gradient(circle at 50% 50%, #fff 0 5px, #24489c 5.5px 7px, transparent 7.5px), repeating-linear-gradient(45deg, #24489c 0 2px, #183170 2px 5px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
-.pcard.back.back-emblem_black, :root[data-back="emblem_black"] .pcard.back { background: radial-gradient(circle at 50% 50%, #fff 0 5px, #444 5.5px 7px, transparent 7.5px), repeating-linear-gradient(45deg, #444 0 2px, #1a1a1a 2px 5px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
-.pcard.back.back-emblem_royal, :root[data-back="emblem_royal"] .pcard.back { background: radial-gradient(circle at 50% 50%, #fff 0 5px, #6a3fb3 5.5px 7px, transparent 7.5px), repeating-linear-gradient(45deg, #6a3fb3 0 2px, #2a1450 2px 5px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 2px #f2c94c; }
-.pcard.back.back-stripe_mint, :root[data-back="stripe_mint"] .pcard.back { background: repeating-linear-gradient(45deg, #3fc9a3 0 3px, #2a9a7c 3px 6px); border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-stripe_coral, :root[data-back="stripe_coral"] .pcard.back { background: repeating-linear-gradient(45deg, #ff7a6b 0 3px, #d9584a 3px 6px); border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-stripe_sky, :root[data-back="stripe_sky"] .pcard.back { background: repeating-linear-gradient(45deg, #5ab0ff 0 3px, #3a86d9 3px 6px); border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-stripe_night, :root[data-back="stripe_night"] .pcard.back { background: repeating-linear-gradient(45deg, #2c3a66 0 3px, #1a2240 3px 6px); border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-stripe_candy, :root[data-back="stripe_candy"] .pcard.back { background: repeating-linear-gradient(45deg, #ff4d6d 0 3px, #ffffff 3px 6px); border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-dots_red, :root[data-back="dots_red"] .pcard.back { background: radial-gradient(circle, #ffd0d0 1.4px, transparent 1.8px) 0 0 / 6px 6px, #b3262b; border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
-.pcard.back.back-dots_blue, :root[data-back="dots_blue"] .pcard.back { background: radial-gradient(circle, #cfe0ff 1.4px, transparent 1.8px) 0 0 / 6px 6px, #24489c; border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
-.pcard.back.back-dots_black, :root[data-back="dots_black"] .pcard.back { background: radial-gradient(circle, #888 1.4px, transparent 1.8px) 0 0 / 6px 6px, #151515; border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-dots_gold, :root[data-back="dots_gold"] .pcard.back { background: radial-gradient(circle, #ffe9a8 1.4px, transparent 1.8px) 0 0 / 6px 6px, #8a6a1a; border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-dots_pink, :root[data-back="dots_pink"] .pcard.back { background: radial-gradient(circle, #ffffff 1.4px, transparent 1.8px) 0 0 / 6px 6px, #ff7aa8; border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-check_red, :root[data-back="check_red"] .pcard.back { background: repeating-conic-gradient(#b3262b 0 25%, #7c1a1f 0 50%) 0 0 / 8px 8px; border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-check_bw, :root[data-back="check_bw"] .pcard.back { background: repeating-conic-gradient(#f2f2f2 0 25%, #1a1a1a 0 50%) 0 0 / 8px 8px; border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-check_green, :root[data-back="check_green"] .pcard.back { background: repeating-conic-gradient(#2f8f5b 0 25%, #1d5e3b 0 50%) 0 0 / 8px 8px; border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-check_violet, :root[data-back="check_violet"] .pcard.back { background: repeating-conic-gradient(#8a5ad9 0 25%, #5a33a8 0 50%) 0 0 / 8px 8px; border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-burst_sun, :root[data-back="burst_sun"] .pcard.back { background: repeating-conic-gradient(from 0deg at 50% 50%, #ffb547 0 9deg, #ff7a1a 9deg 18deg); border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-burst_ice, :root[data-back="burst_ice"] .pcard.back { background: repeating-conic-gradient(from 0deg at 50% 50%, #d8f3ff 0 9deg, #7cc4e8 9deg 18deg); border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-burst_fire, :root[data-back="burst_fire"] .pcard.back { background: repeating-conic-gradient(from 0deg at 50% 50%, #ff3b1a 0 9deg, #8e0e00 9deg 18deg); border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-burst_galaxy, :root[data-back="burst_galaxy"] .pcard.back { background: repeating-conic-gradient(from 0deg at 50% 50%, #3a1a7a 0 9deg, #0a0620 9deg 18deg); border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-rings_ocean, :root[data-back="rings_ocean"] .pcard.back { background: repeating-radial-gradient(circle at 50% 50%, #2a7fb8 0 2px, #1a5a8a 2px 5px); border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-rings_lava, :root[data-back="rings_lava"] .pcard.back { background: repeating-radial-gradient(circle at 50% 50%, #ff5a1a 0 2px, #6a1006 2px 5px); border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-rings_hypno, :root[data-back="rings_hypno"] .pcard.back { background: repeating-radial-gradient(circle at 50% 50%, #ffffff 0 2px, #111111 2px 5px); border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-rings_mint, :root[data-back="rings_mint"] .pcard.back { background: repeating-radial-gradient(circle at 50% 50%, #7ff0c8 0 2px, #2a9a7c 2px 5px); border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-zig_red, :root[data-back="zig_red"] .pcard.back { background: linear-gradient(135deg, #d9343a 25%, transparent 25%) -4px 0 / 8px 8px, linear-gradient(225deg, #d9343a 25%, transparent 25%) -4px 0 / 8px 8px, linear-gradient(315deg, #d9343a 25%, transparent 25%) 0 0 / 8px 8px, linear-gradient(45deg, #d9343a 25%, #7c1a1f 25%) 0 0 / 8px 8px; border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-zig_blue, :root[data-back="zig_blue"] .pcard.back { background: linear-gradient(135deg, #3a6ad9 25%, transparent 25%) -4px 0 / 8px 8px, linear-gradient(225deg, #3a6ad9 25%, transparent 25%) -4px 0 / 8px 8px, linear-gradient(315deg, #3a6ad9 25%, transparent 25%) 0 0 / 8px 8px, linear-gradient(45deg, #3a6ad9 25%, #1b367a 25%) 0 0 / 8px 8px; border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-zig_gold, :root[data-back="zig_gold"] .pcard.back { background: linear-gradient(135deg, #f2c94c 25%, transparent 25%) -4px 0 / 8px 8px, linear-gradient(225deg, #f2c94c 25%, transparent 25%) -4px 0 / 8px 8px, linear-gradient(315deg, #f2c94c 25%, transparent 25%) 0 0 / 8px 8px, linear-gradient(45deg, #f2c94c 25%, #5a4310 25%) 0 0 / 8px 8px; border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-zig_neon, :root[data-back="zig_neon"] .pcard.back { background: linear-gradient(135deg, #3df2c9 25%, transparent 25%) -4px 0 / 8px 8px, linear-gradient(225deg, #3df2c9 25%, transparent 25%) -4px 0 / 8px 8px, linear-gradient(315deg, #3df2c9 25%, transparent 25%) 0 0 / 8px 8px, linear-gradient(45deg, #3df2c9 25%, #0b1416 25%) 0 0 / 8px 8px; border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-plaid_scot, :root[data-back="plaid_scot"] .pcard.back { background: repeating-linear-gradient(0deg, #ff3b3b55 0 3px, transparent 3px 9px), repeating-linear-gradient(90deg, #ff3b3b55 0 3px, transparent 3px 9px), #1a3a6a; border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-plaid_forest, :root[data-back="plaid_forest"] .pcard.back { background: repeating-linear-gradient(0deg, #ffd24a55 0 3px, transparent 3px 9px), repeating-linear-gradient(90deg, #ffd24a55 0 3px, transparent 3px 9px), #1d4a2a; border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-plaid_grey, :root[data-back="plaid_grey"] .pcard.back { background: repeating-linear-gradient(0deg, #ffffff55 0 3px, transparent 3px 9px), repeating-linear-gradient(90deg, #ffffff55 0 3px, transparent 3px 9px), #4a5258; border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-grad_sunset, :root[data-back="grad_sunset"] .pcard.back { background: linear-gradient(145deg, #ff7e5f, #6a2a7a); border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-grad_ocean, :root[data-back="grad_ocean"] .pcard.back { background: linear-gradient(145deg, #2193b0, #0b3550); border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-grad_mint, :root[data-back="grad_mint"] .pcard.back { background: linear-gradient(145deg, #a8f0d8, #2a9a7c); border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-grad_wine, :root[data-back="grad_wine"] .pcard.back { background: linear-gradient(145deg, #8a1f3a, #2a0612); border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-grad_steel, :root[data-back="grad_steel"] .pcard.back { background: linear-gradient(145deg, #c9d1d6, #4a5258); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
-.pcard.back.back-grad_emerald, :root[data-back="grad_emerald"] .pcard.back { background: linear-gradient(145deg, #2fd68a, #0a3a22); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 2px #f2c94c; }
-.pcard.back.back-grad_aurora, :root[data-back="grad_aurora"] .pcard.back { background: linear-gradient(145deg, #3df2c9, #6a3fb3); border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-prestige_star, :root[data-back="prestige_star"] .pcard.back { background: radial-gradient(circle at 50% 50%, #fff 0 5px, #c9a227 5.5px 7px, transparent 7.5px), repeating-linear-gradient(45deg, #c9a227 0 2px, #3a2a06 2px 5px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 2px #f2c94c; }
-.pcard.back.back-ghost, :root[data-back="ghost"] .pcard.back { background: repeating-radial-gradient(circle at 50% 50%, #c8d8ff22 0 2px, #0a0a14 2px 5px); border-color: rgba(255,255,255,0.45);  }
-.pcard.back.back-collector, :root[data-back="collector"] .pcard.back { background: radial-gradient(circle at 50% 50%, #fff 0 5px, #2a7fb8 5.5px 7px, transparent 7.5px), repeating-linear-gradient(45deg, #2a7fb8 0 2px, #0b1e2e 2px 5px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 2px #f2c94c; }
-.pcard.back.back-champion, :root[data-back="champion"] .pcard.back { background: repeating-conic-gradient(from 0deg at 50% 50%, #f2c94c 0 9deg, #8a6a1a 9deg 18deg); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 2px #f2c94c; }
+.pcard.back.back-casino_red, :root[data-back="casino_red"] .pcard.back:not(.preview) { background: repeating-linear-gradient(45deg, #b3262b 0 1.5px, transparent 1.5px 6px), repeating-linear-gradient(-45deg, #b3262b 0 1.5px, #8e1b20 1.5px 6px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
+.pcard.back.back-casino_blue, :root[data-back="casino_blue"] .pcard.back:not(.preview) { background: repeating-linear-gradient(45deg, #24489c 0 1.5px, transparent 1.5px 6px), repeating-linear-gradient(-45deg, #24489c 0 1.5px, #1b367a 1.5px 6px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
+.pcard.back.back-casino_black, :root[data-back="casino_black"] .pcard.back:not(.preview) { background: repeating-linear-gradient(45deg, #3a3a3a 0 1.5px, transparent 1.5px 6px), repeating-linear-gradient(-45deg, #3a3a3a 0 1.5px, #161616 1.5px 6px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
+.pcard.back.back-casino_green, :root[data-back="casino_green"] .pcard.back:not(.preview) { background: repeating-linear-gradient(45deg, #1f7a46 0 1.5px, transparent 1.5px 6px), repeating-linear-gradient(-45deg, #1f7a46 0 1.5px, #145a33 1.5px 6px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
+.pcard.back.back-casino_purple, :root[data-back="casino_purple"] .pcard.back:not(.preview) { background: repeating-linear-gradient(45deg, #6a3fb3 0 1.5px, transparent 1.5px 6px), repeating-linear-gradient(-45deg, #6a3fb3 0 1.5px, #4d2a8a 1.5px 6px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
+.pcard.back.back-casino_gold, :root[data-back="casino_gold"] .pcard.back:not(.preview) { background: repeating-linear-gradient(45deg, #d8b04a 0 1.5px, transparent 1.5px 6px), repeating-linear-gradient(-45deg, #d8b04a 0 1.5px, #9c7a22 1.5px 6px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
+.pcard.back.back-emblem_red, :root[data-back="emblem_red"] .pcard.back:not(.preview) { background: radial-gradient(circle at 50% 50%, #fff 0 5px, #a3242a 5.5px 7px, transparent 7.5px), repeating-linear-gradient(45deg, #a3242a 0 2px, #7c1a1f 2px 5px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
+.pcard.back.back-emblem_blue, :root[data-back="emblem_blue"] .pcard.back:not(.preview) { background: radial-gradient(circle at 50% 50%, #fff 0 5px, #24489c 5.5px 7px, transparent 7.5px), repeating-linear-gradient(45deg, #24489c 0 2px, #183170 2px 5px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
+.pcard.back.back-emblem_black, :root[data-back="emblem_black"] .pcard.back:not(.preview) { background: radial-gradient(circle at 50% 50%, #fff 0 5px, #444 5.5px 7px, transparent 7.5px), repeating-linear-gradient(45deg, #444 0 2px, #1a1a1a 2px 5px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
+.pcard.back.back-emblem_royal, :root[data-back="emblem_royal"] .pcard.back:not(.preview) { background: radial-gradient(circle at 50% 50%, #fff 0 5px, #6a3fb3 5.5px 7px, transparent 7.5px), repeating-linear-gradient(45deg, #6a3fb3 0 2px, #2a1450 2px 5px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 2px #f2c94c; }
+.pcard.back.back-stripe_mint, :root[data-back="stripe_mint"] .pcard.back:not(.preview) { background: repeating-linear-gradient(45deg, #3fc9a3 0 3px, #2a9a7c 3px 6px); border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-stripe_coral, :root[data-back="stripe_coral"] .pcard.back:not(.preview) { background: repeating-linear-gradient(45deg, #ff7a6b 0 3px, #d9584a 3px 6px); border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-stripe_sky, :root[data-back="stripe_sky"] .pcard.back:not(.preview) { background: repeating-linear-gradient(45deg, #5ab0ff 0 3px, #3a86d9 3px 6px); border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-stripe_night, :root[data-back="stripe_night"] .pcard.back:not(.preview) { background: repeating-linear-gradient(45deg, #2c3a66 0 3px, #1a2240 3px 6px); border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-stripe_candy, :root[data-back="stripe_candy"] .pcard.back:not(.preview) { background: repeating-linear-gradient(45deg, #ff4d6d 0 3px, #ffffff 3px 6px); border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-dots_red, :root[data-back="dots_red"] .pcard.back:not(.preview) { background: radial-gradient(circle, #ffd0d0 1.4px, transparent 1.8px) 0 0 / 6px 6px, #b3262b; border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
+.pcard.back.back-dots_blue, :root[data-back="dots_blue"] .pcard.back:not(.preview) { background: radial-gradient(circle, #cfe0ff 1.4px, transparent 1.8px) 0 0 / 6px 6px, #24489c; border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
+.pcard.back.back-dots_black, :root[data-back="dots_black"] .pcard.back:not(.preview) { background: radial-gradient(circle, #888 1.4px, transparent 1.8px) 0 0 / 6px 6px, #151515; border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-dots_gold, :root[data-back="dots_gold"] .pcard.back:not(.preview) { background: radial-gradient(circle, #ffe9a8 1.4px, transparent 1.8px) 0 0 / 6px 6px, #8a6a1a; border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-dots_pink, :root[data-back="dots_pink"] .pcard.back:not(.preview) { background: radial-gradient(circle, #ffffff 1.4px, transparent 1.8px) 0 0 / 6px 6px, #ff7aa8; border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-check_red, :root[data-back="check_red"] .pcard.back:not(.preview) { background: repeating-conic-gradient(#b3262b 0 25%, #7c1a1f 0 50%) 0 0 / 8px 8px; border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-check_bw, :root[data-back="check_bw"] .pcard.back:not(.preview) { background: repeating-conic-gradient(#f2f2f2 0 25%, #1a1a1a 0 50%) 0 0 / 8px 8px; border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-check_green, :root[data-back="check_green"] .pcard.back:not(.preview) { background: repeating-conic-gradient(#2f8f5b 0 25%, #1d5e3b 0 50%) 0 0 / 8px 8px; border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-check_violet, :root[data-back="check_violet"] .pcard.back:not(.preview) { background: repeating-conic-gradient(#8a5ad9 0 25%, #5a33a8 0 50%) 0 0 / 8px 8px; border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-burst_sun, :root[data-back="burst_sun"] .pcard.back:not(.preview) { background: repeating-conic-gradient(from 0deg at 50% 50%, #ffb547 0 9deg, #ff7a1a 9deg 18deg); border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-burst_ice, :root[data-back="burst_ice"] .pcard.back:not(.preview) { background: repeating-conic-gradient(from 0deg at 50% 50%, #d8f3ff 0 9deg, #7cc4e8 9deg 18deg); border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-burst_fire, :root[data-back="burst_fire"] .pcard.back:not(.preview) { background: repeating-conic-gradient(from 0deg at 50% 50%, #ff3b1a 0 9deg, #8e0e00 9deg 18deg); border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-burst_galaxy, :root[data-back="burst_galaxy"] .pcard.back:not(.preview) { background: repeating-conic-gradient(from 0deg at 50% 50%, #3a1a7a 0 9deg, #0a0620 9deg 18deg); border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-rings_ocean, :root[data-back="rings_ocean"] .pcard.back:not(.preview) { background: repeating-radial-gradient(circle at 50% 50%, #2a7fb8 0 2px, #1a5a8a 2px 5px); border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-rings_lava, :root[data-back="rings_lava"] .pcard.back:not(.preview) { background: repeating-radial-gradient(circle at 50% 50%, #ff5a1a 0 2px, #6a1006 2px 5px); border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-rings_hypno, :root[data-back="rings_hypno"] .pcard.back:not(.preview) { background: repeating-radial-gradient(circle at 50% 50%, #ffffff 0 2px, #111111 2px 5px); border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-rings_mint, :root[data-back="rings_mint"] .pcard.back:not(.preview) { background: repeating-radial-gradient(circle at 50% 50%, #7ff0c8 0 2px, #2a9a7c 2px 5px); border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-zig_red, :root[data-back="zig_red"] .pcard.back:not(.preview) { background: linear-gradient(135deg, #d9343a 25%, transparent 25%) -4px 0 / 8px 8px, linear-gradient(225deg, #d9343a 25%, transparent 25%) -4px 0 / 8px 8px, linear-gradient(315deg, #d9343a 25%, transparent 25%) 0 0 / 8px 8px, linear-gradient(45deg, #d9343a 25%, #7c1a1f 25%) 0 0 / 8px 8px; border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-zig_blue, :root[data-back="zig_blue"] .pcard.back:not(.preview) { background: linear-gradient(135deg, #3a6ad9 25%, transparent 25%) -4px 0 / 8px 8px, linear-gradient(225deg, #3a6ad9 25%, transparent 25%) -4px 0 / 8px 8px, linear-gradient(315deg, #3a6ad9 25%, transparent 25%) 0 0 / 8px 8px, linear-gradient(45deg, #3a6ad9 25%, #1b367a 25%) 0 0 / 8px 8px; border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-zig_gold, :root[data-back="zig_gold"] .pcard.back:not(.preview) { background: linear-gradient(135deg, #f2c94c 25%, transparent 25%) -4px 0 / 8px 8px, linear-gradient(225deg, #f2c94c 25%, transparent 25%) -4px 0 / 8px 8px, linear-gradient(315deg, #f2c94c 25%, transparent 25%) 0 0 / 8px 8px, linear-gradient(45deg, #f2c94c 25%, #5a4310 25%) 0 0 / 8px 8px; border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-zig_neon, :root[data-back="zig_neon"] .pcard.back:not(.preview) { background: linear-gradient(135deg, #3df2c9 25%, transparent 25%) -4px 0 / 8px 8px, linear-gradient(225deg, #3df2c9 25%, transparent 25%) -4px 0 / 8px 8px, linear-gradient(315deg, #3df2c9 25%, transparent 25%) 0 0 / 8px 8px, linear-gradient(45deg, #3df2c9 25%, #0b1416 25%) 0 0 / 8px 8px; border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-plaid_scot, :root[data-back="plaid_scot"] .pcard.back:not(.preview) { background: repeating-linear-gradient(0deg, #ff3b3b55 0 3px, transparent 3px 9px), repeating-linear-gradient(90deg, #ff3b3b55 0 3px, transparent 3px 9px), #1a3a6a; border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-plaid_forest, :root[data-back="plaid_forest"] .pcard.back:not(.preview) { background: repeating-linear-gradient(0deg, #ffd24a55 0 3px, transparent 3px 9px), repeating-linear-gradient(90deg, #ffd24a55 0 3px, transparent 3px 9px), #1d4a2a; border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-plaid_grey, :root[data-back="plaid_grey"] .pcard.back:not(.preview) { background: repeating-linear-gradient(0deg, #ffffff55 0 3px, transparent 3px 9px), repeating-linear-gradient(90deg, #ffffff55 0 3px, transparent 3px 9px), #4a5258; border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-grad_sunset, :root[data-back="grad_sunset"] .pcard.back:not(.preview) { background: linear-gradient(145deg, #ff7e5f, #6a2a7a); border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-grad_ocean, :root[data-back="grad_ocean"] .pcard.back:not(.preview) { background: linear-gradient(145deg, #2193b0, #0b3550); border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-grad_mint, :root[data-back="grad_mint"] .pcard.back:not(.preview) { background: linear-gradient(145deg, #a8f0d8, #2a9a7c); border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-grad_wine, :root[data-back="grad_wine"] .pcard.back:not(.preview) { background: linear-gradient(145deg, #8a1f3a, #2a0612); border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-grad_steel, :root[data-back="grad_steel"] .pcard.back:not(.preview) { background: linear-gradient(145deg, #c9d1d6, #4a5258); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 3px #fff, inset 0 0 0 4px rgba(0,0,0,0.25); }
+.pcard.back.back-grad_emerald, :root[data-back="grad_emerald"] .pcard.back:not(.preview) { background: linear-gradient(145deg, #2fd68a, #0a3a22); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 2px #f2c94c; }
+.pcard.back.back-grad_aurora, :root[data-back="grad_aurora"] .pcard.back:not(.preview) { background: linear-gradient(145deg, #3df2c9, #6a3fb3); border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-prestige_star, :root[data-back="prestige_star"] .pcard.back:not(.preview) { background: radial-gradient(circle at 50% 50%, #fff 0 5px, #c9a227 5.5px 7px, transparent 7.5px), repeating-linear-gradient(45deg, #c9a227 0 2px, #3a2a06 2px 5px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 2px #f2c94c; }
+.pcard.back.back-ghost, :root[data-back="ghost"] .pcard.back:not(.preview) { background: repeating-radial-gradient(circle at 50% 50%, #c8d8ff22 0 2px, #0a0a14 2px 5px); border-color: rgba(255,255,255,0.45);  }
+.pcard.back.back-collector, :root[data-back="collector"] .pcard.back:not(.preview) { background: radial-gradient(circle at 50% 50%, #fff 0 5px, #2a7fb8 5.5px 7px, transparent 7.5px), repeating-linear-gradient(45deg, #2a7fb8 0 2px, #0b1e2e 2px 5px); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 2px #f2c94c; }
+.pcard.back.back-champion, :root[data-back="champion"] .pcard.back:not(.preview) { background: repeating-conic-gradient(from 0deg at 50% 50%, #f2c94c 0 9deg, #8a6a1a 9deg 18deg); border-color: rgba(255,255,255,0.45); box-shadow: inset 0 0 0 2px #f2c94c; }
 /* ---------- 30 новых стилей фишек: свои цвета для каждого номинала ---------- */
-:root[data-chips="ocean"] .c-white { --chip: #e0f4ff; --edge: #00000055; }
-:root[data-chips="ocean"] .c-red { --chip: #1f6fb2; --edge: #ffffffcc; }
-:root[data-chips="ocean"] .c-green { --chip: #2aa8a0; --edge: #ffffffcc; }
-:root[data-chips="ocean"] .c-black { --chip: #0b2e4a; --edge: #ffffffcc; }
-:root[data-chips="ocean"] .c-purple { --chip: #4a5ad9; --edge: #ffffffcc; }
-:root[data-chips="ocean"] .c-gold { --chip: #7fd1ff; --edge: #ffffffcc; }
-:root[data-chips="forest"] .c-white { --chip: #e8f2dc; --edge: #00000055; }
-:root[data-chips="forest"] .c-red { --chip: #7a3a1a; --edge: #ffffffcc; }
-:root[data-chips="forest"] .c-green { --chip: #2f7a3a; --edge: #ffffffcc; }
-:root[data-chips="forest"] .c-black { --chip: #1a2a14; --edge: #ffffffcc; }
-:root[data-chips="forest"] .c-purple { --chip: #5a6a2a; --edge: #ffffffcc; }
-:root[data-chips="forest"] .c-gold { --chip: #c9a227; --edge: #ffffffcc; }
-:root[data-chips="candy"] .c-white { --chip: #fff0f6; --edge: #00000055; }
-:root[data-chips="candy"] .c-red { --chip: #ff4d8a; --edge: #ffffffcc; }
-:root[data-chips="candy"] .c-green { --chip: #5ad9a8; --edge: #ffffffcc; }
-:root[data-chips="candy"] .c-black { --chip: #5a2a4a; --edge: #ffffffcc; }
-:root[data-chips="candy"] .c-purple { --chip: #a86aff; --edge: #ffffffcc; }
-:root[data-chips="candy"] .c-gold { --chip: #ffd24a; --edge: #ffffffcc; }
-:root[data-chips="pastel"] .c-white { --chip: #ffffff; --edge: #00000055; }
-:root[data-chips="pastel"] .c-red { --chip: #ffb3b3; --edge: #ffffffcc; }
-:root[data-chips="pastel"] .c-green { --chip: #b3f0d0; --edge: #ffffffcc; }
-:root[data-chips="pastel"] .c-black { --chip: #8a8a9a; --edge: #ffffffcc; }
-:root[data-chips="pastel"] .c-purple { --chip: #cdb3ff; --edge: #ffffffcc; }
-:root[data-chips="pastel"] .c-gold { --chip: #ffe6a8; --edge: #ffffffcc; }
-:root[data-chips="metal"] .c-white { --chip: #e6ebee; --edge: #00000055; }
-:root[data-chips="metal"] .c-red { --chip: #b87333; --edge: #ffffffcc; }
-:root[data-chips="metal"] .c-green { --chip: #8a9aa0; --edge: #ffffffcc; }
-:root[data-chips="metal"] .c-black { --chip: #2a2e31; --edge: #ffffffcc; }
-:root[data-chips="metal"] .c-purple { --chip: #6a7a8a; --edge: #ffffffcc; }
-:root[data-chips="metal"] .c-gold { --chip: #d8b04a; --edge: #ffffffcc; }
-:root[data-chips="ruby"] .c-white { --chip: #ffe0e0; --edge: #00000055; }
-:root[data-chips="ruby"] .c-red { --chip: #9b111e; --edge: #ffffffcc; }
-:root[data-chips="ruby"] .c-green { --chip: #c2185b; --edge: #ffffffcc; }
-:root[data-chips="ruby"] .c-black { --chip: #3a0610; --edge: #ffffffcc; }
-:root[data-chips="ruby"] .c-purple { --chip: #6a0f3a; --edge: #ffffffcc; }
-:root[data-chips="ruby"] .c-gold { --chip: #e0115f; --edge: #ffffffcc; }
-:root[data-chips="emerald"] .c-white { --chip: #e0fff0; --edge: #00000055; }
-:root[data-chips="emerald"] .c-red { --chip: #0f7a4a; --edge: #ffffffcc; }
-:root[data-chips="emerald"] .c-green { --chip: #2fd68a; --edge: #ffffffcc; }
-:root[data-chips="emerald"] .c-black { --chip: #062a1a; --edge: #ffffffcc; }
-:root[data-chips="emerald"] .c-purple { --chip: #1a9a6a; --edge: #ffffffcc; }
-:root[data-chips="emerald"] .c-gold { --chip: #a8f0d8; --edge: #ffffffcc; }
-:root[data-chips="sapphire"] .c-white { --chip: #e0ecff; --edge: #00000055; }
-:root[data-chips="sapphire"] .c-red { --chip: #0f52ba; --edge: #ffffffcc; }
-:root[data-chips="sapphire"] .c-green { --chip: #3a7ad9; --edge: #ffffffcc; }
-:root[data-chips="sapphire"] .c-black { --chip: #06193a; --edge: #ffffffcc; }
-:root[data-chips="sapphire"] .c-purple { --chip: #1a3a8a; --edge: #ffffffcc; }
-:root[data-chips="sapphire"] .c-gold { --chip: #8fb8ff; --edge: #ffffffcc; }
-:root[data-chips="amethyst"] .c-white { --chip: #f2e8ff; --edge: #00000055; }
-:root[data-chips="amethyst"] .c-red { --chip: #7a3ab8; --edge: #ffffffcc; }
-:root[data-chips="amethyst"] .c-green { --chip: #a86aff; --edge: #ffffffcc; }
-:root[data-chips="amethyst"] .c-black { --chip: #2a1050; --edge: #ffffffcc; }
-:root[data-chips="amethyst"] .c-purple { --chip: #5a2a9a; --edge: #ffffffcc; }
-:root[data-chips="amethyst"] .c-gold { --chip: #d9b3ff; --edge: #ffffffcc; }
-:root[data-chips="obsidian"] .c-white { --chip: #c0c4c8; --edge: #00000055; }
-:root[data-chips="obsidian"] .c-red { --chip: #2a2a2a; --edge: #ffffffcc; }
-:root[data-chips="obsidian"] .c-green { --chip: #3a4a44; --edge: #ffffffcc; }
-:root[data-chips="obsidian"] .c-black { --chip: #050505; --edge: #ffffffcc; }
-:root[data-chips="obsidian"] .c-purple { --chip: #2a2440; --edge: #ffffffcc; }
-:root[data-chips="obsidian"] .c-gold { --chip: #6a6a6a; --edge: #ffffffcc; }
-:root[data-chips="ivory"] .c-white { --chip: #fffaf0; --edge: #00000055; }
-:root[data-chips="ivory"] .c-red { --chip: #c9a27a; --edge: #ffffffcc; }
-:root[data-chips="ivory"] .c-green { --chip: #a8b89a; --edge: #ffffffcc; }
-:root[data-chips="ivory"] .c-black { --chip: #5a4a3a; --edge: #ffffffcc; }
-:root[data-chips="ivory"] .c-purple { --chip: #b8a8c8; --edge: #ffffffcc; }
-:root[data-chips="ivory"] .c-gold { --chip: #e8d8a8; --edge: #ffffffcc; }
-:root[data-chips="retro"] .c-white { --chip: #fff3d6; --edge: #00000055; }
-:root[data-chips="retro"] .c-red { --chip: #e2483a; --edge: #ffffffcc; }
-:root[data-chips="retro"] .c-green { --chip: #2a9d8f; --edge: #ffffffcc; }
-:root[data-chips="retro"] .c-black { --chip: #264653; --edge: #ffffffcc; }
-:root[data-chips="retro"] .c-purple { --chip: #9a5ad9; --edge: #ffffffcc; }
-:root[data-chips="retro"] .c-gold { --chip: #e9c46a; --edge: #ffffffcc; }
-:root[data-chips="vaporwave"] .c-white { --chip: #fff0ff; --edge: #00000055; }
-:root[data-chips="vaporwave"] .c-red { --chip: #ff71ce; --edge: #ffffffcc; }
-:root[data-chips="vaporwave"] .c-green { --chip: #01cdfe; --edge: #ffffffcc; }
-:root[data-chips="vaporwave"] .c-black { --chip: #2a1a4a; --edge: #ffffffcc; }
-:root[data-chips="vaporwave"] .c-purple { --chip: #b967ff; --edge: #ffffffcc; }
-:root[data-chips="vaporwave"] .c-gold { --chip: #fffb96; --edge: #ffffffcc; }
-:root[data-chips="cyber"] .c-white { --chip: #d8fff8; --edge: #00000055; }
-:root[data-chips="cyber"] .c-red { --chip: #ff2a6d; --edge: #ffffffcc; }
-:root[data-chips="cyber"] .c-green { --chip: #05d9e8; --edge: #ffffffcc; }
-:root[data-chips="cyber"] .c-black { --chip: #0a0a1a; --edge: #ffffffcc; }
-:root[data-chips="cyber"] .c-purple { --chip: #7a2aff; --edge: #ffffffcc; }
-:root[data-chips="cyber"] .c-gold { --chip: #d1f7ff; --edge: #ffffffcc; }
-:root[data-chips="desert"] .c-white { --chip: #fff3e0; --edge: #00000055; }
-:root[data-chips="desert"] .c-red { --chip: #c1440e; --edge: #ffffffcc; }
-:root[data-chips="desert"] .c-green { --chip: #a8a050; --edge: #ffffffcc; }
-:root[data-chips="desert"] .c-black { --chip: #4a2a10; --edge: #ffffffcc; }
-:root[data-chips="desert"] .c-purple { --chip: #8a5a3a; --edge: #ffffffcc; }
-:root[data-chips="desert"] .c-gold { --chip: #e8b04a; --edge: #ffffffcc; }
-:root[data-chips="ice"] .c-white { --chip: #ffffff; --edge: #00000055; }
-:root[data-chips="ice"] .c-red { --chip: #7cc4e8; --edge: #ffffffcc; }
-:root[data-chips="ice"] .c-green { --chip: #a8e8f0; --edge: #ffffffcc; }
-:root[data-chips="ice"] .c-black { --chip: #2a4a6a; --edge: #ffffffcc; }
-:root[data-chips="ice"] .c-purple { --chip: #8aa8e8; --edge: #ffffffcc; }
-:root[data-chips="ice"] .c-gold { --chip: #d8f3ff; --edge: #ffffffcc; }
-:root[data-chips="lava"] .c-white { --chip: #ffe0c0; --edge: #00000055; }
-:root[data-chips="lava"] .c-red { --chip: #ff3b1a; --edge: #ffffffcc; }
-:root[data-chips="lava"] .c-green { --chip: #ff8a1a; --edge: #ffffffcc; }
-:root[data-chips="lava"] .c-black { --chip: #2a0606; --edge: #ffffffcc; }
-:root[data-chips="lava"] .c-purple { --chip: #8e0e00; --edge: #ffffffcc; }
-:root[data-chips="lava"] .c-gold { --chip: #ffd24a; --edge: #ffffffcc; }
-:root[data-chips="jungle"] .c-white { --chip: #efffd8; --edge: #00000055; }
-:root[data-chips="jungle"] .c-red { --chip: #d9343a; --edge: #ffffffcc; }
-:root[data-chips="jungle"] .c-green { --chip: #3a9a1a; --edge: #ffffffcc; }
-:root[data-chips="jungle"] .c-black { --chip: #0f2a0a; --edge: #ffffffcc; }
-:root[data-chips="jungle"] .c-purple { --chip: #6a3a9a; --edge: #ffffffcc; }
-:root[data-chips="jungle"] .c-gold { --chip: #f2c94c; --edge: #ffffffcc; }
-:root[data-chips="royal"] .c-white { --chip: #fffaf0; --edge: #00000055; }
-:root[data-chips="royal"] .c-red { --chip: #8a1a2a; --edge: #ffffffcc; }
-:root[data-chips="royal"] .c-green { --chip: #1a5a3a; --edge: #ffffffcc; }
-:root[data-chips="royal"] .c-black { --chip: #1a1a2a; --edge: #ffffffcc; }
-:root[data-chips="royal"] .c-purple { --chip: #4a1a7a; --edge: #ffffffcc; }
-:root[data-chips="royal"] .c-gold { --chip: #d8b04a; --edge: #ffffffcc; }
-:root[data-chips="mono"] .c-white { --chip: #ffffff; --edge: #00000055; }
-:root[data-chips="mono"] .c-red { --chip: #9a9a9a; --edge: #ffffffcc; }
-:root[data-chips="mono"] .c-green { --chip: #6a6a6a; --edge: #ffffffcc; }
-:root[data-chips="mono"] .c-black { --chip: #111111; --edge: #ffffffcc; }
-:root[data-chips="mono"] .c-purple { --chip: #3a3a3a; --edge: #ffffffcc; }
-:root[data-chips="mono"] .c-gold { --chip: #d0d0d0; --edge: #ffffffcc; }
-:root[data-chips="sakura"] .c-white { --chip: #fff5f8; --edge: #00000055; }
-:root[data-chips="sakura"] .c-red { --chip: #ff8aa8; --edge: #ffffffcc; }
-:root[data-chips="sakura"] .c-green { --chip: #a8d8a0; --edge: #ffffffcc; }
-:root[data-chips="sakura"] .c-black { --chip: #5a3a44; --edge: #ffffffcc; }
-:root[data-chips="sakura"] .c-purple { --chip: #d9a8e8; --edge: #ffffffcc; }
-:root[data-chips="sakura"] .c-gold { --chip: #ffd8e0; --edge: #ffffffcc; }
-:root[data-chips="autumn"] .c-white { --chip: #fff3e0; --edge: #00000055; }
-:root[data-chips="autumn"] .c-red { --chip: #c0392b; --edge: #ffffffcc; }
-:root[data-chips="autumn"] .c-green { --chip: #8a6a1a; --edge: #ffffffcc; }
-:root[data-chips="autumn"] .c-black { --chip: #3a2010; --edge: #ffffffcc; }
-:root[data-chips="autumn"] .c-purple { --chip: #d35400; --edge: #ffffffcc; }
-:root[data-chips="autumn"] .c-gold { --chip: #f39c12; --edge: #ffffffcc; }
-:root[data-chips="winter"] .c-white { --chip: #ffffff; --edge: #00000055; }
-:root[data-chips="winter"] .c-red { --chip: #c0392b; --edge: #ffffffcc; }
-:root[data-chips="winter"] .c-green { --chip: #1f6f4a; --edge: #ffffffcc; }
-:root[data-chips="winter"] .c-black { --chip: #1a2a3a; --edge: #ffffffcc; }
-:root[data-chips="winter"] .c-purple { --chip: #5a7ad9; --edge: #ffffffcc; }
-:root[data-chips="winter"] .c-gold { --chip: #d8e8ff; --edge: #ffffffcc; }
-:root[data-chips="spring"] .c-white { --chip: #fffff0; --edge: #00000055; }
-:root[data-chips="spring"] .c-red { --chip: #ff6a8a; --edge: #ffffffcc; }
-:root[data-chips="spring"] .c-green { --chip: #7ad96a; --edge: #ffffffcc; }
-:root[data-chips="spring"] .c-black { --chip: #3a4a2a; --edge: #ffffffcc; }
-:root[data-chips="spring"] .c-purple { --chip: #b38aff; --edge: #ffffffcc; }
-:root[data-chips="spring"] .c-gold { --chip: #ffe66a; --edge: #ffffffcc; }
-:root[data-chips="summer"] .c-white { --chip: #fffbe0; --edge: #00000055; }
-:root[data-chips="summer"] .c-red { --chip: #ff5a3a; --edge: #ffffffcc; }
-:root[data-chips="summer"] .c-green { --chip: #1ac9a8; --edge: #ffffffcc; }
-:root[data-chips="summer"] .c-black { --chip: #1a3a5a; --edge: #ffffffcc; }
-:root[data-chips="summer"] .c-purple { --chip: #ff8ad9; --edge: #ffffffcc; }
-:root[data-chips="summer"] .c-gold { --chip: #ffd21a; --edge: #ffffffcc; }
-:root[data-chips="mafia"] .c-white { --chip: #e8e0d0; --edge: #00000055; }
-:root[data-chips="mafia"] .c-red { --chip: #7a0a0a; --edge: #ffffffcc; }
-:root[data-chips="mafia"] .c-green { --chip: #2a3a2a; --edge: #ffffffcc; }
-:root[data-chips="mafia"] .c-black { --chip: #0a0a0a; --edge: #ffffffcc; }
-:root[data-chips="mafia"] .c-purple { --chip: #3a2a1a; --edge: #ffffffcc; }
-:root[data-chips="mafia"] .c-gold { --chip: #b8962a; --edge: #ffffffcc; }
-:root[data-chips="arcade"] .c-white { --chip: #ffffff; --edge: #00000055; }
-:root[data-chips="arcade"] .c-red { --chip: #ff004d; --edge: #ffffffcc; }
-:root[data-chips="arcade"] .c-green { --chip: #00e436; --edge: #ffffffcc; }
-:root[data-chips="arcade"] .c-black { --chip: #1d2b53; --edge: #ffffffcc; }
-:root[data-chips="arcade"] .c-purple { --chip: #7e2553; --edge: #ffffffcc; }
-:root[data-chips="arcade"] .c-gold { --chip: #ffec27; --edge: #ffffffcc; }
-:root[data-chips="galaxy"] .c-white { --chip: #e8e0ff; --edge: #00000055; }
-:root[data-chips="galaxy"] .c-red { --chip: #ff4da6; --edge: #ffffffcc; }
-:root[data-chips="galaxy"] .c-green { --chip: #3ad9d9; --edge: #ffffffcc; }
-:root[data-chips="galaxy"] .c-black { --chip: #0a0620; --edge: #ffffffcc; }
-:root[data-chips="galaxy"] .c-purple { --chip: #6a3fb3; --edge: #ffffffcc; }
-:root[data-chips="galaxy"] .c-gold { --chip: #ffd24a; --edge: #ffffffcc; }
-:root[data-chips="copper"] .c-white { --chip: #ffe8d8; --edge: #00000055; }
-:root[data-chips="copper"] .c-red { --chip: #b87333; --edge: #ffffffcc; }
-:root[data-chips="copper"] .c-green { --chip: #6a8a5a; --edge: #ffffffcc; }
-:root[data-chips="copper"] .c-black { --chip: #3a2010; --edge: #ffffffcc; }
-:root[data-chips="copper"] .c-purple { --chip: #8a4a2a; --edge: #ffffffcc; }
-:root[data-chips="copper"] .c-gold { --chip: #e8a868; --edge: #ffffffcc; }
-:root[data-chips="rainbow"] .c-white { --chip: #ffffff; --edge: #00000055; }
-:root[data-chips="rainbow"] .c-red { --chip: #ff3b3b; --edge: #ffffffcc; }
-:root[data-chips="rainbow"] .c-green { --chip: #3bd96a; --edge: #ffffffcc; }
-:root[data-chips="rainbow"] .c-black { --chip: #3b3bff; --edge: #ffffffcc; }
-:root[data-chips="rainbow"] .c-purple { --chip: #b93bff; --edge: #ffffffcc; }
-:root[data-chips="rainbow"] .c-gold { --chip: #ffd23b; --edge: #ffffffcc; }
+/* ---------- Стили фишек: переменные на [data-chips] — у превью свой стиль, у стола свой ---------- */
+[data-chips="classic"] { --cw: initial; --cwe: initial; --cr: initial; --cre: initial; --cg: initial; --cge: initial; --ck: initial; --cke: initial; --cp: initial; --cpe: initial; --cy: initial; --cye: initial; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="neon"] { --cw: initial; --cwe: initial; --cr: initial; --cre: initial; --cg: initial; --cge: initial; --ck: initial; --cke: initial; --cp: initial; --cpe: initial; --cy: initial; --cye: initial; --chip-bg: #0b1416; --chip-sh: inset 0 0 0 2px #3df2c9, 0 0 6px #3df2c9; }
+[data-chips="gold"] { --cw: initial; --cwe: initial; --cr: initial; --cre: initial; --cg: initial; --cge: initial; --ck: initial; --cke: initial; --cp: initial; --cpe: initial; --cy: initial; --cye: initial; --chip-bg: linear-gradient(90deg, #b8892a, #f7dd8a, #b8892a); --chip-sh: inset 0 0 0 2px #fff3c4; }
+[data-chips="halloween"] { --cw: initial; --cwe: initial; --cr: initial; --cre: initial; --cg: initial; --cge: initial; --ck: initial; --cke: initial; --cp: initial; --cpe: initial; --cy: initial; --cye: initial; --chip-bg: #ff7a1a; --chip-sh: inset 0 0 0 2px #1a1a1a, inset 0 0 0 4px #ff7a1a; }
+[data-chips="newyear"] { --cw: initial; --cwe: initial; --cr: initial; --cre: initial; --cg: initial; --cge: initial; --ck: initial; --cke: initial; --cp: initial; --cpe: initial; --cy: initial; --cye: initial; --chip-bg: repeating-conic-gradient(#d92b2b 0 25%, #fff 0 50%); --chip-sh: inset 0 0 0 2px #1f8a4a; }
+[data-chips="valentine"] { --cw: initial; --cwe: initial; --cr: initial; --cre: initial; --cg: initial; --cge: initial; --ck: initial; --cke: initial; --cp: initial; --cpe: initial; --cy: initial; --cye: initial; --chip-bg: #ff5a8a; --chip-sh: inset 0 0 0 2px #fff0f5; }
+[data-chips="ocean"] { --cw: #e0f4ff; --cwe: #00000055; --cr: #1f6fb2; --cre: #ffffffcc; --cg: #2aa8a0; --cge: #ffffffcc; --ck: #0b2e4a; --cke: #ffffffcc; --cp: #4a5ad9; --cpe: #ffffffcc; --cy: #7fd1ff; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="forest"] { --cw: #e8f2dc; --cwe: #00000055; --cr: #7a3a1a; --cre: #ffffffcc; --cg: #2f7a3a; --cge: #ffffffcc; --ck: #1a2a14; --cke: #ffffffcc; --cp: #5a6a2a; --cpe: #ffffffcc; --cy: #c9a227; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="candy"] { --cw: #fff0f6; --cwe: #00000055; --cr: #ff4d8a; --cre: #ffffffcc; --cg: #5ad9a8; --cge: #ffffffcc; --ck: #5a2a4a; --cke: #ffffffcc; --cp: #a86aff; --cpe: #ffffffcc; --cy: #ffd24a; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="pastel"] { --cw: #ffffff; --cwe: #00000055; --cr: #ffb3b3; --cre: #ffffffcc; --cg: #b3f0d0; --cge: #ffffffcc; --ck: #8a8a9a; --cke: #ffffffcc; --cp: #cdb3ff; --cpe: #ffffffcc; --cy: #ffe6a8; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="metal"] { --cw: #e6ebee; --cwe: #00000055; --cr: #b87333; --cre: #ffffffcc; --cg: #8a9aa0; --cge: #ffffffcc; --ck: #2a2e31; --cke: #ffffffcc; --cp: #6a7a8a; --cpe: #ffffffcc; --cy: #d8b04a; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="ruby"] { --cw: #ffe0e0; --cwe: #00000055; --cr: #9b111e; --cre: #ffffffcc; --cg: #c2185b; --cge: #ffffffcc; --ck: #3a0610; --cke: #ffffffcc; --cp: #6a0f3a; --cpe: #ffffffcc; --cy: #e0115f; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="emerald"] { --cw: #e0fff0; --cwe: #00000055; --cr: #0f7a4a; --cre: #ffffffcc; --cg: #2fd68a; --cge: #ffffffcc; --ck: #062a1a; --cke: #ffffffcc; --cp: #1a9a6a; --cpe: #ffffffcc; --cy: #a8f0d8; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="sapphire"] { --cw: #e0ecff; --cwe: #00000055; --cr: #0f52ba; --cre: #ffffffcc; --cg: #3a7ad9; --cge: #ffffffcc; --ck: #06193a; --cke: #ffffffcc; --cp: #1a3a8a; --cpe: #ffffffcc; --cy: #8fb8ff; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="amethyst"] { --cw: #f2e8ff; --cwe: #00000055; --cr: #7a3ab8; --cre: #ffffffcc; --cg: #a86aff; --cge: #ffffffcc; --ck: #2a1050; --cke: #ffffffcc; --cp: #5a2a9a; --cpe: #ffffffcc; --cy: #d9b3ff; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="obsidian"] { --cw: #c0c4c8; --cwe: #00000055; --cr: #2a2a2a; --cre: #ffffffcc; --cg: #3a4a44; --cge: #ffffffcc; --ck: #050505; --cke: #ffffffcc; --cp: #2a2440; --cpe: #ffffffcc; --cy: #6a6a6a; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="ivory"] { --cw: #fffaf0; --cwe: #00000055; --cr: #c9a27a; --cre: #ffffffcc; --cg: #a8b89a; --cge: #ffffffcc; --ck: #5a4a3a; --cke: #ffffffcc; --cp: #b8a8c8; --cpe: #ffffffcc; --cy: #e8d8a8; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="retro"] { --cw: #fff3d6; --cwe: #00000055; --cr: #e2483a; --cre: #ffffffcc; --cg: #2a9d8f; --cge: #ffffffcc; --ck: #264653; --cke: #ffffffcc; --cp: #9a5ad9; --cpe: #ffffffcc; --cy: #e9c46a; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="vaporwave"] { --cw: #fff0ff; --cwe: #00000055; --cr: #ff71ce; --cre: #ffffffcc; --cg: #01cdfe; --cge: #ffffffcc; --ck: #2a1a4a; --cke: #ffffffcc; --cp: #b967ff; --cpe: #ffffffcc; --cy: #fffb96; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="cyber"] { --cw: #d8fff8; --cwe: #00000055; --cr: #ff2a6d; --cre: #ffffffcc; --cg: #05d9e8; --cge: #ffffffcc; --ck: #0a0a1a; --cke: #ffffffcc; --cp: #7a2aff; --cpe: #ffffffcc; --cy: #d1f7ff; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="desert"] { --cw: #fff3e0; --cwe: #00000055; --cr: #c1440e; --cre: #ffffffcc; --cg: #a8a050; --cge: #ffffffcc; --ck: #4a2a10; --cke: #ffffffcc; --cp: #8a5a3a; --cpe: #ffffffcc; --cy: #e8b04a; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="ice"] { --cw: #ffffff; --cwe: #00000055; --cr: #7cc4e8; --cre: #ffffffcc; --cg: #a8e8f0; --cge: #ffffffcc; --ck: #2a4a6a; --cke: #ffffffcc; --cp: #8aa8e8; --cpe: #ffffffcc; --cy: #d8f3ff; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="lava"] { --cw: #ffe0c0; --cwe: #00000055; --cr: #ff3b1a; --cre: #ffffffcc; --cg: #ff8a1a; --cge: #ffffffcc; --ck: #2a0606; --cke: #ffffffcc; --cp: #8e0e00; --cpe: #ffffffcc; --cy: #ffd24a; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="jungle"] { --cw: #efffd8; --cwe: #00000055; --cr: #d9343a; --cre: #ffffffcc; --cg: #3a9a1a; --cge: #ffffffcc; --ck: #0f2a0a; --cke: #ffffffcc; --cp: #6a3a9a; --cpe: #ffffffcc; --cy: #f2c94c; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="royal"] { --cw: #fffaf0; --cwe: #00000055; --cr: #8a1a2a; --cre: #ffffffcc; --cg: #1a5a3a; --cge: #ffffffcc; --ck: #1a1a2a; --cke: #ffffffcc; --cp: #4a1a7a; --cpe: #ffffffcc; --cy: #d8b04a; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="mono"] { --cw: #ffffff; --cwe: #00000055; --cr: #9a9a9a; --cre: #ffffffcc; --cg: #6a6a6a; --cge: #ffffffcc; --ck: #111111; --cke: #ffffffcc; --cp: #3a3a3a; --cpe: #ffffffcc; --cy: #d0d0d0; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="sakura"] { --cw: #fff5f8; --cwe: #00000055; --cr: #ff8aa8; --cre: #ffffffcc; --cg: #a8d8a0; --cge: #ffffffcc; --ck: #5a3a44; --cke: #ffffffcc; --cp: #d9a8e8; --cpe: #ffffffcc; --cy: #ffd8e0; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="autumn"] { --cw: #fff3e0; --cwe: #00000055; --cr: #c0392b; --cre: #ffffffcc; --cg: #8a6a1a; --cge: #ffffffcc; --ck: #3a2010; --cke: #ffffffcc; --cp: #d35400; --cpe: #ffffffcc; --cy: #f39c12; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="winter"] { --cw: #ffffff; --cwe: #00000055; --cr: #c0392b; --cre: #ffffffcc; --cg: #1f6f4a; --cge: #ffffffcc; --ck: #1a2a3a; --cke: #ffffffcc; --cp: #5a7ad9; --cpe: #ffffffcc; --cy: #d8e8ff; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="spring"] { --cw: #fffff0; --cwe: #00000055; --cr: #ff6a8a; --cre: #ffffffcc; --cg: #7ad96a; --cge: #ffffffcc; --ck: #3a4a2a; --cke: #ffffffcc; --cp: #b38aff; --cpe: #ffffffcc; --cy: #ffe66a; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="summer"] { --cw: #fffbe0; --cwe: #00000055; --cr: #ff5a3a; --cre: #ffffffcc; --cg: #1ac9a8; --cge: #ffffffcc; --ck: #1a3a5a; --cke: #ffffffcc; --cp: #ff8ad9; --cpe: #ffffffcc; --cy: #ffd21a; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="mafia"] { --cw: #e8e0d0; --cwe: #00000055; --cr: #7a0a0a; --cre: #ffffffcc; --cg: #2a3a2a; --cge: #ffffffcc; --ck: #0a0a0a; --cke: #ffffffcc; --cp: #3a2a1a; --cpe: #ffffffcc; --cy: #b8962a; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="arcade"] { --cw: #ffffff; --cwe: #00000055; --cr: #ff004d; --cre: #ffffffcc; --cg: #00e436; --cge: #ffffffcc; --ck: #1d2b53; --cke: #ffffffcc; --cp: #7e2553; --cpe: #ffffffcc; --cy: #ffec27; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="galaxy"] { --cw: #e8e0ff; --cwe: #00000055; --cr: #ff4da6; --cre: #ffffffcc; --cg: #3ad9d9; --cge: #ffffffcc; --ck: #0a0620; --cke: #ffffffcc; --cp: #6a3fb3; --cpe: #ffffffcc; --cy: #ffd24a; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="copper"] { --cw: #ffe8d8; --cwe: #00000055; --cr: #b87333; --cre: #ffffffcc; --cg: #6a8a5a; --cge: #ffffffcc; --ck: #3a2010; --cke: #ffffffcc; --cp: #8a4a2a; --cpe: #ffffffcc; --cy: #e8a868; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+[data-chips="rainbow"] { --cw: #ffffff; --cwe: #00000055; --cr: #ff3b3b; --cre: #ffffffcc; --cg: #3bd96a; --cge: #ffffffcc; --ck: #3b3bff; --cke: #ffffffcc; --cp: #b93bff; --cpe: #ffffffcc; --cy: #ffd23b; --cye: #ffffffcc; --chip-bg: initial; --chip-sh: initial; }
+.chip-prev { display: flex; gap: 3px; align-items: flex-end; justify-content: center; height: 26px; }
+.chip-prev .stack { display: flex; flex-direction: column; }

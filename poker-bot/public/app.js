@@ -504,7 +504,7 @@ function lookCard() {
     h('div', { class: 'label' }, 'Рубашка карт'),
     h('div', { class: 'item-grid' }, L.backs.map((b) => h('button', {
       class: `item-pick ${L.back === b.id ? 'on' : ''} ${b.owned ? '' : 'locked'}`, onclick: () => (b.owned ? run({ t: 'equip', kind: 'back', id: b.id }) : toast(`Закрыто: ${b.how}`)),
-    }, h('div', { class: `pcard back sm back-${b.id}` }), h('div', { class: 'small' }, b.name), !b.owned && h('div', { class: 'small muted', style: 'font-size:10px' }, `🔒 ${b.how}`)))),
+    }, h('div', { class: `pcard back sm preview back-${b.id}` }), h('div', { class: 'small' }, b.name), !b.owned && h('div', { class: 'small muted', style: 'font-size:10px' }, `🔒 ${b.how}`)))),
     h('div', { class: 'label' }, 'Баннер профиля'),
     h('div', { class: 'choices wrap' }, (L.banners || []).map((b) => h('button', { class: `banner-pick banner-${b} ${L.banner === b ? 'on' : ''}`, onclick: () => run({ t: 'equip', kind: 'banner', id: b }) }, BANNER_NAMES[b] || b))),
     h('div', { class: 'label' }, 'Сцена стола'),
@@ -516,7 +516,7 @@ function lookCard() {
     h('div', { class: 'label' }, 'Раздача карт'),
     pick(DEAL_ANIM, ui.deal, (id) => setUi({ deal: id })),
     h('div', { class: 'label' }, 'Фишки'),
-    pick(CHIP_STYLES, ui.chips, (id) => setUi({ chips: id })),
+    chipPicker(ui.chips),
     h('div', { class: 'label' }, 'Режим экрана'),
     pick(MODES, ui.mode, (id) => setUi({ mode: id })),
     h('label', { class: 'toggle-row' }, h('input', { type: 'checkbox', checked: ui.deck4, onchange: (e) => setUi({ deck4: e.target.checked }) }), h('span', {}, 'Колода в 4 цвета'), h('span', { class: 'small muted' }, '♦ синие, ♣ зелёные')),
@@ -1363,6 +1363,24 @@ function examScreen() {
     h('button', { class: 'btn', disabled: done < E.qs.length, onclick: async () => { const r = await run({ t: 'examSubmit', answers: E.answers }); if (r) { E.result = r; render(); window.scrollTo(0, 0); } } }, 'Сдать'));
 }
 
+// мини-превью стиля фишек: три стопки своих цветов (стиль — на контейнере, не на всём экране)
+function chipPreview(id) {
+  return h('div', { class: 'chip-prev', 'data-chips': id }, ['c-white', 'c-red', 'c-gold'].map((c, i) =>
+    h('div', { class: 'stack' }, Array.from({ length: 3 + i }, () => h('div', { class: `chip ${c}` })))));
+}
+function chipPicker(cur) {
+  return h('div', { class: 'item-grid' }, CHIP_STYLES.map(([id, name]) => h('button', {
+    class: `item-pick ${cur === id ? 'on' : ''}`, onclick: () => { setUi({ chips: id }); render(); },
+  }, chipPreview(id), h('div', { class: 'small' }, name))));
+}
+function backPicker() {
+  const L = S.look;
+  if (!L) return null;
+  return h('div', { class: 'item-grid' }, L.backs.filter((b) => b.owned).map((b) => h('button', {
+    class: `item-pick ${L.back === b.id ? 'on' : ''}`, onclick: () => run({ t: 'equip', kind: 'back', id: b.id }),
+  }, h('div', { class: `pcard back sm preview back-${b.id}` }), h('div', { class: 'small' }, b.name))));
+}
+
 // быстрые настройки прямо за столом
 function quickSettings() {
   const ui = loadUi();
@@ -1376,7 +1394,11 @@ function quickSettings() {
     h('div', { class: 'small muted' }, 'Раздача карт'),
     h('div', { class: 'choices wrap' }, DEAL_ANIM.map(([k, n]) => h('button', { class: ui.deal === k ? 'on' : '', onclick: () => { setUi({ deal: k }); render(); } }, n))),
     h('div', { class: 'small muted' }, 'Сцена'),
-    h('div', { class: 'choices wrap' }, SCENES.filter(([k]) => k !== 'photo').map(([k, n]) => h('button', { class: ui.scene === k ? 'on' : '', onclick: () => { setUi({ scene: k }); render(); } }, n))));
+    h('div', { class: 'choices wrap' }, SCENES.filter(([k]) => k !== 'photo').map(([k, n]) => h('button', { class: ui.scene === k ? 'on' : '', onclick: () => { setUi({ scene: k }); render(); } }, n))),
+    h('div', { class: 'small muted' }, 'Фишки'),
+    chipPicker(ui.chips),
+    h('div', { class: 'small muted' }, 'Рубашка карт'),
+    backPicker());
 }
 
 function openCombos() {
