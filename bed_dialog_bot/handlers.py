@@ -51,6 +51,7 @@ async def _send_banner(context, chat_id, path, caption=None, reply_markup=None, 
         return False
 
 _GIVE_PREMIUM_RE = re.compile(r"^/give\s+premium\s+(\d+)\s+(\d+)\s*$")
+_GIVEULTRA_RE = re.compile(r"^/giveultra\s+(\S+)(?:\s+(\S+))?\s*$")
 _SUPPORT_RE = re.compile(r"^/support(?:\s+(.+))?$", re.DOTALL)
 _SUGGEST_RE = re.compile(r"^/suggest(?:\s+(.+))?$", re.DOTALL)
 _REPLY_RE = re.compile(r"^/reply\s+(\d+)\s+(.+)$", re.DOTALL)
@@ -7953,6 +7954,35 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         until_ts = storage.grant_premium_days(target_id, days)
         until_str = _fmt_premium(until_ts)
         await message.reply_text(f"✅ Премиум для {target_id} выдан до {until_str}.")
+        return
+
+    gu_match = _GIVEULTRA_RE.match(text)
+    if gu_match:
+        if not await _require_perm(message, storage, "premium"):
+            return
+        target = _resolve_person(storage, gu_match.group(1))
+        if target is None:
+            await message.reply_text(
+                "Не нашёл пользователя. Укажи @ник (он должен был писать боту), "
+                "ID игрока или числовой user_id: <code>/giveultra @ник [дней|forever]</code>",
+                parse_mode="HTML")
+            return
+        arg = (gu_match.group(2) or "30").strip().lower()
+        if arg in ("forever", "навсегда", "♾", "0"):
+            until_ts = storage.grant_ultra_forever(target)
+            human = "НАВСЕГДА ♾"
+        else:
+            days = int(arg) if arg.isdigit() else 30
+            until_ts = storage.grant_ultra_days(target, days)
+            human = f"{days} дн. (до {_fmt_premium(until_ts)})"
+        await message.reply_text(f"🔱 ULTRA PREMIUM выдан <code>{target}</code> — {human}.",
+                                 parse_mode="HTML")
+        try:
+            await context.bot.send_message(
+                target, f"🔱 Тебе выдан <b>ULTRA PREMIUM</b> — {human}!\nОткрой: /menu → 🔱 ULTRA PREMIUM",
+                parse_mode="HTML")
+        except Exception:
+            pass
         return
 
     if text.startswith("/credit"):
