@@ -230,6 +230,7 @@ export class GameTable {
   }
 
   resetView() {
+    this.allinEq = null;
     this.v = {
       board: [], pot: 0, bets: {}, folded: new Set(), last: {}, shown: {}, dealt: new Set(), actor: null, deadline: 0, result: null, handId: 0, buttonId: null,
       equity: null, winCards: null, emotes: this.v?.emotes || {}, says: this.v?.says || {},
@@ -350,6 +351,7 @@ export class GameTable {
     for (const [id, cards] of Object.entries(holes)) v.shown[id] = v.shown[id] || { cards, hand: null };
     if (this.mega || this.jokers) return; // огромный стол и джокеры — шансы не считаем
     v.equity = knownEquity(holes, v.board, this.variant === 'short' ? evaluateShort : evaluate, this.variant === 'short');
+    if (!this.allinEq) this.allinEq = { ...v.equity }; // шансы в момент олл-ина — для статистики удачи
   }
 
   async run() {
@@ -584,6 +586,29 @@ export class GameTable {
         const mine = e.contributions.find((c) => c.id === p.id)?.total ?? 0;
         const got = e.winners.filter((w) => w.id === p.id).reduce((a, w) => a + w.amount, 0);
         this.hub.onBotVs?.(p.id, botsIn.map((b) => b.name), won, botsIn.length === 1 ? got - mine : null);
+      }
+      // подробная статистика раздачи (для экрана «Моя статистика»)
+      if (this.hub.onHandStats) {
+        const mine = log.filter((x) => x.type === 'action' && x.id === p.id);
+        const aggr = {};
+        for (const x of mine) { const k = x.street[0]; aggr[k] ||= [0, 0]; if (x.action === 'raise') aggr[k][0]++; if (x.action === 'call') aggr[k][1]++; }
+        const put = e.contributions.find((c) => c.id === p.id)?.total ?? 0;
+        const got = e.winners.filter((w) => w.id === p.id).reduce((a, w) => a + w.amount, 0);
+        const sc = v.shown[p.id]?.score;
+        const hole = p.bot.hole || [];
+        const folded = mine.some((x) => x.action === 'fold');
+        const riverCall = mine.find((x) => x.street === 'river' && x.action === 'call');
+        const postRaise = mine.some((x) => x.street !== 'preflop' && x.action === 'raise');
+        const endCat = hole.length === 2 && v.board.length >= 3 ? handCategory(evaluate(hole.concat(v.board))) : null;
+        this.hub.onHandStats(p.id, {
+          pos: log.find((x) => x.type === 'handStart')?.players.find((x) => x.id === p.id)?.position ?? null,
+          hole, vpip: mine.some((x) => x.street === 'preflop' && (x.action === 'call' || x.action === 'raise')),
+          pfr: mine.some((x) => x.street === 'preflop' && x.action === 'raise'), aggr,
+          net: got - put, won: got > 0, sd: sc != null, cat: sc != null ? handCategory(sc) : null,
+          alleq: this.allinEq?.[p.id] ?? null, foldcost: folded ? put : 0, rcall: riverCall && got > 0 ? riverCall.to : 0,
+          bluff: postRaise && endCat === 0, bb: this.bb, kind: this.kind,
+          opps: this.players.filter((o) => !o.isBot && o.id !== p.id && v.dealt.has(o.id)).map((o) => o.id),
+        });
       }
       const shown = v.shown[p.id];
       const score = shown?.score;

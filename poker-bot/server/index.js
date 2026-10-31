@@ -19,6 +19,7 @@ import * as botsx from './botsx.js';
 import * as social2 from './social2.js';
 import * as learn from './learn.js';
 import * as notes from './notes.js';
+import * as stats from './stats.js';
 import { GameTable } from './game/table.js';
 import { ghostHour } from '../core/bots.js';
 import { BOT_KINDS } from '../core/crowd.js';
@@ -104,7 +105,8 @@ const hub = {
     const u = getUser(uid);
     for (const f of social.friendIds(uid)) if (hub.isOnline(f)) hub.send(f, { t: 'toast', text: `${u.name} сел за стол — можно посмотреть в «Друзьях»` });
   },
-  onTourDone: (uid, ev) => progress.onEvent(uid, { type: 'tour', ...ev }),
+  onTourDone: (uid, ev) => { stats.recordTour(uid, ev); progress.onEvent(uid, { type: 'tour', ...ev }); },
+  onHandStats: (uid, r) => stats.recordHand(uid, r),
   onBeatAll: (uid, bots) => progress.onEvent(uid, { type: 'beatAll', bots }),
   onCaughtCheater: (uid) => progress.onEvent(uid, { type: 'caughtCheater' }),
   onBotVs: (uid, bots, won, net) => progress.recordVs(uid, bots, won, net),
@@ -632,6 +634,14 @@ const handlers = {
     if (!a?.seat.extend?.()) throw new Error('Таймбанк закончился');
     return { t: 'ok', left: a.seat.timebanks };
   },
+  // ---------- статистика ----------
+  myStats: (uid) => ({ t: 'stats', stats: stats.statsView(uid), ach: stats.achPercent() }),
+  compareFriend(uid, m) {
+    if (!social.areFriends(uid, Number(m.id))) throw new Error('Сравнивать можно только с другом');
+    return { t: 'compare', ...stats.compare(uid, Number(m.id)) };
+  },
+  serverRecords: () => ({ t: 'records', records: stats.serverRecords() }),
+  exportStats: (uid) => ({ t: 'export', rows: stats.exportRows(uid) }),
   // заметка и цветная метка на игрока
   setNote(uid, m) {
     notes.setNote(uid, m.target, m.note, m.color);
@@ -932,6 +942,16 @@ recoverAfterRestart();
 tournaments.ensureBig();
 setInterval(() => {
   try { tournaments.tick(); } catch (e) { console.error('tick', e); }
+  // недельный отчёт в Telegram: понедельник, 12:00 по Москве
+  try {
+    const d = new Date(Date.now() + 3 * 3600000);
+    const wk = d.toISOString().slice(0, 10);
+    if (d.getUTCDay() === 1 && d.getUTCHours() === 12 && db.prepare("SELECT value FROM meta WHERE key = 'weekly_report'").get()?.value !== wk && bot.username) {
+      db.prepare("INSERT INTO meta (key, value) VALUES ('weekly_report', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").run(wk);
+      const list = stats.weeklyReports().filter((r) => !getUser(r.uid)?.no_remind);
+      (async () => { for (const r of list) { notify(r.uid, `📊 Твоя неделя: ${r.hands} раздач, выиграно ${r.won}, итог ${r.bb >= 0 ? '+' : ''}${r.bb} больших блайндов. Подробно — в «Моей статистике».`, openButton('Статистика', '#stats')); await new Promise((x) => setTimeout(x, 60)); } })();
+    }
+  } catch (e) { console.error('weekly', e); }
   // онлайн по часам — для графика в админке
   try { admin.recordOnline(sockets.size); } catch {}
   // напоминание про бонус дня: раз в день в 18:00 по Москве тем, кто заходил на неделе, но не сегодня

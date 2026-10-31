@@ -375,7 +375,7 @@ class RunningTournament {
       this.hub.sendMe(r.user_id);
       notify(r.user_id, text, openButton('Открыть', `#t=${this.t.id}`));
       this.hub.onWinnings?.(r.user_id, prize - this.t.buyin); // в счёт наград за выигрыш
-      this.hub.onTourDone?.(r.user_id, { place: r.place, size: this.n, solo: false });
+      this.hub.onTourDone?.(r.user_id, { place: r.place, size: this.n, solo: false, prize, buyin: this.t.buyin, name: this.t.name });
     }
     this.hub.lobbyChanged();
   }

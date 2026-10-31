@@ -237,7 +237,7 @@ export class SoloTour {
     });
     this.hub.send(this.userId, { t: 'finished', tournamentId: this.id, solo: true, place, prize, total: this.n, ratingDelta: Math.round(delta) });
     this.hub.onWinnings?.(this.userId, prize - this.buyin);
-    this.hub.onTourDone?.(this.userId, { place, size: this.n, solo: true });
+    this.hub.onTourDone?.(this.userId, { place, size: this.n, solo: true, prize: prize + 0, buyin: this.buyin, name: this.name, demo: !!this.demo });
     this.hub.sendMe(this.userId);
     this.hub.onSoloDone?.(this);
   }

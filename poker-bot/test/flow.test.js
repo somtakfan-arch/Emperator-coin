@@ -1270,3 +1270,25 @@ test('удобство за столом: отлучка без кика, авт
   assertLedger(9981);
   c.close();
 });
+
+test('статистика: VPIP, позиции, тепловая карта, Эло, турниры, сравнение, рекорды, экспорт', async () => {
+  const c = new Client(9991, { autoplay: 'call' });
+  await c.ready;
+  await c.req({ t: 'invoice', pack: 'p1' });
+  await c.req({ t: 'sitBots', mode: '6', buyin: 500, fast: true });
+  const t0 = await c.waitFor((m) => m.t === 'table' && m.table?.inHand);
+  await c.waitFor((m) => m.t === 'left' || (m.t === 'table' && (m.table?.handId >= t0.table.handId + 4 || m.table?.canRebuy)), 60000);
+  c.ws.send(JSON.stringify({ t: 'leave' })); await c.waitFor((m) => m.t === 'left', 30000);
+  const s = (await c.req({ t: 'myStats' })).stats;
+  assert.ok(s.hands >= 1, 'раздачи записаны');
+  assert.ok(s.vpip > 0, 'колл-станция заходит в банк');
+  assert.equal(s.aggression.length, 4);
+  assert.ok(s.classes.length > 0 && s.byPos.length > 0);
+  assert.equal(s.byHour.length, 24);
+  const rec = await c.req({ t: 'serverRecords' });
+  assert.ok(rec.records);
+  const ex = await c.req({ t: 'exportStats' });
+  assert.ok(ex.rows.length >= 1 && ex.rows[0].hand);
+  await assert.rejects(c.req({ t: 'compareFriend', id: 1 }), /с другом/);
+  c.close();
+});

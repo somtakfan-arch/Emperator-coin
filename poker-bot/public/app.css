@@ -1069,3 +1069,8 @@ textarea.buyin-input { resize: vertical; font: inherit; }
 
 .cd-odds { font-size: 11px; color: var(--soft); font-weight: 600; }
 .pre-acts { display: grid !important; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; } .pre-acts button { font-size: 12px !important; padding: 0 4px; white-space: nowrap; }
+
+/* ---------- Статистика ---------- */
+.hour-bars { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; align-items: end; height: 56px; }
+.hour-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
+.hour-bar { width: 100%; border-radius: 2px; min-height: 1px; } .hour-bar.up { background: #4fc77a; } .hour-bar.down { background: #ff5a5a; }

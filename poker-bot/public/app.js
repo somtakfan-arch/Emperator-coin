@@ -595,7 +595,7 @@ function leaveTableScreen(tournamentId) {
 
 // ---------- Навигация ----------
 
-const BACK = { style: 'profile', school: 'lobby', chart: 'school', quiz: 'school', exam: 'school', history: 'friends', replay: 'history', botlab: 'lobby', training: 'lobby', tutorial: 'lobby', admin: 'profile', friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
+const BACK = { stats: 'profile', style: 'profile', school: 'lobby', chart: 'school', quiz: 'school', exam: 'school', history: 'friends', replay: 'history', botlab: 'lobby', training: 'lobby', tutorial: 'lobby', admin: 'profile', friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
 
 function go(screen) {
   if (screen !== 'table' && S.screen === 'table' && S.table) S.tableHidden = true;
@@ -1239,8 +1239,10 @@ function historyScreen() {
   const list = S.history;
   return h('div', { class: 'screen' },
     header('Раздачи за сутки'),
+    list && h('div', { class: 'choices wrap' }, [['all', 'Все'], ['won', 'Выигранные'], ['lost', 'Проигранные'], ['sd', 'Со вскрытием'], ['big', 'Крупные']].map(([k, n]) =>
+      h('button', { class: (S.histFilter || 'all') === k ? 'on' : '', onclick: () => { S.histFilter = k; render(); } }, n))),
     !list ? h('div', { class: 'muted small' }, 'Загрузка…')
-      : list.length ? list.map((x) => h('button', { class: 'item', onclick: () => openReplay(x.id) },
+      : list.length ? list.filter((x) => ({ all: true, won: x.net > 0, lost: x.net < 0, sd: !!x.hand, big: Math.abs(x.net) >= 1000 })[S.histFilter || 'all']).map((x) => h('button', { class: 'item', onclick: () => openReplay(x.id) },
         h('div', { class: 'row', style: 'gap:8px;min-width:0' },
           h('div', { class: 'tut-cards' }, (x.hole || []).map((c) => pcard(c, 'sm'))),
           h('div', { class: 'col', style: 'gap:1px;min-width:0' },
@@ -1516,6 +1518,102 @@ function styleScreen() {
     h('div', { style: 'height:70px' }));
 }
 
+// ---------- Моя статистика ----------
+
+async function openStats() {
+  go('stats');
+  const r = await run({ t: 'myStats' });
+  if (r) { S.stats = r.stats; S.achPct = r.ach; render(); }
+  const rec = await run({ t: 'serverRecords' });
+  if (rec) { S.records = rec.records; render(); }
+}
+
+// маленький линейный график (SVG)
+function lineGraph(pts, color = '#6fdc8c', H = 70) {
+  if (!pts || pts.length < 2) return h('div', { class: 'small muted' }, 'Мало данных для графика');
+  const W = 300, min = Math.min(...pts), max = Math.max(...pts), span = max - min || 1;
+  const xy = pts.map((v, i) => `${((i / (pts.length - 1)) * W).toFixed(1)},${(H - 4 - ((v - min) / span) * (H - 8)).toFixed(1)}`);
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('class', 'stack-graph');
+  svg.innerHTML = `<polyline points="${xy.join(' ')}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round"/>`;
+  return svg;
+}
+
+function statsScreen() {
+  const T = S.stats;
+  if (!T) return h('div', { class: 'screen' }, header('Моя статистика'), h('div', { class: 'muted small' }, 'Загрузка…'));
+  const sec = (title, ...body) => [h('div', { class: 'label' }, title), h('div', { class: 'glass card', style: 'gap:8px' }, ...body)];
+  const sign = (x) => `${x > 0 ? '+' : x < 0 ? '−' : ''}${fmt(Math.abs(x))}`;
+  const R = 'AKQJT98765432';
+  const by = Object.fromEntries((T.classes || []).map((c) => [c.k, c]));
+  const heat = [];
+  for (let i = 0; i < 13; i++) for (let j = 0; j < 13; j++) {
+    const k = i === j ? R[i] + R[j] : i < j ? R[i] + R[j] + 's' : R[j] + R[i] + 'o';
+    const c = by[k];
+    const v = c ? Math.max(-1, Math.min(1, c.bb / 20)) : 0;
+    const bg = !c ? 'rgba(255,255,255,0.05)' : v >= 0 ? `rgba(79,199,122,${0.25 + v * 0.75})` : `rgba(255,90,90,${0.25 - v * 0.75})`;
+    heat.push(h('div', { class: 'ch-cell', style: `background:${bg};color:${c ? '#111' : 'rgba(255,255,255,0.35)'}`, title: c ? `${k}: ${c.n} раздач, ${c.bb} ББ` : k }, k));
+  }
+  const L = T.luck;
+  const maxH = Math.max(1, ...T.byHour.map(Math.abs));
+  const hand = (x) => h('div', { class: 'row between' }, h('div', { class: 'tut-cards' }, x.cards.map((c) => pcard(c, 'sm'))), h('div', { class: 'b', style: `color:${x.net >= 0 ? 'var(--green)' : '#ff8a80'}` }, sign(x.net)));
+  const REC = S.records;
+  return h('div', { class: 'screen' },
+    header('Моя статистика'),
+    h('div', { class: 'small soft' }, `Раздач в статистике: ${fmt(T.hands)} · в игре ${Math.floor(T.playMinutes / 60)} ч ${T.playMinutes % 60} мин`),
+    sec('Стиль игры',
+      h('div', { class: 'grid3' }, stat('VPIP', `${T.vpip}%`), stat('PFR', `${T.pfr}%`), stat('Вскрытия', `${T.sdPct}%`)),
+      h('div', { class: 'small muted', style: 'line-height:1.45' }, 'VPIP — в скольких раздачах ты вкладываешь фишки до флопа. PFR — как часто повышаешь до флопа. Хороший игрок: VPIP 20–30%, PFR чуть меньше.'),
+      h('div', { class: 'grid3' }, stat('Победы на вскрытии', `${T.sdWin}%`), stat('Блефов', T.bluff.n), stat('Удачных блефов', T.bluff.n ? `${Math.round((T.bluff.won / T.bluff.n) * 100)}%` : '—'))),
+    sec('Агрессия по улицам', ...T.aggression.map((a) => h('div', { class: 'row between' }, h('div', {}, a.name), h('div', { class: 'small soft' }, `рейзов ${a.raises} · коллов ${a.calls} · AF ${a.af}`)))),
+    sec('Тепловая карта рук (итог в ББ)', h('div', { class: 'chart-grid' }, heat), h('div', { class: 'small muted' }, 'Зелёный — руки в плюс, красный — в минус. Сверху — одномастные (s), снизу — разномастные (o).')),
+    T.topHands.length > 0 && sec('Лучшие стартовые руки', ...T.topHands.map((c) => h('div', { class: 'row between' }, h('div', { class: 'b' }, c.k), h('div', { class: 'small soft' }, `${c.n} раздач · ${sign(c.bb)} ББ`)))),
+    T.worstHands.length > 0 && sec('Худшие стартовые руки', ...T.worstHands.map((c) => h('div', { class: 'row between' }, h('div', { class: 'b' }, c.k), h('div', { class: 'small soft' }, `${c.n} раздач · ${sign(c.bb)} ББ`)))),
+    T.byPos.length > 0 && sec('Итог по позициям (ББ)', ...T.byPos.map((p) => h('div', { class: 'row between' }, h('div', {}, p.name), h('div', { class: 'small soft' }, `${p.n} раздач · ${sign(p.bb)}`)))),
+    sec('Лучшие и худшие раздачи', ...T.best.map(hand), ...T.worst.map(hand),
+      T.costlyFold && h('div', { class: 'small soft' }, `💸 Самый дорогой фолд: ${fmt(T.costlyFold.amount)} фишек`),
+      T.bestCall && h('div', { class: 'small soft' }, `🎯 Лучший колл на ривере: ${fmt(T.bestCall.amount)} фишек — и выиграл`)),
+    sec('Удача в олл-инах',
+      L.allins ? [h('div', { class: 'grid3' }, stat('Олл-инов', L.allins), stat('Ожидалось побед', L.expected), stat('Выиграно', L.actual)),
+        h('div', { class: 'small soft' }, L.actual >= L.expected ? `🍀 Тебе везёт: на ${Math.round((L.actual - L.expected) * 10) / 10} побед больше расчёта` : `😬 Не везёт: на ${Math.round((L.expected - L.actual) * 10) / 10} побед меньше расчёта`),
+        h('div', { class: 'small muted' }, `Ауты зашли (выиграл, будучи позади): ${L.suckouts} · «бэд-биты» (проиграл, будучи впереди): ${L.badBeats}`)]
+        : h('div', { class: 'small muted' }, 'Олл-инов со вскрытием пока не было')),
+    sec('График Эло за 30 дней', lineGraph(T.elo, '#8fb8ff')),
+    sec('Итог по времени суток (ББ, по Москве)',
+      h('div', { class: 'hour-bars' }, T.byHour.map((v, i) => h('div', { class: 'hour-col', title: `${i}:00 — ${v} ББ, раздач ${T.byHourN[i]}` },
+        h('div', { class: `hour-bar ${v >= 0 ? 'up' : 'down'}`, style: `height:${Math.round((Math.abs(v) / maxH) * 40)}px` }),
+        i % 6 === 0 && h('div', { class: 'small muted', style: 'font-size:9px' }, i))))),
+    sec(`Турниры · ROI ${T.roi == null ? '—' : `${T.roi}%`}`,
+      T.tours.length ? T.tours.slice(0, 10).map((t) => h('div', { class: 'row between' }, h('div', { class: 'small' }, `${t.name} · ${t.place}/${t.size}`), h('div', { class: 'small soft' }, t.prize ? `+${fmt(t.prize)}` : '—')))
+        : h('div', { class: 'small muted' }, 'Турниров пока не было'),
+      h('div', { class: 'small muted' }, 'ROI — сколько процентов от взносов ты в среднем возвращаешь сверху.')),
+    T.vs.length > 0 && sec('Против живых игроков', ...T.vs.map((v) => h('div', { class: 'row between' }, h('div', {}, v.name), h('div', { class: 'small soft' }, `раздач ${v.hands} · твоих побед ${v.won}${v.net ? ` · 1 на 1 ${sign(v.net)}` : ''}`)))),
+    REC && sec('Рекорды сервера',
+      REC.pot && h('div', { class: 'small' }, `💰 Самый большой банк: ${fmt(REC.pot.v)} — ${REC.pot.name}`),
+      REC.hands && h('div', { class: 'small' }, `🏆 Больше всех раздач: ${fmt(REC.hands.v)} — ${REC.hands.name}`),
+      REC.rating && h('div', { class: 'small' }, `📈 Лучшее Эло: ${fmt(REC.rating.v)} — ${REC.rating.name}`),
+      REC.tours && h('div', { class: 'small' }, `🥇 Больше всех побед в турнирах: ${fmt(REC.tours.v)} — ${REC.tours.name}`),
+      REC.hand?.v > 0 && h('div', { class: 'small' }, `🔥 Самый крупный выигрыш за раздачу: ${fmt(REC.hand.v)} — ${REC.hand.name}`)),
+    h('button', { class: 'btn-ghost', onclick: exportStats }, '⬇️ Скачать историю раздач (CSV)'),
+    h('div', { style: 'height:70px' }));
+}
+
+// 73 экспорт: CSV-файл; если скачивание недоступно — копируем в буфер
+async function exportStats() {
+  const r = await run({ t: 'exportStats' });
+  if (!r) return;
+  const head = 'время;позиция;рука;итог;большой блайнд;выиграл;вскрытие;стол';
+  const csv = [head, ...r.rows.map((x) => [new Date(x.at).toLocaleString('ru'), x.pos || '', x.hand || '', x.net, x.bb, x.won ? 'да' : 'нет', x.sd ? 'да' : 'нет', x.kind].join(';'))].join('\n');
+  try {
+    const a = h('a', { href: URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })), download: 'poker-history.csv' });
+    document.body.append(a); a.click(); a.remove();
+    toast('Файл скачивается');
+  } catch {
+    navigator.clipboard?.writeText(csv).then(() => toast('Скопировано в буфер'));
+  }
+}
+
 function openCombos() {
   S.comboBack = S.screen;
   go('combos');
@@ -1539,6 +1637,7 @@ function openStart(startParam) {
   if (hash === 'wallet') return go('wallet');
   if (hash === 'profile') return go('profile');
   if (hash === 'progress') return go('progress');
+  if (hash === 'stats') return openStats();
   go('lobby');
 }
 
@@ -1658,6 +1757,7 @@ function settingsCard() {
     h('label', { class: 'toggle-row glass', style: 'padding:12px 14px;border-radius:14px' },
       h('input', { type: 'checkbox', checked: S.me.remind !== false, onchange: async (e) => { await run({ t: 'setRemind', on: e.target.checked }); S.me.remind = e.target.checked; } }),
       h('span', {}, 'Напоминания в Telegram'), h('span', { class: 'small muted' }, 'бонус дня и турниры')),
+    h('button', { class: 'item', onclick: openStats }, h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, '📊 Моя статистика'), h('div', { class: 'small muted' }, 'VPIP, позиции, тепловая карта рук, удача, турниры, Эло')), icon('chev')),
     h('button', { class: 'item', onclick: openHistory }, h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, 'История раздач'), h('div', { class: 'small muted' }, 'Все раздачи за сутки с повтором и разбором')), icon('chev')),
       h('span', {}, 'Звуки за столом')),
     h('label', { class: 'toggle-row glass', style: 'padding:12px 14px;border-radius:14px' },
@@ -1709,6 +1809,7 @@ function lobbyScreen() {
         stat('Раздач', fmt(S.summary.hands || 0)), stat('Выиграно', fmt(S.summary.won || 0)),
         S.summary.net != null ? stat('Итог', `${S.summary.net >= 0 ? '+' : '−'}${fmt(Math.abs(S.summary.net))}`) : stat('Минут', S.summary.minutes ?? '—')),
       S.summary.graph && stackGraph(S.summary.graph),
+      S.summary.net != null && h('button', { class: 'btn-sm', onclick: () => shareCard({ title: 'Итог сессии', subtitle: `${S.summary.net >= 0 ? '+' : '−'}${fmt(Math.abs(S.summary.net))} фишек · раздач ${S.summary.hands || 0}`, cards: [], board: [], footer: 'Покер в Telegram' }, `Мой итог за сессию: ${S.summary.net >= 0 ? '+' : '−'}${fmt(Math.abs(S.summary.net))} фишек! Го играть:`) }, '📤 Поделиться итогом'),
       S.summary.stack > 0 && h('div', { class: 'small soft' }, `На баланс вернулось ${fmt(S.summary.stack)} фишек${S.summary.minutes ? ` · ${S.summary.minutes} мин за столом` : ''}`)),
     me.table && h('div', { class: 'glass card at-table' },
       h('button', { class: 'at-table-back', onclick: () => { send({ t: 'table' }); go('table'); } },
@@ -2540,6 +2641,7 @@ function progressScreen() {
     q.claimed ? h('span', { class: 'small', style: 'color:var(--green)' }, 'Получено')
       : h('button', { class: 'btn-sm', disabled: q.p < q.need, onclick: () => run({ t: 'claimQuest', period, key: q.key }) }, 'Забрать'));
   const setP = (r) => { if (r?.progress) { S.progress = r.progress; render(); } };
+  if (!S.achPct && !S.achPctLoading) { S.achPctLoading = true; run({ t: 'myStats' }).then((r) => { if (r) { S.achPct = r.ach; render(); } }); }
   const L = P.level || { lvl: 0, xp: 0, per: 300, points: 0, prestige: 0, prestigeAt: 30 };
   const cal = P.calendar || { days: [], today: 1 };
   const daysInMonth = new Date(Number(cal.month?.slice(0, 4)), Number(cal.month?.slice(5, 7)), 0).getDate() || 30;
@@ -2623,7 +2725,8 @@ function progressScreen() {
     },
       h('div', { style: 'font-size:22px' }, a.at ? '🏅' : '🔒'),
       h('div', { class: 'b', style: 'font-size:12px' }, a.name),
-      h('div', { class: 'small muted', style: 'font-size:10.5px;line-height:1.3' }, a.text)))),
+      h('div', { class: 'small muted', style: 'font-size:10.5px;line-height:1.3' }, a.text),
+      S.achPct?.[a.key] != null && !a.secret && h('div', { class: 'small', style: 'font-size:10px;color:#f5d37a' }, `есть у ${S.achPct[a.key]}% игроков`)))),
     // статистика
     h('div', { class: 'label' }, 'Статистика'),
     h('div', { class: 'glass card' },
@@ -2897,6 +3000,10 @@ function friendActions(f) {
     h('div', { class: 'small muted' }, 'Кто выиграет больше раздач за 3 часа. Ставите одинаково, победитель забирает всё'),
     h('div', { class: 'choices' }, [500, 1000, 5000].map((b) => h('button', { class: (a.bet || 1000) === b ? 'on' : '', onclick: () => { a.bet = b; render(); } }, fmt(b)))),
     h('button', { class: 'btn-sm', onclick: async () => { if (await run({ t: 'proposeBet', to: f.id, stake: a.bet || 1000 })) { toast('Пари предложено'); send({ t: 'friends' }); } } }, 'Предложить пари'),
+    h('button', { class: 'btn-sm ghost', style: 'margin-top:6px', onclick: async () => { const r = await run({ t: 'compareFriend', id: f.id }); if (r) { a.cmp = r; render(); } } }, '📊 Сравнить статистику'),
+    a.cmp && h('div', { class: 'glass card', style: 'gap:4px;padding:10px' },
+      [['Эло', 'rating'], ['Раздач выиграно', 'handsWon'], ['Раздач в статистике', 'hands'], ['VPIP %', 'vpip'], ['PFR %', 'pfr'], ['Победы на вскрытии %', 'sdWin'], ['ROI турниров %', 'roi'], ['Минут в игре', 'minutes']].map(([n, k]) =>
+        h('div', { class: 'row between' }, h('div', { class: 'small' }, n), h('div', { class: 'small b' }, `${a.cmp.me[k] ?? '—'} : ${a.cmp.him[k] ?? '—'}`)))),
     !S.friends?.mentor && h('button', { class: 'btn-sm ghost', style: 'margin-top:6px', onclick: async () => { if (await run({ t: 'setMentor', id: f.id })) { toast(`${f.name} теперь твой наставник`); send({ t: 'friends' }); } } }, '🎓 Сделать наставником'),
     h('button', { class: 'btn-sm ghost', style: 'margin-top:6px', onclick: () => { if (confirm(`Удалить ${f.name} из друзей?`)) run({ t: 'removeFriend', id: f.id }); } }, 'Удалить из друзей'));
 }
@@ -3296,7 +3403,7 @@ function combosScreen() {
 
 // ---------- Рендер ----------
 
-const SCREENS = { style: styleScreen, school: schoolScreen, chart: chartScreen, quiz: quizScreen, exam: examScreen, history: historyScreen, replay: replayScreen, botlab: botLabScreen, training: trainingScreen, tutorial: tutorialScreen, admin: adminScreen, friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
+const SCREENS = { stats: statsScreen, style: styleScreen, school: schoolScreen, chart: chartScreen, quiz: quizScreen, exam: examScreen, history: historyScreen, replay: replayScreen, botlab: botLabScreen, training: trainingScreen, tutorial: tutorialScreen, admin: adminScreen, friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
 
 function render() {
   const app = document.getElementById('app');
