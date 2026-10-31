@@ -8,6 +8,7 @@ import { describeHand, evaluate, evaluateShort, handCategory } from '../../core/
 import { config } from '../config.js';
 import { db, credit } from '../db.js';
 import { skillLevel } from '../progress.js';
+import { noteOf, keyOf } from '../notes.js';
 import { knownEquity, bestFive, outs } from './tablefx.js';
 import { publicLook, vipEmotes, VIP_EMOTES } from '../cosmetics.js';
 import { botPhrase } from '../../core/phrases.js';
@@ -533,6 +534,7 @@ export class GameTable {
           // твоя текущая комбинация (только тебе)
           ...(mine && dealt && p.bot.hole && !v.folded.has(p.id) ? this.myHand(p.bot.hole) : {}),
           away: !p.isBot && p.bot.sittingOut,
+          tag: uid > 0 ? noteOf(uid, keyOf(p))?.color ?? null : null, // твоя цветная метка на игрока
           handsWon: p.isBot ? botHandsWon(p.name) : p.handsWon ?? 0,
           streak: p.streak || 0,
           team: this.teams?.get(p.id) ?? null,

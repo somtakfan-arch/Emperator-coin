@@ -222,6 +222,8 @@ function onMessage(m) {
       };
       S.session = null;
       go('lobby');
+      // следующий стол сам: обыграл всех ботов — садимся за такой же
+      if (m.beatAll && loadUi().autoNext && S.lastSit) setTimeout(() => sitBots(), 1500);
       break;
     case 'invoice':
       tg?.openInvoice(m.link, (status) => {
@@ -293,6 +295,17 @@ function sfx(kind) {
 
 function tableSounds(prev, next) {
   if (!prev || !next || prev.id !== next.id || S.screen !== 'table') return;
+  // субтитры и озвучка: что сделал игрок
+  const ui = loadUi();
+  if (ui.subs || ui.voice) {
+    for (const s of next.seats) {
+      const was = prev.seats.find((x) => x.id === s.id);
+      if (!was || s.last === was.last || !s.last) continue;
+      const line = `${s.me ? 'Ты' : s.name}: ${s.last}`;
+      if (ui.subs) { S.subs = [...(S.subs || []).slice(-1), line]; }
+      if (ui.voice && !s.me) { try { const u = new SpeechSynthesisUtterance(line); u.lang = 'ru-RU'; u.rate = 1.15; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch {} }
+    }
+  }
   if (next.board.length > prev.board.length) sfx('card');
   const prevBet = Object.fromEntries(prev.seats.map((x) => [x.id, x.bet]));
   if (next.seats.some((x) => x.bet > (prevBet[x.id] || 0))) sfx('chip');
@@ -318,6 +331,7 @@ function runPreAction(t) {
   if (p.kind === 'cf') action = { type: t.toCall > 0 ? 'fold' : 'check' };
   if (p.kind === 'c' && t.toCall === 0) action = { type: 'check' };
   if (p.kind === 'any') action = { type: t.toCall > 0 ? 'call' : 'check' };
+  if (p.kind === 'half') action = t.maxTo > t.currentBet ? { type: 'raise', to: clampRaise(t.currentBet + 0.5 * (t.pot + t.toCall), t) } : { type: t.toCall > 0 ? 'call' : 'check' };
   if (!action) return false;
   setTimeout(() => {
     send({ t: 'act', action });
@@ -393,6 +407,15 @@ function playerCardModal(c) {
         c.bot ? stat('', '') : stat('Побед в турн.', c.tourWins || 0)),
       c.bot && c.vs?.hands > 0 && h('div', { class: 'small soft' }, `Против тебя: раздач ${fmt(c.vs.hands)}, ты выиграл ${fmt(c.vs.wins)} (${Math.round((c.vs.wins / c.vs.hands) * 100)}%)${c.vs.net ? ` · итог 1 на 1: ${c.vs.net > 0 ? '+' : '−'}${fmt(Math.abs(c.vs.net))}` : ''}`),
       c.bot && c.level && c.level !== 'normal' && h('div', { class: 'small muted' }, `Сложность: ${c.level === 'easy' ? 'лёгкий' : 'мастер'}`),
+      // твоя заметка и метка — видишь только ты
+      c.notes && c.id !== S.me.id && h('div', { class: 'col', style: 'gap:6px' },
+        h('div', { class: 'small muted' }, 'Метка и заметка (видишь только ты)'),
+        h('div', { class: 'row', style: 'gap:6px' }, ['red', 'orange', 'yellow', 'green', 'blue', 'purple', null].map((col) => h('button', {
+          class: `tag-dot ${col ? `tag-bg-${col}` : ''} ${(c.notes.color || null) === col ? 'on' : ''}`, 'aria-label': col || 'без метки',
+          onclick: async () => { c.notes.color = col; await run({ t: 'setNote', target: c.notes.target, note: c.notes.note || '', color: col }); render(); },
+        }, col ? '' : '✕'))),
+        h('input', { class: 'buyin-input', style: 'margin:0', placeholder: 'Заметка: «часто блефует на ривере»', value: c.notes.note || '', maxlength: 300,
+          onchange: (e) => { c.notes.note = e.target.value; run({ t: 'setNote', target: c.notes.target, note: e.target.value, color: c.notes.color || null }); } })),
       !c.bot && c.id !== S.me.id && !c.friend && h('button', { class: 'btn-sm', onclick: async () => { if (await run({ t: 'addFriend', ref: c.id })) toast('Заявка в друзья отправлена'); } }, 'Добавить в друзья'),
       // витрина
       !c.bot && c.showcase && h('div', { class: 'showcase' },
@@ -459,6 +482,9 @@ function applyUi() {
   // стиль и кастом: «auto» — без атрибута
   for (const k of ['felt', 'rim', 'face', 'dbtn', 'font', 'slots', 'pill', 'bg', 'timer', 'hand', 'emo']) { if (ui[k] && ui[k] !== 'auto') d[k] = ui[k]; else delete d[k]; }
   document.documentElement.classList.toggle('onehand', !!ui.oneHand);
+  document.documentElement.classList.toggle('lefty', !!ui.lefty);
+  document.documentElement.classList.toggle('bigbtns', !!ui.bigBtns);
+  document.documentElement.classList.toggle('eco', !!ui.eco);
   d.deal = ui.deal;
   // своё фото на фоне стола (хранится только на этом устройстве)
   let bg = null;
@@ -1192,6 +1218,11 @@ function botLabScreen() {
 
 // ---------- История раздач за сутки и повтор ----------
 
+async function openLastReplay() {
+  const r = await run({ t: 'history' });
+  if (!r?.hands?.length) return toast('Ещё нет сыгранных раздач');
+  openReplay(r.hands[0].id);
+}
 async function openHistory() {
   go('history');
   const r = await run({ t: 'history' });
@@ -1418,6 +1449,15 @@ function quickSettings() {
     tog('Вибрация на мой ход', ui.vibro !== false, (v) => setUi({ vibro: v })),
     tog('Колода в 4 цвета', ui.deck4, (v) => setUi({ deck4: v })),
     tog('Режим одной рукой', ui.oneHand, (v) => setUi({ oneHand: v })),
+    tog('Режим для левшей', ui.lefty, (v) => setUi({ lefty: v })),
+    tog('Крупные кнопки', ui.bigBtns, (v) => setUi({ bigBtns: v })),
+    tog('Экономия батареи (без анимаций)', ui.eco, (v) => setUi({ eco: v })),
+    tog('Отмена фолда (2 секунды)', ui.undoFold, (v) => setUi({ undoFold: v })),
+    tog('Подтверждать олл-ин', ui.confirmAllin, (v) => setUi({ confirmAllin: v })),
+    tog('Озвучка ходов', ui.voice, (v) => setUi({ voice: v })),
+    tog('Субтитры действий', ui.subs, (v) => setUi({ subs: v })),
+    tog('Напоминать про перерыв (каждый час)', ui.breakRemind !== false, (v) => setUi({ breakRemind: v })),
+    h('div', { class: 'small muted', style: 'line-height:1.4' }, 'На ПК: F — фолд, C — чек/колл, R — рейз, A — олл-ин, H — подсказка. На телефоне: свайп влево по панели — фолд, вверх — чек/колл, двойной тап по столу — чек/колл.'),
     h('div', { class: 'small muted' }, 'Раздача карт'),
     h('div', { class: 'choices wrap' }, DEAL_ANIM.map(([k, n]) => h('button', { class: ui.deal === k ? 'on' : '', onclick: () => { setUi({ deal: k }); render(); } }, n))),
     h('div', { class: 'small muted' }, 'Сцена'),
@@ -1772,6 +1812,8 @@ function botsScreen() {
         h('input', { type: 'checkbox', checked: !!S.marathon, onchange: (e) => { S.marathon = e.target.checked; } }),
         h('span', {}, 'Марафон'), h('span', { class: 'small muted' }, '1000 раздач, в конце итог и сундук')),
       !['mixed', 'ladder', 'rush'].includes(S.botMode) && h('div', { class: 'col', style: 'gap:4px;margin-top:6px' },
+        h('label', { class: 'toggle-row' }, h('input', { type: 'checkbox', checked: !!S.autoTopUp, onchange: (e) => { S.autoTopUp = e.target.checked; } }), h('span', {}, 'Авто-докупка'), h('span', { class: 'small muted' }, 'стек меньше половины — долить до бай-ина')),
+        h('label', { class: 'toggle-row' }, h('input', { type: 'checkbox', checked: !!loadUi().autoNext, onchange: (e) => setUi({ autoNext: e.target.checked }) }), h('span', {}, 'Следующий стол сам'), h('span', { class: 'small muted' }, 'обыграл всех — сразу новый стол')),
         h('div', { class: 'small muted' }, 'Авто-стоп: встать, если проиграл'),
         h('div', { class: 'choices' }, [[0, 'Выкл'], [0.5, 'половину'], [0.75, '¾ бай-ина']].map(([v, l]) => h('button', { class: (S.stopLoss || 0) === v ? 'on' : '', onclick: () => { S.stopLoss = v; render(); } }, l))))),
     S.botMode === 'mixed' && h('div', { class: 'field' },
@@ -1903,7 +1945,8 @@ function mixedScreen() {
 }
 
 async function sitBots() {
-  const r = await run({ t: 'sitBots', mode: S.botMode, botName: S.botName, buyin: S.buyin, minutes: S.botMinutes, fast: !!S.botFast, level: S.botLevel || 'normal', variant: S.shortDeck ? 'short' : null, chaos: !!S.chaos, jokers: !!S.jokers, marathon: ['6', '9'].includes(S.botMode) && !!S.marathon, stopLoss: S.stopLoss || 0 });
+  S.lastSit = { mode: S.botMode, botName: S.botName, buyin: S.buyin, minutes: S.botMinutes };
+  const r = await run({ t: 'sitBots', mode: S.botMode, botName: S.botName, buyin: S.buyin, minutes: S.botMinutes, fast: !!S.botFast, level: S.botLevel || 'normal', variant: S.shortDeck ? 'short' : null, chaos: !!S.chaos, jokers: !!S.jokers, marathon: ['6', '9'].includes(S.botMode) && !!S.marathon, stopLoss: S.stopLoss || 0, autoTopUp: !!S.autoTopUp });
   if (r) go('table');
 }
 
@@ -2043,11 +2086,11 @@ function tableScreen() {
     const [x, y] = SPOTS[spot];
     const top = y < 50;
     const cards = s.me
-      ? (s.cards ? s.cards.map((c) => pcard(c, 'lg', `${hl(c)} ${dealing}`)) : [])
+      ? (s.cards ? s.cards.map((c) => pcard(c, 'lg', `${hl(c)} ${dealing} ${s.myHandCat >= 3 && T.inHand ? 'strong' : ''}`)) : [])
       : s.cards ? s.cards.map((c) => pcard(c, 'sm', hl(c))) : s.inHand && T.inHand ? [pcard(null, 'sm', dealing), pcard(null, 'sm', dealing)] : [];
     const won = !T.inHand && T.result?.some((w) => w.id === s.id);
     const plate = h('div', {
-      'data-seat': s.id, class: `plate ${s.look?.plate ? `plate-${s.look.plate}` : ''} ${T.actor === s.id ? 'turn' : ''} ${s.folded || s.away ? 'out' : ''} ${won ? 'win' : ''}`,
+      'data-seat': s.id, class: `plate ${s.tag ? `tag-${s.tag}` : ''} ${s.look?.plate ? `plate-${s.look.plate}` : ''} ${T.actor === s.id ? 'turn' : ''} ${s.folded || s.away ? 'out' : ''} ${won ? 'win' : ''}`,
       role: 'button', 'aria-label': `Карточка игрока ${s.me ? 'ты' : s.name}`, onclick: () => run({ t: 'playerCard', id: s.id }),
     },
       seatAvatar(s),
@@ -2130,6 +2173,7 @@ function tableScreen() {
         // Хаос / босс-раш — строкой в шапке, чтобы не закрывать игроков
         (T.chaos || T.rush) && h('div', { class: 'mode-line' }, T.rush ? `Босс ${T.rush.i} из ${T.rush.of}: ${T.rush.name}` : T.chaos),
         T.show && h('div', { class: 'mode-line' }, T.show.bet ? `Ставка ${fmt(T.show.bet)} на ${T.show.pick} · выигрыш ${fmt(T.show.win)}` : 'Шоу ботов — просто смотри'),
+        loadUi().subs && S.subs?.length > 0 && h('div', { class: 'mode-line subs' }, S.subs.join(' · ')),
         T.ladder && h('div', { class: 'mode-line' }, `Ступень ${T.ladder.step} из ${T.ladder.of}: ${T.ladder.name}`),
         T.marathon && h('div', { class: 'mode-line' }, `Марафон: раздача ${Math.min(T.marathon.hand, T.marathon.of)} из ${T.marathon.of} · итог ${T.marathon.net >= 0 ? '+' : '−'}${fmt(Math.abs(T.marathon.net))}`),
         T.team && h('div', { class: 'mode-line' }, '🔵 твоя команда · 🔴 соперники'),
@@ -2241,7 +2285,7 @@ function fxLayer() {
 }
 
 function flyChips(from, to, { n = 3, delay = 0, color = 'c-red' } = {}) {
-  if (!from || !to || document.hidden) return;
+  if (!from || !to || document.hidden || loadUi().eco) return;
   const layer = fxLayer();
   for (let i = 0; i < n; i++) {
     const c = h('div', { class: `fly-chip ${color}`, style: `left:${from.x}px;top:${from.y}px` });
@@ -2344,6 +2388,21 @@ function hintCard(hnt, t, act) {
     !hnt.cards?.length && h('div', { class: 'small muted', style: 'font-size:11px' }, 'Это расчёт по его ставкам, а не его настоящие карты.'));
 }
 
+// Отправка хода с удобствами: отмена фолда на 2 секунды, подтверждение олл-ина
+function sendAct(action, t) {
+  const ui = loadUi();
+  if (action.type === 'raise' && action.to >= t.maxTo && ui.confirmAllin && !confirm(`Олл-ин на ${fmt(t.maxTo)}?`)) return;
+  const fire = () => { send({ t: 'act', action }); S.turn = null; S.hint = null; S.undo = null; render(); };
+  const left = (t.deadline || 0) - nowSrv();
+  if (action.type === 'fold' && ui.undoFold && t.toCall > 0 && left > 3500) {
+    S.undo = { timer: setTimeout(fire, 2000) };
+    render();
+    return;
+  }
+  fire();
+}
+function cancelUndo() { if (S.undo) { clearTimeout(S.undo.timer); S.undo = null; render(); } }
+
 function actionPanel(T, me, myTurn) {
   if (T.watching) {
     return h('div', { class: 'panel' },
@@ -2356,22 +2415,32 @@ function actionPanel(T, me, myTurn) {
     const preset = (label, frac) => h('button', {
       onclick: () => { S.raiseTo = frac === 'all' ? t.maxTo : clampRaise(t.currentBet + frac * (t.pot + t.toCall), t); render(); },
     }, label);
-    const act = (action) => {
-      send({ t: 'act', action });
-      S.turn = null;
-      S.hint = null;
-      render();
-    };
+    const act = (action) => sendAct(action, t);
+    S.curAct = act; // для горячих клавиш, свайпов и двойного тапа
     const callAmt = Math.min(t.toCall, t.maxTo - t.myBet);
+    if (S.undo) {
+      return h('div', { class: 'panel' },
+        h('div', { class: 'soft', style: 'text-align:center;font-size:14px' }, 'Фолд через 2 секунды…'),
+        h('button', { class: 'btn', onclick: cancelUndo }, 'Отменить фолд'));
+    }
+    // шансы банка: какую долю нужно выигрывать, чтобы колл окупался
+    const odds = t.toCall > 0 ? Math.round((callAmt / (t.pot + callAmt)) * 100) : 0;
+    // пресеты: до флопа — в больших блайндах, после — в долях банка
+    const pre = !T.board.length;
+    const presetsRow = pre
+      ? [2.5, 3, 4].map((x) => h('button', { onclick: () => { S.raiseTo = clampRaise(x * t.bb + (t.toCall > t.bb ? t.currentBet - t.bb : 0), t); render(); } }, `${x} ББ`))
+      : loadPresets().map((f) => preset(presetLabel(f), f));
     return h('div', { class: 'panel' },
       t.deadline > 0 && h('div', { class: 'countdown', 'data-countdown': t.deadline },
-        h('span', { class: 'cd-label' }, 'Твой ход'),
+        h('span', { class: 'cd-label' }, 'Твой ход', odds ? h('span', { class: 'cd-odds', title: 'Какую долю нужно выигрывать, чтобы колл окупался' }, ` · колл = ${odds}% банка`) : ''),
         // таймбанк: +15 секунд, 3 раза за стол
         me?.timebanks > 0 && h('button', { class: 'timebank-btn', onclick: () => run({ t: 'timebank' }) }, `+15 с · ${me.timebanks}`),
         h('span', { class: 'cd-sec' }, ''),
         h('div', { class: 'cd-bar' }, h('div', { 'data-deadline': t.deadline }))),
-      canRaise && h('div', { class: 'presets' }, loadPresets().map((f) => preset(presetLabel(f), f)), preset('Олл-ин', 'all')),
-      canRaise && t.maxTo > t.minRaiseTo && h('input', {
+      canRaise && h('div', { class: 'presets' }, presetsRow, preset('Олл-ин', 'all')),
+      canRaise && t.maxTo > t.minRaiseTo && h('div', { class: 'bb-step' },
+        h('button', { 'aria-label': 'Минус большой блайнд', onclick: () => { S.raiseTo = clampRaise(S.raiseTo - t.bb, t); render(); } }, '−'),
+        h('input', {
         type: 'range', min: t.minRaiseTo, max: t.maxTo, step: Math.max(1, Math.floor(t.bb / 2)), value: S.raiseTo,
         'aria-label': 'Размер ставки',
         oninput: (e) => {
@@ -2379,6 +2448,7 @@ function actionPanel(T, me, myTurn) {
           document.getElementById('raise-btn').textContent = raiseLabel(t);
         },
       }),
+        h('button', { 'aria-label': 'Плюс большой блайнд', onclick: () => { S.raiseTo = clampRaise(S.raiseTo + t.bb, t); render(); } }, '+')),
       h('div', { class: 'acts' },
         h('button', { class: 'a-fold', onclick: () => act({ type: 'fold' }) }, 'Фолд'),
         h('button', { class: 'a-call', onclick: () => act({ type: t.toCall > 0 ? 'call' : 'check' }) }, t.toCall > 0 ? `Колл ${fmt(callAmt)}` : 'Чек'),
@@ -2388,8 +2458,8 @@ function actionPanel(T, me, myTurn) {
   }
   if (me?.away && !T.leaving) {
     return h('div', { class: 'panel' },
-      h('div', { class: 'soft', style: 'text-align:center;font-size:14px' }, 'Ты пропустил ход и отошёл от стола'),
-      h('button', { class: 'btn', onclick: () => send({ t: 'back' }) }, 'Я вернулся'));
+      h('div', { class: 'soft', style: 'text-align:center;font-size:14px' }, S.awayMine ? '☕ Ты отошёл — ходы пропускаются, место держится 10 минут' : 'Ты пропустил ход и отошёл от стола'),
+      h('button', { class: 'btn', onclick: () => { S.awayMine = false; send({ t: 'back' }); } }, 'Я вернулся'));
   }
   if (T.canRebuy) {
     return h('div', { class: 'panel' },
@@ -2406,8 +2476,11 @@ function actionPanel(T, me, myTurn) {
       onclick: () => { S.pre = S.pre?.kind === kind && S.pre.hand === T.handId ? null : { kind, hand: T.handId }; render(); },
     }, label);
     return h('div', { class: 'panel' },
-      h('div', { class: 'soft', style: 'text-align:center;font-size:13px' }, actorNow ? `Ходит ${actorNow.name}` : 'Раздача идёт'),
-      h('div', { class: 'pre-acts' }, pre('cf', 'Чек / фолд'), pre('c', 'Чек'), pre('any', 'Колл любой')));
+      h('div', { class: 'row between', style: 'gap:6px' },
+        h('button', { class: 'btn-sm ghost', onclick: async () => { if (await run({ t: 'away' })) { S.awayMine = true; toast('☕ Отошёл: место держится 10 минут'); } } }, '☕ Отойти'),
+        h('div', { class: 'soft', style: 'text-align:center;font-size:13px' }, actorNow ? `Ходит ${actorNow.name}` : 'Раздача идёт'),
+        h('button', { class: 'btn-sm ghost', onclick: openLastReplay }, '⏮ Прошлая')),
+      h('div', { class: 'pre-acts' }, pre('cf', 'Чек / фолд'), pre('c', 'Чек'), pre('any', 'Колл любой'), pre('half', 'Рейз ½')));
   }
   const actor = T.seats.find((s) => s.id === T.actor);
   const text = T.leaving ? 'Встаём после раздачи…'
@@ -3232,6 +3305,11 @@ function render() {
   if (S.error) return app.replaceChildren(h('div', { class: 'screen' }, h('div', { class: 'center-msg' }, h('div', { class: 'h2' }, 'Покер'), h('div', { class: 'muted' }, S.error))));
   if (!S.me || S.screen === 'loading') return app.replaceChildren(h('div', { class: 'screen' }, h('div', { class: 'center-msg muted' }, S.connected ? 'Входим…' : 'Подключаемся…')));
   app.replaceChildren(SCREENS[S.screen]());
+  // ты за столом, но смотришь меню — маленькая плашка, нажми чтобы вернуться
+  if (S.table && S.screen !== 'table' && !S.table.watching) {
+    const myTurnNow = S.turn && S.table.actor === S.me.id;
+    app.append(h('button', { class: `mini-table ${myTurnNow ? 'turn' : ''}`, onclick: () => go('table') }, myTurnNow ? '⏰ Твой ход!' : `🃏 За столом · банк ${fmt(S.table.pot || 0)}`));
+  }
   if (focusId) {
     const el = document.getElementById(focusId);
     if (el) { el.focus(); if (el.setSelectionRange && el.type === 'text') el.setSelectionRange(el.value.length, el.value.length); }
@@ -3287,3 +3365,40 @@ tg?.disableVerticalSwipes?.();
 render();
 connect();
 setInterval(() => { if (['lobby', 'tours', 'tour'].includes(S.screen)) render(); }, 30000);
+
+// ---------- Горячие клавиши (ПК), свайпы и двойной тап (телефон) ----------
+function myTurnNow() { return S.screen === 'table' && S.turn && S.table?.actor === S.me?.id && S.curAct; }
+document.addEventListener('keydown', (e) => {
+  if (!myTurnNow() || e.target.tagName === 'INPUT') return;
+  const t = S.turn;
+  const k = e.key.toLowerCase();
+  if (k === 'f' || k === 'а') S.curAct({ type: 'fold' });
+  else if (k === 'c' || k === 'с') S.curAct({ type: t.toCall > 0 ? 'call' : 'check' });
+  else if ((k === 'r' || k === 'к') && t.maxTo > t.currentBet) S.curAct({ type: 'raise', to: S.raiseTo });
+  else if ((k === 'a' || k === 'ф') && t.maxTo > t.currentBet) S.curAct({ type: 'raise', to: t.maxTo });
+  else if (k === 'h' || k === 'р') askHint();
+});
+let touch0 = null;
+document.addEventListener('touchstart', (e) => { const p = e.touches[0]; touch0 = { x: p.clientX, y: p.clientY, el: e.target, at: Date.now() }; }, { passive: true });
+document.addEventListener('touchend', (e) => {
+  if (!touch0 || !myTurnNow()) return;
+  const p = e.changedTouches[0];
+  const dx = p.clientX - touch0.x, dy = p.clientY - touch0.y;
+  const onPanel = touch0.el.closest?.('.panel') && !touch0.el.closest('input');
+  if (onPanel && Date.now() - touch0.at < 600) {
+    if (dx < -80 && Math.abs(dy) < 50) S.curAct({ type: 'fold' });
+    else if (dy < -70 && Math.abs(dx) < 50) S.curAct({ type: S.turn.toCall > 0 ? 'call' : 'check' });
+  }
+  touch0 = null;
+}, { passive: true });
+let lastTap = 0;
+document.addEventListener('click', (e) => {
+  if (!e.target.closest?.('.felt-wrap') || e.target.closest('button, [data-seat]') || !myTurnNow()) return;
+  if (Date.now() - lastTap < 350) { S.curAct({ type: S.turn.toCall > 0 ? 'call' : 'check' }); lastTap = 0; } else lastTap = Date.now();
+});
+// напоминание про перерыв: час подряд за столом
+setInterval(() => {
+  if (!S.session || loadUi().breakRemind === false) return;
+  const mins = Math.floor((Date.now() - S.session.start) / 60000);
+  if (mins > 0 && mins % 60 === 0 && S.session.lastBreak !== mins) { S.session.lastBreak = mins; toast(`⏸ Ты играешь уже ${mins / 60} ч — сделай перерыв, разомнись и попей воды`); }
+}, 30000);

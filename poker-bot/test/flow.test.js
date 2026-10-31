@@ -1247,3 +1247,26 @@ test('стиль и кастом: 350 вариантов, у каждого ес
   c.ws.send(JSON.stringify({ t: 'leave' })); await c.waitFor((m) => m.t === 'left', 30000);
   c.close();
 });
+
+test('удобство за столом: отлучка без кика, авто-докупка, заметки и метки', async () => {
+  const c = new Client(9981, { autoplay: 'idle' });
+  await c.ready;
+  await c.req({ t: 'invoice', pack: 'p1' });
+  await c.req({ t: 'sitBots', mode: 'hu', botName: 'Маньяк', buyin: 500, autoTopUp: true });
+  const t0 = await c.waitFor((m) => m.t === 'table' && m.table?.inHand);
+  const bot = t0.table.seats.find((s) => s.isBot);
+  await c.req({ t: 'setNote', target: `b:${bot.name}`, note: 'жмёт олл-ин', color: 'red' });
+  await c.waitFor((m) => m.t === 'table' && m.table?.seats?.find((s) => s.isBot)?.tag === 'red');
+  const card = await c.req({ t: 'playerCard', id: bot.id });
+  assert.equal(card.card.notes.note, 'жмёт олл-ин');
+  await assert.rejects(c.req({ t: 'setNote', target: 'x:1', note: 'a' }), /Неверный/);
+  // отлучка: несколько раздач без ходов — со стола не выкидывает (обычно кик после 2 пропусков)
+  await c.req({ t: 'away' });
+  await c.waitFor((m) => m.t === 'left' || (m.t === 'table' && m.table?.handId >= t0.table.handId + 3), 60000);
+  await c.req({ t: 'back' });
+  assert.ok(!c.msgs.some((m) => m.t === 'left'), 'со стола не выкинуло');
+  c.msgs.length = 0; // на тестовой скорости раздач очень много — не копим
+  c.ws.send(JSON.stringify({ t: 'leave' })); await c.waitFor((m) => m.t === 'left', 30000);
+  assertLedger(9981);
+  c.close();
+});

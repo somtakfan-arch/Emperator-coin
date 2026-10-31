@@ -18,6 +18,7 @@ import { botHandsWon, botWeekTop } from './game/table.js';
 import * as botsx from './botsx.js';
 import * as social2 from './social2.js';
 import * as learn from './learn.js';
+import * as notes from './notes.js';
 import { GameTable } from './game/table.js';
 import { ghostHour } from '../core/bots.js';
 import { BOT_KINDS } from '../core/crowd.js';
@@ -443,6 +444,7 @@ const handlers = {
     const at = activeTable(uid);
     const p = at?.table.players.find((x) => x.id === Number(m.id));
     if (!p) throw new Error('Игрок не за твоим столом');
+    const nt = { target: notes.keyOf(p), ...(notes.noteOf(uid, notes.keyOf(p)) || {}) };
     if (p.isBot) {
       const info = BOTS.find((b) => b.name === p.name) || CROWD_VIEW.find((b) => b.name === p.name);
       const boss = BOSS_CLASSES.map((C) => new C({})).find((b) => b.name === p.name);
@@ -451,7 +453,7 @@ const handlers = {
         t: 'card',
         card: {
           bot: true, name: p.name, style: info?.style ?? boss?.style ?? '', handsWon: botHandsWon(p.name),
-          elo: botRating(p.name, room?.level, room?.shadow), level: room?.level ?? 'normal', vs: progress.vsStats(uid, p.name),
+          elo: botRating(p.name, room?.level, room?.shadow), level: room?.level ?? 'normal', vs: progress.vsStats(uid, p.name), notes: nt,
         },
       };
     }
@@ -464,7 +466,7 @@ const handlers = {
         achievements: P.achievements.filter((a) => a.at).length, tourWins: u.wins, look: cosmetics.publicLook(p.id),
         // витрина: медали, коллекция, альбом, лучшая рука, престиж
         showcase: { medals: P.medals, cards: P.cards.length, album: Object.keys(P.album).length, best: P.best, prestige: P.level.prestige, level: P.level.lvl },
-        stats: { hands: P.stats.hands, wins: P.stats.wins, bestCat: P.stats.bestCat },
+        stats: { hands: P.stats.hands, wins: P.stats.wins, bestCat: P.stats.bestCat }, notes: nt,
       },
     };
   },
@@ -497,7 +499,7 @@ const handlers = {
   sitBots(uid, m) {
     if (activeTable(uid)) throw new Error('Ты уже за столом');
     botRooms.set(uid, BotRoom.open(hub, getUser(uid), {
-      mode: ['6', '9', 'rush', 'mega', 'ladder', 'team'].includes(m.mode) ? m.mode : 'hu', jokers: !!m.jokers, marathon: !!m.marathon, stopLoss: [0.5, 0.75].includes(Number(m.stopLoss)) ? Number(m.stopLoss) : 0, botName: m.botName, variant: m.variant === 'short' ? 'short' : null, chaos: !!m.chaos, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0, fast: !!m.fast,
+      mode: ['6', '9', 'rush', 'mega', 'ladder', 'team'].includes(m.mode) ? m.mode : 'hu', jokers: !!m.jokers, marathon: !!m.marathon, stopLoss: [0.5, 0.75].includes(Number(m.stopLoss)) ? Number(m.stopLoss) : 0, autoTopUp: !!m.autoTopUp, botName: m.botName, variant: m.variant === 'short' ? 'short' : null, chaos: !!m.chaos, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0, fast: !!m.fast,
       level: m.level || 'normal', shadow: progress.shadowLevel(uid), mirror: progress.mirrorStats(uid), myBot: m.botName === '__my' ? botsx.myBot(uid) : null,
     }));
     hub.onSeated(uid);
@@ -630,14 +632,30 @@ const handlers = {
     if (!a?.seat.extend?.()) throw new Error('Таймбанк закончился');
     return { t: 'ok', left: a.seat.timebanks };
   },
+  // заметка и цветная метка на игрока
+  setNote(uid, m) {
+    notes.setNote(uid, m.target, m.note, m.color);
+    activeTable(uid)?.table.broadcast();
+    return { t: 'ok' };
+  },
+  // отойти от стола: ходы пропускаются, но со стола не выкидывает 10 минут
+  away(uid) {
+    const a = activeTable(uid);
+    if (!a) throw new Error('Ты не за столом');
+    a.seat.sittingOut = true;
+    a.seat.awayUntil = Date.now() + 10 * 60000;
+    a.table.broadcast();
+    return { t: 'ok' };
+  },
   back(uid) {
     const a = activeTable(uid);
     if (a) {
       a.seat.sittingOut = false;
+      a.seat.awayUntil = 0;
       a.seat.timeouts = 0;
       a.table.broadcast();
     }
-    return null;
+    return { t: 'ok' };
   },
   // встать / выйти с любого стола: свой стол — стек на баланс; турнир — вылет с текущим местом
   leave(uid) {

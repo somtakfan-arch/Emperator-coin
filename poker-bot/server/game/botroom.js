@@ -45,7 +45,8 @@ const saveMemory = db.prepare(`INSERT INTO bot_memory (user_id, bot, data, at) V
   ON CONFLICT (user_id, bot) DO UPDATE SET data = excluded.data, at = excluded.at`);
 
 export class BotRoom {
-  constructor(hub, user, { mode, botName, buyin, minutes = 0, fast = false, level = 'normal', shadow = 0, variant = null, chaos = false, jokers = false, marathon = false, mirror = null, myBot = null, stopLoss = 0 }) {
+  constructor(hub, user, { mode, botName, buyin, minutes = 0, fast = false, level = 'normal', shadow = 0, variant = null, chaos = false, jokers = false, marathon = false, mirror = null, myBot = null, stopLoss = 0, autoTopUp = false }) {
+    this.autoTopUp = autoTopUp; // авто-докупка до бай-ина, когда стек меньше половины
     this.stopLoss = stopLoss; // авто-стоп: встать, если стек упал на эту долю от вложенного
     this.mode = mode;
     this.chaosOn = chaos;
@@ -192,6 +193,16 @@ export class BotRoom {
         return this.close();
       }
     }
+    // авто-докупка: стек меньше половины бай-ина — доливаем до бай-ина с баланса
+    if (this.autoTopUp && !this.rush && !this.ladder && !this.team && this.me.stack > 0 && this.me.stack < this.buyin / 2) {
+      const add = this.buyin - this.me.stack;
+      if (debit(this.userId, add, 'bots_topup')) {
+        this.me.stack += add;
+        this.invested += add;
+        setInPlay.run(this.me.stack, this.userId);
+        this.hub.send(this.userId, { t: 'toast', text: `Авто-докупка: +${add.toLocaleString('ru')} до бай-ина` });
+      }
+    }
     // Хаос: случайное событие на каждую раздачу
     this.table.setBlinds(...this.baseBlinds);
     this.table.chaos = this.chaosOn ? CHAOS[(Math.random() * CHAOS.length) | 0] : null;
@@ -217,7 +228,7 @@ export class BotRoom {
       }
     }
     // свободный стол: пропустил 2 хода подряд — убираем из-за стола, стек на баланс
-    if (!this.endsAt && this.seat.sittingOut && !this.leaving) {
+    if (!this.endsAt && this.seat.sittingOut && !this.leaving && !(this.seat.awayUntil > Date.now())) {
       this.leaving = true;
       this.kicked = true;
     }
