@@ -574,7 +574,7 @@ test('стол: эмодзи, таймбанк, шансы при олл-ине,
   await a.waitFor((m) => m.t === 'table' && m.table?.seats.find((s) => s.me)?.emote === '🔥', 10000);
   // таймбанк: +15 секунд, счётчик уменьшается
   const tb = await a.req({ t: 'timebank' });
-  assert.equal(tb.left, 2);
+  assert.equal(tb.left, 4); // у админа навык «Запас времени» на максимуме: 3 + 2, один потрачен
   const longer = await a.waitFor((m) => m.t === 'table' && m.table?.deadline >= turn.deadline + 14000, 10000);
   assert.ok(longer);
   // олл-ин: боты по кнопке идут ва-банк, мы коллируем — видны шансы
@@ -1167,4 +1167,16 @@ test('пачка 14: поиск игроков, бан и мут, онлайн, 
   await assert.rejects(banned.ready, /заблокирован/);
   await a.req({ t: 'admin', a: 'ban', id: 9951, on: false });
   a.close(); u.close(); banned.close();
+});
+
+test('админ: при входе открыто всё — достижения, карты, альбом, навыки', async () => {
+  const a = new Client(7001);
+  await a.ready;
+  const p = (await a.req({ t: 'progress' })).progress;
+  assert.ok(p.achievements.every((x) => x.at), 'все достижения');
+  assert.equal(p.cards.length, 52);
+  assert.equal(Object.keys(p.album).length, 10);
+  assert.ok(p.skills.every((s) => s.lvl === s.max));
+  assert.ok(p.level.points >= 0 && p.level.prestige >= 1);
+  a.close();
 });

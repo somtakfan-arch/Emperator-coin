@@ -666,3 +666,20 @@ export function weakSpots(uid) {
   if (tips.every((t) => !t.bad)) tips.push({ bad: false, text: 'Явных дыр не видно — так держать!' });
   return { ready: true, tips, stats: { vpip: Math.round(vpip * 100), showdownWin: Math.round(sdw * 100), riverCallWin: s.rc ? Math.round(rcw * 100) : null } };
 }
+
+// ---------- Админ: открыто вообще всё (без начисления фишек за достижения) ----------
+export function unlockAll(uid) {
+  tx(() => {
+    const p = load(uid);
+    if (!p) return;
+    const now = Date.now();
+    for (const a of ACHIEVEMENTS) p.ach[a.key] ||= now;
+    p.cards = Array.from({ length: 52 }, (_, i) => i);
+    p.album ||= {};
+    for (const k of ['0', '1', '2', '3', '4', '5', '6', '7', '8', 'royal']) p.album[k] ||= now;
+    p.xpTotal = Math.max(p.xpTotal || 0, PRESTIGE_LEVEL * XP_PER_ACC_LEVEL);
+    p.skills = Object.fromEntries(SKILLS.map((s) => [s.key, s.max]));
+    p.prestige = Math.max(p.prestige || 0, 1);
+    save(uid, p);
+  });
+}

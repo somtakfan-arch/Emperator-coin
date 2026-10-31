@@ -874,6 +874,7 @@ wss.on('connection', (ws) => {
         const u = upsertUser(auth.user);
         if (admin.isBanned(u.id)) return reply({ t: 'error', text: 'Аккаунт заблокирован' });
         uid = u.id;
+        if (config.adminIds.includes(uid)) progress.unlockAll(uid); // у админа открыто всё
         admin.touch(uid); // для статистики «активные за сутки»
         if (!sockets.has(uid)) sockets.set(uid, new Set());
         sockets.get(uid).add(ws);
