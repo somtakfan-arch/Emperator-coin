@@ -628,6 +628,7 @@ export class GameTable {
         vsKing: won && !!king && (e.contributions.find((c) => c.id === king.id)?.total ?? 0) > 0,
         handsWon: p.handsWon ?? 0,
         bb: this.bb,
+        kind: this.kind,
         hole: p.bot.hole || [],
         score: won && score != null ? score : null,
         handName: won && score != null ? describeHand(score) : null,

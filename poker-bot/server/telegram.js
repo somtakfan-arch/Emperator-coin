@@ -57,6 +57,7 @@ export const inviteLink = (tId) => `https://t.me/${bot.username}?start=t_${tId}`
 
 // Пакет фишек или подсказок по id
 export function findPack(id) {
+  if (id === 'pass') return { id: 'pass', stars: 150, pass: true }; // премиум-линия пропуска сезона
   return config.packs.find((p) => p.id === id) || config.hintPacks.find((p) => p.id === id) || null;
 }
 
@@ -64,6 +65,12 @@ export async function createInvoice(userId, packId) {
   const pack = findPack(packId);
   if (!pack) throw new Error('нет такого пакета');
   const hints = !!pack.hints;
+  if (pack.pass) {
+    return api('createInvoiceLink', {
+      title: 'Премиум-пропуск сезона', description: 'Вторая линия наград пропуска: жетоны за каждый уровень и сундуки. Действует до конца сезона.',
+      payload: JSON.stringify({ u: userId, p: 'pass' }), provider_token: '', currency: 'XTR', prices: [{ label: 'Премиум-пропуск', amount: pack.stars }],
+    });
+  }
   return api('createInvoiceLink', {
     title: hints ? `Подсказки: ${pack.hints} шт.` : `${pack.chips.toLocaleString('ru')} фишек`,
     description: hints
@@ -90,6 +97,10 @@ function onPayment(msg) {
     return r.changes > 0;
   });
   if (!done) return; // повтор того же платежа
+  if (pack.pass) {
+    hooks.onPremium?.(userId);
+    return notify(userId, 'Премиум-пропуск сезона активирован! Забирай награды второй линии в «Наградах».', appButton('Открыть', '#progress', 'success'));
+  }
   if (pack.hints) {
     db.prepare('UPDATE users SET hints = hints + ? WHERE id = ?').run(pack.hints, userId);
     hooks.onBalance?.(userId);

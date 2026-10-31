@@ -120,6 +120,8 @@ export function statsView(uid) {
     bluff: { n: bluffs.length, won: bluffWon }, playMinutes: Math.round(ms / 60000),
     elo, tours: tours.map((t) => ({ at: t.at, name: t.name, place: t.place, size: t.size, prize: t.prize, buyin: t.buyin })),
     roi: tAll.b ? Math.round(((tAll.p - tAll.b) / tAll.b) * 100) : null, tourCount: tAll.n, vs,
+    // 93 лучший месяц по итогу в фишках
+    bestMonth: db.prepare("SELECT strftime('%Y-%m', at / 1000 + 10800, 'unixepoch') AS m, SUM(net) AS net FROM hand_stats WHERE user_id = ? GROUP BY m ORDER BY net DESC LIMIT 1").get(uid) || null,
   };
 }
 

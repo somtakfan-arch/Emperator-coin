@@ -2,7 +2,7 @@
 // Аватар и рамку видят все за столом; рубашку — только ты (она в настройках устройства, но открывается здесь).
 import { db } from './db.js';
 import { config } from './config.js';
-import { rankOf, setChestCosmetic, titlesOf } from './progress.js';
+import { rankOf, setChestCosmetic, titlesOf, addShards, spendShards } from './progress.js';
 
 const cols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
 if (!cols.has('photo')) db.exec('ALTER TABLE users ADD COLUMN photo TEXT');
@@ -282,9 +282,22 @@ setChestCosmetic((p, kind, uid) => {
     ...FRAMES.filter((f) => f.chest && !d.c.owned.includes(`frame:${f.id}`)).map((f) => ({ key: `frame:${f.id}`, text: `рамка «${f.name}»` })),
     ...BACKS.filter((b) => b.chest && !d.c.owned.includes(`back:${b.id}`)).map((b) => ({ key: `back:${b.id}`, text: `рубашка «${b.name}»` })),
   ];
-  if (!pool.length) return null;
+  if (!pool.length) { addShards(uid, 10); return '10 осколков (у тебя уже всё из сундуков)'; }
   const pick = pool[(Math.random() * pool.length) | 0];
   d.c.owned.push(pick.key);
   db.prepare('UPDATE users SET cosmetics = ? WHERE id = ?').run(JSON.stringify(d.c), uid);
   return pick.text;
 });
+
+// крафт: предмет «из сундука» за 50 осколков
+export const CRAFT_PRICE = 50;
+export function craft(uid, kind, id) {
+  const list = kind === 'frame' ? FRAMES : kind === 'back' ? BACKS : null;
+  const item = list?.find((x) => x.id === id && x.chest);
+  if (!item) throw new Error('Скрафтить можно только предметы «из сундука»');
+  const d = load(uid);
+  if (d.c.owned.includes(`${kind}:${id}`)) throw new Error('Уже есть');
+  spendShards(uid, CRAFT_PRICE);
+  d.c.owned.push(`${kind}:${id}`);
+  db.prepare('UPDATE users SET cosmetics = ? WHERE id = ?').run(JSON.stringify(d.c), uid);
+}

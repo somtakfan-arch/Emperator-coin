@@ -615,7 +615,7 @@ function leaveTableScreen(tournamentId) {
 
 // ---------- Навигация ----------
 
-const BACK = { fun: 'lobby', stats: 'profile', style: 'profile', school: 'lobby', chart: 'school', quiz: 'school', exam: 'school', history: 'friends', replay: 'history', botlab: 'lobby', training: 'lobby', tutorial: 'lobby', admin: 'profile', friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
+const BACK = { eco: 'progress', fun: 'lobby', stats: 'profile', style: 'profile', school: 'lobby', chart: 'school', quiz: 'school', exam: 'school', history: 'friends', replay: 'history', botlab: 'lobby', training: 'lobby', tutorial: 'lobby', admin: 'profile', friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
 
 function go(screen) {
   if (screen !== 'table' && S.screen === 'table' && S.table) S.tableHidden = true;
@@ -1620,6 +1620,7 @@ function statsScreen() {
       REC.rating && h('div', { class: 'small' }, `📈 Лучшее Эло: ${fmt(REC.rating.v)} — ${REC.rating.name}`),
       REC.tours && h('div', { class: 'small' }, `🥇 Больше всех побед в турнирах: ${fmt(REC.tours.v)} — ${REC.tours.name}`),
       REC.hand?.v > 0 && h('div', { class: 'small' }, `🔥 Самый крупный выигрыш за раздачу: ${fmt(REC.hand.v)} — ${REC.hand.name}`)),
+    T.bestMonth?.net > 0 && sec('Лучший месяц', h('div', { class: 'row between' }, h('div', {}, T.bestMonth.m), h('div', { class: 'b', style: 'color:var(--green)' }, sign(T.bestMonth.net)))),
     h('button', { class: 'btn-ghost', onclick: exportStats }, '⬇️ Скачать историю раздач (CSV)'),
     h('div', { style: 'height:70px' }));
 }
@@ -1696,6 +1697,64 @@ function funScreen() {
       const y = r.recap;
       shareCard({ title: `Мой ${y.year} в покере`, subtitle: `${fmt(y.hands)} раздач · ${fmt(y.won)} побед`, cards: [], board: [], footer: `${y.tours} турниров · ${y.favBot ? `любимый соперник: ${y.favBot}` : 'Покер в Telegram'}` }, `Мой ${y.year} в покере: ${y.hands} раздач, ${y.won} побед! Го играть:`);
     } }, '📤 Картинка итогов года')),
+    h('div', { style: 'height:70px' }));
+}
+
+// ---------- Жетоны, магазин, лиги, пропуск ----------
+
+async function openEco() {
+  go('eco');
+  const r = await run({ t: 'economy' });
+  if (r) { S.eco = r; render(); }
+}
+
+function ecoScreen() {
+  const R = S.eco;
+  if (!R) return h('div', { class: 'screen' }, header('Жетоны и магазин'), h('div', { class: 'muted small' }, 'Загрузка…'));
+  const E = R.eco;
+  const upd = (r) => { if (r) { if (r.text) toast(r.text); if (r.eco) S.eco.eco = r.eco; if (r.premium) S.eco.premium = r.premium; if (r.look) S.look = r.look; render(); } };
+  const box = (title, ...body) => h('div', { class: 'glass card', style: 'gap:8px' }, h('div', { class: 'b', style: 'font-size:15px' }, title), ...body);
+  const P = S.progress;
+  const passLvl = P ? P.pass.level : 0;
+  const craftable = (S.look ? [...S.look.frames.map((x) => ({ ...x, kind: 'frame' })), ...S.look.backs.map((x) => ({ ...x, kind: 'back' }))] : [])
+    .filter((x) => !x.owned && /сундук/.test(x.how));
+  return h('div', { class: 'screen' },
+    header('Жетоны и магазин'),
+    h('div', { class: 'grid3' }, stat('Жетоны', E.tokens), stat('Билеты', E.tickets), stat('Осколки', E.shards)),
+    E.happyHour && h('div', { class: 'glass card', style: 'border-color:#f5d37a' }, h('div', { class: 'b' }, '🎉 Счастливый час: x2 опыт до 21:00 по Москве')),
+    E.boostUntil > nowSrv() && h('div', { class: 'small', style: 'color:#f5d37a' }, `⚡ Удвоитель опыта ещё ${Math.ceil((E.boostUntil - nowSrv()) / 60000)} мин`),
+    box('🎁 Бесплатно',
+      h('div', { class: 'grid2' },
+        h('button', { class: 'btn-ghost', disabled: !E.freeChest, onclick: async () => upd(await run({ t: 'claimFree', what: 'chest' })) }, E.freeChest ? 'Сундук дня' : 'Сундук — завтра'),
+        h('button', { class: 'btn-ghost', disabled: !E.cashback, onclick: async () => upd(await run({ t: 'claimFree', what: 'cashback' })) }, 'Кешбэк 5% за вчера')),
+      h('div', { class: 'row between' }, h('div', { class: 'small soft' }, `🐷 Копилка: ${fmt(E.piggy)} (5% от выигранных банков)`),
+        h('button', { class: 'btn-sm', disabled: !E.piggyReady || !E.piggy, onclick: async () => upd(await run({ t: 'claimFree', what: 'piggy' })) }, 'Разбить'))),
+    box('📜 Путь игрока', h('div', { class: 'progress' }, h('div', { style: `width:${(E.chain.step / E.chain.of) * 100}%` })),
+      h('div', { class: 'small soft' }, E.chain.text ? `Шаг ${E.chain.step + 1} из ${E.chain.of}: ${E.chain.text}` : 'Путь пройден!'),
+      E.chain.reward > 0 && h('button', { class: 'btn-sm', onclick: async () => upd(await run({ t: 'claimFree', what: 'chain' })) }, `Забрать ${fmt(E.chain.reward)} фишек`)),
+    box('🗓 Задания месяца', ...E.monthly.map((q) => h('div', { class: 'quest' },
+      h('div', { class: 'col', style: 'gap:4px;flex:1' }, h('div', { class: 'b', style: 'font-size:14px' }, q.text), h('div', { class: 'progress' }, h('div', { style: `width:${(q.p / q.need) * 100}%` })), h('div', { class: 'small muted' }, `${q.p}/${q.need} · эпический сундук и 50 жетонов`)),
+      q.claimed ? h('span', { class: 'small', style: 'color:var(--green)' }, 'Получено') : h('button', { class: 'btn-sm', disabled: q.p < q.need, onclick: async () => upd(await run({ t: 'claimMonthly', key: q.key })) }, 'Забрать')))),
+    box('🕵️ Скрытое задание недели', h('div', { class: 'small soft' }, E.hidden.text), h('div', { class: 'small muted' }, E.hidden.done ? 'Выполнено ✓' : 'Награда: 40 жетонов и редкий сундук')),
+    box('🛒 Магазин за жетоны', h('div', { class: 'small muted' }, 'Жетоны дают за задания, достижения и мастерство.'),
+      ...E.shop.map((it) => h('div', { class: 'row between' }, h('div', {}, it.name), h('button', { class: 'btn-sm', disabled: E.tokens < it.price, onclick: async () => upd(await run({ t: 'shopBuy', id: it.id })) }, `${it.price} 🪙`)))),
+    box('🎟 Лотерея', h('div', { class: 'small muted' }, 'Билет — за каждое задание. Внутри фишки, жетоны или сундук.'),
+      h('button', { class: 'btn-sm', disabled: !E.tickets, onclick: async () => upd(await run({ t: 'openTicket' })) }, `Открыть билет (${E.tickets})`)),
+    box('🔨 Крафт за осколки', h('div', { class: 'small muted' }, 'Осколки выпадают из сундуков, когда всё «из сундука» у тебя уже есть. Предмет — 50 осколков.'),
+      craftable.length ? craftable.slice(0, 12).map((x) => h('div', { class: 'row between' }, h('div', { class: 'small' }, `${x.kind === 'frame' ? 'Рамка' : 'Рубашка'} «${x.name}»`), h('button', { class: 'btn-sm', disabled: E.shards < 50, onclick: async () => upd(await run({ t: 'craft', kind: x.kind, id: x.id })) }, '50 💎')))
+        : h('div', { class: 'small soft' }, 'Всё «из сундука» уже собрано')),
+    box(`⭐ Премиум-пропуск сезона${R.premium.premium ? ' — активен' : ''}`,
+      h('div', { class: 'small muted' }, 'Вторая линия пропуска: +20 жетонов за каждый уровень, каждый 5-й — редкий сундук.'),
+      !R.premium.premium ? h('button', { class: 'btn', onclick: async () => { const r = await run({ t: 'invoice', pack: 'pass' }); if (r?.t === 'paid') { toast('Активирован'); openEco(); } } }, 'Купить за 150 ⭐')
+        : h('div', { class: 'pass-row' }, Array.from({ length: 30 }, (_, i) => i + 1).map((lvl) => {
+          const got = R.premium.claimed.includes(lvl);
+          return h('button', { class: `pass-lvl ${passLvl >= lvl ? 'open' : ''} ${got ? 'got' : ''}`, disabled: passLvl < lvl || got, onclick: async () => upd(await run({ t: 'claimPremium', lvl })) },
+            h('div', { class: 'small muted' }, `ур. ${lvl}`), h('div', { class: 'b', style: 'font-size:12px' }, lvl % 5 ? '20 🪙' : '📦'), got && h('div', { class: 'small', style: 'color:var(--green)' }, '✓'));
+        }))),
+    box('🎖 Мастерство режимов', ...Object.entries(E.modeNames).map(([k, n]) => { const v = E.mastery[k] || 0; const lvl = E.masteryLevels.filter((x) => v >= x).length; return h('div', { class: 'row between' }, h('div', {}, n), h('div', { class: 'small soft' }, `${v} раздач · уровень ${lvl}/3${E.masteryLevels[lvl] ? ` · до следующего ${E.masteryLevels[lvl] - v}` : ''}`)); })),
+    box('🥉🥈🥇 Достижения с уровнями', ...E.tiers.map((t) => h('div', { class: 'row between' }, h('div', {}, `${['—', '🥉', '🥈', '🥇'][t.lvl]} ${t.name}`), h('div', { class: 'small soft' }, `${fmt(t.v)}${t.next ? ` / ${fmt(t.next)}` : ' · максимум'}`)))),
+    box(`🏆 Лига «${R.league.league}» · прирост Эло за неделю`, h('div', { class: 'small muted' }, 'Тройка лучших в каждой лиге в понедельник получает редкий сундук.'),
+      R.league.rows.length ? R.league.rows.slice(0, 15).map((r) => h('div', { class: 'row between', style: r.me ? 'color:#f5d37a' : '' }, h('div', {}, `${r.place}. ${r.name}`), h('div', { class: 'b' }, `${r.gain >= 0 ? '+' : ''}${r.gain}`))) : h('div', { class: 'small soft' }, 'Пока пусто')),
     h('div', { style: 'height:70px' }));
 }
 
@@ -2746,6 +2805,7 @@ function progressScreen() {
   const daysInMonth = new Date(Number(cal.month?.slice(0, 4)), Number(cal.month?.slice(5, 7)), 0).getDate() || 30;
   return h('div', { class: 'screen' },
     header('Награды'),
+    h('button', { class: 'item', onclick: openEco }, h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, '🪙 Жетоны, магазин и лиги'), h('div', { class: 'small muted' }, 'Сундук дня, копилка, кешбэк, Путь игрока, задания месяца, лотерея, крафт, премиум-пропуск')), icon('chev')),
     // колесо удачи и испытание дня
     h('div', { class: 'grid2' },
       h('div', { class: 'glass card', style: 'gap:8px' },
@@ -3502,7 +3562,7 @@ function combosScreen() {
 
 // ---------- Рендер ----------
 
-const SCREENS = { fun: funScreen, stats: statsScreen, style: styleScreen, school: schoolScreen, chart: chartScreen, quiz: quizScreen, exam: examScreen, history: historyScreen, replay: replayScreen, botlab: botLabScreen, training: trainingScreen, tutorial: tutorialScreen, admin: adminScreen, friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
+const SCREENS = { eco: ecoScreen, fun: funScreen, stats: statsScreen, style: styleScreen, school: schoolScreen, chart: chartScreen, quiz: quizScreen, exam: examScreen, history: historyScreen, replay: replayScreen, botlab: botLabScreen, training: trainingScreen, tutorial: tutorialScreen, admin: adminScreen, friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
 
 function render() {
   const app = document.getElementById('app');

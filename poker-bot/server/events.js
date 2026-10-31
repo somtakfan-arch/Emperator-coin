@@ -20,5 +20,6 @@ export function setEvent(kind, hours, title) {
   db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('event', ?)").run(JSON.stringify(e));
   return e;
 }
-export const eventMult = (kind) => (getEvent()?.kind === kind ? 2 : 1);
+export const happyHour = () => new Date(Date.now() + 3 * HOUR).getUTCHours() === 20; // 20:00–21:00 по Москве
+export const eventMult = (kind) => (getEvent()?.kind === kind || (kind === 'x2xp' && happyHour()) ? 2 : 1);
 

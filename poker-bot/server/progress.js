@@ -3,7 +3,7 @@
 // Всё хранится в users.progress (JSON), для таблиц лидеров — отдельные колонки.
 import { db, tx, credit } from './db.js';
 import { config, NOT_ADMIN } from './config.js';
-import { eventMult } from './events.js';
+import { eventMult, happyHour } from './events.js';
 
 const cols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
 if (!cols.has('progress')) db.exec("ALTER TABLE users ADD COLUMN progress TEXT NOT NULL DEFAULT '{}'");
@@ -169,7 +169,8 @@ export function setProgressNotifier(fn) {
 }
 
 function addXp(p, n) {
-  const v = Math.round(n * eventMult('x2xp') * (1 + 0.1 * (p.skills?.xp || 0))); // ивент «x2 опыт», навык «Опыт»
+  const boost = p.boostUntil > Date.now() ? 2 : 1; // личный удвоитель на час
+  const v = Math.round(n * eventMult('x2xp') * boost * (1 + 0.1 * (p.skills?.xp || 0))); // ивент «x2 опыт», навык «Опыт»
   p.pass.xp += v;
   p.xpTotal = (p.xpTotal || 0) + v; // опыт за всё время — уровень аккаунта
 }
@@ -182,6 +183,7 @@ function unlock(uid, p, key, out) {
   p.ach[key] = Date.now();
   if (a.chips && config.progressRewards) credit(uid, x2(a.chips), 'achievement', key);
   if (a.chest) p.chests[a.chest]++;
+  p.tokens = (p.tokens || 0) + 10;
   addXp(p, 50);
   out.push(`🏅 Достижение «${a.name}»: +${a.chips} фишек${a.chest ? ` и ${CHESTS[a.chest].name.toLowerCase()}` : ''}`);
 }
@@ -239,6 +241,14 @@ export function onHand(uid, h) {
       if (s.streak >= 5) unlock(uid, p, 'streak_5', out);
       if (h.vsKing) unlock(uid, p, 'beat_king', out);
       if (h.allIn && h.showdown) unlock(uid, p, 'allin_win', out);
+      // бонус за первую победу дня
+      if (p.firstWin !== dayKey()) {
+        p.firstWin = dayKey();
+        if (config.progressRewards) credit(uid, x2(200), 'first_win_day');
+        out.push('☀️ Первая победа дня: +200 фишек');
+      }
+      // копилка: 5% от выигранного банка (до 5000), разбивается раз в неделю
+      p.piggy = Math.min(5000, (p.piggy || 0) + Math.floor((h.amount || 0) * 0.05));
       // коллекция карт: каждая карта, с которой ты выиграл
       p.cards ||= [];
       for (const c of h.hole || []) if (c < 52 && !p.cards.includes(c)) p.cards.push(c);
@@ -277,6 +287,17 @@ export function onHand(uid, h) {
       if (p.night?.d !== night) p.night = { d: night, n: 0 };
       if (++p.night.n >= 100) unlock(uid, p, 'night_marathon', out);
     }
+    // клад: 1 шанс из 60 найти сундук прямо за столом
+    if (Math.random() < 1 / 60) { p.chests.common++; out.push('💰 Ты нашёл клад: обычный сундук!'); }
+    // мастерство режимов: раздачи в каждом виде столов
+    if (h.kind) {
+      p.mastery ||= {};
+      const m = (p.mastery[h.kind] = (p.mastery[h.kind] || 0) + 1);
+      const lvl = MASTERY.findIndex((x) => x.n === m);
+      if (lvl >= 0) { p.chests[MASTERY[lvl].chest]++; p.tokens = (p.tokens || 0) + MASTERY[lvl].tokens; out.push(`🎖 Мастерство «${MODE_NAMES[h.kind] || h.kind}»: уровень ${lvl + 1}`); }
+    }
+    // цепочка заданий
+    chainStep(p, h, out);
     if (s.hands >= 100) unlock(uid, p, 'hands_100', out);
     if (s.hands >= 1000) unlock(uid, p, 'hands_1000', out);
     if (s.hands >= 10000) unlock(uid, p, 'hands_10000', out);
@@ -341,6 +362,8 @@ export function claimQuest(uid, period, key) {
     if (q.p < def.need) throw new Error('Задание ещё не выполнено');
     q.claimed = true;
     credit(uid, x2(def.chips), 'quest', key);
+    p.tokens = (p.tokens || 0) + (period === 'weekly' ? 15 : 5); // жетоны для магазина
+    p.tickets = (p.tickets || 0) + 1; // лотерейный билет за задание
     addXp(p, def.xp);
     if (def.chest) p.chests[def.chest]++;
     save(uid, p);
@@ -380,6 +403,8 @@ export function claimDaily(uid) {
     if (n === 30) { p.chests.epic++; msg += ' · календарь: 30 дней — эпический сундук!'; }
     addXp(p, 10);
     if (p.bonus.streak >= 7) unlock(uid, p, 'streak_7', out);
+    // большие серии: 30, 50 и 100 дней подряд
+    if ([30, 50, 100].includes(p.bonus.streak)) { p.chests.epic++; msg += ` · ${p.bonus.streak} дней подряд — эпический сундук!`; }
     save(uid, p);
   });
   for (const t of out) notify(uid, t);
@@ -478,6 +503,8 @@ export function checkSeason(onDone) {
   if (!row) return db.prepare("INSERT INTO meta (key, value) VALUES ('season', ?)").run(cur);
   if (row.value === cur) return;
   const ended = row.value;
+  // топ-3 сезона по Эло (без админа) — эпические сундуки
+  for (const t of db.prepare(`SELECT id FROM users WHERE ${NOT_ADMIN} ORDER BY rating DESC LIMIT 3`).all()) grantChest(t.id, 'epic');
   const users = db.prepare('SELECT id, rating FROM users').all();
   tx(() => {
     for (const u of users) {
@@ -714,4 +741,263 @@ export function unlockAll(uid) {
     p.prestige = Math.max(p.prestige || 0, 1);
     save(uid, p);
   });
+}
+
+
+// ==================== Экономика и прогресс: пачка «250 фич» ====================
+
+const MASTERY = [{ n: 50, chest: 'common', tokens: 10 }, { n: 200, chest: 'rare', tokens: 30 }, { n: 1000, chest: 'epic', tokens: 100 }];
+const MODE_NAMES = { bots: 'Столы с ботами', tour: 'Турниры', mixed: 'Столы с друзьями' };
+
+// 78 цепочка заданий «Путь игрока»: шаги по порядку
+const CHAIN = [
+  { text: 'Сыграй 10 раздач', test: (p) => p.stats.hands >= 10, chips: 200 },
+  { text: 'Выиграй раздачу на вскрытии', test: (p, h) => h.won && h.showdown, chips: 300 },
+  { text: 'Выиграй банк от 20 больших блайндов', test: (p, h) => h.won && h.amount >= 20 * h.bb, chips: 400 },
+  { text: 'Выиграй с двумя парами или сильнее', test: (p, h) => h.won && h.cat >= 2, chips: 500 },
+  { text: 'Выиграй олл-ин', test: (p, h) => h.won && h.allIn, chips: 600 },
+  { text: 'Выиграй со стритом или сильнее', test: (p, h) => h.won && h.cat >= 4, chips: 800 },
+  { text: 'Сыграй 300 раздач', test: (p) => p.stats.hands >= 300, chips: 1000, chest: 'rare' },
+  { text: 'Выиграй с фулл-хаусом или сильнее', test: (p, h) => h.won && h.cat >= 6, chips: 1500, chest: 'epic' },
+];
+function chainStep(p, h, out) {
+  const i = p.chain || 0;
+  if (i >= CHAIN.length || !CHAIN[i].test(p, h)) return;
+  p.chain = i + 1;
+  p.chainReward = (p.chainReward || 0) + CHAIN[i].chips;
+  if (CHAIN[i].chest) p.chests[CHAIN[i].chest]++;
+  out.push(`📜 Путь игрока, шаг ${i + 1}: «${CHAIN[i].text}» — готово! Награда ждёт в «Наградах»`);
+}
+
+// 77 задания месяца
+const MONTHLY = [
+  { key: 'm_win300', text: 'Выиграй 300 раздач', need: 300, stat: 'wins' },
+  { key: 'm_play1000', text: 'Сыграй 1000 раздач', need: 1000, stat: 'hands' },
+  { key: 'm_tour10', text: 'Сыграй 10 турниров', need: 10, stat: 'tours' },
+];
+function monthly(p) {
+  const m = seasonKey();
+  if (p.month?.key !== m) p.month = { key: m, base: { wins: p.stats.wins, hands: p.stats.hands, tours: p.stats.tours }, claimed: [] };
+  return MONTHLY.map((q) => ({ ...q, p: Math.min(q.need, p.stats[q.stat] - (p.month.base[q.stat] || 0)), claimed: p.month.claimed.includes(q.key) }));
+}
+
+// 84 магазин за жетоны, 85–86 осколки и крафт
+export const SHOP = [
+  { id: 'common', name: 'Обычный сундук', price: 20 }, { id: 'rare', name: 'Редкий сундук', price: 60 }, { id: 'epic', name: 'Эпический сундук', price: 180 },
+  { id: 'hint', name: 'Подсказка', price: 15 }, { id: 'boost', name: 'Удвоитель опыта на 1 час', price: 30 }, { id: 'ticket', name: 'Лотерейный билет', price: 10 },
+];
+export function buy(uid, id) {
+  let msg = null;
+  tx(() => {
+    const p = load(uid);
+    const it = SHOP.find((x) => x.id === id);
+    if (!it) throw new Error('Нет такого товара');
+    if ((p.tokens || 0) < it.price) throw new Error('Не хватает жетонов');
+    p.tokens -= it.price;
+    if (CHESTS[id]) p.chests[id]++;
+    if (id === 'hint') db.prepare('UPDATE users SET hints = hints + 1 WHERE id = ?').run(uid);
+    if (id === 'boost') p.boostUntil = Math.max(Date.now(), p.boostUntil || 0) + 3600000;
+    if (id === 'ticket') p.tickets = (p.tickets || 0) + 1;
+    save(uid, p);
+    msg = `Куплено: ${it.name}`;
+  });
+  return msg;
+}
+export function addShards(uid, n) { tx(() => { const p = load(uid); p.shards = (p.shards || 0) + n; save(uid, p); }); }
+
+// 87 лотерейный билет: мгновенный розыгрыш (только игровые награды)
+const LOTTO = [{ w: 40, chips: 100 }, { w: 25, chips: 300 }, { w: 15, tokens: 10 }, { w: 10, chest: 'common' }, { w: 7, chips: 1000 }, { w: 3, chest: 'rare' }];
+export function openTicket(uid) {
+  let res = null;
+  tx(() => {
+    const p = load(uid);
+    if (!(p.tickets > 0)) throw new Error('Билетов нет — их дают за задания');
+    p.tickets--;
+    let r = Math.random() * LOTTO.reduce((a, x) => a + x.w, 0);
+    const x = LOTTO.find((it) => (r -= it.w) < 0) || LOTTO[0];
+    if (x.chips) credit(uid, x.chips, 'lottery');
+    if (x.tokens) p.tokens = (p.tokens || 0) + x.tokens;
+    if (x.chest) p.chests[x.chest]++;
+    save(uid, p);
+    res = x.chips ? `+${x.chips} фишек` : x.tokens ? `+${x.tokens} жетонов` : CHESTS[x.chest].name;
+  });
+  return res;
+}
+
+// 83 бесплатный сундук дня, 94 копилка (раз в неделю), 95 кешбэк за проигрыши вчера
+export function claimFree(uid, what) {
+  let msg = null;
+  tx(() => {
+    const p = load(uid);
+    if (what === 'chest') {
+      if (p.freeChest === dayKey()) throw new Error('Сундук дня уже забран');
+      p.freeChest = dayKey();
+      p.chests.common++;
+      msg = 'Обычный сундук в копилке сундуков';
+    } else if (what === 'piggy') {
+      if (p.piggyAt === weekKey()) throw new Error('Копилку можно разбить раз в неделю');
+      if (!(p.piggy > 0)) throw new Error('Копилка пуста — она копит 5% от выигранных банков');
+      credit(uid, p.piggy, 'piggy');
+      msg = `+${p.piggy} фишек из копилки`;
+      p.piggy = 0;
+      p.piggyAt = weekKey();
+    } else if (what === 'cashback') {
+      if (p.cashbackAt === dayKey()) throw new Error('Кешбэк уже получен сегодня');
+      const from = Date.parse(`${dayKey(Date.now() - 86400000)}T00:00:00+03:00`), to = from + 86400000;
+      const net = db.prepare('SELECT COALESCE(SUM(net), 0) AS n FROM hand_stats WHERE user_id = ? AND at >= ? AND at < ?').get(uid, from, to).n;
+      if (net >= 0) throw new Error('Вчера ты не был в минусе — кешбэка нет');
+      const back = Math.min(2000, Math.floor(-net * 0.05));
+      if (!back) throw new Error('Слишком маленький минус для кешбэка');
+      credit(uid, back, 'cashback');
+      p.cashbackAt = dayKey();
+      msg = `Кешбэк 5% за вчера: +${back} фишек`;
+    } else if (what === 'chain') {
+      if (!(p.chainReward > 0)) throw new Error('Пока нечего забирать');
+      credit(uid, p.chainReward, 'chain');
+      msg = `+${p.chainReward} фишек за «Путь игрока»`;
+      p.chainReward = 0;
+    } else throw new Error('Неизвестная награда');
+    save(uid, p);
+  });
+  return msg;
+}
+export function claimMonthly(uid, key) {
+  let msg = null;
+  tx(() => {
+    const p = load(uid);
+    const q = monthly(p).find((x) => x.key === key);
+    if (!q) throw new Error('Нет такого задания');
+    if (q.claimed) throw new Error('Уже получено');
+    if (q.p < q.need) throw new Error('Задание ещё не выполнено');
+    p.month.claimed.push(key);
+    p.chests.epic++;
+    p.tokens = (p.tokens || 0) + 50;
+    save(uid, p);
+    msg = 'Эпический сундук и 50 жетонов';
+  });
+  return msg;
+}
+
+// 82 бонус за возвращение (не был 7+ дней) и 99 праздничные подарки — при входе
+const HOLIDAYS = { '01-01': 'Новый год', '02-23': '23 февраля', '03-08': '8 марта', '05-09': 'День Победы', '06-12': 'День России', '10-31': 'Хэллоуин', '12-31': 'канун Нового года' };
+export function onLogin(uid, lastSeen) {
+  const out = [];
+  tx(() => {
+    const p = load(uid);
+    if (!p) return;
+    if (lastSeen && Date.now() - lastSeen > 7 * 86400000 && p.backAt !== dayKey()) {
+      p.backAt = dayKey();
+      if (config.progressRewards) credit(uid, 1000, 'comeback');
+      p.chests.rare++;
+      out.push('👋 С возвращением! +1000 фишек и редкий сундук');
+    }
+    const md = dayKey().slice(5);
+    if (HOLIDAYS[md] && p.holiday !== dayKey()) {
+      p.holiday = dayKey();
+      p.chests.epic++;
+      out.push(`🎁 С праздником (${HOLIDAYS[md]})! Эпический сундук в подарок`);
+    }
+    save(uid, p);
+  });
+  return out;
+}
+
+// 88 достижения с уровнями: бронза / серебро / золото по счётчикам
+const TIERS = [
+  { name: 'Раздачи', stat: 'hands', t: [100, 1000, 10000] }, { name: 'Победы', stat: 'wins', t: [50, 500, 5000] },
+  { name: 'Турниры', stat: 'tours', t: [5, 50, 300] }, { name: 'Сундуки', stat: 'chestsOpened', t: [10, 100, 500] },
+];
+
+// 89 скрытое задание недели
+const HIDDEN = [
+  { text: 'Выиграй с 2-3 на руках', test: (h) => { const r = (h.hole || []).map((c) => c >> 2).sort((a, b) => a - b); return h.won && r[0] === 0 && r[1] === 1; } },
+  { text: 'Выиграй банк, не дойдя до флопа, 5 раз', count: 5, test: (h) => h.won && !h.showdown && h.amount > 0 },
+  { text: 'Выиграй с флешем червей', test: (h) => h.won && h.cat === 5 && (h.five || []).every((c) => (c & 3) === 1) },
+  { text: 'Выиграй с каре', test: (h) => h.won && h.cat === 7 },
+];
+export function hiddenCheck(uid, h) {
+  const out = [];
+  tx(() => {
+    const p = load(uid);
+    if (!p) return;
+    const wk = weekKey();
+    if (p.hidden?.wk !== wk) p.hidden = { wk, i: Math.abs([...wk].reduce((a, c) => a * 31 + c.charCodeAt(0), uid)) % HIDDEN.length, n: 0, done: false };
+    const q = HIDDEN[p.hidden.i];
+    if (p.hidden.done || !q.test(h)) return;
+    if (++p.hidden.n >= (q.count || 1)) {
+      p.hidden.done = true;
+      p.tokens = (p.tokens || 0) + 40;
+      p.chests.rare++;
+      out.push(`🕵️ Скрытое задание недели: «${q.text}» — выполнено! +40 жетонов и редкий сундук`);
+    }
+    save(uid, p);
+  });
+  for (const t of out) notify(uid, t);
+}
+
+// 90–91 лиги по рангу: прирост Эло за неделю, тройке лучших в каждой лиге — сундуки (в понедельник)
+export function leagueView(uid) {
+  const since = Date.parse(`${weekKey()}T00:00:00+03:00`);
+  const me = getP.get(uid);
+  const myRank = rankOf(me?.rating || 1500).name;
+  const rows = db.prepare(`SELECT u.id, u.name, u.rating, (u.rating - COALESCE((SELECT rating FROM rating_hist r WHERE r.user_id = u.id AND r.at < ? ORDER BY r.at DESC LIMIT 1), 1500)) AS gain
+    FROM users u WHERE u.last_seen > ? AND ${NOT_ADMIN.replace('id', 'u.id')}`).all(since, since);
+  const league = rows.filter((r) => rankOf(r.rating).name === myRank).sort((a, b) => b.gain - a.gain).slice(0, 30)
+    .map((r, i) => ({ place: i + 1, name: r.name, gain: Math.round(r.gain), me: r.id === uid }));
+  return { league: myRank, rows: league };
+}
+
+// для экрана наград
+export function economyView(uid) {
+  const p = load(uid);
+  if (!p) return null;
+  const tiers = TIERS.map((t) => { const v = p.stats[t.stat] || 0; const lvl = t.t.filter((x) => v >= x).length; return { name: t.name, v, lvl, next: t.t[lvl] ?? null }; });
+  const hid = p.hidden?.wk === weekKey() ? p.hidden : null;
+  return {
+    tokens: p.tokens || 0, tickets: p.tickets || 0, shards: p.shards || 0, piggy: p.piggy || 0, piggyReady: p.piggyAt !== weekKey(),
+    boostUntil: p.boostUntil || 0, freeChest: p.freeChest !== dayKey(), cashback: p.cashbackAt !== dayKey(), happyHour: happyHour(),
+    chain: { step: p.chain || 0, of: CHAIN.length, text: CHAIN[p.chain || 0]?.text || null, reward: p.chainReward || 0 },
+    monthly: monthly(p), shop: SHOP, mastery: p.mastery || {}, masteryLevels: MASTERY.map((m) => m.n), modeNames: MODE_NAMES, tiers,
+    hidden: hid ? { done: hid.done, text: hid.done ? HIDDEN[hid.i].text : '??? — откроется, когда выполнишь', n: hid.n } : { done: false, text: '??? — откроется, когда выполнишь', n: 0 },
+  };
+}
+
+// 76 премиум-линия пропуска (покупается за звёзды на сезон): +20 жетонов за каждый уровень, каждый 5-й — редкий сундук
+export function setPremium(uid) { tx(() => { const p = load(uid); p.pass.premium = true; save(uid, p); }); }
+export function claimPremium(uid, lvl) {
+  let msg = null;
+  tx(() => {
+    const p = load(uid);
+    lvl = Number(lvl);
+    if (!p.pass.premium) throw new Error('Премиум-линия не куплена');
+    if (Math.floor(p.pass.xp / XP_PER_LEVEL) < lvl || lvl < 1 || lvl > 30) throw new Error('Уровень ещё не открыт');
+    p.pass.premiumClaimed ||= [];
+    if (p.pass.premiumClaimed.includes(lvl)) throw new Error('Уже получено');
+    p.pass.premiumClaimed.push(lvl);
+    p.tokens = (p.tokens || 0) + 20;
+    if (lvl % 5 === 0) p.chests.rare++;
+    save(uid, p);
+    msg = `+20 жетонов${lvl % 5 === 0 ? ' и редкий сундук' : ''}`;
+  });
+  return msg;
+}
+export const premiumOf = (uid) => { const p = load(uid); return { premium: !!p?.pass.premium, claimed: p?.pass.premiumClaimed || [] }; };
+
+// 86 крафт: осколки за дубликаты из сундуков
+export function spendShards(uid, n) {
+  tx(() => { const p = load(uid); if ((p.shards || 0) < n) throw new Error(`Нужно ${n} осколков`); p.shards -= n; save(uid, p); });
+}
+
+// 91 награды лиг: тройка лучших по приросту Эло за прошлую неделю в каждом ранге — редкий сундук
+export function leagueRewards() {
+  const to = Date.parse(`${weekKey()}T00:00:00+03:00`), from = to - 7 * 86400000;
+  const rows = db.prepare(`SELECT u.id, u.rating,
+      COALESCE((SELECT rating FROM rating_hist r WHERE r.user_id = u.id AND r.at < ? ORDER BY r.at DESC LIMIT 1), 1500) AS r0,
+      COALESCE((SELECT rating FROM rating_hist r WHERE r.user_id = u.id AND r.at < ? ORDER BY r.at DESC LIMIT 1), u.rating) AS r1
+    FROM users u WHERE u.last_seen > ? AND ${NOT_ADMIN.replace('id', 'u.id')}`).all(from, to, from);
+  const by = {};
+  for (const r of rows) (by[rankOf(r.r1).name] ||= []).push({ id: r.id, gain: r.r1 - r.r0 });
+  const won = [];
+  for (const list of Object.values(by)) for (const r of list.filter((x) => x.gain > 0).sort((a, b) => b.gain - a.gain).slice(0, 3)) { grantChest(r.id, 'rare'); won.push(r.id); }
+  return won;
 }

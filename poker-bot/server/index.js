@@ -85,6 +85,7 @@ const hub = {
   onReplay: (uid, data) => social2.saveReplay(uid, data),
   onHandResult(uid, h) {
     progress.onHand(uid, h);
+    progress.hiddenCheck(uid, h); // скрытое задание недели
     if (h.won) social2.countWeekWin(uid); // клубные войны
     // наставник: новичок дошёл до ступени — награда обоим
     const mt = social2.mentorCheck(uid, (progress.progressView(uid)?.stats.hands ?? 0));
@@ -97,6 +98,9 @@ const hub = {
     const hands = progress.progressView(uid)?.stats.hands ?? 0;
     const inviter = social.checkRef(uid, hands);
     if (inviter) {
+      // уровни рефералки: 3, 10 и 25 приведённых друзей — эпический сундук
+      const n = social.refStats(inviter).rewarded;
+      if ([3, 10, 25].includes(n)) { progress.grantChest(inviter, 'epic'); hub.send(inviter, { t: 'toast', text: `🤝 ${n} друзей привёл — эпический сундук!` }); }
       hub.send(inviter, { t: 'toast', text: `Твой друг сыграл 20 раздач: +${social.REF_BONUS_INVITER} фишек и редкий сундук!` });
       notify(inviter, `Друг, которого ты позвал, сыграл 20 раздач — тебе <b>+${social.REF_BONUS_INVITER}</b> фишек и редкий сундук!`);
       hub.sendMe(inviter);
@@ -163,6 +167,7 @@ const hub = {
 };
 hooks.onBalance = (uid) => hub.sendMe(uid);
 hooks.onRef = (uid, refBy) => social.registerRef(uid, refBy);
+hooks.onPremium = (uid) => { progress.setPremium(uid); hub.sendMe(uid); hub.send(uid, { t: 'toast', text: '⭐ Премиум-пропуск активирован!' }); };
 hooks.refBonus = social.REF_BONUS_NEW;
 progress.setProgressNotifier((uid, text) => {
   hub.send(uid, { t: 'toast', text });
@@ -639,6 +644,14 @@ const handlers = {
     if (!a?.seat.extend?.()) throw new Error('Таймбанк закончился');
     return { t: 'ok', left: a.seat.timebanks };
   },
+  // ---------- экономика и прогресс ----------
+  economy: (uid) => ({ t: 'economy', eco: progress.economyView(uid), premium: progress.premiumOf(uid), league: progress.leagueView(uid) }),
+  shopBuy(uid, m) { const text = progress.buy(uid, String(m.id)); hub.sendMe(uid); return { t: 'ok', text, eco: progress.economyView(uid) }; },
+  openTicket(uid) { const text = progress.openTicket(uid); hub.sendMe(uid); return { t: 'ok', text, eco: progress.economyView(uid) }; },
+  claimFree(uid, m) { const text = progress.claimFree(uid, String(m.what)); hub.sendMe(uid); return { t: 'ok', text, eco: progress.economyView(uid) }; },
+  claimMonthly(uid, m) { const text = progress.claimMonthly(uid, String(m.key)); return { t: 'ok', text, eco: progress.economyView(uid) }; },
+  claimPremium(uid, m) { const text = progress.claimPremium(uid, m.lvl); return { t: 'ok', text, premium: progress.premiumOf(uid) }; },
+  craft(uid, m) { cosmetics.craft(uid, String(m.kind), String(m.id)); return { t: 'ok', text: 'Скрафчено!', eco: progress.economyView(uid), look: cosmetics.lookView(uid) }; },
   // ---------- весёлое ----------
   fun: (uid) => ({ t: 'fun', fortune: fun.fortune(uid), riddle: fun.riddle(uid), birthdays: fun.birthdaysToday(), capsules: fun.capsulesOf(uid), memes: MEMES }),
   answerRiddle(uid, m) { const r = fun.answerRiddle(uid, m.a); hub.sendMe(uid); return { t: 'ok', ...r }; },
@@ -823,6 +836,7 @@ const handlers = {
     if (!pack) throw new Error('Нет такого пакета');
     if (config.dev) {
       // локально оплаты нет — сразу зачисляем, чтобы можно было тестировать
+      if (pack.pass) { progress.setPremium(uid); hub.sendMe(uid); return { t: 'paid' }; }
       if (pack.hints) db.prepare('UPDATE users SET hints = hints + ? WHERE id = ?').run(pack.hints, uid);
       else credit(uid, pack.chips, 'dev_topup');
       hub.sendMe(uid);
@@ -926,6 +940,7 @@ wss.on('connection', (ws) => {
       if (m.t === 'auth') {
         const auth = authenticate(m);
         if (!auth?.user?.id) return reply({ t: 'error', text: 'Открой приложение через Telegram' });
+        const prevSeen = db.prepare('SELECT last_seen FROM users WHERE id = ?').get(auth.user.id)?.last_seen || 0;
         const u = upsertUser(auth.user);
         if (admin.isBanned(u.id)) return reply({ t: 'error', text: 'Аккаунт заблокирован' });
         uid = u.id;
@@ -934,6 +949,7 @@ wss.on('connection', (ws) => {
         if (!sockets.has(uid)) sockets.set(uid, new Set());
         sockets.get(uid).add(ws);
         reply({ t: 'hello', me: meView(uid), startParam: auth.startParam || null });
+        for (const text of progress.onLogin(uid, prevSeen)) setTimeout(() => hub.send(uid, { t: 'toast', text }), 1500);
         // бот-заменитель доигрывает за время, пока тебя не было
         botsx.runOffline(uid).then((log) => {
           if (log) hub.send(uid, { t: 'toast', text: `🤖 Пока тебя не было, твой бот сыграл ${log.hands} раздач: ${log.net >= 0 ? '+' : '−'}${Math.abs(log.net).toLocaleString('ru')} фишек в его банке` });
@@ -975,6 +991,7 @@ setInterval(() => {
     const wk = d.toISOString().slice(0, 10);
     if (d.getUTCDay() === 1 && d.getUTCHours() === 12 && db.prepare("SELECT value FROM meta WHERE key = 'weekly_report'").get()?.value !== wk && bot.username) {
       db.prepare("INSERT INTO meta (key, value) VALUES ('weekly_report', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").run(wk);
+      for (const id of progress.leagueRewards()) hub.send(id, { t: 'toast', text: '🏆 Ты в тройке своей лиги за неделю — редкий сундук!' });
       const list = stats.weeklyReports().filter((r) => !getUser(r.uid)?.no_remind);
       (async () => { for (const r of list) { notify(r.uid, `📊 Твоя неделя: ${r.hands} раздач, выиграно ${r.won}, итог ${r.bb >= 0 ? '+' : ''}${r.bb} больших блайндов. Подробно — в «Моей статистике».`, openButton('Статистика', '#stats')); await new Promise((x) => setTimeout(x, 60)); } })();
     }

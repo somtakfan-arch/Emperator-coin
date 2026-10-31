@@ -1340,3 +1340,30 @@ test('весёлое: гадание, загадка и секретный ст�
   assertLedger(9995);
   c.close();
 });
+
+test('экономика: сундук дня, магазин за жетоны, лотерея, кешбэк, копилка, задания месяца, премиум, лиги', async () => {
+  const c = new Client(9997, { autoplay: 'call' });
+  await c.ready;
+  await c.req({ t: 'invoice', pack: 'p1' });
+  let e = (await c.req({ t: 'economy' })).eco;
+  assert.ok(e.freeChest && e.monthly.length === 3 && e.shop.length >= 5 && e.tiers.length === 4);
+  await c.req({ t: 'claimFree', what: 'chest' });
+  await assert.rejects(c.req({ t: 'claimFree', what: 'chest' }), /уже забран/);
+  await assert.rejects(c.req({ t: 'shopBuy', id: 'epic' }), /жетонов/);
+  await assert.rejects(c.req({ t: 'openTicket' }), /Билетов нет/);
+  await assert.rejects(c.req({ t: 'claimFree', what: 'cashback' }), /кешбэк|минусе/i);
+  await assert.rejects(c.req({ t: 'claimPremium', lvl: 1 }), /не куплена/);
+  await c.req({ t: 'invoice', pack: 'pass' }); // в DEV — сразу активирует
+  const r = await c.req({ t: 'economy' });
+  assert.equal(r.premium.premium, true);
+  assert.ok(r.league.league);
+  // раздачи: мастерство режимов и путь игрока растут
+  await c.req({ t: 'sitBots', mode: '6', buyin: 500, fast: true });
+  const t0 = await c.waitFor((m) => m.t === 'table' && m.table?.inHand);
+  await c.waitFor((m) => m.t === 'left' || (m.t === 'table' && (m.table?.handId >= t0.table.handId + 3 || m.table?.canRebuy)), 60000);
+  c.ws.send(JSON.stringify({ t: 'leave' })); await c.waitFor((m) => m.t === 'left', 30000);
+  e = (await c.req({ t: 'economy' })).eco;
+  assert.ok((e.mastery.bots || 0) >= 1, 'мастерство растёт');
+  assertLedger(9997);
+  c.close();
+});
