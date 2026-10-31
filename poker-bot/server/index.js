@@ -24,6 +24,7 @@ import * as fun from './fun.js';
 import * as social3 from './social3.js';
 import { addFeed } from './feed.js';
 import * as admin2 from './admin2.js';
+import * as learn2 from './learn2.js';
 import { MEMES } from './game/table.js';
 import { GameTable } from './game/table.js';
 import { ghostHour } from '../core/bots.js';
@@ -155,6 +156,17 @@ const hub = {
   },
   // тренер включён у игрока?
   coachOn: (uid) => coachUsers.has(uid),
+  // мгновенный тренер (сравнение с правильным ходом сразу после решения)
+  instantOn: (uid) => instantUsers.has(uid),
+  instantReview(uid, dec, log) {
+    try {
+      const [st] = GameTable.review(uid, [dec], log);
+      if (!st) return;
+      const j = learn2.judge(uid, st.verdict);
+      hub.send(uid, { t: 'coachNow', text: st.text, verdict: st.verdict, best: st.best, streak: j.streak ?? 0, ten: !!j.ten, chips: j.chips || 0 });
+      if (j.ten) hub.sendMe(uid);
+    } catch {}
+  },
   onSoloDone(tour) {
     if (solos.get(tour.userId) === tour) solos.delete(tour.userId);
   },
@@ -234,6 +246,7 @@ function presence(id) {
   };
 }
 const watching = new Map(); // uid -> стол, за которым он наблюдает
+const instantUsers = new Set(); // кто включил мгновенного тренера
 
 function activeTable(uid) {
   const room = botRooms.get(uid);
@@ -600,6 +613,16 @@ const handlers = {
   // ---------- удобство: поиск игроков, напоминания ----------
   findPlayers: (uid, m) => ({ t: 'players', players: admin.findPlayers(m.q, uid) }),
   setRemind(uid, m) { db.prepare('UPDATE users SET no_remind = ? WHERE id = ?').run(m.on ? 0 : 1, uid); return { t: 'ok' }; },
+  // ---------- обучение 2 ----------
+  instantCoach(uid, m) { if (m.on) instantUsers.add(uid); else instantUsers.delete(uid); return { t: 'ok' }; },
+  course: (uid) => ({ t: 'course', course: learn2.courseView(uid), problem: learn2.dailyProblem(uid), tip: learn2.eveningTip() }),
+  markStep(uid, m) { learn2.markStep(uid, String(m.step)); return { t: 'ok', course: learn2.courseView(uid) }; },
+  outsQ: () => ({ t: 'ok', ...learn2.outsQuestion() }),
+  answerProblem(uid, m) { const r = learn2.answerProblem(uid, m.opt); if (r.chips) hub.sendMe(uid); return { t: 'ok', ...r }; },
+  sandbox: (uid, m) => ({ t: 'ok', ...learn2.sandbox(m.hole, m.board) }),
+  communityHands: () => ({ t: 'ok', hands: learn2.communityHands() }),
+  communityReplay: (uid, m) => { const r = social2.replay(m.id); return { t: 'replay', replay: { ...r, owner: 'Игрок', ownerId: null, canReview: false } }; },
+  weekMistakes: (uid) => ({ t: 'ok', mistakes: learn2.weekMistakes(uid, GameTable.review) }),
   // ---------- обучение: разбор раздачи, слабые места, викторина, экзамен ----------
   review(uid, m) {
     const d = social2.replayDecisions(m.id);
@@ -611,7 +634,7 @@ const handlers = {
   exam: () => ({ t: 'exam', questions: learn.examQuestions(), pass: learn.EXAM_PASS }),
   examSubmit(uid, m) {
     const r = learn.gradeExam(m.answers);
-    if (r.passed) progress.onEvent(uid, { type: 'exam' });
+    if (r.passed) { progress.onEvent(uid, { type: 'exam' }); learn2.markStep(uid, 'exam'); }
     return { t: 'examResult', ...r };
   },
   // ---------- пачка 12: повторы, пари, клубные войны и банк, статус, сюрпризы, наставник ----------
@@ -858,7 +881,7 @@ const handlers = {
   startSolo(uid, m) {
     if (admin2.maintenance() && !config.adminIds.includes(uid)) throw new Error(`Техработы: ${admin2.maintenance()}`);
     if (activeTable(uid) || solos.get(uid)) throw new Error('Ты уже за столом');
-    const tour = SoloTour.open(hub, getUser(uid), { buyin: m.buyin, size: m.size, blindMin: m.blindMin, demo: !!m.demo, ko: !!m.ko, seats: m.seats });
+    const tour = SoloTour.open(hub, getUser(uid), { buyin: m.buyin, size: m.size, blindMin: m.blindMin, demo: !!m.demo, ko: !!m.ko, seats: m.seats, practice: !!m.practice });
     solos.set(uid, tour);
     if (!m.demo) hub.onSeated(uid);
     hub.sendMe(uid);

@@ -18,13 +18,14 @@ export const SOLO_BLINDS = [0.5, 2, 3, 6]; // минут на уровень (0.
 const setInPlay = db.prepare('UPDATE users SET in_play = ? WHERE id = ?');
 
 export class SoloTour {
-  constructor(hub, user, { buyin, size, blindMin, demo = false, ko = false, seats = 6 }) {
+  constructor(hub, user, { buyin, size, blindMin, demo = false, ko = false, seats = 6, practice = false }) {
     this.seats = size === 9 || (seats === 9 && size > 9) ? 9 : MAX_SEATS; // столы по 6 или по 9
     this.bounty = ko ? Math.floor(buyin / 2) : 0; // нокаут: за каждого выбитого бота
     this.hub = hub;
     // демо — только админ, для видео: фишки ненастоящие, баланс/Эло/призы не трогаются,
     // карты на следующую раздачу за своим столом выбираешь сам
     this.demo = demo;
+    this.practice = !!practice; // учебный: без взноса, призов, Эло и статистики
     this.plan = null;
     this.userId = user.id;
     this.id = `s${randomBytes(5).toString('base64url').replace(/[^a-zA-Z0-9]/g, 'x')}`;
@@ -51,6 +52,13 @@ export class SoloTour {
       const size = SOLO_SIZES.includes(Number(o.size)) ? Number(o.size) : 60;
       const blindMin = SOLO_BLINDS.includes(Number(o.blindMin)) ? Number(o.blindMin) : 3;
       const t = new SoloTour(hub, user, { buyin: 1000, size, blindMin, demo: true, seats: Number(o.seats) });
+      t.start(user);
+      return t;
+    }
+    if (o.practice) {
+      const size = SOLO_SIZES.includes(Number(o.size)) ? Number(o.size) : 6;
+      const t = new SoloTour(hub, user, { buyin: 0, size, blindMin: 2, practice: true, seats: Number(o.seats) });
+      t.name = `Учебный турнир · ${size}`;
       t.start(user);
       return t;
     }
@@ -115,7 +123,7 @@ export class SoloTour {
 
   newTable(num) {
     const tb = new GameTable({ id: `${this.id}:${num}`, kind: 'tour', title: `${this.name} · стол ${num}`, hub: this.hub, sb: 10, bb: 20 });
-    tb.noStats = this.demo; // демо — не в счёт
+    tb.noStats = this.demo || this.practice; // демо и учебный — не в счёт
     // карты по плану — только за столом, где сидишь ты
     if (this.demo) tb.engine.demoDeck = (deck, ids) => {
       if (!ids.includes(this.userId) || !this.plan) return deck;
@@ -214,8 +222,8 @@ export class SoloTour {
     if (this.done) return;
     this.done = true;
     for (const tb of this.tables) tb.closed = true;
-    if (this.demo) {
-      this.hub.send(this.userId, { t: 'finished', tournamentId: this.id, solo: true, demo: true, place, prize: 0, total: this.n });
+    if (this.demo || this.practice) {
+      this.hub.send(this.userId, { t: 'finished', tournamentId: this.id, solo: true, demo: true, practice: this.practice, place, prize: 0, total: this.n });
       this.hub.sendMe(this.userId);
       return this.hub.onSoloDone?.(this);
     }

@@ -106,7 +106,10 @@ export class HumanSeat {
     if (!type) return;
     this.timeouts = 0;
     const to = Math.floor(Number(a.to) || 0);
-    this.decisions.push({ state: s, type, logLen: this.table?.handLog?.length ?? 0 }); // для тренера и разбора раздачи
+    const dec = { state: s, type, logLen: this.table?.handLog?.length ?? 0 };
+    this.decisions.push(dec); // для тренера и разбора раздачи
+    // мгновенный тренер: оценка хода сразу, а не после раздачи
+    if (this.hub.instantOn?.(this.id) && !this.table?.mega && !this.table?.jokers) { const log = (this.table?.handLog || []).slice(); setTimeout(() => this.hub.instantReview?.(this.id, dec, log), 0); }
     this.pending.finish(type === 'raise' ? { type, to: Math.max(s.minRaiseTo, Math.min(to, s.myBet + s.stack)) } : { type });
   }
 

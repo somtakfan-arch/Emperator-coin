@@ -187,6 +187,11 @@ function onMessage(m) {
       S.table = null;
       go('friends');
       break;
+    case 'coachNow':
+      S.coachNow = m;
+      if (m.ten) { toast(`🎯 10 правильных решений подряд!${m.chips ? ` +${m.chips}` : ''}`); confetti(); }
+      setTimeout(() => { if (S.coachNow === m) { S.coachNow = null; render(); } }, 6000);
+      break;
     case 'coach':
       S.coachTips = m.tips;
       clearTimeout(S.coachTimer);
@@ -328,6 +333,12 @@ function tableSounds(prev, next) {
         : r.length === 2 && r[0] === 0 && r[1] === 5 ? '😎 Выиграл с 7-2 — самой слабой рукой в покере!'
           : r.length === 2 && r[0] === 0 && r[1] === 0 ? '🦆 Утята (двойки) победили!' : null;
     if (egg) { toast(egg); setTimeout(() => confetti(), 300); }
+  }
+  // почему проиграл: на вскрытии
+  if (next.result && !prev.result && !next.result.some((w) => w.id === S.me?.id) && loadUi().whyLost !== false) {
+    const meS = next.seats.find((x) => x.me);
+    const w = next.result[0];
+    if (meS?.cards && meS.hand && w?.hand && !meS.folded) toast(`Проиграл: у ${w.name} «${w.hand}» сильнее твоей «${meS.hand}»`);
   }
   if (next.result && !prev.result && next.result.some((w) => w.id === S.me?.id)) {
     sfx('win');
@@ -619,7 +630,7 @@ function leaveTableScreen(tournamentId) {
 
 // ---------- Навигация ----------
 
-const BACK = { dm: 'friends', pprofile: 'lobby', eco: 'progress', fun: 'lobby', stats: 'profile', style: 'profile', school: 'lobby', chart: 'school', quiz: 'school', exam: 'school', history: 'friends', replay: 'history', botlab: 'lobby', training: 'lobby', tutorial: 'lobby', admin: 'profile', friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
+const BACK = { course: 'school', trainers: 'school', sandbox: 'school', community: 'school', mistakes: 'school', glossary: 'school', flopTable: 'school', dm: 'friends', pprofile: 'lobby', eco: 'progress', fun: 'lobby', stats: 'profile', style: 'profile', school: 'lobby', chart: 'school', quiz: 'school', exam: 'school', history: 'friends', replay: 'history', botlab: 'lobby', training: 'lobby', tutorial: 'lobby', admin: 'profile', friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
 
 function go(screen) {
   if (screen !== 'table' && S.screen === 'table' && S.table) S.tableHidden = true;
@@ -821,6 +832,7 @@ function tutorialScreen() {
   const page = TUTORIAL[i];
   const last = i === TUTORIAL.length - 1;
   const goPage = (n) => { S.tutPage = n; render(); window.scrollTo(0, 0); };
+  if (!S.markedT?.[i]) { (S.markedT ||= {})[i] = true; send({ t: 'markStep', step: `t${i}` }); } // курс: страница прочитана
   return h('div', { class: 'screen tut' },
     header('Как играть'),
     h('div', { class: 'small muted' }, `Шаг ${i + 1} из ${TUTORIAL.length}`),
@@ -1120,7 +1132,7 @@ function trainingScreen() {
   const next = () => { tr.step++; tr.wrong = null; render(); };
   const choose = (k) => { if (k === step.right) next(); else { tr.wrong = k; render(); } };
   const lastLesson = tr.lesson === LESSONS.length - 1;
-  if (step.t === 'done') markLessonDone(tr.lesson);
+  if (step.t === 'done') { markLessonDone(tr.lesson); if (!S.markedL?.[tr.lesson]) { (S.markedL ||= {})[tr.lesson] = true; send({ t: 'markStep', step: `l${tr.lesson}` }); } }
 
   const seat = (name, stack, cards, say) => h('div', { class: 'tr-seat' },
     h('div', { class: 'row between' }, h('div', { class: 'b' }, name), h('div', { class: 'small soft' }, `${fmt(stack)} фишек`)),
@@ -1142,6 +1154,12 @@ function trainingScreen() {
     step.t === 'ask' && h('div', { class: 'tr-opts' }, step.opts.map(([k, label]) =>
       h('button', { class: k === 'fold' ? 'btn-ghost' : 'btn', onclick: () => choose(k) }, label))),
     step.t === 'info' && h('button', { class: 'btn', onclick: next }, 'Дальше'),
+    step.t !== 'done' && h('button', { class: 'btn-ghost', onclick: () => {
+      // «как видео»: шаги идут сами, на вопросах выбирается правильный ход
+      if (S.autoplay) { clearInterval(S.autoplay); S.autoplay = null; render(); return; }
+      S.autoplay = setInterval(() => { const L2 = LESSONS[tr.lesson]; const st2 = L2.steps[tr.step]; if (!st2 || st2.t === 'done' || S.screen !== 'training') { clearInterval(S.autoplay); S.autoplay = null; render(); return; } tr.step++; tr.wrong = null; render(); }, 3500);
+      render();
+    } }, S.autoplay ? '⏸ Пауза' : '▶ Смотреть как видео'),
     step.t === 'done' && (lastLesson
       ? h('div', { class: 'col', style: 'gap:10px' },
         h('div', { class: 'small soft', style: 'line-height:1.45' }, 'Тренировка пройдена! Теперь попробуй настоящую игру против ботов на лёгкой сложности — фишки там уже твои.'),
@@ -1348,6 +1366,18 @@ function schoolScreen() {
     item('Таблица стартовых рук', 'Какие руки играть с какой позиции', () => go('chart')),
     item('Викторина', 'Какая рука сильнее — на скорость', openQuiz),
     item('Экзамен', 'Сдай — получишь значок «Знаток покера»', openExam),
+    item('🎓 Курс из 30 шагов', 'Уровни знаний, сертификаты, задача дня', openCourse),
+    item('🏋️ Тренажёры', 'Ауты, шансы банка, префлоп, олл-ин или фолд, позиции, блеф, турнир', () => go('trainers')),
+    item('🧪 Песочница', 'Выбери карты — увидишь комбинацию, ауты и шансы', () => { S.sb = { hole: [], board: [] }; go('sandbox'); }),
+    item('🔍 Разбор чужих раздач', 'Крупные раздачи игроков за сутки, без имён', async () => { const r = await run({ t: 'communityHands' }); if (r) { S.comm = r.hands; go('community'); } }),
+    item('❌ Мои ошибки недели', 'Где ты чаще всего ошибаешься', async () => { go('mistakes'); const r = await run({ t: 'weekMistakes' }); if (r) { S.mistakes = r.mistakes; render(); } }),
+    item('📖 Словарь', 'Все термины с поиском', () => go('glossary')),
+    item('📊 Сила рук на флопе', 'Как часто что собирается', () => go('flopTable')),
+    item('🎓 Учебный турнир', 'Против ботов, без взноса и рейтинга', async () => { if (await run({ t: 'startSolo', practice: true, size: 6 })) go('table'); }),
+    item('🤝 1 на 1 с Учителем', 'Бот объясняет каждый свой ход', async () => { S.botMode = 'hu'; S.botName = 'Учитель'; if (await run({ t: 'sitBots', mode: 'hu', botName: 'Учитель', buyin: S.lobby?.buyinMin || 100 })) go('table'); }),
+    h('label', { class: 'toggle-row glass', style: 'padding:12px 14px;border-radius:14px' },
+      h('input', { type: 'checkbox', checked: !!S.instant, onchange: (e) => { S.instant = e.target.checked; send({ t: 'instantCoach', on: S.instant }); } }),
+      h('span', {}, 'Мгновенный тренер'), h('span', { class: 'small muted' }, 'оценка хода сразу + челлендж «10 правильных подряд»')),
     h('div', { class: 'label' }, 'Мои слабые места'),
     h('div', { class: 'glass card', style: 'gap:8px' },
       !W ? h('div', { class: 'small muted' }, 'Загрузка…')
@@ -1484,6 +1514,10 @@ function quickSettings() {
     tog('Режим одной рукой', ui.oneHand, (v) => setUi({ oneHand: v })),
     tog('Режим для левшей', ui.lefty, (v) => setUi({ lefty: v })),
     tog('Карты вверх ногами 🙃', ui.upside, (v) => setUi({ upside: v })),
+    tog('Подсказки новичку в мой ход', ui.newbie !== false, (v) => setUi({ newbie: v })),
+    tog('Объяснять, почему проиграл', ui.whyLost !== false, (v) => setUi({ whyLost: v })),
+    h('button', { class: 'btn-ghost', onclick: () => { S.cheat = !S.cheat; render(); } }, '📋 Шпаргалка'),
+    S.cheat && h('div', { class: 'small soft', style: 'line-height:1.5' }, 'Комбинации (сильнее → слабее): флеш-рояль, стрит-флеш, каре, фулл-хаус, флеш, стрит, сет, две пары, пара, старшая карта. Правило 2 и 4: ауты × 2 — шанс на следующей карте, × 4 — к риверу. Колл выгоден, если шанс больше, чем «колл / (банк + колл)». Чем позже позиция — тем больше рук можно играть.'),
     tog('Голос ботов (озвучка фраз)', ui.botVoice, (v) => setUi({ botVoice: v })),
     tog('Праздничные столы', ui.holiday !== false, (v) => setUi({ holiday: v })),
     h('div', { class: 'small muted' }, 'Погода за столом'),
@@ -1767,6 +1801,166 @@ function ecoScreen() {
     box(`🏆 Лига «${R.league.league}» · прирост Эло за неделю`, h('div', { class: 'small muted' }, 'Тройка лучших в каждой лиге в понедельник получает редкий сундук.'),
       R.league.rows.length ? R.league.rows.slice(0, 15).map((r) => h('div', { class: 'row between', style: r.me ? 'color:#f5d37a' : '' }, h('div', {}, `${r.place}. ${r.name}`), h('div', { class: 'b' }, `${r.gain >= 0 ? '+' : ''}${r.gain}`))) : h('div', { class: 'small soft' }, 'Пока пусто')),
     h('div', { style: 'height:70px' }));
+}
+
+// ---------- Обучение 2 ----------
+
+async function openCourse() {
+  go('course');
+  const r = await run({ t: 'course' });
+  if (r) { S.course = r; render(); }
+}
+function courseScreen() {
+  const C = S.course;
+  if (!C) return h('div', { class: 'screen' }, header('Курс'), h('div', { class: 'muted small' }, 'Загрузка…'));
+  const K = C.course, P = C.problem;
+  const open = (s) => (s.kind === 'tutorial' ? openTutorial(s.n) : s.kind === 'lesson' ? openTraining(s.n) : s.kind === 'exam' ? openExam() : go('trainers'));
+  return h('div', { class: 'screen' }, header('Курс покера'),
+    C.tip && h('div', { class: 'glass card' }, h('div', { class: 'small soft' }, `🌙 Совет вечера от Учителя: ${C.tip}`)),
+    h('div', { class: 'glass card', style: 'gap:6px' },
+      h('div', { class: 'row between' }, h('div', { class: 'b', style: 'font-size:16px' }, `Уровень: ${K.level}`), h('div', { class: 'small muted' }, `${K.done}/${K.total}`)),
+      h('div', { class: 'progress' }, h('div', { style: `width:${(K.done / K.total) * 100}%` })),
+      K.certs.length ? K.certs.map((c) => h('button', { class: 'btn-sm', onclick: () => shareCard({ title: '🎓 Сертификат', subtitle: c, cards: [], board: [], footer: `${S.me.name} · Покер в Telegram` }, `Получил «${c}» в школе покера!`) }, `📜 ${c} — поделиться`))
+        : h('div', { class: 'small muted' }, 'Сертификаты — за 10, 20 и 30 пройденных шагов')),
+    h('div', { class: 'glass card', style: 'gap:6px' }, h('div', { class: 'b' }, '🧩 Задача дня'), h('div', { class: 'small soft', style: 'line-height:1.45' }, P.q),
+      P.solved ? h('div', { class: 'small', style: 'color:var(--green)' }, `✓ Решено. ${P.why}`)
+        : h('div', { class: 'choices wrap' }, P.opts.map((o, i) => h('button', { onclick: async () => { const r = await run({ t: 'answerProblem', opt: i }); if (r) { toast(r.ok ? `Верно!${r.chips ? ` +${r.chips}` : ''}` : `Нет, правильно: ${r.right}`); if (r.ok) { P.solved = true; P.why = r.why; } else P.lastWhy = r.why; render(); } } }, o))),
+      P.lastWhy && !P.solved && h('div', { class: 'small muted' }, P.lastWhy)),
+    K.steps.map((s, i) => h('button', { class: 'item', onclick: () => open(s) }, h('div', { class: 'row', style: 'gap:8px' }, h('span', {}, s.done ? '✅' : `${i + 1}.`), h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, s.title), h('div', { class: 'small muted' }, { tutorial: 'правила', lesson: 'урок-раздача', trainer: 'тренажёр', exam: 'экзамен' }[s.kind]))), icon('chev'))));
+}
+
+// тренажёры
+const POS_Q = [
+  ['Кто ходит последним после флопа?', ['Баттон', 'Большой блайнд', 'Ранняя позиция'], 0],
+  ['Кто ходит первым до флопа (за полным столом)?', ['Малый блайнд', 'Игрок слева от большого блайнда', 'Баттон'], 1],
+  ['С какой позиции можно играть больше рук?', ['Ранняя', 'Средняя', 'Поздняя (баттон)'], 2],
+  ['Почему позиция важна?', ['Больше фишек', 'Ты видишь ходы соперников до своего', 'Карты лучше'], 1],
+  ['Малый блайнд после флопа ходит…', ['Первым', 'Последним', 'Как повезёт'], 0],
+];
+const BLUFF_Q = [
+  ['На столе K K 4, соперник чекнул. У тебя 8-7. Блефовать небольшой ставкой?', ['Да', 'Нет'], 0],
+  ['Ты уже ставил на флопе, соперник уравнял. На тёрне пустая карта, у тебя ничего. Второй блеф?', ['Да', 'Нет'], 1],
+  ['Против троих соперников блефовать…', ['Хорошо', 'Плохо — кто-то точно заплатит'], 1],
+  ['Соперник — «колл-станция» (коллирует всё). Блефовать?', ['Да', 'Нет'], 1],
+  ['Ривер дорисовал флеш, ты повышал всю раздачу. Ставка-блеф на ривере…', ['Выглядит убедительно', 'Бессмысленна'], 0],
+];
+const TOUR_Q = [
+  ['Блайнды растут, у тебя 8 ББ. Как играть?', ['Ждать тузов', 'Олл-ин или фолд', 'Лимповать'], 1],
+  ['На «пузыре» (до призов одно место) с большим стеком…', ['Давить коротких', 'Играть очень тихо'], 0],
+  ['Средний стек на пузыре против олл-ина большого стека…', ['Коллировать шире', 'Коллировать уже — вылет дороже'], 1],
+  ['Ранняя стадия турнира, стек 100 ББ. Олл-ин с A-J?', ['Нормально', 'Слишком рискованно'], 1],
+  ['Финальный стол, 3 игрока. Призы сильно различаются. Главное…', ['Не вылетать первым', 'Всегда идти олл-ин'], 0],
+];
+function trainersScreen() {
+  const Tq = S.trq || (S.trq = { kind: null });
+  const pick = (kind) => { S.trq = { kind, n: 0, ok: 0 }; nextQ(); };
+  const nextQ = async () => {
+    const q = S.trq;
+    if (q.kind === 'outs') { const r = await run({ t: 'outsQ' }); if (r) q.cur = r; }
+    if (q.kind === 'odds') { const pot = (2 + ((Math.random() * 18) | 0)) * 50, bet = Math.round(pot * [0.25, 0.33, 0.5, 0.75, 1][(Math.random() * 5) | 0]); const need = Math.round((bet / (pot + bet * 2)) * 100); const eq = [20, 25, 30, 35, 40, 45][(Math.random() * 6) | 0]; q.cur = { pot, bet, need, eq, right: eq >= need ? 0 : 1 }; }
+    if (q.kind === 'pre' || q.kind === 'push') {
+      const R = 'AKQJT98765432', r1 = (Math.random() * 13) | 0, r2 = (Math.random() * 13) | 0, suited = r1 !== r2 && Math.random() < 0.3;
+      const hi = 12 - Math.min(r1, r2), lo = 12 - Math.max(r1, r2), sc = handScore(hi, lo, suited);
+      const name = `${R[Math.min(r1, r2)]}${R[Math.max(r1, r2)]}${r1 === r2 ? '' : suited ? 's' : 'o'}`;
+      if (q.kind === 'pre') { const pos = CHART_POS[(Math.random() * 4) | 0]; const need = { early: 8, middle: 7, late: 5, blinds: 6 }[pos[0]]; q.cur = { name, pos: pos[1], right: sc >= need + 3 ? 2 : sc >= need ? 1 : 0 }; }
+      else { const bb = 3 + ((Math.random() * 10) | 0); q.cur = { name, bb, right: sc >= 4 + bb * 0.6 ? 0 : 1 }; }
+    }
+    if (q.kind === 'pos' || q.kind === 'bluff' || q.kind === 'tour') { const pool = { pos: POS_Q, bluff: BLUFF_Q, tour: TOUR_Q }[q.kind]; q.cur = pool[q.n % pool.length]; }
+    render();
+  };
+  const answer = (i) => {
+    const q = S.trq, c = q.cur;
+    const right = q.kind === 'outs' ? c.opts.indexOf(c.right) : Array.isArray(c) ? c[2] : c.right;
+    q.n++; if (i === right) q.ok++;
+    toast(i === right ? '✅ Верно' : `❌ Нет. ${q.kind === 'outs' ? `Аутов ${c.right}` : q.kind === 'odds' ? `Нужно ${c.need}% шансов` : 'Посмотри объяснение в уроках'}`);
+    if (q.n >= 5) { if (q.ok >= 4) { const step = { outs: 'q_outs', odds: 'q_odds', pre: 'q_pre', push: 'q_push' }[q.kind]; if (step) send({ t: 'markStep', step }); } toast(`Итог: ${q.ok}/5${q.ok >= 4 ? ' — зачтено в курс!' : ''}`); S.trq = { kind: null }; render(); return; }
+    nextQ();
+  };
+  const c = Tq.cur;
+  let body = null;
+  if (Tq.kind && c) {
+    const opts = (labels) => h('div', { class: 'col', style: 'gap:6px' }, labels.map((l, i) => h('button', { class: 'exam-opt', onclick: () => answer(i) }, l)));
+    body = h('div', { class: 'glass card', style: 'gap:8px' }, h('div', { class: 'small muted' }, `Вопрос ${Tq.n + 1} из 5 · верно ${Tq.ok}`),
+      Tq.kind === 'outs' ? [h('div', { class: 'small' }, 'Твои карты и флоп. Сколько аутов улучшат руку?'), h('div', { class: 'tut-cards' }, c.hole.map((x) => pcard(x, 'sm')), h('span', { style: 'width:10px' }), c.board.map((x) => pcard(x, 'sm'))), opts(c.opts.map(String))]
+        : Tq.kind === 'odds' ? [h('div', { class: 'small' }, `В банке ${c.pot}, соперник ставит ${c.bet}. Твои шансы выиграть ~${c.eq}%. Колл выгоден?`), opts(['Да', 'Нет'])]
+          : Tq.kind === 'pre' ? [h('div', { class: 'small' }, `Позиция: ${c.pos}. Рука ${c.name}. Все сбросили до тебя.`), opts(['Фолд', 'Колл/лимп', 'Рейз'])]
+            : Tq.kind === 'push' ? [h('div', { class: 'small' }, `Стек ${c.bb} ББ, рука ${c.name}, все сбросили. Олл-ин?`), opts(['Олл-ин', 'Фолд'])]
+              : [h('div', { class: 'small' }, c[0]), opts(c[1])]);
+  }
+  const it = (k, t, sub) => h('button', { class: 'item', onclick: () => pick(k) }, h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, t), h('div', { class: 'small muted' }, sub)), icon('chev'));
+  return h('div', { class: 'screen' }, header('Тренажёры'),
+    body || [it('outs', 'Ауты', 'Сколько карт улучшат руку'), it('odds', 'Шансы банка', 'Выгоден ли колл'), it('pre', 'Префлоп', 'Фолд, колл или рейз по позиции'),
+      it('push', 'Олл-ин или фолд', 'Короткий стек в турнире'), it('pos', 'Позиции', 'Кто когда ходит'), it('bluff', 'Блеф', 'Когда блефовать, а когда нет'), it('tour', 'Турнирная стадия', 'Пузырь, финалка, короткий стек')]);
+}
+
+// песочница
+function sandboxScreen() {
+  const B = S.sb;
+  const sel = (c) => { if (B.hole.includes(c)) B.hole = B.hole.filter((x) => x !== c); else if (B.board.includes(c)) B.board = B.board.filter((x) => x !== c); else if (B.hole.length < 2) B.hole.push(c); else if (B.board.length < 5) B.board.push(c); B.res = null; render(); };
+  return h('div', { class: 'screen' }, header('Песочница'),
+    h('div', { class: 'small muted' }, 'Нажимай карты: первые две — твои, дальше — стол (до 5).'),
+    h('div', { class: 'row', style: 'gap:10px;align-items:center' }, h('div', { class: 'tut-cards' }, B.hole.map((c) => pcard(c, 'sm'))), h('span', {}, '|'), h('div', { class: 'tut-cards' }, B.board.map((c) => pcard(c, 'sm')))),
+    h('div', { class: 'coll-grid' }, Array.from({ length: 52 }, (_, i) => (i % 13) * 4 + Math.floor(i / 13)).map((c) => h('div', { class: `coll-card got ${(c & 3) === 1 || (c & 3) === 2 ? 'red' : ''} ${B.hole.includes(c) || B.board.includes(c) ? 'picked' : ''}`, onclick: () => sel(c) }, cardText(c)))),
+    h('div', { class: 'grid2' },
+      h('button', { class: 'btn', style: 'height:44px', disabled: B.hole.length < 2, onclick: async () => { const r = await run({ t: 'sandbox', hole: B.hole, board: B.board }); if (r) { B.res = r; render(); } } }, 'Посчитать'),
+      h('button', { class: 'btn-ghost', style: 'height:44px', onclick: () => { S.sb = { hole: [], board: [] }; render(); } }, 'Сбросить')),
+    B.res && h('div', { class: 'glass card', style: 'gap:6px' },
+      h('div', { class: 'b', style: 'font-size:18px' }, `Шанс против случайной руки: ${B.res.equity}%`),
+      B.res.hand && h('div', { class: 'small' }, `Комбинация: ${B.res.hand}`),
+      B.res.outs != null && B.board.length < 5 && h('div', { class: 'small soft' }, `Аутов: ${B.res.outs}`)));
+}
+
+function communityScreen() {
+  return h('div', { class: 'screen' }, header('Разбор чужих раздач'),
+    h('div', { class: 'small muted' }, 'Крупные раздачи игроков за сутки. Имена скрыты — смотри, как играли, и думай, как сыграл бы ты.'),
+    (S.comm || []).length ? S.comm.map((x) => h('button', { class: 'item', onclick: async () => { const r = await run({ t: 'communityReplay', id: x.id }); if (r) { S.replay = { ...r.replay, step: 0 }; go('replay'); } } },
+      h('div', { class: 'col' }, h('div', { class: 'b', style: `font-size:14px;color:${x.net > 0 ? 'var(--green)' : '#ff8a80'}` }, `${x.net > 0 ? '+' : '−'}${fmt(Math.abs(x.net))}${x.hand ? ` · ${x.hand}` : ''}`), h('div', { class: 'small muted' }, x.title)), icon('chev')))
+      : h('div', { class: 'small muted' }, 'Пока нет крупных раздач'));
+}
+
+function mistakesScreen() {
+  return h('div', { class: 'screen' }, header('Мои ошибки недели'),
+    !S.mistakes ? h('div', { class: 'small muted' }, 'Разбираю последние раздачи…')
+      : S.mistakes.length ? S.mistakes.map((m) => h('button', { class: 'item', onclick: () => openReplay(m.id) }, h('div', { class: 'col' }, h('div', { class: 'small', style: 'color:#ffb4b4' }, `❌ ${m.text}`), h('div', { class: 'small muted' }, `лучше было: ${m.best}`)), icon('chev')))
+        : h('div', { class: 'small', style: 'color:var(--green)' }, 'В последних раздачах явных ошибок нет 💪'));
+}
+
+const GLOSSARY = [
+  ['Банк', 'Все фишки, поставленные в раздаче'], ['Бай-ин', 'Сколько фишек берёшь за стол или платишь за турнир'], ['Блайнды', 'Обязательные ставки до раздачи'],
+  ['ББ', 'Большой блайнд — мера стека: «30 ББ»'], ['Баттон', 'Позиция дилера, ходит последним после флопа'], ['Флоп', 'Первые 3 общие карты'],
+  ['Тёрн', '4-я общая карта'], ['Ривер', '5-я общая карта'], ['Префлоп', 'Торговля до флопа'], ['Вскрытие', 'Игроки показывают карты в конце'],
+  ['Кикер', 'Старшая карта вне комбинации'], ['Олл-ин', 'Поставить все фишки'], ['Блеф', 'Ставка со слабой рукой, чтобы соперник сбросил'],
+  ['Ауты', 'Карты, которые улучшат руку'], ['Дро', 'Рука, которой не хватает карты (флеш-дро, стрит-дро)'], ['Стек', 'Сколько фишек у игрока'],
+  ['Лимп', 'Просто уравнять большой блайнд до флопа'], ['3-бет', 'Повторное повышение'], ['Продолженная ставка', 'Ставка на флопе после рейза до флопа'],
+  ['Слоуплей', 'Тихая игра сильной руки'], ['Сет', 'Тройка, где две карты твои'], ['Оверпара', 'Твоя пара выше всех карт стола'],
+  ['Натс', 'Лучшая возможная рука'], ['Тильт', 'Злость после проигрыша, из-за которой играешь хуже'], ['VPIP', 'Как часто вкладываешь фишки до флопа'],
+  ['Шансы банка', 'Доля, которую нужно доплатить, к будущему банку'], ['Пузырь', 'Момент в турнире прямо перед призами'], ['Бэд-бит', 'Проигрыш, когда был сильным фаворитом'],
+];
+function glossaryScreen() {
+  const q = (S.gq || '').toLowerCase();
+  return h('div', { class: 'screen' }, header('Словарь'),
+    h('input', { class: 'buyin-input', id: 'gq', placeholder: 'Поиск термина', value: S.gq || '', oninput: (e) => { S.gq = e.target.value; render(); } }),
+    GLOSSARY.filter(([t, d]) => !q || t.toLowerCase().includes(q) || d.toLowerCase().includes(q)).map(([t, d]) => h('div', { class: 'glass card', style: 'gap:2px;padding:10px 12px' }, h('div', { class: 'b' }, t), h('div', { class: 'small soft' }, d))));
+}
+
+function flopTableScreen() {
+  const rows = [['Пара на флопе (с неспаренной рукой)', '32%'], ['Две пары на флопе', '2%'], ['Сет с карманной парой', '12%'], ['Флеш-дро с одномастными', '11%'],
+    ['Готовый флеш с одномастными', '0,8%'], ['Стрит-дро с коннекторами', '10%'], ['Флеш к риверу, если дро на флопе', '35%'], ['Стрит к риверу с открытым дро', '31%'],
+    ['Сет к риверу с парой на флопе', '8%'], ['Хоть что-то лучше старшей карты к риверу', '~60%']];
+  return h('div', { class: 'screen' }, header('Сила рук на флопе'),
+    h('div', { class: 'glass card', style: 'gap:6px' }, rows.map(([a, b]) => h('div', { class: 'row between' }, h('div', { class: 'small' }, a), h('div', { class: 'b' }, b)))),
+    h('div', { class: 'small soft', style: 'line-height:1.45' }, 'Правило 2 и 4: умножь ауты на 2 — шанс на следующей карте, на 4 — шанс к риверу (с флопа).'));
+}
+
+// подсказка новичку в его ход
+function newbieTip(T) {
+  const me = T.seats.find((x) => x.me);
+  const cat = me?.myHandCat;
+  const t = S.turn;
+  const text = !T.board.length ? (t.toCall > 3 * t.bb ? 'Совет: перед флопом большая ставка — играй только сильные руки' : 'Совет: слабые руки до флопа лучше сбросить')
+    : cat >= 3 ? 'Совет: у тебя сильная рука — ставь и повышай' : cat === 2 ? 'Совет: две пары — хорошо, ставь' : cat === 1 ? 'Совет: пара — средне, не вкладывай слишком много'
+      : t.toCall > 0 ? 'Совет: у тебя ничего — если ставка большая, сбрасывай' : 'Совет: у тебя ничего — можно бесплатно сделать чек';
+  return h('div', { class: 'newbie-tip' }, text);
 }
 
 function openCombos() {
@@ -2510,6 +2704,9 @@ function tableScreen() {
         h('button', { class: 'jam-btn', 'aria-label': 'Перевернуть стол', onclick: () => run({ t: 'prank', kind: 'flip' }) }, '🙃'),
         h('button', { class: 'jam-btn', 'aria-label': 'Всем маски', onclick: () => run({ t: 'prank', kind: 'masks' }) }, '🎭'),
         h('button', { class: 'jam-btn', 'aria-label': 'Тихий пранк: у друга тузы, выигрываешь ты', onclick: async () => { if (await run({ t: 'prank', kind: 'cooler' })) toast('🤫 Тихий пранк: у друга будут тузы, а выиграешь ты'); } }, '🤫')),
+      S.coachNow && h('div', { class: `coach-now v-${S.coachNow.verdict}` }, `${S.coachNow.verdict === 'bad' ? '❌' : S.coachNow.verdict === 'meh' ? '⚠️' : '✅'} ${S.coachNow.text}${S.coachNow.verdict !== 'ok' ? ` · лучше: ${S.coachNow.best}` : ''}`, S.coachNow.streak > 1 && h('span', { class: 'small' }, ` · серия ${S.coachNow.streak}/10`)),
+      // подсказка новичку: что значит твоя рука сейчас
+      myTurn && loadUi().newbie !== false && S.turn && newbieTip(T),
       S.emoteOpen && emoteTray(),
       S.emoteOpen && !T.watching && h('div', { class: 'chat-row' },
         h('input', { class: 'buyin-input', style: 'margin:0;flex:1;height:36px', id: 'tchat', placeholder: 'Сообщение за столом', maxlength: 120, value: S.tchat || '', oninput: (e) => { S.tchat = e.target.value; } }),
@@ -3767,7 +3964,7 @@ function combosScreen() {
 
 // ---------- Рендер ----------
 
-const SCREENS = { dm: dmScreen, pprofile: pprofileScreen, eco: ecoScreen, fun: funScreen, stats: statsScreen, style: styleScreen, school: schoolScreen, chart: chartScreen, quiz: quizScreen, exam: examScreen, history: historyScreen, replay: replayScreen, botlab: botLabScreen, training: trainingScreen, tutorial: tutorialScreen, admin: adminScreen, friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
+const SCREENS = { course: courseScreen, trainers: trainersScreen, sandbox: sandboxScreen, community: communityScreen, mistakes: mistakesScreen, glossary: glossaryScreen, flopTable: flopTableScreen, dm: dmScreen, pprofile: pprofileScreen, eco: ecoScreen, fun: funScreen, stats: statsScreen, style: styleScreen, school: schoolScreen, chart: chartScreen, quiz: quizScreen, exam: examScreen, history: historyScreen, replay: replayScreen, botlab: botLabScreen, training: trainingScreen, tutorial: tutorialScreen, admin: adminScreen, friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
 
 function render() {
   const app = document.getElementById('app');
