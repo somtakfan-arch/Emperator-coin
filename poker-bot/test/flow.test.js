@@ -1213,13 +1213,14 @@ test('рубашки и фишки: у каждой есть стиль, усл�
   c.close(); a.close();
 });
 
-test('стиль и кастом: 100 вариантов, у каждого есть стиль, ник и табличка видны за столом', async () => {
+test('стиль и кастом: 350 вариантов, у каждого есть стиль, ник и табличка видны за столом', async () => {
   const { readFileSync } = await import('node:fs');
   const css = readFileSync(new URL('../public/app.css', import.meta.url), 'utf8');
   const js = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
   const { NAME_FX, PLATES, FRAMES } = await import('../server/cosmetics.js');
   let n = 0;
-  for (const [list, attr] of [['FELTS', 'felt'], ['RIMS', 'rim'], ['FACES', 'face'], ['DBTNS', 'dbtn'], ['FONTS', 'font'], ['SLOTS', 'slots'], ['PILLS', 'pill']]) {
+  for (const [list, attr] of [['FELTS', 'felt'], ['RIMS', 'rim'], ['FACES', 'face'], ['DBTNS', 'dbtn'], ['FONTS', 'font'], ['SLOTS', 'slots'], ['PILLS', 'pill'],
+    ['FELTS_X', 'felt'], ['RIMS_X', 'rim'], ['FACES_X', 'face'], ['DBTNS_X', 'dbtn'], ['FONTS_X', 'font'], ['SLOTS_X', 'slots'], ['PILLS_X', 'pill'], ['BGS_X', 'bg'], ['TIMERS_X', 'timer'], ['HANDS_X', 'hand'], ['EMOS_X', 'emo']]) {
     const src = js.slice(js.indexOf(`const ${list} = [`), js.indexOf('\n', js.indexOf(`const ${list} = [`)));
     const ids = [...src.matchAll(/\['([a-z_0-9]+)', '/g)].map((m) => m[1]).filter((x) => x !== 'auto');
     for (const id of ids) assert.ok(css.includes(`[data-${attr}="${id}"]`) && css.includes(`.pv-${attr === 'font' ? 'font' : attr}-${id}`), `${attr}:${id}`);
@@ -1228,8 +1229,8 @@ test('стиль и кастом: 100 вариантов, у каждого ес
   for (const x of NAME_FX.filter((x) => x.id !== 'none')) assert.ok(css.includes(`.nfx-${x.id}`), x.id);
   for (const x of PLATES.filter((x) => x.id !== 'none')) assert.ok(css.includes(`.plate.plate-${x.id}`), x.id);
   for (const x of FRAMES) if (x.id !== 'none') assert.ok(css.includes(`.frame-${x.id}`), x.id);
-  n += NAME_FX.length - 1 + PLATES.length - 1 + 10;
-  assert.equal(n, 100);
+  n += NAME_FX.length - 1 + PLATES.length - 1 + FRAMES.filter((x) => x.id.startsWith('x') || ['rainbow', 'ice', 'emerald', 'ruby', 'double', 'sun', 'shadow', 'pink', 'toxic', 'platinum'].includes(x.id)).length;
+  assert.equal(n, 350, '100 + 250 вариантов');
   // игрок: ник и табличка видны за столом
   const c = new Client(9971);
   await c.ready;

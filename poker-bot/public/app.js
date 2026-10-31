@@ -417,6 +417,23 @@ const DBTNS = [['auto', 'Белый'], ...[['gold', 'Золотой'], ['black',
 const FONTS = [['auto', 'Обычный'], ...[['serif', 'С засечками'], ['mono', 'Моно'], ['rounded', 'Округлый'], ['narrow', 'Узкий'], ['classic', 'Классика']]];
 const SLOTS = [['auto', 'Пунктир'], ...[['solid', 'Сплошные'], ['glow', 'Светящиеся'], ['none', 'Невидимые'], ['gold', 'Золотые'], ['dots', 'Точки']]];
 const PILLS = [['auto', 'Белая'], ...[['dark', 'Тёмная'], ['gold', 'Золотая'], ['neon', 'Неон'], ['red', 'Красная'], ['blue', 'Синяя'], ['green', 'Зелёная'], ['glass', 'Стекло'], ['purple', 'Фиолетовая'], ['pink', 'Розовая'], ['outline', 'Контур']]];
+const FELTS_X = [['xscarlet', 'Алая'], ['xcoral', 'Коралловая'], ['xcopper', 'Медная'], ['xamber', 'Янтарная'], ['xhoney', 'Медовая'], ['xlemon', 'Лимонная'], ['xpistachio', 'Фисташковая'], ['xgrass', 'Травяная'], ['xmalachite', 'Малахитовая'], ['xjade', 'Нефритовая'], ['xsea', 'Морская'], ['xlagoon', 'Лагуна'], ['xaqua', 'Аквамариновая'], ['xazure', 'Лазурная'], ['xcobalt', 'Кобальтовая'], ['xindigo', 'Индиго'], ['xultra', 'Ультрамарин'], ['xlavender', 'Лавандовая'], ['xlilac', 'Сиреневая'], ['xamethyst', 'Аметистовая'], ['xorchid', 'Орхидея'], ['xfuchsia', 'Фуксия'], ['xraspberry', 'Малиновая'], ['xcherry', 'Вишнёвая'], ['xgarnet', 'Гранатовая'], ['xcoffee', 'Кофейная'], ['xtobacco', 'Табачная'], ['xash', 'Пепельная'], ['xstorm', 'Грозовая'], ['xsage', 'Шалфейная']];
+const RIMS_X = [['xscarlet', 'Алый'], ['xcoral', 'Коралловый'], ['xcopper', 'Медный'], ['xamber', 'Янтарный'], ['xhoney', 'Медовый'], ['xlemon', 'Лимонный'], ['xpistachio', 'Фисташковый'], ['xgrass', 'Травяной'], ['xmalachite', 'Малахитовый'], ['xjade', 'Нефритовый'], ['xsea', 'Морской'], ['xlagoon', 'Лагуна'], ['xaqua', 'Аквамариновый'], ['xazure', 'Лазурный'], ['xcobalt', 'Кобальтовый'], ['xindigo', 'Индиго'], ['xultra', 'Ультрамарин'], ['xlavender', 'Лавандовый'], ['xlilac', 'Сиреневый'], ['xamethyst', 'Аметистовый']];
+const FACES_X = [['xscarlet', 'Алая'], ['xamber', 'Янтарная'], ['xpistachio', 'Фисташковая'], ['xjade', 'Нефритовая'], ['xaqua', 'Аквамариновая'], ['xindigo', 'Индиго'], ['xlilac', 'Сиреневая'], ['xfuchsia', 'Фуксия'], ['xgarnet', 'Гранатовая'], ['xash', 'Пепельная'], ['xcoral', 'Коралловая'], ['xhoney', 'Медовая'], ['xgrass', 'Травяная'], ['xsea', 'Морская'], ['xazure', 'Лазурная'], ['xultra', 'Ультрамарин'], ['xamethyst', 'Аметистовая'], ['xraspberry', 'Малиновая'], ['xcoffee', 'Кофейная'], ['xstorm', 'Грозовая']];
+const DBTNS_X = [['xscarlet', 'Алый'], ['xcopper', 'Медный'], ['xhoney', 'Медовый'], ['xpistachio', 'Фисташковый'], ['xmalachite', 'Малахитовый'], ['xsea', 'Морской'], ['xaqua', 'Аквамариновый'], ['xcobalt', 'Кобальтовый'], ['xultra', 'Ультрамарин'], ['xlilac', 'Сиреневый'], ['xorchid', 'Орхидея'], ['xraspberry', 'Малиновый'], ['xgarnet', 'Гранатовый'], ['xtobacco', 'Табачный'], ['xstorm', 'Грозовой']];
+const PILLS_X = [['xcoral', 'Коралловая'], ['xamber', 'Янтарная'], ['xlemon', 'Лимонная'], ['xgrass', 'Травяная'], ['xjade', 'Нефритовая'], ['xlagoon', 'Лагуна'], ['xazure', 'Лазурная'], ['xindigo', 'Индиго'], ['xlavender', 'Лавандовая'], ['xamethyst', 'Аметистовая'], ['xfuchsia', 'Фуксия'], ['xcherry', 'Вишнёвая'], ['xcoffee', 'Кофейная'], ['xash', 'Пепельная'], ['xsage', 'Шалфейная']];
+const FONTS_X = [['xslab', 'Брусковый'], ['ximpact', 'Плакат'], ['xbook', 'Книжный'], ['xtech', 'Техно'], ['xhand', 'Рукописный']];
+const SLOTS_X = [['xscarlet', 'Алые'], ['xamber', 'Янтарные'], ['xpistachio', 'Фисташковые'], ['xjade', 'Нефритовые'], ['xaqua', 'Аквамариновые'], ['xindigo', 'Индиго'], ['xlilac', 'Сиреневые'], ['xfuchsia', 'Фуксия'], ['xgarnet', 'Гранатовые'], ['xash', 'Пепельные']];
+const BGS_X = [['xscarlet', 'Алый'], ['xcoral', 'Коралловый'], ['xcopper', 'Медный'], ['xamber', 'Янтарный'], ['xhoney', 'Медовый'], ['xlemon', 'Лимонный'], ['xpistachio', 'Фисташковый'], ['xgrass', 'Травяной'], ['xmalachite', 'Малахитовый'], ['xjade', 'Нефритовый'], ['xsea', 'Морской'], ['xlagoon', 'Лагуна'], ['xaqua', 'Аквамариновый'], ['xazure', 'Лазурный'], ['xcobalt', 'Кобальтовый'], ['xindigo', 'Индиго'], ['xultra', 'Ультрамарин'], ['xlavender', 'Лавандовый'], ['xlilac', 'Сиреневый'], ['xamethyst', 'Аметистовый'], ['xorchid', 'Орхидея'], ['xfuchsia', 'Фуксия'], ['xraspberry', 'Малиновый'], ['xcherry', 'Вишнёвый'], ['xgarnet', 'Гранатовый'], ['xcoffee', 'Кофейный'], ['xtobacco', 'Табачный'], ['xash', 'Пепельный'], ['xstorm', 'Грозовой'], ['xsage', 'Шалфейный']];
+const TIMERS_X = [['xscarlet', 'Алый'], ['xcopper', 'Медный'], ['xhoney', 'Медовый'], ['xpistachio', 'Фисташковый'], ['xmalachite', 'Малахитовый'], ['xsea', 'Морской'], ['xaqua', 'Аквамариновый'], ['xcobalt', 'Кобальтовый'], ['xultra', 'Ультрамарин'], ['xlilac', 'Сиреневый'], ['xorchid', 'Орхидея'], ['xraspberry', 'Малиновый'], ['xgarnet', 'Гранатовый'], ['xtobacco', 'Табачный'], ['xstorm', 'Грозовой']];
+const HANDS_X = [['xscarlet', 'Алая'], ['xcopper', 'Медная'], ['xhoney', 'Медовая'], ['xpistachio', 'Фисташковая'], ['xmalachite', 'Малахитовая'], ['xsea', 'Морская'], ['xaqua', 'Аквамариновая'], ['xcobalt', 'Кобальтовая'], ['xultra', 'Ультрамарин'], ['xlilac', 'Сиреневая'], ['xorchid', 'Орхидея'], ['xraspberry', 'Малиновая'], ['xgarnet', 'Гранатовая'], ['xtobacco', 'Табачная'], ['xstorm', 'Грозовая']];
+const EMOS_X = [['xcoral', 'Коралловая'], ['xamber', 'Янтарная'], ['xlemon', 'Лимонная'], ['xgrass', 'Травяная'], ['xjade', 'Нефритовая'], ['xlagoon', 'Лагуна'], ['xazure', 'Лазурная'], ['xindigo', 'Индиго'], ['xlavender', 'Лавандовая'], ['xamethyst', 'Аметистовая'], ['xfuchsia', 'Фуксия'], ['xcherry', 'Вишнёвая'], ['xcoffee', 'Кофейная'], ['xash', 'Пепельная'], ['xsage', 'Шалфейная']];
+// новые группы: фон экрана стола, таймер хода, плашка «моя комбинация», подложка эмодзи
+const BGS = [['auto', 'По сцене'], ...BGS_X];
+const TIMERS = [['auto', 'Серебро'], ...TIMERS_X];
+const HANDS = [['auto', 'Обычная'], ...HANDS_X];
+const EMOS = [['auto', 'Без подложки'], ...EMOS_X];
+for (const [list, add] of [[FELTS, FELTS_X], [RIMS, RIMS_X], [FACES, FACES_X], [DBTNS, DBTNS_X], [PILLS, PILLS_X], [FONTS, FONTS_X], [SLOTS, SLOTS_X]]) list.push(...add);
 const ANIM_AVATARS = ['🔥', '⚡', '🌀', '💫', '🌈', '👾'];
 const MODES = [['normal', 'Обычный'], ['minimal', 'Минимализм'], ['large', 'Крупный'], ['stream', 'Стрим']];
 function loadUi() {
@@ -440,7 +457,7 @@ function applyUi() {
   document.documentElement.classList.toggle('anim', !!ui.anim);
   d.cardfont = ui.cardFont;
   // стиль и кастом: «auto» — без атрибута
-  for (const k of ['felt', 'rim', 'face', 'dbtn', 'font', 'slots', 'pill']) { if (ui[k] && ui[k] !== 'auto') d[k] = ui[k]; else delete d[k]; }
+  for (const k of ['felt', 'rim', 'face', 'dbtn', 'font', 'slots', 'pill', 'bg', 'timer', 'hand', 'emo']) { if (ui[k] && ui[k] !== 'auto') d[k] = ui[k]; else delete d[k]; }
   document.documentElement.classList.toggle('onehand', !!ui.oneHand);
   d.deal = ui.deal;
   // своё фото на фоне стола (хранится только на этом устройстве)
@@ -495,7 +512,7 @@ function lookCard() {
   const ui = loadUi();
   const pick = (list, cur, onPick) => h('div', { class: 'choices wrap' }, list.map(([id, name]) => h('button', { class: cur === id ? 'on' : '', onclick: () => onPick(id) }, name)));
   return h('div', { class: 'col', style: 'gap:10px' },
-    h('button', { class: 'item', onclick: () => go('style') }, h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, '🎨 Стиль и кастом'), h('div', { class: 'small muted' }, 'Ник, табличка, сукно, бортик, карты, баттон, шрифт и ещё — 100 вариантов')), icon('chev')),
+    h('button', { class: 'item', onclick: () => go('style') }, h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, '🎨 Стиль и кастом'), h('div', { class: 'small muted' }, 'Ник, табличка, сукно, бортик, карты, фон, таймер, шрифт и ещё — 350 вариантов')), icon('chev')),
     // титул под ником — из открытых достижений
     h('div', { class: 'label' }, 'Титул'),
     (L.titles || []).length ? h('div', { class: 'choices wrap' },
@@ -1409,7 +1426,7 @@ function quickSettings() {
     chipPicker(ui.chips),
     h('div', { class: 'small muted' }, 'Рубашка карт'),
     backPicker(),
-    h('button', { class: 'btn-ghost', onclick: () => { S.quickSet = false; S.tableHidden = true; go('style'); } }, '🎨 Всё оформление (100 вариантов)'));
+    h('button', { class: 'btn-ghost', onclick: () => { S.quickSet = false; S.tableHidden = true; go('style'); } }, '🎨 Всё оформление (350 вариантов)'));
 }
 
 // ---------- Стиль и кастом: 100 вариантов оформления ----------
@@ -1445,9 +1462,17 @@ function styleScreen() {
     grid(PILLS, ui.pill, 'pill', (id) => h('div', { class: `pv-pill ${id !== 'auto' ? `pv-pill-${id}` : ''}` }, '250')),
     h('div', { class: 'label' }, 'Ячейки для карт на столе'),
     grid(SLOTS, ui.slots, 'slots', (id) => h('div', { class: `pv-slots ${id !== 'auto' ? `pv-slots-${id}` : ''}` })),
+    h('div', { class: 'label' }, 'Фон вокруг стола'),
+    grid(BGS, ui.bg, 'bg', (id) => h('div', { class: `pv-bg ${id !== 'auto' ? `pv-bg-${id}` : ''}` })),
+    h('div', { class: 'label' }, 'Полоска таймера хода'),
+    grid(TIMERS, ui.timer, 'timer', (id) => h('div', { class: `pv-timer ${id !== 'auto' ? `pv-timer-${id}` : ''}` }, h('div'))),
+    h('div', { class: 'label' }, 'Плашка «моя комбинация»'),
+    grid(HANDS, ui.hand, 'hand', (id) => h('div', { class: `pv-hand ${id !== 'auto' ? `pv-hand-${id}` : ''}` }, 'Пара тузов')),
+    h('div', { class: 'label' }, 'Подложка эмодзи'),
+    grid(EMOS, ui.emo, 'emo', (id) => h('div', { class: `pv-emo ${id !== 'auto' ? `pv-emo-${id}` : ''}` }, '😎')),
     h('div', { class: 'label' }, 'Шрифт приложения'),
     grid(FONTS, ui.font, 'font', (id) => h('div', { class: `pv-fontx ${id !== 'auto' ? `pv-font-${id}` : ''}` }, 'Аа 123')),
-    h('button', { class: 'btn-ghost', onclick: () => { setUi({ felt: 'auto', rim: 'auto', face: 'auto', dbtn: 'auto', font: 'auto', slots: 'auto', pill: 'auto' }); render(); toast('Сброшено'); } }, 'Сбросить моё оформление'),
+    h('button', { class: 'btn-ghost', onclick: () => { setUi({ felt: 'auto', rim: 'auto', face: 'auto', dbtn: 'auto', font: 'auto', slots: 'auto', pill: 'auto', bg: 'auto', timer: 'auto', hand: 'auto', emo: 'auto' }); render(); toast('Сброшено'); } }, 'Сбросить моё оформление'),
     h('div', { style: 'height:70px' }));
 }
 
