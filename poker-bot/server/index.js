@@ -20,6 +20,8 @@ import * as social2 from './social2.js';
 import * as learn from './learn.js';
 import * as notes from './notes.js';
 import * as stats from './stats.js';
+import * as fun from './fun.js';
+import { MEMES } from './game/table.js';
 import { GameTable } from './game/table.js';
 import { ghostHour } from '../core/bots.js';
 import { BOT_KINDS } from '../core/crowd.js';
@@ -255,6 +257,8 @@ function lobbyView(uid) {
   return {
     tournaments: tournaments.list(uid),
     event: admin.getEvent(),
+    champion: progress.fameView().hall[0]?.top[0] || null,
+    birthdays: fun.birthdaysToday().slice(0, 5),
     online: sockets.size,
     packs: config.packs, hintPacks: config.hintPacks, bots: BOTS, crowd: CROWD_VIEW, solo: SOLO_VIEW, buyins: config.botBuyins, buyinMin: config.buyinMin,
     sizes: config.tournament.sizes, blindOptions: config.tournament.blindOptions, turnSeconds: config.turnSeconds, timedMinutes: config.timedMinutes,
@@ -270,6 +274,7 @@ const handlers = {
   // таблицы лидеров: по Эло, по выигранным раздачам, по самому большому банку
   // админа в таблицах лидеров нет
   top: (uid, m) => {
+    if (m.kind === 'unlucky') return { t: 'top', kind: 'unlucky', rating: fun.unluckyTop().map((r) => ({ name: r.name, value: r.v, rank: 'бэд-битов', rankColor: '#ff8a80' })) };
     if (m.kind === 'bots') return { t: 'top', kind: 'bots', rating: botWeekTop().map((r) => ({ name: r.name, value: r.value, rank: 'бот', rankColor: '#9ad' })) };
     const kind = ['hands', 'pot'].includes(m.kind) ? m.kind : 'rating';
     const rows = kind === 'hands'
@@ -501,7 +506,7 @@ const handlers = {
   sitBots(uid, m) {
     if (activeTable(uid)) throw new Error('Ты уже за столом');
     botRooms.set(uid, BotRoom.open(hub, getUser(uid), {
-      mode: ['6', '9', 'rush', 'mega', 'ladder', 'team'].includes(m.mode) ? m.mode : 'hu', jokers: !!m.jokers, marathon: !!m.marathon, stopLoss: [0.5, 0.75].includes(Number(m.stopLoss)) ? Number(m.stopLoss) : 0, autoTopUp: !!m.autoTopUp, botName: m.botName, variant: m.variant === 'short' ? 'short' : null, chaos: !!m.chaos, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0, fast: !!m.fast,
+      mode: ['6', '9', 'rush', 'mega', 'ladder', 'team'].includes(m.mode) ? m.mode : 'hu', jokers: !!m.jokers, marathon: !!m.marathon, mirrorMode: !!m.mirror, fog: !!m.fog, stopLoss: [0.5, 0.75].includes(Number(m.stopLoss)) ? Number(m.stopLoss) : 0, autoTopUp: !!m.autoTopUp, botName: m.botName, variant: m.variant === 'short' ? 'short' : null, chaos: !!m.chaos, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0, fast: !!m.fast,
       level: m.level || 'normal', shadow: progress.shadowLevel(uid), mirror: progress.mirrorStats(uid), myBot: m.botName === '__my' ? botsx.myBot(uid) : null,
     }));
     hub.onSeated(uid);
@@ -633,6 +638,28 @@ const handlers = {
     const a = activeTable(uid);
     if (!a?.seat.extend?.()) throw new Error('Таймбанк закончился');
     return { t: 'ok', left: a.seat.timebanks };
+  },
+  // ---------- весёлое ----------
+  fun: (uid) => ({ t: 'fun', fortune: fun.fortune(uid), riddle: fun.riddle(uid), birthdays: fun.birthdaysToday(), capsules: fun.capsulesOf(uid), memes: MEMES }),
+  answerRiddle(uid, m) { const r = fun.answerRiddle(uid, m.a); hub.sendMe(uid); return { t: 'ok', ...r }; },
+  guessFlop(uid, m) { const r = fun.guessFlop(uid, String(m.pick)); hub.sendMe(uid); return { t: 'ok', ...r }; },
+  hlStart: (uid) => ({ t: 'ok', ...fun.hlStart(uid) }),
+  hlGuess(uid, m) { const r = fun.hlGuess(uid, m.dir === 'up' ? 'up' : 'down'); if (r.chips) hub.sendMe(uid); return { t: 'ok', ...r }; },
+  cardRoulette(uid) { const r = fun.cardRoulette(uid); hub.sendMe(uid); return { t: 'ok', ...r }; },
+  puzzleNew: (uid) => ({ t: 'ok', ...fun.puzzleNew(uid) }),
+  puzzleCheck(uid, m) { const r = fun.puzzleCheck(uid, m.pick); if (r.chips) hub.sendMe(uid); return { t: 'ok', ...r }; },
+  capsule(uid, m) { fun.capsuleCreate(uid, m.text, m.days); return { t: 'ok', capsules: fun.capsulesOf(uid) }; },
+  yearRecap: (uid) => ({ t: 'ok', recap: fun.yearRecap(uid) }),
+  botAlbum: (uid) => ({ t: 'ok', all: [...BOTS.map((b) => b.name), ...CROWD_VIEW.map((c) => c.name)], met: Object.keys(progress.vsStats(uid)), cards: progress.botCardsOf(uid) }),
+  // секретный стол: пароль дня из загадки
+  sitSecret(uid, m) {
+    if (String(m.password || '').trim().toUpperCase() !== fun.secretPassword()) throw new Error('Неверный пароль — разгадай загадку дня');
+    if (activeTable(uid)) throw new Error('Ты уже за столом');
+    botRooms.set(uid, BotRoom.open(hub, getUser(uid), { mode: '9', buyin: Number(m.buyin) || 1000, chaos: true, jokers: true, secret: true, level: 'master', shadow: 0 }));
+    progress.onEvent(uid, { type: 'secret' });
+    hub.onSeated(uid);
+    hub.sendMe(uid);
+    return { t: 'ok' };
   },
   // ---------- статистика ----------
   myStats: (uid) => ({ t: 'stats', stats: stats.statsView(uid), ach: stats.achPercent() }),
@@ -952,6 +979,13 @@ setInterval(() => {
       (async () => { for (const r of list) { notify(r.uid, `📊 Твоя неделя: ${r.hands} раздач, выиграно ${r.won}, итог ${r.bb >= 0 ? '+' : ''}${r.bb} больших блайндов. Подробно — в «Моей статистике».`, openButton('Статистика', '#stats')); await new Promise((x) => setTimeout(x, 60)); } })();
     }
   } catch (e) { console.error('weekly', e); }
+  // капсулы времени: пришло время — письмо себе
+  try {
+    for (const c of fun.dueCapsules()) {
+      notify(c.user_id, `⏳ Капсула времени от тебя самого (${new Date(c.created).toLocaleDateString('ru')}):\n\n${c.text.replace(/[<>&]/g, '')}`);
+      hub.send(c.user_id, { t: 'toast', text: '⏳ Открылась твоя капсула времени — загляни в «Весёлое»' });
+    }
+  } catch (e) { console.error('capsules', e); }
   // онлайн по часам — для графика в админке
   try { admin.recordOnline(sockets.size); } catch {}
   // напоминание про бонус дня: раз в день в 18:00 по Москве тем, кто заходил на неделе, но не сегодня

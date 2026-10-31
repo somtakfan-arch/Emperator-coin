@@ -1292,3 +1292,51 @@ test('статистика: VPIP, позиции, тепловая карта, �
   await assert.rejects(c.req({ t: 'compareFriend', id: 1 }), /с другом/);
   c.close();
 });
+
+test('весёлое: гадание, загадка и секретный стол, мини-игры, капсула, альбом, зеркало, туман, мемы', async () => {
+  const c = new Client(9995, { autoplay: 'call' });
+  await c.ready;
+  await c.req({ t: 'invoice', pack: 'p1' });
+  const f = await c.req({ t: 'fun' });
+  assert.ok(f.fortune.text && f.riddle.q && Array.isArray(f.birthdays));
+  await assert.rejects(c.req({ t: 'answerRiddle', a: 'неправильно' }), /Не угадал/);
+  await assert.rejects(c.req({ t: 'sitSecret', password: 'nope' }), /Неверный пароль/);
+  const { secretPassword } = await import('../server/fun.js');
+  await c.req({ t: 'sitSecret', password: secretPassword().toLowerCase(), buyin: 1000 });
+  const st = await c.waitFor((m) => m.t === 'table' && /Секретный стол/.test(m.table?.title || ''));
+  assert.equal(st.table.seats.length, 9);
+  c.ws.send(JSON.stringify({ t: 'leave' })); await c.waitFor((m) => m.t === 'left', 30000);
+  // мини-игры
+  const g = await c.req({ t: 'guessFlop', pick: 'ace' });
+  assert.equal(g.flop.length, 3);
+  const h0 = await c.req({ t: 'hlStart' });
+  const h1 = await c.req({ t: 'hlGuess', dir: 'up' });
+  assert.ok(h0.card != null && h1.card != null);
+  const rl = await c.req({ t: 'cardRoulette' });
+  assert.ok(rl.chips > 0);
+  await assert.rejects(c.req({ t: 'cardRoulette' }), /завтра/);
+  const pz = await c.req({ t: 'puzzleNew' });
+  const chk = await c.req({ t: 'puzzleCheck', pick: pz.cards.slice(0, 5) });
+  assert.ok(typeof chk.ok === 'boolean' && chk.best);
+  const cap = await c.req({ t: 'capsule', text: 'привет из прошлого', days: 7 });
+  assert.equal(cap.capsules.length, 1);
+  const al = await c.req({ t: 'botAlbum' });
+  assert.ok(al.all.length > 50 && al.met.length > 0);
+  // зеркало: у всех одинаковое достоинство карт; туман: чужие стеки скрыты
+  await c.req({ t: 'sitBots', mode: '6', buyin: 500, mirror: true, fog: true });
+  const mt = await c.waitFor((m) => m.t === 'table' && /Зеркало/.test(m.table?.title || '') && m.table.inHand && m.table.seats.find((s) => s.me)?.cards);
+  assert.ok(mt.table.seats.filter((s) => !s.me && s.inHand).every((s) => s.stack === -1), 'туман');
+  c.ws.send(JSON.stringify({ t: 'emote', e: 'ГГ' })); // эмодзи шлётся без ответа
+  await c.waitFor((m) => m.t === 'table' && m.table?.seats?.find((s) => s.me)?.emote === 'ГГ');
+  const mine = mt.table.seats.find((s) => s.me).cards.map((x) => x >> 2).sort();
+  const sd = await c.waitFor((m) => m.t === 'table' && m.table?.result && m.table.seats.some((s) => !s.me && s.cards), 60000).catch(() => null);
+  // карты сравниваем внутри одной раздачи
+  const myCards = sd?.table.seats.find((x) => x.me)?.cards;
+  if (sd && myCards) for (const s of sd.table.seats.filter((x) => !x.me && x.cards)) assert.deepEqual(s.cards.map((x) => x >> 2).sort(), myCards.map((x) => x >> 2).sort());
+  assert.ok(mine.length === 2);
+  c.ws.send(JSON.stringify({ t: 'leave' })); await c.waitFor((m) => m.t === 'left' && c.msgs.filter((x) => x.t === 'left').length >= 2, 30000);
+  const top = await c.req({ t: 'top', kind: 'unlucky' });
+  assert.equal(top.kind, 'unlucky');
+  assertLedger(9995);
+  c.close();
+});

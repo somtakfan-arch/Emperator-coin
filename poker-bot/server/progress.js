@@ -79,6 +79,10 @@ export const ACHIEVEMENTS = [
   { key: 'album', name: 'Полный альбом', text: 'Выиграй со всеми комбинациями', chips: 5000, chest: 'epic' },
   { key: 'prestige', name: 'Престиж', text: 'Получи первую звезду престижа', chips: 5000 },
   { key: 'exam', name: 'Знаток покера', text: 'Сдай экзамен по правилам', chips: 1000 },
+  { key: 'joker_hunter', name: 'Охотник на джокеров', text: 'Поймай 10 джокеров на руки', chips: 2000, chest: 'epic' },
+  { key: 'bot_collector', name: 'Коллекционер ботов', text: 'Собери карточки 50 ботов (выиграй у них банк)', chips: 5000, chest: 'epic' },
+  { key: 'night_marathon', name: 'Марафонец ночи', text: 'Сыграй 100 раздач за одну ночь (0–6 по Москве)', chips: 1500 },
+  { key: 'secret_table', name: 'Посвящённый', text: 'Найди пароль и сядь за секретный стол', chips: 500 },
   // секретные: не видно, пока не откроешь
   { key: 'seven_deuce', name: 'Наглость', text: 'Выиграй с 7-2 на руках', chips: 1000, secret: true },
   { key: 'night_owl', name: 'Сова', text: 'Выиграй раздачу между 2 и 5 часами ночи', chips: 700, secret: true },
@@ -259,6 +263,20 @@ export function onHand(uid, h) {
       s.streak = 0;
       if ((h.hole || []).length === 2 && h.hole.every((c) => c >> 2 === 12) && h.showdown) unlock(uid, p, 'aces_cracked', out);
     }
+    // охота на джокера: джокер на руках
+    const jk = (h.hole || []).filter((c) => c >= 52).length;
+    if (jk) {
+      p.jokers = (p.jokers || 0) + jk;
+      out.push(`🃏 Джокер пойман! Всего ${p.jokers} из 10`);
+      if (p.jokers >= 10) unlock(uid, p, 'joker_hunter', out);
+    }
+    // ночной марафон: раздачи с 0 до 6 по Москве за одну ночь
+    const mh = msk();
+    if (mh.getUTCHours() < 6) {
+      const night = mh.toISOString().slice(0, 10);
+      if (p.night?.d !== night) p.night = { d: night, n: 0 };
+      if (++p.night.n >= 100) unlock(uid, p, 'night_marathon', out);
+    }
     if (s.hands >= 100) unlock(uid, p, 'hands_100', out);
     if (s.hands >= 1000) unlock(uid, p, 'hands_1000', out);
     if (s.hands >= 10000) unlock(uid, p, 'hands_10000', out);
@@ -298,6 +316,7 @@ export function onEvent(uid, ev) {
     if (ev.type === 'beatAll' && ev.bots?.includes('Призрак')) unlock(uid, p, 'ghost', out);
     if (ev.type === 'caughtCheater') unlock(uid, p, 'cheater', out);
     if (ev.type === 'exam') unlock(uid, p, 'exam', out);
+    if (ev.type === 'secret') unlock(uid, p, 'secret_table', out);
     if (ev.type === 'rating' && ev.rating >= 1900) unlock(uid, p, 'gold', out);
     bumpQuests(p, evs, out);
     save(uid, p);
@@ -483,7 +502,20 @@ const vsUp = db.prepare(`INSERT INTO bot_vs (user_id, bot, hands, wins, net) VAL
   ON CONFLICT (user_id, bot) DO UPDATE SET hands = hands + 1, wins = wins + excluded.wins, net = net + excluded.net`);
 export function recordVs(uid, bots, won, net) {
   for (const b of bots) vsUp.run(uid, b, won ? 1 : 0, net ?? 0);
+  // карточки ботов: выиграл банк — карточка бота в коллекцию
+  if (won) {
+    const out = [];
+    tx(() => {
+      const p = load(uid);
+      p.botCards ||= [];
+      for (const b of bots) if (!p.botCards.includes(b)) { p.botCards.push(b); out.push(`🎴 Новая карточка бота: ${b}`); }
+      if (p.botCards.length >= 50) unlock(uid, p, 'bot_collector', out);
+      save(uid, p);
+    });
+    for (const t of out) notify(uid, t);
+  }
 }
+export const botCardsOf = (uid) => load(uid)?.botCards || [];
 export function vsStats(uid, bot = null) {
   if (bot) return db.prepare('SELECT hands, wins, net FROM bot_vs WHERE user_id = ? AND bot = ?').get(uid, bot) || { hands: 0, wins: 0, net: 0 };
   return Object.fromEntries(db.prepare('SELECT bot, hands, wins, net FROM bot_vs WHERE user_id = ?').all(uid).map((r) => [r.bot, { hands: r.hands, wins: r.wins, net: r.net }]));

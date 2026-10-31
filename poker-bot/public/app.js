@@ -313,6 +313,19 @@ function tableSounds(prev, next) {
   // голос бота: рык, когда бот идёт олл-ин
   const wasAll = new Set(prev.seats.filter((x) => x.allIn).map((x) => x.id));
   if (next.seats.some((x) => x.isBot && x.allIn && !wasAll.has(x.id))) setTimeout(() => sfx('roar'), 250);
+  // голос ботов: озвучка их фраз
+  if (ui.botVoice) for (const s of next.seats) { const was = prev.seats.find((x) => x.id === s.id); if (s.say && s.say !== was?.say) { try { const u = new SpeechSynthesisUtterance(s.say); u.lang = 'ru-RU'; speechSynthesis.speak(u); } catch {} } }
+  // пасхалки: особые победы
+  const myW = next.result && !prev.result && next.result.find((w) => w.id === S.me?.id);
+  if (myW) {
+    const meS = next.seats.find((x) => x.me);
+    const r = (meS?.cards || []).map((c) => c >> 2).sort((a, b) => a - b);
+    const egg = myW.hand === 'Роял-флеш' ? '👑 РОЯЛ-ФЛЕШ! Такое бывает раз в жизни!'
+      : /Каре тузов/.test(myW.hand || '') ? '🅰️ Каре тузов — легенда!'
+        : r.length === 2 && r[0] === 0 && r[1] === 5 ? '😎 Выиграл с 7-2 — самой слабой рукой в покере!'
+          : r.length === 2 && r[0] === 0 && r[1] === 0 ? '🦆 Утята (двойки) победили!' : null;
+    if (egg) { toast(egg); setTimeout(() => confetti(), 300); }
+  }
   if (next.result && !prev.result && next.result.some((w) => w.id === S.me?.id)) {
     sfx('win');
     const mine = next.result.find((w) => w.id === S.me?.id);
@@ -483,6 +496,12 @@ function applyUi() {
   for (const k of ['felt', 'rim', 'face', 'dbtn', 'font', 'slots', 'pill', 'bg', 'timer', 'hand', 'emo']) { if (ui[k] && ui[k] !== 'auto') d[k] = ui[k]; else delete d[k]; }
   document.documentElement.classList.toggle('onehand', !!ui.oneHand);
   document.documentElement.classList.toggle('lefty', !!ui.lefty);
+  document.documentElement.classList.toggle('upside', !!ui.upside);
+  // праздничные столы: Хэллоуин и Новый год — если сцена обычная
+  const md = new Date(Date.now() + 3 * 3600000);
+  const mmdd = (md.getUTCMonth() + 1) * 100 + md.getUTCDate();
+  const holiday = mmdd >= 1025 && mmdd <= 1102 ? 'halloween' : mmdd >= 1220 || mmdd <= 110 ? 'newyear' : null;
+  if (ui.holiday !== false && holiday && (!ui.scene || ui.scene === 'felt')) d.scene = holiday;
   document.documentElement.classList.toggle('bigbtns', !!ui.bigBtns);
   document.documentElement.classList.toggle('eco', !!ui.eco);
   d.deal = ui.deal;
@@ -582,9 +601,10 @@ const EMOTES = ['👍', '😂', '🔥', '😎', '😱', '🤡', '💀', '🙏', 
 function emoteTray() {
   // VIP-эмодзи: с ранга «Золото» или 10 уровня пропуска
   const list = S.me?.vip ? [...EMOTES, ...(S.look?.vipEmotes || [])] : EMOTES;
+  const MEMES = ['ГГ', 'Повезло-повезло', 'Ну ты жук', 'Кто так играет?!', 'Я в шоке', 'Красиво!', 'Это фиаско', 'Олл-ин и молиться'];
   return h('div', { class: 'emote-tray' }, list.map((e) => h('button', {
     class: 'emote-pick', 'aria-label': `Эмодзи ${e}`, onclick: () => { send({ t: 'emote', e }); S.emoteOpen = false; render(); },
-  }, e)));
+  }, e)), MEMES.map((e) => h('button', { class: 'emote-pick meme', onclick: () => { send({ t: 'emote', e }); S.emoteOpen = false; render(); } }, e)));
 }
 
 function leaveTableScreen(tournamentId) {
@@ -595,7 +615,7 @@ function leaveTableScreen(tournamentId) {
 
 // ---------- Навигация ----------
 
-const BACK = { stats: 'profile', style: 'profile', school: 'lobby', chart: 'school', quiz: 'school', exam: 'school', history: 'friends', replay: 'history', botlab: 'lobby', training: 'lobby', tutorial: 'lobby', admin: 'profile', friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
+const BACK = { fun: 'lobby', stats: 'profile', style: 'profile', school: 'lobby', chart: 'school', quiz: 'school', exam: 'school', history: 'friends', replay: 'history', botlab: 'lobby', training: 'lobby', tutorial: 'lobby', admin: 'profile', friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
 
 function go(screen) {
   if (screen !== 'table' && S.screen === 'table' && S.table) S.tableHidden = true;
@@ -1452,6 +1472,11 @@ function quickSettings() {
     tog('Колода в 4 цвета', ui.deck4, (v) => setUi({ deck4: v })),
     tog('Режим одной рукой', ui.oneHand, (v) => setUi({ oneHand: v })),
     tog('Режим для левшей', ui.lefty, (v) => setUi({ lefty: v })),
+    tog('Карты вверх ногами 🙃', ui.upside, (v) => setUi({ upside: v })),
+    tog('Голос ботов (озвучка фраз)', ui.botVoice, (v) => setUi({ botVoice: v })),
+    tog('Праздничные столы', ui.holiday !== false, (v) => setUi({ holiday: v })),
+    h('div', { class: 'small muted' }, 'Погода за столом'),
+    h('div', { class: 'choices wrap' }, [['none', 'Ясно'], ['rain', '🌧 Дождь'], ['snow', '❄️ Снег'], ['leaves', '🍂 Листопад']].map(([k, n]) => h('button', { class: (ui.weather || 'none') === k ? 'on' : '', onclick: () => { setUi({ weather: k }); render(); } }, n))),
     tog('Крупные кнопки', ui.bigBtns, (v) => setUi({ bigBtns: v })),
     tog('Экономия батареи (без анимаций)', ui.eco, (v) => setUi({ eco: v })),
     tog('Отмена фолда (2 секунды)', ui.undoFold, (v) => setUi({ undoFold: v })),
@@ -1612,6 +1637,66 @@ async function exportStats() {
   } catch {
     navigator.clipboard?.writeText(csv).then(() => toast('Скопировано в буфер'));
   }
+}
+
+// ---------- Весёлое ----------
+
+async function openFun() {
+  go('fun');
+  const r = await run({ t: 'fun' });
+  if (r) { S.fun = { ...(S.fun || {}), ...r }; render(); }
+}
+
+function funScreen() {
+  const F = S.fun;
+  if (!F) return h('div', { class: 'screen' }, header('Весёлое'), h('div', { class: 'muted small' }, 'Загрузка…'));
+  const box = (title, ...body) => h('div', { class: 'glass card', style: 'gap:8px' }, h('div', { class: 'b', style: 'font-size:15px' }, title), ...body);
+  const G = F.game || {};
+  const res = (r) => { F.game = { ...G, ...r }; render(); };
+  return h('div', { class: 'screen' },
+    header('Весёлое'),
+    box('🔮 Гадание дня', h('div', { class: 'soft', style: 'line-height:1.45' }, F.fortune.text), h('div', { class: 'small muted' }, `Счастливая масть: ${F.fortune.lucky} · счастливое число: ${F.fortune.number}`)),
+    box('🧩 Загадка дня', h('div', { class: 'soft' }, F.riddle.q),
+      F.riddle.solved || F.secretPw ? h('div', { class: 'small', style: 'color:#f5d37a' }, `🔐 Пароль секретного стола на сегодня: ${F.secretPw || F.riddle.password}`)
+        : h('div', { class: 'row', style: 'gap:6px' },
+          h('input', { class: 'buyin-input', style: 'margin:0;flex:1', placeholder: 'Ответ', value: F.ans || '', oninput: (e) => { F.ans = e.target.value; } }),
+          h('button', { class: 'btn-sm', onclick: async () => { const r = await run({ t: 'answerRiddle', a: F.ans }); if (r) { F.secretPw = r.password; toast(`Верно!${r.chips ? ` +${r.chips} фишек.` : ''} Пароль открыт`); render(); } } }, 'Ответить'))),
+    box('🔐 Секретный стол', h('div', { class: 'small soft', style: 'line-height:1.45' }, 'Стол на 9: сильные боты, хаос и джокеры. Пароль меняется каждый день — его даёт загадка.'),
+      h('div', { class: 'row', style: 'gap:6px' },
+        h('input', { class: 'buyin-input', style: 'margin:0;flex:1', placeholder: 'Пароль', value: F.pw || '', oninput: (e) => { F.pw = e.target.value; } }),
+        h('button', { class: 'btn-sm', onclick: async () => { if (await run({ t: 'sitSecret', password: F.pw, buyin: 1000 })) go('table'); } }, 'Сесть · 1 000'))),
+    box('🃏 Угадай флоп', h('div', { class: 'small muted' }, 'Первые 5 угадываний в день — с наградой'),
+      h('div', { class: 'choices wrap' }, [['ace', 'Будет туз · 150'], ['pair', 'Будет пара · 120'], ['red', 'Больше красных · 30'], ['high', 'Старшая ≥ валета · 40']].map(([k, n]) =>
+        h('button', { onclick: async () => { const r = await run({ t: 'guessFlop', pick: k }); if (r) res({ flop: r }); } }, n))),
+      G.flop && h('div', { class: 'row', style: 'gap:8px;align-items:center' }, h('div', { class: 'tut-cards' }, G.flop.flop.map((c) => pcard(c, 'sm'))),
+        h('div', { class: 'b', style: `color:${G.flop.ok ? 'var(--green)' : '#ff8a80'}` }, G.flop.ok ? `Угадал!${G.flop.chips ? ` +${G.flop.chips}` : ''}` : 'Мимо'))),
+    box('⬆️⬇️ Больше-меньше', h('div', { class: 'small muted' }, 'Угадай, следующая карта старше или младше. Серия из 5 — 200 фишек (3 раза в день).'),
+      G.hl ? [h('div', { class: 'row', style: 'gap:10px;align-items:center' }, pcard(G.hl.card), h('div', { class: 'b' }, `Серия: ${G.hl.streak}`), G.hl.ok === false && h('div', { class: 'small', style: 'color:#ff8a80' }, 'Мимо — серия сброшена')),
+        h('div', { class: 'grid2' },
+          h('button', { class: 'btn-ghost', onclick: async () => { const r = await run({ t: 'hlGuess', dir: 'down' }); if (r) { if (r.chips) toast(`Серия 5! +${r.chips}`); res({ hl: r }); } } }, '⬇️ Меньше'),
+          h('button', { class: 'btn-ghost', onclick: async () => { const r = await run({ t: 'hlGuess', dir: 'up' }); if (r) { if (r.chips) toast(`Серия 5! +${r.chips}`); res({ hl: r }); } } }, '⬆️ Больше'))]
+        : h('button', { class: 'btn-sm', onclick: async () => { const r = await run({ t: 'hlStart' }); if (r) res({ hl: r }); } }, 'Начать')),
+    box('🎰 Карточная рулетка (раз в день)', h('div', { class: 'small muted' }, 'Туз — 1000, картинка — 300, 8–10 — 100, остальное — 50'),
+      G.roul ? h('div', { class: 'row', style: 'gap:10px;align-items:center' }, pcard(G.roul.card), h('div', { class: 'b' }, `+${G.roul.chips}`))
+        : h('button', { class: 'btn-sm', onclick: async () => { const r = await run({ t: 'cardRoulette' }); if (r) res({ roul: r }); } }, 'Крутить')),
+    box('🧠 Пазл: выбери лучшие 5 из 7', G.pz ? [
+      h('div', { class: 'tut-cards' }, G.pz.cards.map((c) => h('div', { class: `pz-card ${(G.pzPick || []).includes(c) ? 'on' : ''}`, onclick: () => { const p = new Set(G.pzPick || []); p.has(c) ? p.delete(c) : p.add(c); G.pzPick = [...p]; render(); } }, pcard(c, 'sm')))),
+      h('button', { class: 'btn-sm', onclick: async () => { const r = await run({ t: 'puzzleCheck', pick: G.pzPick || [] }); if (r) { toast(r.ok ? `Верно: ${r.best}!${r.chips ? ` +${r.chips}` : ''}` : `Это ${r.mine}, а можно собрать ${r.best}`); if (r.ok) res({ pz: null, pzPick: [] }); } } }, `Проверить (${(G.pzPick || []).length}/5)`)]
+      : h('button', { class: 'btn-sm', onclick: async () => { const r = await run({ t: 'puzzleNew' }); if (r) res({ pz: r, pzPick: [] }); } }, 'Новый пазл')),
+    box('🎴 Альбом ботов', h('button', { class: 'btn-sm', onclick: async () => { const r = await run({ t: 'botAlbum' }); if (r) res({ album: r }); } }, 'Открыть'),
+      G.album && h('div', { class: 'small soft' }, `Встретил ${G.album.met.length} из ${G.album.all.length} · карточек (выиграл банк) ${G.album.cards.length}`),
+      G.album && h('div', { class: 'album-bots' }, G.album.all.map((n) => h('div', { class: `ab ${G.album.cards.includes(n) ? 'card' : G.album.met.includes(n) ? 'met' : ''}` }, n)))),
+    box('⏳ Капсула времени', h('div', { class: 'small muted' }, 'Напиши письмо себе — придёт в Telegram через выбранный срок.'),
+      h('textarea', { class: 'buyin-input', style: 'margin:0;height:70px', placeholder: 'Через месяц я буду…', oninput: (e) => { F.cap = e.target.value; } }, F.cap || ''),
+      h('div', { class: 'choices' }, [7, 30, 90].map((d) => h('button', { onclick: async () => { const r = await run({ t: 'capsule', text: F.cap, days: d }); if (r) { F.capsules = r.capsules; F.cap = ''; toast(`Капсула откроется через ${d} дн.`); render(); } } }, `${d} дн.`))),
+      (F.capsules || []).map((c) => h('div', { class: 'small soft' }, c.sent ? `📬 ${new Date(c.created).toLocaleDateString('ru')}: ${c.text}` : `🔒 откроется ${new Date(c.open_at).toLocaleDateString('ru')}`))),
+    box('📅 Итоги года', h('button', { class: 'btn-sm', onclick: async () => {
+      const r = await run({ t: 'yearRecap' });
+      if (!r) return;
+      const y = r.recap;
+      shareCard({ title: `Мой ${y.year} в покере`, subtitle: `${fmt(y.hands)} раздач · ${fmt(y.won)} побед`, cards: [], board: [], footer: `${y.tours} турниров · ${y.favBot ? `любимый соперник: ${y.favBot}` : 'Покер в Telegram'}` }, `Мой ${y.year} в покере: ${y.hands} раздач, ${y.won} побед! Го играть:`);
+    } }, '📤 Картинка итогов года')),
+    h('div', { style: 'height:70px' }));
 }
 
 function openCombos() {
@@ -1792,6 +1877,11 @@ function lobbyScreen() {
       h('div', { class: 'grid2' },
         h('button', { class: 'btn-ghost', onclick: () => { markTutorialAsked(); render(); } }, 'Умею'),
         h('button', { class: 'btn', style: 'height:46px;font-size:14px', onclick: () => openTutorial(0) }, 'Научи меня'))),
+    // статуя чемпиона прошлой недели и дни рождения ботов
+    S.lobby?.champion && h('div', { class: 'glass card statue' }, h('div', { style: 'font-size:30px' }, '🗿'),
+      h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 'small muted' }, 'Статуя чемпиона прошлой недели'), h('div', { class: 'b', style: 'font-size:16px' }, `${S.lobby.champion.name} · ${S.lobby.champion.points} очков`))),
+    S.lobby?.birthdays?.length > 0 && h('div', { class: 'small soft', style: 'text-align:center' }, `🎂 Сегодня день рождения у ботов: ${S.lobby.birthdays.join(', ')}`),
+    h('button', { class: 'item', onclick: openFun }, h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, '🎉 Весёлое'), h('div', { class: 'small muted' }, 'Гадание, загадка, секретный стол, мини-игры, капсула времени, альбом ботов')), icon('chev')),
     // ивент (x2 награды / опыт)
     S.lobby?.event && h('div', { class: 'glass card event-banner' },
       h('div', { class: 'b' }, `🎉 ${S.lobby.event.title}`),
@@ -1909,6 +1999,12 @@ function botsScreen() {
       S.botMode !== 'mixed' && h('label', { class: 'toggle-row' },
         h('input', { type: 'checkbox', checked: !!S.jokers, onchange: (e) => { S.jokers = e.target.checked; } }),
         h('span', {}, 'Джокеры'), h('span', { class: 'small muted' }, 'два джокера в колоде, заменяют любую карту')),
+      S.botMode !== 'mixed' && h('label', { class: 'toggle-row' },
+        h('input', { type: 'checkbox', checked: !!S.mirror, onchange: (e) => { S.mirror = e.target.checked; } }),
+        h('span', {}, 'Зеркало'), h('span', { class: 'small muted' }, 'у всех одинаковые карты по достоинству — решает доска')),
+      S.botMode !== 'mixed' && h('label', { class: 'toggle-row' },
+        h('input', { type: 'checkbox', checked: !!S.fog, onchange: (e) => { S.fog = e.target.checked; } }),
+        h('span', {}, 'Туман'), h('span', { class: 'small muted' }, 'стеки соперников скрыты до конца раздачи')),
       ['6', '9'].includes(S.botMode) && h('label', { class: 'toggle-row' },
         h('input', { type: 'checkbox', checked: !!S.marathon, onchange: (e) => { S.marathon = e.target.checked; } }),
         h('span', {}, 'Марафон'), h('span', { class: 'small muted' }, '1000 раздач, в конце итог и сундук')),
@@ -2047,7 +2143,7 @@ function mixedScreen() {
 
 async function sitBots() {
   S.lastSit = { mode: S.botMode, botName: S.botName, buyin: S.buyin, minutes: S.botMinutes };
-  const r = await run({ t: 'sitBots', mode: S.botMode, botName: S.botName, buyin: S.buyin, minutes: S.botMinutes, fast: !!S.botFast, level: S.botLevel || 'normal', variant: S.shortDeck ? 'short' : null, chaos: !!S.chaos, jokers: !!S.jokers, marathon: ['6', '9'].includes(S.botMode) && !!S.marathon, stopLoss: S.stopLoss || 0, autoTopUp: !!S.autoTopUp });
+  const r = await run({ t: 'sitBots', mode: S.botMode, botName: S.botName, buyin: S.buyin, minutes: S.botMinutes, fast: !!S.botFast, level: S.botLevel || 'normal', variant: S.shortDeck ? 'short' : null, chaos: !!S.chaos, jokers: !!S.jokers, marathon: ['6', '9'].includes(S.botMode) && !!S.marathon, stopLoss: S.stopLoss || 0, autoTopUp: !!S.autoTopUp, mirror: !!S.mirror, fog: !!S.fog });
   if (r) go('table');
 }
 
@@ -2199,13 +2295,14 @@ function tableScreen() {
         // ник окрашен цветом ранга
         h('div', { class: `nm ${s.look?.nameFx ? `nfx-${s.look.nameFx}` : ''}`, style: s.look?.rankColor ? `color:${s.look.rankColor}` : null }, s.team ? (s.team === 'A' ? '🔵 ' : '🔴 ') : '', s.cheat ? '👁 ' : '', s.tilt ? '😤 ' : '', s.me ? 'Ты' : s.name),
         // стек и рядом значок выигранных раздач (у людей и у ботов) — внутри таблички, ничего не закрывает
-        h('div', { class: 'st' }, s.allIn ? 'олл-ин' : fmt(s.stack),
+        h('div', { class: 'st' }, s.allIn ? 'олл-ин' : s.stack < 0 ? '🌫 ???' : fmt(s.stack),
           s.handsWon > 0 && h('span', { class: 'wins-badge', title: 'Выиграно раздач', 'aria-label': `Выиграно раздач: ${s.handsWon}` },
             icon('trophy', 9), fmtShort(s.handsWon)),
           // серия побед подряд
           s.streak >= 2 && h('span', { class: 'streak-badge', title: 'Серия побед', 'aria-label': `Серия побед: ${s.streak}` }, `🔥${s.streak}`))),
       // эмодзи над игроком
-      s.emote && h('div', { class: 'emote-bubble', 'aria-label': `Эмодзи ${s.emote}` }, s.emote),
+      s.emote && h('div', { class: `emote-bubble ${s.emote.length > 3 ? 'meme' : ''}`, 'aria-label': `Эмодзи ${s.emote}` }, s.emote),
+      s.bday && h('div', { class: 'bday-badge', title: 'Сегодня день рождения!' }, '🎂'),
       // фраза бота
       s.say && h('div', { class: 'say-bubble' }, s.say),
       // шансы при олл-ине
@@ -2268,6 +2365,8 @@ function tableScreen() {
   return h('div', { class: `table-screen ${adminDock ? 'with-admin' : ''} ${nine ? 'nine' : ''} ${mega ? 'mega' : ''}` },
     // режим стрима: водяной знак для записи
     h('div', { class: 'stream-mark', 'aria-hidden': 'true' }, '♠ Покер в Telegram · @pokergamebetbot'),
+    loadUi().weather && loadUi().weather !== 'none' && !loadUi().eco && h('div', { class: `weather w-${loadUi().weather}`, 'aria-hidden': 'true' },
+      Array.from({ length: 24 }, (_, i) => h('span', { style: `left:${(i * 37) % 100}%;animation-delay:${(i * 0.37) % 4}s;animation-duration:${3 + (i % 5)}s` }, { rain: '│', snow: '❄', leaves: '🍂' }[loadUi().weather]))),
     h('div', { class: 'table-top' },
       h('button', { class: 'icon-btn', 'aria-label': T.kind === 'tour' ? 'В лобби' : 'Встать из-за стола', onclick: back }, icon('back', 18)),
       h('div', { class: 'title' }, info,
@@ -3344,7 +3443,7 @@ function profileScreen() {
       icon('chev')),
     // таблицы лидеров
     h('div', { class: 'label' }, 'Лучшие игроки'),
-    h('div', { class: 'seg' }, [['rating', 'Эло'], ['hands', 'Раздачи'], ['pot', 'Банк'], ['bots', 'Боты']].map(([k, label]) => h('button', {
+    h('div', { class: 'seg' }, [['rating', 'Эло'], ['hands', 'Раздачи'], ['pot', 'Банк'], ['bots', 'Боты'], ['unlucky', 'Невезучие']].map(([k, label]) => h('button', {
       class: (S.topKind || 'rating') === k ? 'on' : '', onclick: () => { S.topKind = k; S.top = null; send({ t: 'top', kind: k }); render(); },
     }, label))),
     S.top == null ? h('div', { class: 'muted small' }, 'Загрузка…')
@@ -3403,7 +3502,7 @@ function combosScreen() {
 
 // ---------- Рендер ----------
 
-const SCREENS = { stats: statsScreen, style: styleScreen, school: schoolScreen, chart: chartScreen, quiz: quizScreen, exam: examScreen, history: historyScreen, replay: replayScreen, botlab: botLabScreen, training: trainingScreen, tutorial: tutorialScreen, admin: adminScreen, friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
+const SCREENS = { fun: funScreen, stats: statsScreen, style: styleScreen, school: schoolScreen, chart: chartScreen, quiz: quizScreen, exam: examScreen, history: historyScreen, replay: replayScreen, botlab: botLabScreen, training: trainingScreen, tutorial: tutorialScreen, admin: adminScreen, friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
 
 function render() {
   const app = document.getElementById('app');

@@ -9,6 +9,7 @@ import { config } from '../config.js';
 import { db, credit } from '../db.js';
 import { skillLevel } from '../progress.js';
 import { noteOf, keyOf } from '../notes.js';
+import { isBirthday } from '../fun.js';
 import { knownEquity, bestFive, outs } from './tablefx.js';
 import { publicLook, vipEmotes, VIP_EMOTES } from '../cosmetics.js';
 import { botPhrase } from '../../core/phrases.js';
@@ -19,6 +20,8 @@ const STREET_RU = { preflop: 'префлопе', flop: 'флопе', turn: 'тё
 
 // эмодзи за столом (только из набора — без свободного текста)
 export const EMOTES = ['👍', '😂', '🔥', '😎', '😱', '🤡', '💀', '🙏', '😡', '🍀', '👑', '🤔'];
+// мем-реакции текстом
+export const MEMES = ['ГГ', 'Повезло-повезло', 'Ну ты жук', 'Кто так играет?!', 'Я в шоке', 'Красиво!', 'Это фиаско', 'Олл-ин и молиться'];
 
 const addHandWon = db.prepare('UPDATE users SET hands_won = hands_won + 1 WHERE id = ?');
 const getHandsWon = db.prepare('SELECT hands_won FROM users WHERE id = ?');
@@ -260,7 +263,7 @@ export class GameTable {
 
   // эмодзи над игроком на 3 секунды (не чаще раза в секунду)
   emote(id, e) {
-    if (!EMOTES.includes(e) && !(VIP_EMOTES.includes(e) && id > 0 && vipEmotes(id))) throw new Error('Нет такого эмодзи');
+    if (!EMOTES.includes(e) && !MEMES.includes(e) && !(VIP_EMOTES.includes(e) && id > 0 && vipEmotes(id))) throw new Error('Нет такого эмодзи');
     const prev = this.v.emotes[id];
     if (prev && Date.now() - prev.at < 1000) return;
     this.v.emotes[id] = { e, at: Date.now() };
@@ -524,7 +527,7 @@ export class GameTable {
         const dealt = v.dealt.has(p.id);
         const mine = p.id === uid;
         return {
-          id: p.id, name: p.name, stack: p.stack, isBot: !!p.isBot, me: mine,
+          id: p.id, name: p.name, stack: this.fog && !mine && this.inHand ? -1 : p.stack, isBot: !!p.isBot, me: mine, // туман: чужие стеки скрыты
           bet: v.bets[p.id] || 0,
           folded: v.folded.has(p.id), inHand: dealt && !v.folded.has(p.id),
           allIn: dealt && p.stack === 0 && !v.folded.has(p.id),
@@ -537,6 +540,7 @@ export class GameTable {
           ...(mine && dealt && p.bot.hole && !v.folded.has(p.id) ? this.myHand(p.bot.hole) : {}),
           away: !p.isBot && p.bot.sittingOut,
           tag: uid > 0 ? noteOf(uid, keyOf(p))?.color ?? null : null, // твоя цветная метка на игрока
+          bday: p.isBot && isBirthday(p.name) ? true : undefined, // у бота сегодня день рождения
           handsWon: p.isBot ? botHandsWon(p.name) : p.handsWon ?? 0,
           streak: p.streak || 0,
           team: this.teams?.get(p.id) ?? null,

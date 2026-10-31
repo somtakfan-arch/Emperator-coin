@@ -22,6 +22,9 @@ const CHAOS = [
   { kind: 'jackpot', text: 'Хаос: джекпот — победитель получает банк ещё раз (до 50 бб)' },
   { kind: 'cardUp', text: 'Хаос: у всех открыта одна карта' },
   { kind: 'calm', text: 'Хаос: обычная раздача… пока что' },
+  { kind: 'half', text: 'Хаос+: блайнды вдвое меньше' },
+  { kind: 'triple', text: 'Хаос+: тройные блайнды!' },
+  { kind: 'gift', text: 'Хаос+: заведение дарит всем по 5 больших блайндов' },
 ];
 
 // Советник для подсказок: смотрит на стол с места игрока — видит только его карты и чужие ходы
@@ -45,7 +48,7 @@ const saveMemory = db.prepare(`INSERT INTO bot_memory (user_id, bot, data, at) V
   ON CONFLICT (user_id, bot) DO UPDATE SET data = excluded.data, at = excluded.at`);
 
 export class BotRoom {
-  constructor(hub, user, { mode, botName, buyin, minutes = 0, fast = false, level = 'normal', shadow = 0, variant = null, chaos = false, jokers = false, marathon = false, mirror = null, myBot = null, stopLoss = 0, autoTopUp = false }) {
+  constructor(hub, user, { mode, botName, buyin, minutes = 0, fast = false, level = 'normal', shadow = 0, variant = null, chaos = false, jokers = false, marathon = false, mirror = null, myBot = null, stopLoss = 0, autoTopUp = false, mirrorMode = false, fog = false, secret = false }) {
     this.autoTopUp = autoTopUp; // авто-докупка до бай-ина, когда стек меньше половины
     this.stopLoss = stopLoss; // авто-стоп: встать, если стек упал на эту долю от вложенного
     this.mode = mode;
@@ -73,12 +76,27 @@ export class BotRoom {
     const label = { hu: '1 на 1', 6: 'Стол на 6', 9: 'Стол на 9', rush: 'Босс-раш', mega: `Огромный стол · ${MEGA_BOTS + 1} игрок · 6 колод`, ladder: 'Лестница', team: 'Команда 2 на 2' }[mode];
     this.table = new GameTable({
       id: `b${user.id}`, kind: 'bots', hub, sb, bb, variant,
-      title: `${label} · ${sb}/${bb}${variant === 'short' ? ' · Short Deck' : ''}${chaos ? ' · Хаос' : ''}${jokers ? ' · Джокеры' : ''}${marathon && ['6', '9'].includes(mode) ? ' · Марафон' : ''}${minutes ? ` · ${minutes} мин` : ''}${fast ? ' · быстрый' : ''}`,
+      title: `${label} · ${sb}/${bb}${variant === 'short' ? ' · Short Deck' : ''}${chaos ? ' · Хаос' : ''}${jokers ? ' · Джокеры' : ''}${mirrorMode ? ' · Зеркало' : ''}${fog ? ' · Туман' : ''}${secret ? ' · 🔐 Секретный стол' : ''}${marathon && ['6', '9'].includes(mode) ? ' · Марафон' : ''}${minutes ? ` · ${minutes} мин` : ''}${fast ? ' · быстрый' : ''}`,
     });
     this.baseBlinds = [sb, bb];
     this.table.fast = fast || mega; // боты думают меньше, паузы короче
     if (mega) { this.table.mega = true; this.table.engine.decks = 6; }
     if (jokers) { this.table.jokers = true; this.table.engine.jokers = true; } // два джокера в колоде
+    // туман: стеки соперников скрыты
+    if (fog) this.table.fog = true;
+    // зеркало: у всех одинаковые карты на руках (колода из нескольких — карты могут повторяться)
+    if (mirrorMode) {
+      this.table.mirror = true;
+      this.table.engine.decks = 9;
+      this.table.engine.demoDeck = (deck, ids) => {
+        // одинаковое достоинство у всех, масти разные — решает доска (флеш, кикер с доски)
+        const ra = (Math.random() * 13) | 0;
+        let rb = (Math.random() * 13) | 0;
+        if (rb === ra) rb = (ra + 5) % 13;
+        const holes = Object.fromEntries(ids.map((id, i) => [id, [ra * 4 + (i % 4), rb * 4 + ((i + 1) % 4)]]));
+        return arrangeDeck({ holes, board: [] }, deck, ids);
+      };
+    }
     if (marathon && ['6', '9'].includes(mode)) this.marathon = { left: MARATHON }; // марафон — только столы на 6 и 9
     this.bots = [];
     this.advisor = makeAdvisor(user.id);
@@ -207,6 +225,9 @@ export class BotRoom {
     this.table.setBlinds(...this.baseBlinds);
     this.table.chaos = this.chaosOn ? CHAOS[(Math.random() * CHAOS.length) | 0] : null;
     if (this.table.chaos?.kind === 'double') this.table.setBlinds(this.baseBlinds[0] * 2, this.baseBlinds[1] * 2);
+    if (this.table.chaos?.kind === 'triple') this.table.setBlinds(this.baseBlinds[0] * 3, this.baseBlinds[1] * 3);
+    if (this.table.chaos?.kind === 'half') this.table.setBlinds(Math.max(1, Math.floor(this.baseBlinds[0] / 2)), Math.max(2, Math.floor(this.baseBlinds[1] / 2)));
+    if (this.table.chaos?.kind === 'gift') for (const p of this.table.players) if (p.stack > 0) p.stack += 5 * this.baseBlinds[1];
     if (!this.ladder && !this.team && !this.table.players.some((p) => p.isBot)) {
       this.beatAll = true; // обыграл всех ботов — стол закрывается, стек на баланс
       this.hub.onBeatAll?.(this.userId, this.bots.map((b) => b.name));

@@ -1074,3 +1074,21 @@ textarea.buyin-input { resize: vertical; font: inherit; }
 .hour-bars { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; align-items: end; height: 56px; }
 .hour-col { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; }
 .hour-bar { width: 100%; border-radius: 2px; min-height: 1px; } .hour-bar.up { background: #4fc77a; } .hour-bar.down { background: #ff5a5a; }
+
+/* ---------- Весёлое ---------- */
+.emote-pick.meme { font-size: 12px; font-weight: 700; padding: 4px 8px; width: auto; }
+.emote-bubble.meme { font-size: 12px; font-weight: 800; background: rgba(255,255,255,0.95); color: #111; padding: 4px 8px; border-radius: 10px; white-space: nowrap; }
+.bday-badge { position: absolute; right: -8px; top: -10px; font-size: 16px; z-index: 6; }
+.statue { flex-direction: row !important; align-items: center; gap: 12px; }
+.pz-card { border-radius: 8px; padding: 2px; border: 2px solid transparent; cursor: pointer; } .pz-card.on { border-color: #f5d37a; }
+.album-bots { display: flex; flex-wrap: wrap; gap: 4px; } .album-bots .ab { font-size: 10px; padding: 2px 6px; border-radius: 8px; border: 1px solid var(--line); color: var(--muted); }
+.album-bots .ab.met { color: #fff; } .album-bots .ab.card { color: #111; background: #f5d37a; border-color: #f5d37a; }
+.upside .table-screen .pcard:not(.back) { transform: rotate(180deg); }
+.weather { position: absolute; inset: 0; pointer-events: none; z-index: 2; overflow: hidden; }
+.weather span { position: absolute; top: -30px; animation: wfall linear infinite; opacity: 0.6; font-size: 14px; }
+.w-rain span { color: #9ad3ff; font-size: 18px; } .w-snow span { color: #fff; }
+@keyframes wfall { to { transform: translateY(110vh) rotate(30deg); } }
+:root[data-scene="halloween"] .table-screen { background: radial-gradient(circle at 15% 15%, rgba(255,140,0,0.25) 0 50px, transparent 51px), radial-gradient(120% 70% at 50% 40%, #2a1406 0%, #140a04 60%, #050302 100%); }
+:root[data-scene="halloween"] .felt { background: radial-gradient(ellipse at 50% 45%, #c65a12 0%, #7a3208 70%, #3a1604 100%); border-color: #1a0a02; box-shadow: 0 0 0 2px #ff8a1a, 0 0 30px rgba(255,120,20,0.4); }
+:root[data-scene="newyear"] .table-screen { background: radial-gradient(1.5px 1.5px at 20% 30%, #fff, transparent), radial-gradient(1.5px 1.5px at 70% 20%, #fff, transparent), radial-gradient(1.5px 1.5px at 40% 75%, #fff, transparent), radial-gradient(120% 70% at 50% 40%, #0a2a1a 0%, #061a10 60%, #020805 100%); }
+:root[data-scene="newyear"] .felt { background: radial-gradient(ellipse at 50% 45%, #1f7a46 0%, #145a33 70%, #0a3a20 100%); border-color: #8a1a1a; box-shadow: 0 0 0 3px #d4af37, 0 0 24px rgba(212,175,55,0.35); }
