@@ -4,6 +4,7 @@
 import { db, tx, credit } from './db.js';
 import { config, NOT_ADMIN } from './config.js';
 import { eventMult, happyHour } from './events.js';
+import { addFeed } from './feed.js';
 
 const cols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
 if (!cols.has('progress')) db.exec("ALTER TABLE users ADD COLUMN progress TEXT NOT NULL DEFAULT '{}'");
@@ -185,6 +186,7 @@ function unlock(uid, p, key, out) {
   if (a.chest) p.chests[a.chest]++;
   p.tokens = (p.tokens || 0) + 10;
   addXp(p, 50);
+  if (!a.secret) addFeed(uid, 'ach', `получил достижение «${a.name}»`);
   out.push(`🏅 Достижение «${a.name}»: +${a.chips} фишек${a.chest ? ` и ${CHESTS[a.chest].name.toLowerCase()}` : ''}`);
 }
 

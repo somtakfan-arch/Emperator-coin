@@ -1092,3 +1092,12 @@ textarea.buyin-input { resize: vertical; font: inherit; }
 :root[data-scene="halloween"] .felt { background: radial-gradient(ellipse at 50% 45%, #c65a12 0%, #7a3208 70%, #3a1604 100%); border-color: #1a0a02; box-shadow: 0 0 0 2px #ff8a1a, 0 0 30px rgba(255,120,20,0.4); }
 :root[data-scene="newyear"] .table-screen { background: radial-gradient(1.5px 1.5px at 20% 30%, #fff, transparent), radial-gradient(1.5px 1.5px at 70% 20%, #fff, transparent), radial-gradient(1.5px 1.5px at 40% 75%, #fff, transparent), radial-gradient(120% 70% at 50% 40%, #0a2a1a 0%, #061a10 60%, #020805 100%); }
 :root[data-scene="newyear"] .felt { background: radial-gradient(ellipse at 50% 45%, #1f7a46 0%, #145a33 70%, #0a3a20 100%); border-color: #8a1a1a; box-shadow: 0 0 0 3px #d4af37, 0 0 24px rgba(212,175,55,0.35); }
+
+/* ---------- Социальное ---------- */
+.react-btn { padding: 3px 7px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: #fff; font-size: 12px; }
+.react-btn.on { border-color: #f5d37a; background: rgba(245,211,122,0.15); }
+.dm-list { display: flex; flex-direction: column; gap: 6px; min-height: 50vh; }
+.dm { align-self: flex-start; max-width: 80%; padding: 8px 12px; border-radius: 14px; background: rgba(255,255,255,0.08); font-size: 14px; line-height: 1.4; }
+.dm.mine { align-self: flex-end; background: #2f8f5b; }
+.chat-row { display: flex; gap: 6px; padding: 0 8px 6px; }
+.mode-line.chat-line { color: #fff; }

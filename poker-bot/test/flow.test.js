@@ -1367,3 +1367,53 @@ test('экономика: сундук дня, магазин за жетоны,
   assertLedger(9997);
   c.close();
 });
+
+test('социальное: личка, группы, лиги друзей, клубный чат и задание, лента и реакции, профиль и подписка, комментарии, совместный сундук, жалоба, чат стола', async () => {
+  const a = new Client(9901 + 100), b = new Client(9902 + 100);
+  await a.ready; await b.ready;
+  await a.req({ t: 'invoice', pack: 'p1' }); await b.req({ t: 'invoice', pack: 'p1' });
+  await assert.rejects(a.req({ t: 'dmSend', to: 10002, text: 'привет' }), /друзьям/);
+  await a.req({ t: 'addFriend', ref: 10002 }); await b.req({ t: 'addFriend', ref: 10001 });
+  const th = await a.req({ t: 'dmSend', to: 10002, text: 'привет, бля' });
+  assert.ok(th.msgs[0].text.includes('б**'), 'фильтр мата');
+  await b.waitFor((m) => m.t === 'dm');
+  const g = await a.req({ t: 'groupSet', name: 'Школа', members: [10002] });
+  assert.equal(g.groups[0].members[0], 10002);
+  const lg = await a.req({ t: 'leagueCreate', name: 'Пацаны' });
+  await b.req({ t: 'leagueJoin', code: lg.code });
+  const soc = await b.req({ t: 'social' });
+  assert.equal(soc.leagues[0].rows.length, 2);
+  // клуб
+  await a.req({ t: 'createClub', name: 'Короли' });
+  const ch = await a.req({ t: 'clubChatSend', text: 'го турнир' });
+  assert.equal(ch.msgs.length, 1);
+  const cx = await a.req({ t: 'clubExtra' });
+  assert.equal(cx.extra.role, 'owner');
+  await assert.rejects(a.req({ t: 'clubQuestClaim' }), /не выполнил/);
+  // лента: подписка и профиль
+  const { addFeed } = await import('../server/feed.js');
+  addFeed(10002, 'win', 'выиграл банк 9000');
+  const fd = await a.req({ t: 'social' });
+  const item = fd.feed.find((f) => f.uid === 10002);
+  assert.ok(item);
+  await a.req({ t: 'react', id: item.id, e: '🔥' });
+  const pr = await a.req({ t: 'profile', id: 10002 });
+  assert.equal(pr.profile.friend, true);
+  await a.req({ t: 'follow', id: 10002, on: true });
+  // совместный сундук
+  await a.req({ t: 'pactPropose', to: 10002, kind: 'chest' });
+  const ps = await b.req({ t: 'social' });
+  await b.req({ t: 'pactAnswer', id: ps.pacts[0].id, ok: true });
+  await assert.rejects(b.req({ t: 'pactClaim', id: ps.pacts[0].id }), /не выполнено/);
+  // жалоба и ДР
+  await a.req({ t: 'report', id: 10002, reason: 'просто тест' });
+  await a.req({ t: 'setBirthday', date: '13.10' });
+  await assert.rejects(a.req({ t: 'setBirthday', date: '14.10' }), /уже указан/);
+  // чат стола
+  await a.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 500 });
+  await a.waitFor((m) => m.t === 'table' && m.table?.inHand);
+  await a.req({ t: 'tableChat', text: 'всем удачи' });
+  await a.waitFor((m) => m.t === 'table' && m.table?.chat?.some((x) => x.text === 'всем удачи'));
+  a.ws.send(JSON.stringify({ t: 'leave' })); await a.waitFor((m) => m.t === 'left', 30000);
+  a.close(); b.close();
+});

@@ -10,6 +10,7 @@ import { db, credit } from '../db.js';
 import { skillLevel } from '../progress.js';
 import { noteOf, keyOf } from '../notes.js';
 import { isBirthday } from '../fun.js';
+import { filterText } from '../feed.js';
 import { knownEquity, bestFive, outs } from './tablefx.js';
 import { publicLook, vipEmotes, VIP_EMOTES } from '../cosmetics.js';
 import { botPhrase } from '../../core/phrases.js';
@@ -262,6 +263,18 @@ export class GameTable {
   }
 
   // эмодзи над игроком на 3 секунды (не чаще раза в секунду)
+  // чат за столом: короткие сообщения с фильтром мата, последние 15
+  chat(id, name, text) {
+    text = filterText(String(text || '').replace(/\s+/g, ' ').trim().slice(0, 120));
+    if (!text) return;
+    this.chatLog ||= [];
+    const last = this.chatLog.filter((m) => m.id === id).pop();
+    if (last && Date.now() - last.at < 1500) throw new Error('Не так быстро');
+    this.chatLog.push({ id, name, text, at: Date.now() });
+    if (this.chatLog.length > 15) this.chatLog.shift();
+    this.broadcast();
+  }
+
   emote(id, e) {
     if (!EMOTES.includes(e) && !MEMES.includes(e) && !(VIP_EMOTES.includes(e) && id > 0 && vipEmotes(id))) throw new Error('Нет такого эмодзи');
     const prev = this.v.emotes[id];
@@ -519,7 +532,7 @@ export class GameTable {
   snapshot(uid) {
     const v = this.v;
     return {
-      id: this.id, kind: this.kind, title: this.title, sb: this.sb, bb: this.bb, mega: !!this.mega, jokers: !!this.jokers,
+      id: this.id, kind: this.kind, title: this.title, sb: this.sb, bb: this.bb, mega: !!this.mega, jokers: !!this.jokers, chat: this.chatLog || [],
       board: v.board, pot: v.pot, actor: v.actor, deadline: v.deadline, buttonId: v.buttonId,
       handId: v.handId, result: v.result, inHand: this.inHand, fast: !!this.fast, variant: this.variant, chaos: this.chaos?.text ?? null,
       winCards: v.result ? v.winCards : null, ...this.extra(uid),

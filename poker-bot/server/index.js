@@ -21,6 +21,8 @@ import * as learn from './learn.js';
 import * as notes from './notes.js';
 import * as stats from './stats.js';
 import * as fun from './fun.js';
+import * as social3 from './social3.js';
+import { addFeed } from './feed.js';
 import { MEMES } from './game/table.js';
 import { GameTable } from './game/table.js';
 import { ghostHour } from '../core/bots.js';
@@ -87,6 +89,7 @@ const hub = {
     progress.onHand(uid, h);
     progress.hiddenCheck(uid, h); // скрытое задание недели
     if (h.won) social2.countWeekWin(uid); // клубные войны
+    if (h.won && h.amount >= 100 * h.bb) addFeed(uid, 'win', `выиграл банк ${h.amount.toLocaleString('ru')}${h.handName ? ` с рукой «${h.handName}»` : ''}`);
     // наставник: новичок дошёл до ступени — награда обоим
     const mt = social2.mentorCheck(uid, (progress.progressView(uid)?.stats.hands ?? 0));
     if (mt) {
@@ -111,7 +114,7 @@ const hub = {
     const u = getUser(uid);
     for (const f of social.friendIds(uid)) if (hub.isOnline(f)) hub.send(f, { t: 'toast', text: `${u.name} сел за стол — можно посмотреть в «Друзьях»` });
   },
-  onTourDone: (uid, ev) => { stats.recordTour(uid, ev); progress.onEvent(uid, { type: 'tour', ...ev }); },
+  onTourDone: (uid, ev) => { stats.recordTour(uid, ev); if (ev.place === 1 && !ev.demo) addFeed(uid, 'tour', `выиграл турнир «${ev.name || 'Турнир'}» (${ev.size} игроков)`); progress.onEvent(uid, { type: 'tour', ...ev }); },
   onHandStats: (uid, r) => stats.recordHand(uid, r),
   onBeatAll: (uid, bots) => progress.onEvent(uid, { type: 'beatAll', bots }),
   onCaughtCheater: (uid) => progress.onEvent(uid, { type: 'caughtCheater' }),
@@ -263,6 +266,7 @@ function lobbyView(uid) {
     tournaments: tournaments.list(uid),
     event: admin.getEvent(),
     champion: progress.fameView().hall[0]?.top[0] || null,
+    weekTop: social3.weekTop(),
     birthdays: fun.birthdaysToday().slice(0, 5),
     online: sockets.size,
     packs: config.packs, hintPacks: config.hintPacks, bots: BOTS, crowd: CROWD_VIEW, solo: SOLO_VIEW, buyins: config.botBuyins, buyinMin: config.buyinMin,
@@ -331,6 +335,8 @@ const handlers = {
     }
     if (a === 'online') return { t: 'admin', online: admin.onlineHours() };
     if (a === 'pranks') return { t: 'admin', pranks: admin.prankLog() };
+    if (a === 'reports') return { t: 'admin', reports: social3.reportsList() };
+    if (a === 'reportDone') { social3.reportDone(m.id); return { t: 'admin', reports: social3.reportsList() }; }
     if (a === 'event') {
       const e = admin.setEvent(m.kind || null, m.hours, m.title);
       hub.lobbyChanged();
@@ -382,7 +388,7 @@ const handlers = {
     if (activeTable(uid)) throw new Error('Ты уже за столом');
     const id = Number(m.id);
     if (!social.areFriends(uid, id)) throw new Error('Это не твой друг');
-    const room = MixedRoom.open(hub, getUser(uid), { buyin: Number(m.buyin), bots: 0, duel: Number(m.hands) || 20, variant: m.variant });
+    const room = MixedRoom.open(hub, getUser(uid), { buyin: Number(m.buyin), bots: 0, duel: Number(m.hands) || 20, duelKo: !!m.ko, variant: m.variant });
     mixedRooms.set(room.id, room);
     botRooms.set(uid, room);
     handlers.inviteFriend(uid, { id });
@@ -643,6 +649,65 @@ const handlers = {
     const a = activeTable(uid);
     if (!a?.seat.extend?.()) throw new Error('Таймбанк закончился');
     return { t: 'ok', left: a.seat.timebanks };
+  },
+  // ---------- социальное ----------
+  tableChat(uid, m) {
+    if (admin.isMuted(uid)) throw new Error('Ты в муте');
+    const a = activeTable(uid);
+    if (!a) throw new Error('Ты не за столом');
+    a.table.chat(uid, getUser(uid).name, m.text);
+    return { t: 'ok' };
+  },
+  dmSend(uid, m) {
+    if (admin.isMuted(uid)) throw new Error('Ты в муте');
+    const text = social3.dmSend(uid, m.to, m.text);
+    hub.send(Number(m.to), { t: 'dm', from: uid, name: getUser(uid).name, text });
+    return { t: 'dmThread', with: Number(m.to), msgs: social3.dmThread(uid, m.to) };
+  },
+  dmThread: (uid, m) => ({ t: 'dmThread', with: Number(m.with), msgs: social3.dmThread(uid, m.with) }),
+  social: (uid) => ({ t: 'social', unread: social3.dmUnread(uid), groups: social3.groupsOf(uid), leagues: social3.leaguesOf(uid), pacts: social3.pactsOf(uid), feed: social3.feedFor(uid), reacts: social3.REACTS, followers: social3.followersOf(uid), birthday: getUser(uid).birthday || null }),
+  groupSet: (uid, m) => ({ t: 'ok', groups: social3.groupSet(uid, m.name, m.members) }),
+  leagueCreate: (uid, m) => ({ t: 'ok', code: social3.leagueCreate(uid, m.name), leagues: social3.leaguesOf(uid) }),
+  leagueJoin(uid, m) { social3.leagueJoin(uid, m.code); return { t: 'ok', leagues: social3.leaguesOf(uid) }; },
+  leagueLeave(uid, m) { social3.leagueLeave(uid, m.id); return { t: 'ok', leagues: social3.leaguesOf(uid) }; },
+  clubChat: (uid) => ({ t: 'clubChat', msgs: social3.clubChat(uid) }),
+  clubChatSend(uid, m) {
+    if (admin.isMuted(uid)) throw new Error('Ты в муте');
+    const c = social3.clubChatSend(uid, m.text);
+    for (const id of social.clubMembers(c)) if (id !== uid) hub.send(id, { t: 'toast', text: `💬 Клуб · ${getUser(uid).name}: ${String(m.text).slice(0, 60)}` });
+    return { t: 'clubChat', msgs: social3.clubChat(uid) };
+  },
+  clubExtra: (uid) => ({ t: 'ok', extra: social3.clubExtra(uid), shop: social3.CLUB_SHOP }),
+  clubRole(uid, m) { social3.setRole(uid, m.id, m.role); return { t: 'ok', extra: social3.clubExtra(uid) }; },
+  clubKick(uid, m) { social3.kick(uid, m.id); return { t: 'club', ...social.clubView(uid) }; },
+  clubQuestClaim(uid) { social3.clubQuestClaim(uid); hub.sendMe(uid); return { t: 'ok', text: 'Редкий сундук за задание клуба!', extra: social3.clubExtra(uid) }; },
+  clubShopBuy(uid, m) { social3.clubShopBuy(uid, m.to, String(m.kind)); hub.send(Number(m.to), { t: 'toast', text: '🎁 Клуб подарил тебе сундук!' }); return { t: 'club', ...social.clubView(uid) }; },
+  react(uid, m) {
+    const f = social3.react(uid, m.id, String(m.e));
+    if (f.user_id !== uid) hub.send(f.user_id, { t: 'toast', text: `${m.e} ${getUser(uid).name}: «${f.text}»` });
+    return { t: 'ok', feed: social3.feedFor(uid) };
+  },
+  follow(uid, m) { social3.follow(uid, m.id, !!m.on); return { t: 'ok' }; },
+  profile: (uid, m) => ({ t: 'profile', profile: social3.publicProfile(uid, m.id, { showcase: (() => { const P = progress.progressView(Number(m.id)); return P ? { medals: P.medals, achievements: P.achievements.filter((a) => a.at).length, level: P.level.lvl, best: P.best } : null; })() }) }),
+  comments: (uid, m) => ({ t: 'ok', comments: social3.comments(m.id) }),
+  commentAdd(uid, m) {
+    social3.commentAdd(uid, m.id, m.text);
+    const r = social2.replay(m.id);
+    if (r.ownerId && r.ownerId !== uid) hub.send(r.ownerId, { t: 'toast', text: `💬 ${getUser(uid).name} прокомментировал твою раздачу` });
+    return { t: 'ok', comments: social3.comments(m.id) };
+  },
+  pactPropose(uid, m) { social3.pactPropose(uid, m.to, String(m.kind)); hub.send(Number(m.to), { t: 'toast', text: `🤝 ${getUser(uid).name} предлагает ${m.kind === 'chest' ? 'совместный сундук' : 'стать напарниками недели'} — ответь в «Друзьях»` }); return { t: 'ok', pacts: social3.pactsOf(uid) }; },
+  pactAnswer(uid, m) { const p = social3.pactAnswer(uid, m.id, !!m.ok); hub.send(p.a, { t: 'toast', text: m.ok ? '🤝 Друг принял предложение!' : 'Друг отказался' }); return { t: 'ok', pacts: social3.pactsOf(uid) }; },
+  pactClaim(uid, m) { const p = social3.pactClaim(uid, m.id); for (const id of [p.a, p.b]) { hub.send(id, { t: 'toast', text: '🤝 Награда за совместное задание!' }); hub.sendMe(id); } return { t: 'ok', pacts: social3.pactsOf(uid) }; },
+  setBirthday(uid, m) { social3.setBirthday(uid, m.date); return { t: 'ok' }; },
+  report(uid, m) { social3.report(uid, m.id, m.reason); return { t: 'ok', text: 'Жалоба отправлена — модератор посмотрит' }; },
+  tourInviteFriends(uid, m) {
+    const t = tournaments.one(m.id, uid);
+    if (!t) throw new Error('Турнир не найден');
+    const me = getUser(uid);
+    let n = 0;
+    for (const f of social.friendIds(uid)) { hub.send(f, { t: 'toast', text: `🏆 ${me.name} зовёт тебя в турнир «${t.name}»` }); notify(f, `<b>${me.name}</b> зовёт тебя в турнир «${t.name}» 🏆`, openButton('Открыть турнир', `#t=${m.id}`)); n++; }
+    return { t: 'ok', text: `Приглашения отправлены: ${n}` };
   },
   // ---------- экономика и прогресс ----------
   economy: (uid) => ({ t: 'economy', eco: progress.economyView(uid), premium: progress.premiumOf(uid), league: progress.leagueView(uid) }),
@@ -1003,6 +1068,19 @@ setInterval(() => {
       hub.send(c.user_id, { t: 'toast', text: '⏳ Открылась твоя капсула времени — загляни в «Весёлое»' });
     }
   } catch (e) { console.error('capsules', e); }
+  // дни рождения игроков: в 10:00 по Москве — подарок имениннику и весточка друзьям
+  try {
+    const d = new Date(Date.now() + 3 * 3600000);
+    const day = d.toISOString().slice(0, 10);
+    if (d.getUTCHours() === 10 && db.prepare("SELECT value FROM meta WHERE key = 'bday_day'").get()?.value !== day) {
+      db.prepare("INSERT INTO meta (key, value) VALUES ('bday_day', ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value").run(day);
+      for (const u of social3.birthdaysToday()) {
+        progress.grantChest(u.id, 'epic');
+        notify(u.id, '🎂 С днём рождения! В подарок — эпический сундук. Загляни в игру!');
+        for (const f of social.friendIds(u.id)) hub.send(f, { t: 'toast', text: `🎂 Сегодня день рождения у ${u.name} — поздравь в личке или подари фишки` });
+      }
+    }
+  } catch (e) { console.error('bday', e); }
   // онлайн по часам — для графика в админке
   try { admin.recordOnline(sockets.size); } catch {}
   // напоминание про бонус дня: раз в день в 18:00 по Москве тем, кто заходил на неделе, но не сегодня
