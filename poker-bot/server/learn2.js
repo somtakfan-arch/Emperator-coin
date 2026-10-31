@@ -28,6 +28,7 @@ export function markStep(uid, step) {
   if (!COURSE.some((c) => c.id === step)) throw new Error('Нет такого шага');
   db.prepare('INSERT OR IGNORE INTO course (user_id, step, at) VALUES (?, ?, ?)').run(uid, step, Date.now());
 }
+export function unlockCourse(uid) { for (const c of COURSE) markStep(uid, c.id); }
 export function courseView(uid) {
   const done = new Set(db.prepare('SELECT step FROM course WHERE user_id = ?').all(uid).map((r) => r.step));
   const n = done.size;

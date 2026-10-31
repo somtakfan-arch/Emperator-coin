@@ -741,8 +741,17 @@ export function unlockAll(uid) {
     for (const k of ['0', '1', '2', '3', '4', '5', '6', '7', '8', 'royal']) p.album[k] ||= now;
     p.xpTotal = Math.max(p.xpTotal || 0, PRESTIGE_LEVEL * XP_PER_ACC_LEVEL);
     p.skills = Object.fromEntries(SKILLS.map((s) => [s.key, s.max]));
-    p.prestige = Math.max(p.prestige || 0, 1);
+    p.prestige = Math.max(p.prestige || 0, 10); // 10 звёзд престижа
+    p.xpTotal = Math.max(p.xpTotal || 0, 100 * XP_PER_ACC_LEVEL); // уровень 100
+    p.pass.xp = Math.max(p.pass.xp || 0, PASS_LEVELS.length * XP_PER_LEVEL); // пропуск сезона: все уровни
+    p.pass.premium = true;
+    p.mastery = Object.fromEntries(Object.keys(MODE_NAMES).map((k) => [k, Math.max(p.mastery?.[k] || 0, MASTERY.at(-1).n)]));
+    p.chain = CHAIN.length;
+    p.tokens = Math.max(p.tokens || 0, 9999);
+    p.tickets = Math.max(p.tickets || 0, 99);
+    p.shards = Math.max(p.shards || 0, 9999);
     save(uid, p);
+    db.prepare('UPDATE users SET rating = MAX(rating, ?) WHERE id = ?').run(RANKS.at(-1).from, uid); // ранг «Легенда»
   });
 }
 

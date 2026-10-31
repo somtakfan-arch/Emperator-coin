@@ -1081,7 +1081,7 @@ wss.on('connection', (ws) => {
         if (admin.isBanned(u.id)) return reply({ t: 'error', text: 'Аккаунт заблокирован' });
         if (admin2.bannedUntil(u.id) > Date.now()) return reply({ t: 'error', text: `Аккаунт временно заблокирован до ${new Date(admin2.bannedUntil(u.id)).toLocaleString('ru')}` });
         uid = u.id;
-        if (config.adminIds.includes(uid)) progress.unlockAll(uid); // у админа открыто всё
+        if (config.adminIds.includes(uid)) { progress.unlockAll(uid); learn2.unlockCourse(uid); } // у админа открыто всё, всё на максимуме
         admin.touch(uid); // для статистики «активные за сутки»
         if (!sockets.has(uid)) sockets.set(uid, new Set());
         sockets.get(uid).add(ws);

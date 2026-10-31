@@ -1510,3 +1510,14 @@ test('обучение 2: курс, задача дня, ауты, песочн�
   assert.ok(Array.isArray(mk.mistakes));
   c.close();
 });
+
+test('админ: всё на максимуме — престиж, уровень, пропуск, мастерство, жетоны, курс, ранг', async () => {
+  const a = new Client(7001);
+  await a.ready;
+  const p = await a.req({ t: 'progress' });
+  assert.ok(p.progress.level.prestige >= 10 && p.progress.level.lvl >= 100, JSON.stringify(p.progress.level));
+  const k = await a.req({ t: 'course' });
+  assert.equal(k.course.done, 30);
+  assert.ok(db.prepare('SELECT rating FROM users WHERE id = 7001').get().rating >= 3500);
+  a.close();
+});
