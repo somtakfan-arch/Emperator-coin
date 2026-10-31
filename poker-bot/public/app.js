@@ -404,7 +404,8 @@ function playerCardModal(c) {
 
 // Настройки экрана на этом устройстве: колода, сцена, фишки, анимация, режим
 const SCENES = [['felt', 'Сукно'], ['casino', 'Казино'], ['city', 'Ночной город'], ['space', 'Космос'], ['sakura', 'Сакура'], ['vegas', 'Вегас'], ['yacht', 'Яхта'], ['dungeon', 'Подземелье'], ['neon', 'Неон-ночь'], ['photo', 'Своё фото']];
-const CHIP_STYLES = [['classic', 'Классика'], ['neon', 'Неон'], ['gold', 'Золото'], ['halloween', 'Хэллоуин'], ['newyear', 'Новый год'], ['valentine', 'Валентин']];
+const CHIP_STYLES = [['classic', 'Классика'], ['neon', 'Неон'], ['gold', 'Золото'], ['halloween', 'Хэллоуин'], ['newyear', 'Новый год'], ['valentine', 'Валентин'],
+  ['ocean', 'Океан'], ['forest', 'Лес'], ['candy', 'Конфеты'], ['pastel', 'Пастель'], ['metal', 'Металл'], ['ruby', 'Рубин'], ['emerald', 'Изумруд'], ['sapphire', 'Сапфир'], ['amethyst', 'Аметист'], ['obsidian', 'Обсидиан'], ['ivory', 'Слоновая кость'], ['retro', 'Ретро'], ['vaporwave', 'Вейпорвейв'], ['cyber', 'Кибер'], ['desert', 'Пустыня'], ['ice', 'Лёд'], ['lava', 'Лава'], ['jungle', 'Джунгли'], ['royal', 'Королевские'], ['mono', 'Монохром'], ['sakura', 'Сакура'], ['autumn', 'Осень'], ['winter', 'Зима'], ['spring', 'Весна'], ['summer', 'Лето'], ['mafia', 'Мафия'], ['arcade', 'Аркада'], ['galaxy', 'Галактика'], ['copper', 'Медь'], ['rainbow', 'Радуга']];
 const WIN_FX = [['gold', 'Золотая вспышка'], ['rain', 'Золотой дождь'], ['lightning', 'Молния'], ['crown', 'Корона'], ['none', 'Без эффекта']];
 const CARD_FONTS = [['classic', 'Классика'], ['minimal', 'Минимализм'], ['large', 'Крупные']];
 const DEAL_ANIM = [['pretty', 'Красиво'], ['fast', 'Быстро'], ['off', 'Без анимации']];
@@ -1894,22 +1895,24 @@ const LAYOUT = {
 function megaSeat(s, i, n, T) {
   const a = (115 + (i + 0.5) * (310 / n)) * Math.PI / 180; // от низа-слева по часовой до низа-справа
   const x = 50 + 46 * Math.cos(a), y = 50 + 46 * Math.sin(a);
+  // ставка — внутри стола, на той же линии к центру
+  const bx = 50 + 34 * Math.cos(a), by = 50 + 36 * Math.sin(a);
+  const bet = s.bet > 0 && h('div', { class: 'mbet', style: `left:${bx}%;top:${by}%` }, fmtShort(s.bet));
   const won = !T.inHand && T.result?.some((w) => w.id === s.id);
   // при 100 местах подписаны только те, кто сейчас важен: ходит, поставил, ещё в игре после флопа, выиграл
   const shown = n <= 45 || T.actor === s.id || s.bet > 0 || won || s.cards || (T.board.length > 0 && s.inHand && !s.folded);
   if (!shown) {
-    return h('div', { class: `mdot ${s.folded || !s.inHand ? 'out' : ''}`, style: `left:${x}%;top:${y}%`, 'aria-label': `${s.name}, ${fmt(s.stack)}`,
-      onclick: () => run({ t: 'playerCard', id: s.id }) });
+    return [h('div', { class: `mdot ${s.folded || !s.inHand ? 'out' : ''}`, style: `left:${x}%;top:${y}%`, 'aria-label': `${s.name}, ${fmt(s.stack)}`,
+      onclick: () => run({ t: 'playerCard', id: s.id }) }), bet];
   }
-  return h('div', {
+  return [bet, h('div', {
     class: `mseat ${T.actor === s.id ? 'turn' : ''} ${s.folded || !s.inHand ? 'out' : ''} ${won ? 'win' : ''}`,
     style: `left:${x}%;top:${y}%`, 'aria-label': `${s.name}, ${fmt(s.stack)}`,
   },
     h('div', { class: 'mnm' }, s.name.slice(0, 7)),
     h('div', { class: 'mst' }, s.allIn ? 'олл-ин' : fmtShort(s.stack)),
-    s.bet > 0 && h('div', { class: 'mbet' }, fmtShort(s.bet)),
     T.buttonId === s.id && h('div', { class: 'mdealer' }, 'D'),
-    s.cards && h('div', { class: 'mcards' }, s.cards.map(cardText).join(' ')));
+    s.cards && h('div', { class: 'mcards' }, s.cards.map(cardText).join(' ')))];
 }
 
 function clampRaise(x, t) {

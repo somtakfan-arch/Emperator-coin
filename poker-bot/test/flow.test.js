@@ -1180,3 +1180,35 @@ test('админ: при входе открыто всё — достижени
   assert.ok(p.level.points >= 0 && p.level.prestige >= 1);
   a.close();
 });
+
+test('рубашки и фишки: у каждой есть стиль, условия открытия корректные, надеть можно только открытое', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync(new URL('../public/app.css', import.meta.url), 'utf8');
+  const js = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  const { BACKS } = await import('../server/cosmetics.js');
+  const { ACHIEVEMENTS } = await import('../server/progress.js');
+  assert.ok(BACKS.length >= 57);
+  assert.equal(new Set(BACKS.map((b) => b.id)).size, BACKS.length, 'id без повторов');
+  const free = ['classic'];
+  for (const b of BACKS) {
+    if (!free.includes(b.id)) assert.ok(css.includes(`.back-${b.id},`) || css.includes(`.back-${b.id} `), `стиль рубашки ${b.id}`);
+    if (b.ach) assert.ok(ACHIEVEMENTS.some((a) => a.key === b.ach), `достижение ${b.ach}`);
+    assert.ok(b.how && b.name);
+  }
+  const chips = [...js.slice(js.indexOf('const CHIP_STYLES'), js.indexOf('];', js.indexOf('const CHIP_STYLES'))).matchAll(/\['([a-z0-9]+)', '/g)].map((m) => m[1]);
+  assert.equal(chips.length, 36);
+  for (const id of chips.filter((x) => x !== 'classic')) assert.ok(css.includes(`[data-chips="${id}"]`), `стиль фишек ${id}`);
+  // игрок: открытое надевается, закрытое — нет
+  const c = new Client(9961);
+  await c.ready;
+  await c.req({ t: 'equip', kind: 'back', id: 'casino_red' });
+  await assert.rejects(c.req({ t: 'equip', kind: 'back', id: 'casino_gold' }), /закрыто/i);
+  await assert.rejects(c.req({ t: 'equip', kind: 'back', id: 'prestige_star' }), /закрыто/i);
+  // админ: открыто всё
+  const a = new Client(7001);
+  await a.ready;
+  const look = await a.req({ t: 'look' });
+  assert.ok(look.look.backs.every((b) => b.owned));
+  for (const b of BACKS) await a.req({ t: 'equip', kind: 'back', id: b.id });
+  c.close(); a.close();
+});
