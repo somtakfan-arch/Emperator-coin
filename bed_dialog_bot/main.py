@@ -612,7 +612,53 @@ async def _backup_loop(application: Application) -> None:
                     pass
 
 
+def _run_boot_admin(storage) -> None:
+    """One-time admin actions driven by env vars (guarded so they run once):
+    BOOT_GRANT_ULTRA = "<username>[:days|:forever]"  (grant ULTRA to a username)
+    BOOT_MAKE_PROMOS = "<count>:<days>"              (create N premium promo codes)
+    Results are logged with WARNING so they're easy to find in the deploy logs.
+    """
+    import os as _os
+    import secrets as _secrets
+    try:
+        g = (_os.environ.get("BOOT_GRANT_ULTRA", "") or "").strip()
+        if g and storage.get_setting(f"bootgrant:{g}") != "1":
+            parts = g.split(":")
+            uname = parts[0].lstrip("@")
+            dur = parts[1].strip().lower() if len(parts) > 1 else "forever"
+            uid = storage.find_user_by_username(uname)
+            if not uid:
+                logger.warning("BOOT: ULTRA grant FAILED — @%s not found (must /start the bot first)", uname)
+            else:
+                if dur in ("forever", "навсегда", "0"):
+                    storage.grant_ultra_forever(uid)
+                    logger.warning("BOOT: granted ULTRA FOREVER to @%s (id %s)", uname, uid)
+                else:
+                    storage.grant_ultra_days(uid, int(dur))
+                    logger.warning("BOOT: granted ULTRA %s days to @%s (id %s)", dur, uname, uid)
+                storage.set_setting(f"bootgrant:{g}", "1")
+    except Exception:
+        logger.exception("BOOT_GRANT_ULTRA failed")
+    try:
+        p = (_os.environ.get("BOOT_MAKE_PROMOS", "") or "").strip()
+        if p and storage.get_setting(f"bootpromos:{p}") != "1":
+            cnt_s, days_s = (p.split(":") + ["1"])[:2]
+            cnt, days = int(cnt_s), int(days_s)
+            codes = []
+            for _ in range(max(0, cnt)):
+                code = "PREM-" + _secrets.token_hex(3).upper()
+                storage.create_promo(code, days, 1)
+                codes.append(code)
+            if codes:
+                logger.warning("BOOT: created %d premium promos (%d days, 1 use each): %s",
+                               cnt, days, ", ".join(codes))
+                storage.set_setting(f"bootpromos:{p}", "1")
+    except Exception:
+        logger.exception("BOOT_MAKE_PROMOS failed")
+
+
 async def _post_init(application: Application) -> None:
+    _run_boot_admin(application.bot_data["storage"])
     application.create_task(_reminder_loop(application))
     application.create_task(_crypto_loop(application))
     application.create_task(_deposit_loop(application))
