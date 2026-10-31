@@ -382,7 +382,7 @@ function playerCardModal(c) {
       h('div', { class: 'row between' },
         h('div', { class: 'row' },
           c.bot ? h('div', { class: 'ava', style: 'width:44px;height:44px;font-size:18px' }, initial(c.name)) : seatAvatar({ name: c.name, look: c.look }),
-          h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: 'b', style: 'font-size:17px' }, c.name),
+          h('div', { class: 'col', style: 'gap:2px' }, h('div', { class: `b ${c.look?.nameFx ? `nfx-${c.look.nameFx}` : ''}`, style: 'font-size:17px' }, c.name),
             h('div', { class: 'small', style: c.rankColor ? `color:${c.rankColor}` : '' }, c.bot ? `Бот · ${fmt(c.elo)} Эло` : `${c.rank} · ${fmt(c.rating)} Эло`),
             c.look?.title && h('div', { class: 'small', style: 'color:#f5d37a' }, `«${c.look.title}»`))),
         h('button', { class: 'hint-x', 'aria-label': 'Закрыть', onclick: close }, '✕')),
@@ -410,6 +410,13 @@ const WIN_FX = [['gold', 'Золотая вспышка'], ['rain', 'Золот�
 const CARD_FONTS = [['classic', 'Классика'], ['minimal', 'Минимализм'], ['large', 'Крупные']];
 const DEAL_ANIM = [['pretty', 'Красиво'], ['fast', 'Быстро'], ['off', 'Без анимации']];
 const BANNER_NAMES = { none: 'Без баннера', sunset: 'Закат', ocean: 'Океан', forest: 'Лес', royal: 'Королевский', fire: 'Огонь', night: 'Ночь', gold: 'Золото' };
+const FELTS = [['auto', 'По сцене'], ...[['emerald', 'Изумрудное'], ['royal', 'Королевское синее'], ['burgundy', 'Бордовое'], ['purple', 'Фиолетовое'], ['black', 'Чёрное'], ['grey', 'Графит'], ['teal', 'Бирюзовое'], ['orange', 'Апельсин'], ['pink', 'Розовое'], ['gold', 'Золотое'], ['sky', 'Небо'], ['olive', 'Оливковое'], ['wine', 'Вино'], ['mint', 'Мятное'], ['sand', 'Песок'], ['ice', 'Ледяное'], ['lava', 'Лава'], ['night', 'Ночное'], ['forest', 'Лесное'], ['cream', 'Сливочное']]];
+const RIMS = [['auto', 'По сцене'], ...[['wood', 'Дерево'], ['mahogany', 'Красное дерево'], ['gold', 'Золото'], ['silver', 'Серебро'], ['black', 'Чёрный лак'], ['white', 'Белый'], ['neon_pink', 'Неон розовый'], ['neon_blue', 'Неон синий'], ['neon_green', 'Неон зелёный'], ['leather', 'Кожа'], ['chrome', 'Хром'], ['ruby', 'Рубин'], ['ice', 'Лёд'], ['fire', 'Огонь'], ['rainbow', 'Радуга']]];
+const FACES = [['auto', 'Обычные'], ...[['dark', 'Тёмные'], ['cream', 'Винтаж'], ['neon', 'Неон'], ['gold', 'Золотая кайма'], ['blue', 'Голубые'], ['pink', 'Розовые'], ['mint', 'Мятные'], ['paper', 'Бумага'], ['glass', 'Стекло'], ['royal', 'Королевские']]];
+const DBTNS = [['auto', 'Белый'], ...[['gold', 'Золотой'], ['black', 'Чёрный'], ['red', 'Красный'], ['neon', 'Неон'], ['crown', 'Корона']]];
+const FONTS = [['auto', 'Обычный'], ...[['serif', 'С засечками'], ['mono', 'Моно'], ['rounded', 'Округлый'], ['narrow', 'Узкий'], ['classic', 'Классика']]];
+const SLOTS = [['auto', 'Пунктир'], ...[['solid', 'Сплошные'], ['glow', 'Светящиеся'], ['none', 'Невидимые'], ['gold', 'Золотые'], ['dots', 'Точки']]];
+const PILLS = [['auto', 'Белая'], ...[['dark', 'Тёмная'], ['gold', 'Золотая'], ['neon', 'Неон'], ['red', 'Красная'], ['blue', 'Синяя'], ['green', 'Зелёная'], ['glass', 'Стекло'], ['purple', 'Фиолетовая'], ['pink', 'Розовая'], ['outline', 'Контур']]];
 const ANIM_AVATARS = ['🔥', '⚡', '🌀', '💫', '🌈', '👾'];
 const MODES = [['normal', 'Обычный'], ['minimal', 'Минимализм'], ['large', 'Крупный'], ['stream', 'Стрим']];
 function loadUi() {
@@ -432,6 +439,8 @@ function applyUi() {
   document.documentElement.classList.toggle('deck4', !!ui.deck4);
   document.documentElement.classList.toggle('anim', !!ui.anim);
   d.cardfont = ui.cardFont;
+  // стиль и кастом: «auto» — без атрибута
+  for (const k of ['felt', 'rim', 'face', 'dbtn', 'font', 'slots', 'pill']) { if (ui[k] && ui[k] !== 'auto') d[k] = ui[k]; else delete d[k]; }
   document.documentElement.classList.toggle('onehand', !!ui.oneHand);
   d.deal = ui.deal;
   // своё фото на фоне стола (хранится только на этом устройстве)
@@ -486,6 +495,7 @@ function lookCard() {
   const ui = loadUi();
   const pick = (list, cur, onPick) => h('div', { class: 'choices wrap' }, list.map(([id, name]) => h('button', { class: cur === id ? 'on' : '', onclick: () => onPick(id) }, name)));
   return h('div', { class: 'col', style: 'gap:10px' },
+    h('button', { class: 'item', onclick: () => go('style') }, h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, '🎨 Стиль и кастом'), h('div', { class: 'small muted' }, 'Ник, табличка, сукно, бортик, карты, баттон, шрифт и ещё — 100 вариантов')), icon('chev')),
     // титул под ником — из открытых достижений
     h('div', { class: 'label' }, 'Титул'),
     (L.titles || []).length ? h('div', { class: 'choices wrap' },
@@ -542,7 +552,7 @@ function leaveTableScreen(tournamentId) {
 
 // ---------- Навигация ----------
 
-const BACK = { school: 'lobby', chart: 'school', quiz: 'school', exam: 'school', history: 'friends', replay: 'history', botlab: 'lobby', training: 'lobby', tutorial: 'lobby', admin: 'profile', friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
+const BACK = { style: 'profile', school: 'lobby', chart: 'school', quiz: 'school', exam: 'school', history: 'friends', replay: 'history', botlab: 'lobby', training: 'lobby', tutorial: 'lobby', admin: 'profile', friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
 
 function go(screen) {
   if (screen !== 'table' && S.screen === 'table' && S.table) S.tableHidden = true;
@@ -1398,7 +1408,47 @@ function quickSettings() {
     h('div', { class: 'small muted' }, 'Фишки'),
     chipPicker(ui.chips),
     h('div', { class: 'small muted' }, 'Рубашка карт'),
-    backPicker());
+    backPicker(),
+    h('button', { class: 'btn-ghost', onclick: () => { S.quickSet = false; S.tableHidden = true; go('style'); } }, '🎨 Всё оформление (100 вариантов)'));
+}
+
+// ---------- Стиль и кастом: 100 вариантов оформления ----------
+
+function styleScreen() {
+  const ui = loadUi();
+  const L = S.look;
+  const grid = (list, cur, key, pv) => h('div', { class: 'item-grid' }, list.map(([id, name]) => h('button', {
+    class: `item-pick ${(cur || 'auto') === id ? 'on' : ''}`, onclick: () => { setUi({ [key]: id }); render(); },
+  }, pv(id), h('div', { class: 'small' }, name))));
+  const srvGrid = (list, cur, kind, pv) => h('div', { class: 'item-grid' }, (list || []).map((x) => h('button', {
+    class: `item-pick ${cur === x.id ? 'on' : ''} ${x.owned ? '' : 'locked'}`, onclick: () => (x.owned ? run({ t: 'equip', kind, id: x.id }) : toast(`Закрыто: ${x.how}`)),
+  }, pv(x.id), h('div', { class: 'small' }, x.name), !x.owned && h('div', { class: 'small muted', style: 'font-size:10px' }, `🔒 ${x.how}`))));
+  const sample = [h('div', { class: 'pcard red' }, h('div', { class: 'r' }, 'A'), h('div', { class: 's' }, '♥')), h('div', { class: 'pcard' }, h('div', { class: 'r' }, 'K'), h('div', { class: 's' }, '♠'))];
+  return h('div', { class: 'screen' },
+    header('Стиль и кастом'),
+    h('div', { class: 'small soft', style: 'line-height:1.45' }, 'Рамку, эффект ника и табличку видят все за столом. Остальное — только у тебя на экране.'),
+    h('div', { class: 'label' }, 'Эффект ника · видят все'),
+    L && srvGrid(L.nameFxs, L.nameFx, 'namefx', (id) => h('div', { class: `pv-name ${id !== 'none' ? `nfx-${id}` : ''}` }, S.me.name.slice(0, 10))),
+    h('div', { class: 'label' }, 'Табличка игрока · видят все'),
+    L && srvGrid(L.plates, L.plate, 'plate', (id) => h('div', { class: `pv-plate ${id !== 'none' ? `pv-plate-${id}` : ''}` }, h('span', { class: 'nm' }, 'Ты'), h('span', { class: 'st' }, '5 000'))),
+    h('div', { class: 'label' }, 'Рамка аватара · видят все'),
+    L && srvGrid(L.frames, L.frame, 'frame', (id) => h('div', { class: `ava frame-${id}`, style: 'margin:4px auto' }, '🙂')),
+    h('div', { class: 'label' }, 'Цвет сукна'),
+    grid(FELTS, ui.felt, 'felt', (id) => h('div', { class: `pv-felt ${id !== 'auto' ? `pv-felt-${id}` : ''}` })),
+    h('div', { class: 'label' }, 'Бортик стола'),
+    grid(RIMS, ui.rim, 'rim', (id) => h('div', { class: `pv-rim ${id !== 'auto' ? `pv-rim-${id}` : ''}` })),
+    h('div', { class: 'label' }, 'Лицевая сторона карт'),
+    grid(FACES, ui.face, 'face', (id) => h('div', { class: `pv-face ${id !== 'auto' ? `pv-face-${id}` : ''}` }, sample.map((c) => c.cloneNode(true)))),
+    h('div', { class: 'label' }, 'Баттон дилера'),
+    grid(DBTNS, ui.dbtn, 'dbtn', (id) => h('div', { class: `pv-dbtn ${id !== 'auto' ? `pv-dbtn-${id}` : ''}` }, 'D')),
+    h('div', { class: 'label' }, 'Плашка ставки'),
+    grid(PILLS, ui.pill, 'pill', (id) => h('div', { class: `pv-pill ${id !== 'auto' ? `pv-pill-${id}` : ''}` }, '250')),
+    h('div', { class: 'label' }, 'Ячейки для карт на столе'),
+    grid(SLOTS, ui.slots, 'slots', (id) => h('div', { class: `pv-slots ${id !== 'auto' ? `pv-slots-${id}` : ''}` })),
+    h('div', { class: 'label' }, 'Шрифт приложения'),
+    grid(FONTS, ui.font, 'font', (id) => h('div', { class: `pv-fontx ${id !== 'auto' ? `pv-font-${id}` : ''}` }, 'Аа 123')),
+    h('button', { class: 'btn-ghost', onclick: () => { setUi({ felt: 'auto', rim: 'auto', face: 'auto', dbtn: 'auto', font: 'auto', slots: 'auto', pill: 'auto' }); render(); toast('Сброшено'); } }, 'Сбросить моё оформление'),
+    h('div', { style: 'height:70px' }));
 }
 
 function openCombos() {
@@ -1431,6 +1481,7 @@ tg?.BackButton.onClick(() => back());
 window.addEventListener('hashchange', () => S.me && openStart(null));
 function back() {
   if (S.screen === 'combos') return go(S.comboBack || 'lobby');
+  if (S.screen === 'style' && S.table) return go('table'); // из оформления — обратно за стол
   if (S.screen === 'table' && S.table?.watching) return stopWatching();
   // демо-турнир админа: «назад» — выйти из него (фишки ненастоящие)
   if (S.screen === 'table' && S.table?.kind === 'tour' && S.table.demo) {
@@ -1971,13 +2022,13 @@ function tableScreen() {
       : s.cards ? s.cards.map((c) => pcard(c, 'sm', hl(c))) : s.inHand && T.inHand ? [pcard(null, 'sm', dealing), pcard(null, 'sm', dealing)] : [];
     const won = !T.inHand && T.result?.some((w) => w.id === s.id);
     const plate = h('div', {
-      'data-seat': s.id, class: `plate ${T.actor === s.id ? 'turn' : ''} ${s.folded || s.away ? 'out' : ''} ${won ? 'win' : ''}`,
+      'data-seat': s.id, class: `plate ${s.look?.plate ? `plate-${s.look.plate}` : ''} ${T.actor === s.id ? 'turn' : ''} ${s.folded || s.away ? 'out' : ''} ${won ? 'win' : ''}`,
       role: 'button', 'aria-label': `Карточка игрока ${s.me ? 'ты' : s.name}`, onclick: () => run({ t: 'playerCard', id: s.id }),
     },
       seatAvatar(s),
       h('div', { class: 'col', style: 'gap:0;min-width:0' },
         // ник окрашен цветом ранга
-        h('div', { class: 'nm', style: s.look?.rankColor ? `color:${s.look.rankColor}` : null }, s.team ? (s.team === 'A' ? '🔵 ' : '🔴 ') : '', s.cheat ? '👁 ' : '', s.tilt ? '😤 ' : '', s.me ? 'Ты' : s.name),
+        h('div', { class: `nm ${s.look?.nameFx ? `nfx-${s.look.nameFx}` : ''}`, style: s.look?.rankColor ? `color:${s.look.rankColor}` : null }, s.team ? (s.team === 'A' ? '🔵 ' : '🔴 ') : '', s.cheat ? '👁 ' : '', s.tilt ? '😤 ' : '', s.me ? 'Ты' : s.name),
         // стек и рядом значок выигранных раздач (у людей и у ботов) — внутри таблички, ничего не закрывает
         h('div', { class: 'st' }, s.allIn ? 'олл-ин' : fmt(s.stack),
           s.handsWon > 0 && h('span', { class: 'wins-badge', title: 'Выиграно раздач', 'aria-label': `Выиграно раздач: ${s.handsWon}` },
@@ -3147,7 +3198,7 @@ function combosScreen() {
 
 // ---------- Рендер ----------
 
-const SCREENS = { school: schoolScreen, chart: chartScreen, quiz: quizScreen, exam: examScreen, history: historyScreen, replay: replayScreen, botlab: botLabScreen, training: trainingScreen, tutorial: tutorialScreen, admin: adminScreen, friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
+const SCREENS = { style: styleScreen, school: schoolScreen, chart: chartScreen, quiz: quizScreen, exam: examScreen, history: historyScreen, replay: replayScreen, botlab: botLabScreen, training: trainingScreen, tutorial: tutorialScreen, admin: adminScreen, friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
 
 function render() {
   const app = document.getElementById('app');

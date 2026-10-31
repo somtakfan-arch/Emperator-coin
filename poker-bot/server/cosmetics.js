@@ -27,6 +27,16 @@ export const FRAMES = [
   { id: 'neon', name: 'Неон', how: 'из сундука', chest: true },
   { id: 'galaxy', name: 'Галактика', how: 'из сундука', chest: true },
   { id: 'prestige', name: 'Престиж', how: 'звезда престижа', prestige: true },
+  { id: 'rainbow', name: 'Радужная', how: 'есть у всех' },
+  { id: 'ice', name: 'Ледяная', how: 'есть у всех' },
+  { id: 'emerald', name: 'Изумрудная', how: 'есть у всех' },
+  { id: 'ruby', name: 'Рубиновая', how: 'есть у всех' },
+  { id: 'double', name: 'Двойная', how: 'есть у всех' },
+  { id: 'sun', name: 'Солнечная', how: 'из сундука', chest: true },
+  { id: 'shadow', name: 'Тень', how: 'из сундука', chest: true },
+  { id: 'pink', name: 'Розовая', how: 'есть у всех' },
+  { id: 'toxic', name: 'Токсичная', how: 'из сундука', chest: true },
+  { id: 'platinum', name: 'Платиновая', how: 'ранг «Платина»', rank: 2300 },
 ];
 export const BACKS = [
   { id: 'classic', name: 'Классика', how: 'есть у всех' },
@@ -87,6 +97,33 @@ export const BACKS = [
   { id: 'collector', name: 'Коллекционная', ach: 'collector', how: 'достижение «Коллекционер»' },
   { id: 'champion', name: 'Чемпионская', ach: 'tour_win', how: 'достижение «Чемпион»' },
 ];
+// эффекты ника и таблички — их видят все за столом
+export const NAME_FX = [
+  { id: 'none', name: 'Без эффекта', how: 'есть у всех' },
+  { id: 'gold', name: 'Золото', how: 'есть у всех' },
+  { id: 'rainbow', name: 'Радуга', how: 'есть у всех' },
+  { id: 'fire', name: 'Огонь', how: 'есть у всех' },
+  { id: 'ice', name: 'Лёд', how: 'есть у всех' },
+  { id: 'glow', name: 'Свечение', how: 'есть у всех' },
+  { id: 'neon', name: 'Неон', how: 'есть у всех' },
+  { id: 'pink', name: 'Розовый неон', how: 'из сундука', chest: true },
+  { id: 'shimmer', name: 'Перелив', how: 'ранг «Золото»', rank: 1900 },
+  { id: 'blood', name: 'Кровь', how: 'из сундука', chest: true },
+  { id: 'royal', name: 'Королевский', how: 'достижение «Королевский»', ach: 'royal' },
+];
+export const PLATES = [
+  { id: 'none', name: 'Обычная', how: 'есть у всех' },
+  { id: 'glass', name: 'Стекло', how: 'есть у всех' },
+  { id: 'black', name: 'Чёрная', how: 'есть у всех' },
+  { id: 'gold', name: 'Золотая', how: 'ранг «Золото»', rank: 1900 },
+  { id: 'neon', name: 'Неон', how: 'есть у всех' },
+  { id: 'wood', name: 'Дерево', how: 'есть у всех' },
+  { id: 'ruby', name: 'Рубин', how: 'из сундука', chest: true },
+  { id: 'ocean', name: 'Океан', how: 'есть у всех' },
+  { id: 'purple', name: 'Фиолетовая', how: 'есть у всех' },
+  { id: 'white', name: 'Белая', how: 'есть у всех' },
+  { id: 'fire', name: 'Огненная', how: 'достижение «В огне»', ach: 'streak_5' },
+];
 export const VIP_EMOTES = ['💎', '🦈', '🃏', '💸', '🥶', '🫡'];
 
 function load(uid) {
@@ -127,6 +164,8 @@ export function publicLook(uid) {
     rankColor: r.color, rankName: r.name,
     title: d.c.title || null,
     banner: d.c.banner && d.c.banner !== 'none' ? d.c.banner : null,
+    nameFx: d.c.namefx && d.c.namefx !== 'none' ? d.c.namefx : null,
+    plate: d.c.plate && d.c.plate !== 'none' ? d.c.plate : null,
   };
 }
 
@@ -141,6 +180,8 @@ export function lookView(uid) {
     vip: vipEmotes(uid), vipEmotes: VIP_EMOTES,
     title: d.c.title || null, titles: titlesOf(uid),
     banner: d.c.banner || 'none', banners: BANNERS,
+    nameFx: d.c.namefx || 'none', nameFxs: NAME_FX.map((x) => ({ id: x.id, name: x.name, how: x.how, owned: unlocked(x, d, 'namefx') })),
+    plate: d.c.plate || 'none', plates: PLATES.map((x) => ({ id: x.id, name: x.name, how: x.how, owned: unlocked(x, d, 'plate') })),
   };
 }
 
@@ -155,6 +196,11 @@ export function equip(uid, kind, id) {
     const list = kind === 'frame' ? FRAMES : BACKS;
     const item = list.find((x) => x.id === id);
     if (!item) throw new Error('Нет такого предмета');
+    if (!unlocked(item, d, kind)) throw new Error(`Ещё закрыто: ${item.how}`);
+    d.c[kind] = id;
+  } else if (kind === 'namefx' || kind === 'plate') {
+    const item = (kind === 'namefx' ? NAME_FX : PLATES).find((x) => x.id === id);
+    if (!item) throw new Error('Нет такого стиля');
     if (!unlocked(item, d, kind)) throw new Error(`Ещё закрыто: ${item.how}`);
     d.c[kind] = id;
   } else if (kind === 'banner') {

@@ -1212,3 +1212,37 @@ test('рубашки и фишки: у каждой есть стиль, усл�
   for (const b of BACKS) await a.req({ t: 'equip', kind: 'back', id: b.id });
   c.close(); a.close();
 });
+
+test('стиль и кастом: 100 вариантов, у каждого есть стиль, ник и табличка видны за столом', async () => {
+  const { readFileSync } = await import('node:fs');
+  const css = readFileSync(new URL('../public/app.css', import.meta.url), 'utf8');
+  const js = readFileSync(new URL('../public/app.js', import.meta.url), 'utf8');
+  const { NAME_FX, PLATES, FRAMES } = await import('../server/cosmetics.js');
+  let n = 0;
+  for (const [list, attr] of [['FELTS', 'felt'], ['RIMS', 'rim'], ['FACES', 'face'], ['DBTNS', 'dbtn'], ['FONTS', 'font'], ['SLOTS', 'slots'], ['PILLS', 'pill']]) {
+    const src = js.slice(js.indexOf(`const ${list} = [`), js.indexOf('\n', js.indexOf(`const ${list} = [`)));
+    const ids = [...src.matchAll(/\['([a-z_0-9]+)', '/g)].map((m) => m[1]).filter((x) => x !== 'auto');
+    for (const id of ids) assert.ok(css.includes(`[data-${attr}="${id}"]`) && css.includes(`.pv-${attr === 'font' ? 'font' : attr}-${id}`), `${attr}:${id}`);
+    n += ids.length;
+  }
+  for (const x of NAME_FX.filter((x) => x.id !== 'none')) assert.ok(css.includes(`.nfx-${x.id}`), x.id);
+  for (const x of PLATES.filter((x) => x.id !== 'none')) assert.ok(css.includes(`.plate.plate-${x.id}`), x.id);
+  for (const x of FRAMES) if (x.id !== 'none') assert.ok(css.includes(`.frame-${x.id}`), x.id);
+  n += NAME_FX.length - 1 + PLATES.length - 1 + 10;
+  assert.equal(n, 100);
+  // игрок: ник и табличка видны за столом
+  const c = new Client(9971);
+  await c.ready;
+  await c.req({ t: 'equip', kind: 'namefx', id: 'rainbow' });
+  await c.req({ t: 'equip', kind: 'plate', id: 'neon' });
+  await assert.rejects(c.req({ t: 'equip', kind: 'plate', id: 'gold' }), /закрыто/i);
+  await assert.rejects(c.req({ t: 'equip', kind: 'namefx', id: 'nope' }), /Нет такого/);
+  await c.req({ t: 'invoice', pack: 'p1' });
+  await c.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 500 });
+  const t = await c.waitFor((m) => m.t === 'table' && m.table?.seats?.find((s) => s.me)?.look);
+  const me = t.table.seats.find((s) => s.me);
+  assert.equal(me.look.nameFx, 'rainbow');
+  assert.equal(me.look.plate, 'neon');
+  c.ws.send(JSON.stringify({ t: 'leave' })); await c.waitFor((m) => m.t === 'left', 30000);
+  c.close();
+});
