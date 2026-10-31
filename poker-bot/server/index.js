@@ -23,6 +23,7 @@ import * as stats from './stats.js';
 import * as fun from './fun.js';
 import * as social3 from './social3.js';
 import { addFeed } from './feed.js';
+import * as admin2 from './admin2.js';
 import { MEMES } from './game/table.js';
 import { GameTable } from './game/table.js';
 import { ghostHour } from '../core/bots.js';
@@ -251,7 +252,7 @@ function meView(uid) {
   const act = activeTable(uid);
   return {
     id: u.id, name: u.name, chips: u.chips, inPlay: u.in_play, rating: Math.round(u.rating), remind: !u.no_remind,
-    isAdmin: config.adminIds.includes(u.id),
+    isAdmin: config.adminIds.includes(u.id), isMod: admin2.isMod(u.id),
     rank: (({ name, color }) => ({ name, color }))(progress.rankOf(u.rating)),
     vip: cosmetics.vipEmotes(u.id),
     handsWon: u.hands_won, won: u.won, winRewards: WIN_REWARDS.map((r, i) => ({ ...r, done: i < u.won_rewards })), hints: u.hints,
@@ -267,6 +268,7 @@ function lobbyView(uid) {
     event: admin.getEvent(),
     champion: progress.fameView().hall[0]?.top[0] || null,
     weekTop: social3.weekTop(),
+    news: admin2.news(), poll: admin2.pollView(uid), maintenance: admin2.maintenance(),
     birthdays: fun.birthdaysToday().slice(0, 5),
     online: sockets.size,
     packs: config.packs, hintPacks: config.hintPacks, bots: BOTS, crowd: CROWD_VIEW, solo: SOLO_VIEW, buyins: config.botBuyins, buyinMin: config.buyinMin,
@@ -300,9 +302,50 @@ const handlers = {
     return { t: 'ok', text: `Промокод активирован: ${text}` };
   },
   // ---------- админка (только админ) ----------
-  admin(uid, m) {
-    if (!config.adminIds.includes(uid)) throw new Error('Нет доступа');
+  async admin(uid, m) {
     const a = m.a;
+    // модераторы — только часть действий
+    if (!config.adminIds.includes(uid) && !(admin2.isMod(uid) && admin2.MOD_ACTIONS.has(a))) throw new Error('Нет доступа');
+    if (!['search', 'stats', 'promos', 'online', 'pranks', 'reports', 'log', 'analytics', 'suspicious', 'feedback', 'templates', 'abStats', 'botOverrides', 'schedule'].includes(a)) admin2.log(uid, a, { ...m, a: undefined, rid: undefined });
+    if (a === 'log') return { t: 'admin', log: admin2.logList() };
+    if (a === 'replay') return { t: 'admin', replayView: social2.replay(m.id) };
+    if (a === 'refundHand') { const r = admin2.refundHand(m.id, social2.replay); hub.sendMe(r.user); hub.send(r.user, { t: 'toast', text: `Админ вернул проигрыш раздачи: +${r.amount}` }); return { t: 'admin', text: `Возвращено ${r.amount} фишек` }; }
+    if (a === 'suspicious') return { t: 'admin', suspicious: admin2.suspicious() };
+    if (a === 'trusted') { admin2.setTrusted(m.id, !!m.on); return { t: 'admin', text: m.on ? 'В белом списке' : 'Убран из белого списка' }; }
+    if (a === 'giftLimit') { admin2.setGiftLimit(m.value); return { t: 'admin', text: `Лимит подарков: ${admin2.giftLimit()} в сутки` }; }
+    if (a === 'warn') {
+      const r = admin2.warn(m.id, m.reason);
+      notify(Number(m.id), `⚠️ Предупреждение от модерации${m.reason ? `: ${String(m.reason).slice(0, 200)}` : ''}. ${r.banned ? 'Это третье — бан на сутки.' : 'После трёх — бан на сутки.'}`);
+      hub.send(Number(m.id), { t: 'toast', text: '⚠️ Тебе вынесено предупреждение' });
+      if (r.banned) for (const ws of sockets.get(Number(m.id)) || []) ws.close();
+      return { t: 'admin', text: `Предупреждений: ${r.warnings}${r.banned ? ' — бан на сутки' : ''}` };
+    }
+    if (a === 'tempBan') { admin2.tempBan(m.id, m.hours); for (const ws of sockets.get(Number(m.id)) || []) ws.close(); return { t: 'admin', text: `Бан на ${m.hours || 24} ч` }; }
+    if (a === 'templates') return { t: 'admin', templates: admin2.templates() };
+    if (a === 'saveTemplate') return { t: 'admin', templates: admin2.saveTemplate(m.text), text: 'Шаблон сохранён' };
+    if (a === 'broadcastSeg') {
+      const ids = new Set(admin2.segmentIds(m.seg));
+      const st = admin.startBroadcast(m.text, (id, text) => (ids.has(id) ? api('sendMessage', { chat_id: id, text, parse_mode: 'HTML', reply_markup: { inline_keyboard: [[openButton('Играть', '', 'success')]] } }) : Promise.resolve()), [...ids]);
+      return { t: 'admin', broadcast: st, text: `Рассылка: ${ids.size} игроков` };
+    }
+    if (a === 'ab') { admin2.setAb(!!m.on); return { t: 'admin', ab: admin2.abStats() }; }
+    if (a === 'abStats') return { t: 'admin', ab: admin2.abStats() };
+    if (a === 'schedule') return { t: 'admin', schedule: admin2.schedule() };
+    if (a === 'scheduleEvent') return { t: 'admin', schedule: admin2.scheduleEvent(m.kind, m.at, m.hours, m.title), text: 'Ивент запланирован' };
+    if (a === 'startTour') { tournaments.start(String(m.id)); return { t: 'admin', text: 'Турнир запущен' }; }
+    if (a === 'botOverrides') return { t: 'admin', bots: admin2.botOverrides(), botNames: [...BOTS.map((b) => b.name), ...CROWD_VIEW.map((c) => c.name)] };
+    if (a === 'botElo') return { t: 'admin', bots: admin2.setBotElo(m.name, m.elo), text: 'Эло бота изменено' };
+    if (a === 'botToggle') return { t: 'admin', bots: admin2.toggleBot(m.name) };
+    if (a === 'analytics') return { t: 'admin', analytics: admin2.analytics() };
+    if (a === 'exportUsers') return { t: 'admin', exportUsers: admin2.exportUsers() };
+    if (a === 'backup') { await admin2.backupTo(uid); return { t: 'admin', text: 'Бэкап отправлен тебе в Telegram' }; }
+    if (a === 'maintenance') { admin2.setMaintenance(m.text || null); hub.lobbyChanged(); return { t: 'admin', text: m.text ? 'Техработы включены' : 'Техработы выключены' }; }
+    if (a === 'news') { admin2.addNews(m.title, m.text); hub.lobbyChanged(); return { t: 'admin', text: 'Новость опубликована' }; }
+    if (a === 'newsDel') { admin2.delNews(m.id); hub.lobbyChanged(); return { t: 'admin', text: 'Удалено' }; }
+    if (a === 'poll') { admin2.addPoll(m.q, m.options); hub.lobbyChanged(); return { t: 'admin', text: 'Опрос запущен' }; }
+    if (a === 'feedback') return { t: 'admin', feedback: admin2.feedbackList() };
+    if (a === 'feedbackDone') { admin2.feedbackDone(m.id); return { t: 'admin', feedback: admin2.feedbackList() }; }
+    if (a === 'setMod') { admin2.setRole(m.id, m.on ? 'moderator' : ''); return { t: 'admin', text: m.on ? 'Назначен модератором' : 'Снят с модераторов' }; }
     if (a === 'search') return { t: 'admin', users: admin.searchUsers(m.q) };
     if (a === 'adjust') {
       const u = admin.adjust(m.id, m.field, m.mode, m.value);
@@ -510,11 +553,12 @@ const handlers = {
     hub.sendMe(uid);
     return { t: 'progress', progress: progress.progressView(uid), text };
   },
-  createT: (uid, m) => ({ t: 'created', id: tournaments.create(getUser(uid), m.tour || {}) }),
+  createT: (uid, m) => { if (admin2.maintenance() && !config.adminIds.includes(uid)) throw new Error(`Техработы: ${admin2.maintenance()}`); return { t: 'created', id: tournaments.create(getUser(uid), m.tour || {}) }; },
   reg: (uid, m) => (tournaments.register(getUser(uid), m.id), { t: 'ok' }),
   unreg: (uid, m) => (tournaments.unregister(getUser(uid), m.id), { t: 'ok' }),
   cancelT: (uid, m) => (tournaments.cancel(getUser(uid), m.id), { t: 'ok' }),
   sitBots(uid, m) {
+    if (admin2.maintenance() && !config.adminIds.includes(uid)) throw new Error(`Техработы: ${admin2.maintenance()}`);
     if (activeTable(uid)) throw new Error('Ты уже за столом');
     botRooms.set(uid, BotRoom.open(hub, getUser(uid), {
       mode: ['6', '9', 'rush', 'mega', 'ladder', 'team'].includes(m.mode) ? m.mode : 'hu', jokers: !!m.jokers, marathon: !!m.marathon, mirrorMode: !!m.mirror, fog: !!m.fog, stopLoss: [0.5, 0.75].includes(Number(m.stopLoss)) ? Number(m.stopLoss) : 0, autoTopUp: !!m.autoTopUp, botName: m.botName, variant: m.variant === 'short' ? 'short' : null, chaos: !!m.chaos, buyin: Number(m.buyin), minutes: Number(m.minutes) || 0, fast: !!m.fast,
@@ -650,6 +694,8 @@ const handlers = {
     if (!a?.seat.extend?.()) throw new Error('Таймбанк закончился');
     return { t: 'ok', left: a.seat.timebanks };
   },
+  vote(uid, m) { admin2.vote(uid, m.id, m.opt); return { t: 'ok', poll: admin2.pollView(uid) }; },
+  feedback(uid, m) { admin2.addFeedback(uid, m.text); return { t: 'ok', text: 'Спасибо! Отзыв ушёл разработчику' }; },
   // ---------- социальное ----------
   tableChat(uid, m) {
     if (admin.isMuted(uid)) throw new Error('Ты в муте');
@@ -784,6 +830,7 @@ const handlers = {
   rebuy: (uid) => (botRooms.get(uid)?.rebuy(uid), { t: 'ok' }),
   // стол с друзьями: создать, посмотреть по ссылке, сесть
   createMixed(uid, m) {
+    if (admin2.maintenance() && !config.adminIds.includes(uid)) throw new Error(`Техработы: ${admin2.maintenance()}`);
     if (activeTable(uid)) throw new Error('Ты уже за столом');
     const room = MixedRoom.open(hub, getUser(uid), { buyin: Number(m.buyin), bots: Number(m.bots), seats: Number(m.seats), password: m.password || null, variant: m.variant });
     mixedRooms.set(room.id, room);
@@ -809,6 +856,7 @@ const handlers = {
   },
   // сольный турнир с ботами — старт сразу
   startSolo(uid, m) {
+    if (admin2.maintenance() && !config.adminIds.includes(uid)) throw new Error(`Техработы: ${admin2.maintenance()}`);
     if (activeTable(uid) || solos.get(uid)) throw new Error('Ты уже за столом');
     const tour = SoloTour.open(hub, getUser(uid), { buyin: m.buyin, size: m.size, blindMin: m.blindMin, demo: !!m.demo, ko: !!m.ko, seats: m.seats });
     solos.set(uid, tour);
@@ -1008,6 +1056,7 @@ wss.on('connection', (ws) => {
         const prevSeen = db.prepare('SELECT last_seen FROM users WHERE id = ?').get(auth.user.id)?.last_seen || 0;
         const u = upsertUser(auth.user);
         if (admin.isBanned(u.id)) return reply({ t: 'error', text: 'Аккаунт заблокирован' });
+        if (admin2.bannedUntil(u.id) > Date.now()) return reply({ t: 'error', text: `Аккаунт временно заблокирован до ${new Date(admin2.bannedUntil(u.id)).toLocaleString('ru')}` });
         uid = u.id;
         if (config.adminIds.includes(uid)) progress.unlockAll(uid); // у админа открыто всё
         admin.touch(uid); // для статистики «активные за сутки»
@@ -1061,6 +1110,7 @@ setInterval(() => {
       (async () => { for (const r of list) { notify(r.uid, `📊 Твоя неделя: ${r.hands} раздач, выиграно ${r.won}, итог ${r.bb >= 0 ? '+' : ''}${r.bb} больших блайндов. Подробно — в «Моей статистике».`, openButton('Статистика', '#stats')); await new Promise((x) => setTimeout(x, 60)); } })();
     }
   } catch (e) { console.error('weekly', e); }
+  try { for (const e of admin2.dueEvents()) { admin.setEvent(e.kind, e.hours, e.title); hub.lobbyChanged(); } } catch (e) { console.error('sched', e); }
   // капсулы времени: пришло время — письмо себе
   try {
     for (const c of fun.dueCapsules()) {

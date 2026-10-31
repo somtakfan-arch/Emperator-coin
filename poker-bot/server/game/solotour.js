@@ -6,6 +6,7 @@ import { randomBytes } from 'node:crypto';
 import { db, tx, debit, credit } from '../db.js';
 import { config, BLIND_LEVELS, payoutShares } from '../config.js';
 import { CROWD, makeBot } from '../../core/crowd.js';
+import { botOverrides } from '../admin2.js';
 import { BOT_CLASSES } from '../../core/bots.js';
 import { GameTable, HumanSeat, botSeat } from './table.js';
 import { botRating } from './elo.js';
@@ -38,7 +39,8 @@ export class SoloTour {
     this.tables = [];
     // соперники: пара сильных + обычные, все разные
     const pros = BOT_CLASSES.map((C) => new C({}).name).sort(() => Math.random() - 0.5).slice(0, size >= 18 ? 3 : 1);
-    const crowd = CROWD.map((c) => c.name).sort(() => Math.random() - 0.5);
+    const off = new Set(botOverrides().off); // боты, выключенные в админке
+    const crowd = CROWD.map((c) => c.name).filter((n) => !off.has(n)).sort(() => Math.random() - 0.5);
     // в больших турнирах за одним из столов сидит босс — Король
     this.botNames = [...(size >= 18 ? ['Король'] : []), ...pros, ...crowd].slice(0, size - 1);
   }

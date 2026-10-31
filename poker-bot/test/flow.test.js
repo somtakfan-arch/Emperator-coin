@@ -1417,3 +1417,59 @@ test('социальное: личка, группы, лиги друзей, к�
   a.ws.send(JSON.stringify({ t: 'leave' })); await a.waitFor((m) => m.t === 'left', 30000);
   a.close(); b.close();
 });
+
+test('админка 2: модератор, предупреждения и бан, техработы, новости, опрос, отзывы, аналитика, возврат по раздаче, боты, журнал', async () => {
+  const a = new Client(7001), u = new Client(10011), m = new Client(10012);
+  await a.ready; await u.ready; await m.ready;
+  await assert.rejects(m.req({ t: 'admin', a: 'analytics' }), /Нет доступа/);
+  await a.req({ t: 'admin', a: 'setMod', id: 10012, on: true });
+  await m.req({ t: 'admin', a: 'search', q: '10011' }); // модератору можно
+  await assert.rejects(m.req({ t: 'admin', a: 'backup' }), /Нет доступа/);
+  // техработы
+  await a.req({ t: 'admin', a: 'maintenance', text: 'обновляем сервер' });
+  await u.req({ t: 'invoice', pack: 'p1' });
+  await assert.rejects(u.req({ t: 'sitBots', mode: 'hu', botName: 'Скала', buyin: 500 }), /Техработы/);
+  await a.req({ t: 'admin', a: 'maintenance', text: null });
+  // новости, опрос, отзыв
+  await a.req({ t: 'admin', a: 'news', title: 'Обнова', text: 'Новые режимы!' });
+  await a.req({ t: 'admin', a: 'poll', q: 'Какой режим добавить?', options: ['Омаха', 'Стад'] });
+  const lob = await u.req({ t: 'lobby' });
+  assert.equal(lob.news[0].title, 'Обнова');
+  const v = await u.req({ t: 'vote', id: lob.poll.id, opt: 0 });
+  assert.equal(v.poll.mine, 0);
+  await u.req({ t: 'feedback', text: 'Сделайте Омаху пожалуйста' });
+  const fb = await m.req({ t: 'admin', a: 'feedback' });
+  assert.ok(fb.feedback.some((f) => /Омаху/.test(f.text)));
+  // возврат по раздаче
+  await u.req({ t: 'sitBots', mode: 'hu', botName: 'Маньяк', buyin: 500 });
+  await u.waitFor((x) => x.t === 'left' || (x.t === 'table' && (x.table?.handId >= 4 || x.table?.canRebuy)), 60000);
+  u.ws.send(JSON.stringify({ t: 'leave' })); await u.waitFor((x) => x.t === 'left', 30000);
+  const hist = await u.req({ t: 'history' });
+  const lost = hist.hands.find((h) => h.net < 0);
+  if (lost) {
+    const r = await a.req({ t: 'admin', a: 'refundHand', id: lost.id });
+    assert.match(r.text, /Возвращено/);
+    await assert.rejects(a.req({ t: 'admin', a: 'refundHand', id: lost.id }), /уже был возврат/);
+  }
+  assertLedger(10011);
+  // аналитика, подозрительные, боты, лимит, журнал
+  const an = await a.req({ t: 'admin', a: 'analytics' });
+  assert.ok(an.analytics.funnel && an.analytics.retention);
+  await a.req({ t: 'admin', a: 'suspicious' });
+  const bo = await a.req({ t: 'admin', a: 'botToggle', name: 'Колян' });
+  assert.ok(bo.bots.off.includes('Колян'));
+  await a.req({ t: 'admin', a: 'botToggle', name: 'Колян' });
+  await a.req({ t: 'admin', a: 'giftLimit', value: 5000 });
+  const sc = await a.req({ t: 'admin', a: 'scheduleEvent', kind: 'x2xp', at: Date.now() + 3600000, hours: 2 });
+  assert.equal(sc.schedule.length, 1);
+  const lg = await a.req({ t: 'admin', a: 'log' });
+  assert.ok(lg.log.some((l) => l.action === 'maintenance'));
+  // предупреждения: третье — бан на сутки
+  for (let i = 0; i < 3; i++) await m.req({ t: 'admin', a: 'warn', id: 10011, reason: 'тест' });
+  const banned = new Client(10011);
+  await assert.rejects(banned.ready, /временно заблокирован/);
+  const { db: d } = await import('../server/db.js');
+  d.prepare('UPDATE users SET banned_until = 0, warnings = 0 WHERE id = 10011').run();
+  await a.req({ t: 'admin', a: 'giftLimit', value: 10000 });
+  a.close(); u.close(); m.close(); banned.close();
+});

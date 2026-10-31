@@ -5,6 +5,7 @@ import { db, tx, credit } from './db.js';
 import { config, NOT_ADMIN } from './config.js';
 import { eventMult, happyHour } from './events.js';
 import { addFeed } from './feed.js';
+import { abMult } from './admin2.js';
 
 const cols = new Set(db.prepare('PRAGMA table_info(users)').all().map((c) => c.name));
 if (!cols.has('progress')) db.exec("ALTER TABLE users ADD COLUMN progress TEXT NOT NULL DEFAULT '{}'");
@@ -389,7 +390,7 @@ export function claimDaily(uid) {
       p.chests.rare++;
       msg = `День ${p.bonus.streak}: редкий сундук!`;
     } else {
-      const chips = Math.round(x2(reward) * (1 + 0.1 * (p.skills?.daily || 0))); // навык «Бонус дня»
+      const chips = Math.round(x2(reward) * (1 + 0.1 * (p.skills?.daily || 0)) * abMult(uid)); // навык «Бонус дня», A/B-тест
       credit(uid, chips, 'daily_bonus');
       msg = `День ${p.bonus.streak}: +${chips} фишек`;
     }

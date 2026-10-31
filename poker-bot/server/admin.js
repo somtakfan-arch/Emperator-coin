@@ -147,11 +147,11 @@ export { EVENT_KINDS, getEvent, setEvent, eventMult } from './events.js';
 // ---------- Рассылка: не быстрее ~20 сообщений в секунду ----------
 
 let broadcasting = null;
-export function startBroadcast(text, send) {
+export function startBroadcast(text, send, onlyIds = null) {
   if (broadcasting) throw new Error('Рассылка уже идёт');
   text = String(text || '').trim().slice(0, 1500);
   if (text.length < 3) throw new Error('Пустое сообщение');
-  const ids = db.prepare('SELECT id FROM users').all().map((r) => r.id);
+  const ids = onlyIds || db.prepare('SELECT id FROM users').all().map((r) => r.id); // сегмент или все
   broadcasting = { total: ids.length, sent: 0, failed: 0, started: Date.now() };
   const st = broadcasting;
   (async () => {

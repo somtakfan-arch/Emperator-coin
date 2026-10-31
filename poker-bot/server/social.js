@@ -2,6 +2,7 @@
 import { db, tx, credit, getUser } from './db.js';
 import { config, NOT_ADMIN } from './config.js';
 import { grantChest, rankOf } from './progress.js';
+import { giftLimit } from './admin2.js';
 
 db.exec(`
 CREATE TABLE IF NOT EXISTS friends (
@@ -73,7 +74,7 @@ const GIFT_DAY_LIMIT = 10000; // фишек в сутки от одного иг
 export const giftLeftOf = (uid) => giftLeft(uid);
 function giftLeft(uid) {
   const sent = db.prepare('SELECT COALESCE(SUM(chips), 0) AS s FROM gifts WHERE from_id = ? AND at > ?').get(uid, Date.now() - 86400000).s;
-  return Math.max(0, GIFT_DAY_LIMIT - sent);
+  return Math.max(0, giftLimit() - sent); // лимит меняется в админке
 }
 
 export function gift(uid, to, { chips = 0, hints = 0 }) {

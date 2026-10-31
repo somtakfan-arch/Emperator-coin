@@ -35,6 +35,7 @@ function makeAdvisor(userId) {
 }
 import { GameTable, HumanSeat, botSeat } from './table.js';
 import { MegaBot, MEGA_EXTRA } from '../../core/megabot.js';
+import { botOverrides } from '../admin2.js';
 
 const MEGA_BOTS = 100;
 import { handElo, botRating } from './elo.js';
@@ -70,8 +71,8 @@ export class BotRoom {
     // команда 2 на 2: ты и напарник против двух ботов (места через одного)
     if (mode === 'team') this.team = { partner: 'Профессор' };
     const names = mode === 'hu' ? [botName]
-      : mode === '9' ? [...pros, ...CROWD.map((c) => c.name).sort(() => Math.random() - 0.5).slice(0, 3)]
-        : mode === 'rush' ? [RUSH[0]] : mode === 'ladder' ? [LADDER[this.ladder.step]] : mode === 'team' ? ['Акула', 'Профессор', 'Охотник'] : mega ? [...CROWD.map((c) => c.name), ...MEGA_EXTRA].sort(() => Math.random() - 0.5).slice(0, MEGA_BOTS) : pros;
+      : mode === '9' ? [...pros, ...CROWD.map((c) => c.name).filter((n) => !botOverrides().off.includes(n)).sort(() => Math.random() - 0.5).slice(0, 3)]
+        : mode === 'rush' ? [RUSH[0]] : mode === 'ladder' ? [LADDER[this.ladder.step]] : mode === 'team' ? ['Акула', 'Профессор', 'Охотник'] : mega ? [...CROWD.map((c) => c.name).filter((n) => !botOverrides().off.includes(n)), ...MEGA_EXTRA].sort(() => Math.random() - 0.5).slice(0, MEGA_BOTS) : pros;
     if (mode === 'rush') this.rush = { i: 0 };
     const label = { hu: '1 на 1', 6: 'Стол на 6', 9: 'Стол на 9', rush: 'Босс-раш', mega: `Огромный стол · ${MEGA_BOTS + 1} игрок · 6 колод`, ladder: 'Лестница', team: 'Команда 2 на 2' }[mode];
     this.table = new GameTable({

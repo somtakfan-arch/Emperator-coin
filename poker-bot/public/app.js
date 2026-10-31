@@ -1949,6 +1949,14 @@ function lobbyScreen() {
       h('div', { class: 'grid2' },
         h('button', { class: 'btn-ghost', onclick: () => { markTutorialAsked(); render(); } }, 'Умею'),
         h('button', { class: 'btn', style: 'height:46px;font-size:14px', onclick: () => openTutorial(0) }, 'Научи меня'))),
+    S.lobby?.maintenance && h('div', { class: 'glass card', style: 'border-color:#ff9a3a' }, h('div', { class: 'b' }, '🛠 Техработы'), h('div', { class: 'small soft' }, S.lobby.maintenance)),
+    (S.lobby?.news || []).slice(0, 2).map((n) => h('div', { class: 'glass card', style: 'gap:4px' }, h('div', { class: 'b' }, `📰 ${n.title}`), h('div', { class: 'small soft', style: 'line-height:1.45;white-space:pre-line' }, n.text))),
+    S.lobby?.poll && h('div', { class: 'glass card', style: 'gap:6px' }, h('div', { class: 'b' }, `📊 ${S.lobby.poll.q}`),
+      S.lobby.poll.options.map((o, i) => {
+        const total = S.lobby.poll.votes.reduce((a, b) => a + b, 0) || 1;
+        return S.lobby.poll.mine == null ? h('button', { class: 'btn-ghost', style: 'height:38px', onclick: async () => { const r = await run({ t: 'vote', id: S.lobby.poll.id, opt: i }); if (r) { S.lobby.poll = r.poll; render(); } } }, o)
+          : h('div', { class: 'small' }, `${S.lobby.poll.mine === i ? '✓ ' : ''}${o} — ${Math.round((S.lobby.poll.votes[i] / total) * 100)}%`);
+      })),
     S.lobby?.weekTop?.length > 0 && h('div', { class: 'small soft', style: 'text-align:center' }, `🏆 Лучшие недели: ${S.lobby.weekTop.map((x, i) => `${['🥇', '🥈', '🥉'][i]} ${x.name} (${x.won})`).join('  ')}`),
     // статуя чемпиона прошлой недели и дни рождения ботов
     S.lobby?.champion && h('div', { class: 'glass card statue' }, h('div', { style: 'font-size:30px' }, '🗿'),
@@ -2958,7 +2966,7 @@ function adminScreen() {
       if (!raw) return;
       run({ t: 'admin', a: 'adjust', id: u.id, field, mode: raw.startsWith('=') ? 'set' : 'add', value: raw.replace('=', '') });
     } }, 'OK'));
-  const tabs = h('div', { class: 'seg' }, [['stats', 'Стата'], ['users', 'Игроки'], ['promo', 'Промо'], ['more', 'Ещё']].map(([k, l]) =>
+  const tabs = h('div', { class: 'seg' }, [['stats', 'Стата'], ['users', 'Игроки'], ['tools', 'Инструм.'], ['promo', 'Промо'], ['more', 'Ещё']].map(([k, l]) =>
     h('button', { class: tab === k ? 'on' : '', onclick: () => { S.admTab = k; render(); } }, l)));
   let body;
   if (tab === 'stats') {
@@ -3003,7 +3011,58 @@ function adminScreen() {
         adj(u, 'chips', 'Фишки'), adj(u, 'rating', 'Эло'), adj(u, 'hints', 'Подсказки'), adj(u, 'handsWon', 'Раздачи'),
         h('div', { class: 'row', style: 'gap:6px' },
           h('button', { class: `btn-sm ${u.banned ? '' : 'ghost'}`, onclick: () => { if (u.banned || confirm(`Забанить ${u.name}?`)) run({ t: 'admin', a: 'ban', id: u.id, on: !u.banned }); } }, u.banned ? '🔓 Разбанить' : '⛔ Бан'),
-          h('button', { class: `btn-sm ${u.muted ? '' : 'ghost'}`, onclick: () => run({ t: 'admin', a: 'mute', id: u.id, on: !u.muted }) }, u.muted ? '🔊 Снять мут' : '🔇 Мут')))),
+          h('button', { class: `btn-sm ${u.muted ? '' : 'ghost'}`, onclick: () => run({ t: 'admin', a: 'mute', id: u.id, on: !u.muted }) }, u.muted ? '🔊 Снять мут' : '🔇 Мут')),
+        h('div', { class: 'row', style: 'gap:6px;flex-wrap:wrap' },
+          h('button', { class: 'btn-sm ghost', onclick: () => { const why = prompt('Причина предупреждения'); if (why !== null) run({ t: 'admin', a: 'warn', id: u.id, reason: why }); } }, '⚠️ Предупредить'),
+          h('button', { class: 'btn-sm ghost', onclick: () => { const hrs = prompt('Бан на сколько часов?', '24'); if (hrs) run({ t: 'admin', a: 'tempBan', id: u.id, hours: hrs }); } }, '⏳ Бан на время'),
+          h('button', { class: 'btn-sm ghost', onclick: () => run({ t: 'admin', a: 'trusted', id: u.id, on: true }) }, '✓ Доверенный'),
+          h('button', { class: 'btn-sm ghost', onclick: () => run({ t: 'admin', a: 'setMod', id: u.id, on: confirm('Назначить модератором? (Отмена — снять)') }) }, '🛡 Модератор')))),
+    ];
+  } else if (tab === 'tools') {
+    const adm = (a, extra = {}) => send({ t: 'admin', a, ...extra });
+    const ask = (q, d = '') => prompt(q, d);
+    const sec = (title, ...b) => h('div', { class: 'glass card', style: 'gap:6px' }, h('div', { class: 'b' }, title), ...b);
+    const AN = A.analytics;
+    body = [
+      sec('📈 Аналитика', h('button', { class: 'btn-sm', onclick: () => adm('analytics') }, 'Обновить'),
+        AN && [h('div', { class: 'small' }, `Воронка новичков (30 дн., ${AN.funnel.users}): сыграли 1 раздачу ${AN.funnel.h1}% → 10 раздач ${AN.funnel.h10}% → 100 раздач ${AN.funnel.h100}% → платили ${AN.funnel.paid}%`),
+          h('div', { class: 'small' }, `Удержание: D1 ${AN.retention.d1 ?? '—'}% · D7 ${AN.retention.d7 ?? '—'}% · D30 ${AN.retention.d30 ?? '—'}%`),
+          h('div', { class: 'small' }, `Режимы за 7 дн.: ${AN.modes.map((x) => `${x.kind} — ${x.hands} раздач / ${x.players} игр.`).join(' · ') || '—'}`),
+          h('div', { class: 'small' }, `Доход по пакетам: ${AN.packs.map((x) => `${x.pack}: ⭐${x.stars} (${x.n})`).join(' · ') || '—'}`)]),
+      sec('🕵️ Подозрительная игра (перелив фишек 1 на 1)', h('button', { class: 'btn-sm', onclick: () => adm('suspicious') }, 'Проверить'),
+        A.suspicious && (A.suspicious.length ? A.suspicious.map((x) => h('div', { class: 'row between' }, h('div', { class: 'small' }, x.text),
+          h('button', { class: 'btn-sm ghost', onclick: () => adm('trusted', { id: x.a, on: true }) }, '✓ доверять'))) : h('div', { class: 'small muted' }, 'Ничего подозрительного'))),
+      sec('🔎 Раздача по id (из ссылки повтора)', h('button', { class: 'btn-sm', onclick: () => { const id = ask('id раздачи'); if (id) adm('replay', { id }); } }, 'Найти'),
+        A.replayView && [h('div', { class: 'small' }, `${A.replayView.owner}: ${A.replayView.title} · итог ${A.replayView.net}`),
+          A.replayView.net < 0 && h('button', { class: 'btn-sm', onclick: () => { if (confirm(`Вернуть ${-A.replayView.net} фишек?`)) adm('refundHand', { id: A.replayView.id }); } }, 'Вернуть проигрыш')]),
+      sec('📣 Рассылка по сегменту', h('div', { class: 'small muted' }, 'Сегменты: все / активные 7 дн. / не заходили 7 дн. / платившие / ранг Золото+'),
+        h('div', { class: 'choices wrap' }, [['all', 'Все'], ['active', 'Активные'], ['inactive', 'Спящие'], ['payers', 'Платившие'], ['gold', 'Золото+']].map(([k, n]) =>
+          h('button', { onclick: () => { const text = ask(`Текст для «${n}»`, (A.templates || [])[0] || ''); if (text && confirm(`Отправить «${n}»?`)) adm('broadcastSeg', { seg: k, text }); } }, n))),
+        h('div', { class: 'row', style: 'gap:6px' }, h('button', { class: 'btn-sm ghost', onclick: () => adm('templates') }, 'Шаблоны'), h('button', { class: 'btn-sm ghost', onclick: () => { const t = ask('Новый шаблон'); if (t) adm('saveTemplate', { text: t }); } }, '+ шаблон')),
+        (A.templates || []).map((t) => h('div', { class: 'small soft' }, `• ${t.slice(0, 80)}`))),
+      sec('🗓 Ивенты по расписанию', h('div', { class: 'row', style: 'gap:6px' },
+        h('button', { class: 'btn-sm', onclick: () => { const k = ask('x2chips или x2xp', 'x2chips'); const d = ask('Когда начать (ГГГГ-ММ-ДД ЧЧ:ММ по Москве)'); const hrs = ask('Сколько часов', '24'); if (k && d) adm('scheduleEvent', { kind: k, at: Date.parse(d.replace(' ', 'T') + ':00+03:00'), hours: hrs }); } }, '+ запланировать'),
+        h('button', { class: 'btn-sm ghost', onclick: () => adm('schedule') }, 'Список')),
+        (A.schedule || []).map((e) => h('div', { class: 'small soft' }, `${new Date(e.at).toLocaleString('ru')} · ${e.kind} · ${e.hours} ч`))),
+      sec('🧪 A/B-тест бонуса дня (группа B +20%)', h('div', { class: 'row', style: 'gap:6px' },
+        h('button', { class: 'btn-sm', onclick: () => adm('ab', { on: !A.ab?.on }) }, A.ab?.on ? 'Выключить' : 'Включить'), h('button', { class: 'btn-sm ghost', onclick: () => adm('abStats') }, 'Итоги')),
+        A.ab && h('div', { class: 'small' }, `A: новых ${A.ab.a.n}, активны сегодня ${A.ab.a.act} · B: новых ${A.ab.b.n}, активны ${A.ab.b.act}`)),
+      sec('🤖 Боты: Эло и выключение', h('button', { class: 'btn-sm', onclick: () => adm('botOverrides') }, 'Открыть'),
+        A.botNames && h('div', { class: 'album-bots' }, A.botNames.map((n) => h('button', { class: `ab ${A.bots?.off?.includes(n) ? '' : 'met'}`, onclick: () => { const v = ask(`${n}: новое Эло (пусто — вкл/выкл бота)`); if (v) adm('botElo', { name: n, elo: v }); else adm('botToggle', { name: n }); } }, `${A.bots?.off?.includes(n) ? '⛔ ' : ''}${n}${A.bots?.elo?.[n] ? ` · ${A.bots.elo[n]}` : ''}`)))),
+      sec('🏆 Запустить турнир сейчас', h('button', { class: 'btn-sm', onclick: () => { const id = ask('id турнира'); if (id) adm('startTour', { id }); } }, 'Запустить')),
+      sec('🎁 Лимит подарков в сутки', h('button', { class: 'btn-sm', onclick: () => { const v = ask('Сколько фишек в сутки можно дарить', '10000'); if (v) adm('giftLimit', { value: v }); } }, 'Изменить')),
+      sec('📰 Новости и опросы в лобби',
+        h('div', { class: 'row', style: 'gap:6px' },
+          h('button', { class: 'btn-sm', onclick: () => { const t = ask('Заголовок'); const x = t && ask('Текст'); if (x) adm('news', { title: t, text: x }); } }, '+ новость'),
+          h('button', { class: 'btn-sm', onclick: () => { const q = ask('Вопрос опроса'); const o = q && ask('Варианты через ;'); if (o) adm('poll', { q, options: o.split(';') }); } }, '+ опрос'))),
+      sec('💬 Отзывы игроков', h('button', { class: 'btn-sm', onclick: () => adm('feedback') }, 'Показать'),
+        A.feedback && (A.feedback.length ? A.feedback.map((f) => h('div', { class: 'row between', style: 'gap:6px' }, h('div', { class: 'small' }, `${f.name}: ${f.text}`), h('button', { class: 'btn-sm ghost', onclick: () => adm('feedbackDone', { id: f.id }) }, '✓'))) : h('div', { class: 'small muted' }, 'Отзывов нет'))),
+      sec('📜 Журнал действий', h('button', { class: 'btn-sm', onclick: () => adm('log') }, 'Показать'),
+        (A.log || []).map((l) => h('div', { class: 'small soft' }, `${new Date(l.at).toLocaleString('ru', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} · ${l.name || '?'} · ${l.action}${l.details ? ` · ${l.details.slice(0, 80)}` : ''}`))),
+      sec('🛠 Сервис', h('div', { class: 'grid2' },
+        h('button', { class: 'btn-sm', onclick: () => { const t = ask('Текст техработ (пусто — выключить)'); adm('maintenance', { text: t || null }); } }, 'Техработы'),
+        h('button', { class: 'btn-sm', onclick: () => adm('backup') }, 'Бэкап в Telegram'),
+        h('button', { class: 'btn-sm', onclick: async () => { const r = await run({ t: 'admin', a: 'exportUsers' }); if (!r) return; const csv = ['id;имя;ник;фишки;эло;раздач выиграно;создан;заходил;звёзд', ...r.exportUsers.map((u) => [u.id, u.name, u.username || '', u.chips, u.rating, u.hands_won, new Date(u.created).toLocaleDateString('ru'), new Date(u.last_seen).toLocaleDateString('ru'), u.stars].join(';'))].join('\n'); const a2 = h('a', { href: URL.createObjectURL(new Blob(['﻿' + csv], { type: 'text/csv' })), download: 'players.csv' }); document.body.append(a2); a2.click(); a2.remove(); } }, 'Экспорт игроков CSV'))),
     ];
   } else if (tab === 'promo') {
     const P = S.admPromo || (S.admPromo = { code: '', chips: 1000, hints: 0, chest: '', maxUses: 100, days: 7 });
@@ -3631,7 +3690,10 @@ function profileScreen() {
     h('div', { class: 'row' },
       h('div', { class: 'avatar', style: 'width:56px;height:56px;font-size:22px' }, initial(me.name)),
       h('div', { class: 'col' }, h('h1', { class: 'h2' }, me.name), h('div', { class: 'small muted' }, `Эло ${me.rating}`))),
-    me.isAdmin && h('button', { class: 'btn-ghost', onclick: () => go('admin') }, '⚙️ Админка'),
+    (me.isAdmin || me.isMod) && h('button', { class: 'btn-ghost', onclick: () => go('admin') }, me.isAdmin ? '⚙️ Админка' : '🛡 Модерация'),
+    // отзыв разработчику
+    h('button', { class: 'item', onclick: async () => { const t = prompt('Что улучшить или что сломалось? Отзыв увидит разработчик'); if (t) { const r = await run({ t: 'feedback', text: t }); if (r) toast(r.text); } } },
+      h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, '💬 Написать отзыв'), h('div', { class: 'small muted' }, 'Идеи, баги, пожелания')), icon('chev')),
     h('button', { class: 'btn-ghost', onclick: () => shareLink(`${location.origin}${location.pathname}#p=${me.id}`, 'Мой профиль в покере:') }, '🔗 Поделиться своим профилем'),
     h('div', { class: 'glass card' },
       h('div', { class: 'grid3' }, stat('Место', fmt(me.ratingPlace)), stat('Турниров', me.games), stat('Побед', me.wins)),
