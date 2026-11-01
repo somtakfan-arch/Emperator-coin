@@ -657,12 +657,71 @@ def _run_boot_admin(storage) -> None:
         logger.exception("BOOT_MAKE_PROMOS failed")
 
 
+DEFAULT_BDAY_TEXT = (
+    "🎉 Приве-е-ет! С Днём Рождения! 🎂🥳\n"
+    "Желаю тебе всего самого лучшего: здоровья, счастья, любви и чтобы все "
+    "мечты сбывались! 💛"
+)
+
+
+async def _birthday_congrats_loop(application: Application) -> None:
+    """Once a day, auto-congratulate the owner's contacts whose birthday is today
+    (owner opt-in via 'autobday:<owner_id>'). Sent on the owner's behalf over the
+    business connection; guarded so each contact gets at most one congrats/year.
+    Birthdays come from getChat().birthdate (visible only if the contact shares
+    their birthday with the owner)."""
+    storage: Storage = application.bot_data["storage"]
+    import time as _t
+    while True:
+        try:
+            today_idx = int(_t.time()) // 86400
+            if storage.get_setting("bday_congrats_day") != str(today_idx):
+                storage.set_setting("bday_congrats_day", str(today_idx))
+                today = _t.gmtime()
+                since = int(_t.time()) - 120 * 86400  # contacts active last ~4 months
+                for owner_id in storage.connected_owner_ids():
+                    if storage.get_setting(f"autobday:{owner_id}") != "1":
+                        continue
+                    bcid = storage.get_bcid_for_owner(owner_id)
+                    if not bcid:
+                        continue
+                    tmpl = storage.get_setting(f"bdaytext:{owner_id}") or DEFAULT_BDAY_TEXT
+                    for chat_id in storage.list_owner_contacts(owner_id, since):
+                        try:
+                            full = await application.bot.get_chat(chat_id)
+                            bd = getattr(full, "birthdate", None)
+                            if not bd or bd.day != today.tm_mday or bd.month != today.tm_mon:
+                                continue
+                            key = f"bdaysent:{owner_id}:{chat_id}:{today.tm_year}"
+                            if storage.get_setting(key) == "1":
+                                continue
+                            name = getattr(full, "first_name", None) or ""
+                            await application.bot.send_message(
+                                chat_id=chat_id, business_connection_id=bcid,
+                                text=tmpl.replace("{name}", name).replace("{имя}", name))
+                            storage.set_setting(key, "1")
+                            try:
+                                await application.bot.send_message(
+                                    chat_id=owner_id,
+                                    text=f"🎂 Поздравил {name or chat_id} с днём рождения от твоего имени.")
+                            except Exception:
+                                pass
+                            await asyncio.sleep(1)
+                        except Exception:
+                            pass
+                        await asyncio.sleep(0.3)  # throttle getChat
+        except Exception:
+            logger.exception("Birthday congrats loop error")
+        await asyncio.sleep(300)  # re-check every 5 min (fires once per day)
+
+
 async def _post_init(application: Application) -> None:
     _run_boot_admin(application.bot_data["storage"])
     application.create_task(_reminder_loop(application))
     application.create_task(_crypto_loop(application))
     application.create_task(_deposit_loop(application))
     application.create_task(_backup_loop(application))
+    application.create_task(_birthday_congrats_loop(application))
     # 🎂 Optional userbot: "eternal birthday" on the owner's own account (only
     # runs when TG_API_ID/TG_API_HASH/USERBOT_SESSION are configured).
     from . import userbot

@@ -7652,6 +7652,40 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         await message.reply_text(f"🎉 Промокод активирован: +{days} дн. премиума (до {until_str}).{bonus}")
         return
 
+    if text.startswith("/autobday") or text.startswith("/автодр"):
+        uid = message.from_user.id
+        cur = storage.get_setting(f"autobday:{uid}") == "1"
+        storage.set_setting(f"autobday:{uid}", "0" if cur else "1")
+        if cur:
+            await message.reply_text("🎂 Авто-поздравления с ДР выключены.")
+        else:
+            await message.reply_text(
+                "🎂 <b>Авто-поздравления с ДР включены!</b>\n"
+                "В день рождения контакта бот сам напишет ему поздравление от твоего имени "
+                "(видно только у тех, кто показывает тебе свой ДР в Telegram).\n\n"
+                "✍️ Свой текст: <code>/bdaytext твой текст</code> (можно вставить <code>{имя}</code>)\n"
+                "Выключить: /autobday", parse_mode="HTML")
+        return
+    if text.startswith("/bdaytext") or text.startswith("/тестдр"):
+        uid = message.from_user.id
+        parts = (message.text or "").split(maxsplit=1)
+        if len(parts) < 2 or not parts[1].strip():
+            from . import main as _m
+            cur = storage.get_setting(f"bdaytext:{uid}") or _m.DEFAULT_BDAY_TEXT
+            await message.reply_text(
+                "✍️ <b>Текст авто-поздравления</b>\n"
+                f"Сейчас:\n<blockquote>{html.escape(cur)}</blockquote>\n"
+                "Изменить: <code>/bdaytext твой текст</code> (вставь <code>{имя}</code> — подставится имя)\n"
+                "Сбросить на стандартный: <code>/bdaytext reset</code>", parse_mode="HTML")
+            return
+        val = parts[1].strip()
+        if val.lower() in ("reset", "сброс", "default"):
+            storage.set_setting(f"bdaytext:{uid}", "")
+            await message.reply_text("✅ Текст сброшен на стандартный.")
+            return
+        storage.set_setting(f"bdaytext:{uid}", val[:1000])
+        await message.reply_text("✅ Текст авто-поздравления сохранён. Включить: /autobday")
+        return
     if text.startswith("/watermark") or text.startswith("/setwatermark"):
         uid = message.from_user.id
         if not storage.is_premium(uid):

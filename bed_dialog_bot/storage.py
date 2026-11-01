@@ -3736,6 +3736,15 @@ class Storage:
             ).fetchone()
         return row[0] if row else None
 
+    def list_owner_contacts(self, owner_user_id: int, since_ts: int = 0):
+        """chat_ids of the owner's private contacts active since `since_ts`."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT chat_id FROM contact_activity WHERE owner_user_id = ? AND last_ts >= ?",
+                (owner_user_id, since_ts),
+            ).fetchall()
+        return [r[0] for r in rows]
+
     # --- crypto (Crypto Pay / @CryptoBot) invoices ---
 
     def add_crypto_invoice(self, invoice_id: int, user_id: int, days: int) -> None:
