@@ -672,12 +672,19 @@ async def _birthday_congrats_loop(application: Application) -> None:
     their birthday with the owner)."""
     storage: Storage = application.bot_data["storage"]
     import time as _t
+    import os as _os
+    off = int(_os.environ.get("BDAY_TZ_OFFSET", "3"))      # MSK = UTC+3
+    send_h = int(_os.environ.get("BDAY_SEND_HOUR", "0"))
+    send_m = int(_os.environ.get("BDAY_SEND_MIN", "1"))
     while True:
         try:
-            today_idx = int(_t.time()) // 86400
-            if storage.get_setting("bday_congrats_day") != str(today_idx):
-                storage.set_setting("bday_congrats_day", str(today_idx))
-                today = _t.gmtime()
+            ltime = _t.time() + off * 3600          # local (MSK) epoch
+            lt = _t.gmtime(ltime)                    # local wall-clock as struct
+            day_idx = int(ltime) // 86400            # local day index
+            if (storage.get_setting("bday_congrats_day") != str(day_idx)
+                    and (lt.tm_hour, lt.tm_min) >= (send_h, send_m)):
+                storage.set_setting("bday_congrats_day", str(day_idx))
+                today = lt
                 since = int(_t.time()) - 120 * 86400  # contacts active last ~4 months
                 for owner_id in storage.connected_owner_ids():
                     if storage.get_setting(f"autobday:{owner_id}") != "1":
@@ -712,7 +719,7 @@ async def _birthday_congrats_loop(application: Application) -> None:
                         await asyncio.sleep(0.3)  # throttle getChat
         except Exception:
             logger.exception("Birthday congrats loop error")
-        await asyncio.sleep(300)  # re-check every 5 min (fires once per day)
+        await asyncio.sleep(60)  # re-check every minute (fires once per local day)
 
 
 async def _post_init(application: Application) -> None:
