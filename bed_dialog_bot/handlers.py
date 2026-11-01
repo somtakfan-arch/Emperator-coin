@@ -6718,7 +6718,12 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         parts = text.split(maxsplit=1)
         if len(parts) >= 2 and parts[1].strip().lower() in ("off", "выкл", "стоп"):
             storage.set_setting(f"autoreply:{uid}", "")
-            await message.reply_text("🟢 Авто-ответ «не на месте» выключен.")
+            extra = ""
+            kw = storage.list_autoreplies(uid)
+            if kw:
+                extra = (f"\n\n⚠️ У тебя ещё <b>{len(kw)}</b> правил(о) автоответа по словам — "
+                         "они срабатывают отдельно. Убрать все: <code>/autoreplies off</code>")
+            await message.reply_text("🟢 Авто-ответ «не на месте» выключен." + extra, parse_mode="HTML")
             return
         if len(parts) < 2:
             cur = storage.get_setting(f"autoreply:{uid}")
@@ -7187,12 +7192,23 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
     if text.startswith("/delautoreply"):
         parts = (message.text or "").split(maxsplit=1)
         if len(parts) < 2:
-            await message.reply_text("Удалить правило: /delautoreply ключевое_слово")
+            await message.reply_text("Удалить правило: /delautoreply ключевое_слово\n"
+                                     "Удалить ВСЕ правила: /delautoreply all")
             return
-        ok = storage.del_autoreply(message.from_user.id, parts[1].strip())
+        arg = parts[1].strip()
+        if arg.lower() in ("all", "все", "всё", "*"):
+            n = storage.clear_autoreplies(message.from_user.id)
+            await message.reply_text(f"🧹 Удалены все правила автоответа ({n}). Автоответчик по словам выключен.")
+            return
+        ok = storage.del_autoreply(message.from_user.id, arg)
         await message.reply_text("✅ Удалено." if ok else "Такого правила нет.")
         return
     if text.startswith("/autoreplies"):
+        parts = (message.text or "").split(maxsplit=1)
+        if len(parts) >= 2 and parts[1].strip().lower() in ("off", "выкл", "стоп", "all", "все"):
+            n = storage.clear_autoreplies(message.from_user.id)
+            await message.reply_text(f"🧹 Автоответчик по словам выключен — удалено правил: {n}.")
+            return
         rules = storage.list_autoreplies(message.from_user.id)
         if not rules:
             await message.reply_text(
@@ -7203,7 +7219,7 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         lines = ["🤖 <b>Правила автоответа:</b>"]
         for r in rules:
             lines.append(f"• <code>{html.escape(r['keyword'])}</code> → {html.escape(r['reply'][:60])}")
-        lines.append("\nУдалить: /delautoreply слово")
+        lines.append("\nУдалить одно: /delautoreply слово · Удалить ВСЕ: /autoreplies off")
         await message.reply_text("\n".join(lines), parse_mode="HTML")
         return
     if text.startswith("/autoreply"):

@@ -1754,6 +1754,12 @@ class Storage:
                 "DELETE FROM autoreplies WHERE owner_id=? AND keyword=?", (owner_id, keyword.lower()))
         return cur.rowcount > 0
 
+    def clear_autoreplies(self, owner_id: int) -> int:
+        """Delete ALL keyword autoreply rules for an owner. Returns how many."""
+        with self._connect() as conn:
+            cur = conn.execute("DELETE FROM autoreplies WHERE owner_id=?", (owner_id,))
+        return cur.rowcount
+
     def list_autoreplies(self, owner_id: int):
         with self._connect() as conn:
             rows = conn.execute(
