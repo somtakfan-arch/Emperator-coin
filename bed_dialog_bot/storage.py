@@ -1762,14 +1762,24 @@ class Storage:
         return [{"keyword": r[0], "reply": r[1]} for r in rows]
 
     def match_autoreply(self, owner_id: int, text: str):
-        """First autoreply whose keyword is contained in the incoming text."""
+        """First autoreply whose keyword matches the incoming text as a WHOLE word
+        (so a short keyword like 'я' doesn't fire inside 'моя'/'семья')."""
+        import re as _re
         low = (text or "").lower()
         with self._connect() as conn:
             rows = conn.execute(
                 "SELECT keyword, reply FROM autoreplies WHERE owner_id=?", (owner_id,)).fetchall()
         for kw, reply in rows:
-            if kw and kw in low:
-                return reply
+            kw = (kw or "").strip().lower()
+            if not kw:
+                continue
+            try:
+                # \w covers Cyrillic too (Unicode), so this is a word-boundary match.
+                if _re.search(r"(?<!\w)" + _re.escape(kw) + r"(?!\w)", low):
+                    return reply
+            except _re.error:
+                if kw in low:
+                    return reply
         return None
 
     # --- 👥 Friends ---
