@@ -24,7 +24,7 @@ let lastRating = new Map();
 
 export function recordHand(uid, r) {
   ins.run(uid, Date.now(), r.pos, r.hole[0] ?? null, r.hole[1] ?? null, r.vpip ? 1 : 0, r.pfr ? 1 : 0, JSON.stringify(r.aggr || {}),
-    r.net, r.won ? 1 : 0, r.sd ? 1 : 0, r.cat, r.alleq, r.foldcost || 0, r.rcall || 0, r.bluff ? 1 : 0, r.bb, r.kind);
+    Math.max(-1e12, Math.min(1e12, r.net)), r.won ? 1 : 0, r.sd ? 1 : 0, r.cat, r.alleq, r.foldcost || 0, r.rcall || 0, r.bluff ? 1 : 0, r.bb, r.kind);
   for (const o of r.opps || []) vsUp.run(uid, o, r.won ? 1 : 0, r.opps.length === 1 ? r.net : 0);
   // история Эло: точка, только если рейтинг изменился
   const u = getUser(uid);

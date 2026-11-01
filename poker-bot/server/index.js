@@ -1073,6 +1073,8 @@ for (const { name: tb } of db.prepare("SELECT name FROM sqlite_master WHERE type
   }
 }
 
+{ const n = db.prepare('UPDATE users SET chips = 1000000000000 WHERE chips > 1000000000000').run().changes; if (n) console.log(`Урезал баланс до триллиона: ${n}`); }
+
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 16 * 1024 });
 wss.on('connection', (ws) => {
   let uid = null;
