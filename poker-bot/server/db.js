@@ -110,7 +110,7 @@ const q = {
   insertUser: db.prepare('INSERT INTO users (id, name, username, chips, created) VALUES (?, ?, ?, ?, ?)'),
   updateName: db.prepare('UPDATE users SET name = ?, username = ? WHERE id = ?'),
   debit: db.prepare('UPDATE users SET chips = chips - ? WHERE id = ? AND chips >= ?'),
-  credit: db.prepare('UPDATE users SET chips = chips + ? WHERE id = ?'),
+  credit: db.prepare('UPDATE users SET chips = MIN(chips + ?, 1000000000000) WHERE id = ?'), // потолок — триллион, чтобы числа не ломали JS
   ledger: db.prepare('INSERT INTO ledger (user_id, delta, reason, ref, at) VALUES (?, ?, ?, ?, ?)'),
   inPlay: db.prepare('UPDATE users SET in_play = in_play + ? WHERE id = ?'),
 };

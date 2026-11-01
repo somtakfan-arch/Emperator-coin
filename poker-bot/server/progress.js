@@ -229,7 +229,7 @@ export function onHand(uid, h) {
       if (h.cat >= 6) evs.fullPlus = 1;
       if (h.amount >= 30 * h.bb) evs.bigPot30 = 1;
       if (h.allIn && h.showdown) evs.allinWin = 1;
-      if (h.amount > 0) db.prepare('UPDATE users SET biggest_pot = MAX(biggest_pot, ?) WHERE id = ?').run(h.amount, uid);
+      if (h.amount > 0) db.prepare('UPDATE users SET biggest_pot = MAX(biggest_pot, ?) WHERE id = ?').run(Math.min(h.amount, 1e12), uid);
       // достижения
       unlock(uid, p, 'first_win', out);
       if (h.handsWon >= 100) unlock(uid, p, 'wins_100', out);

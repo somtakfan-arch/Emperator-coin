@@ -1065,9 +1065,18 @@ const server = createServer(async (req, res) => {
   }
 });
 
+// Починка базы: числа больше, чем умеет JS (≈9 квадриллионов), ломают чтение — урезаем до триллиона
+for (const { name: tb } of db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").all()) {
+  for (const { name: col } of db.prepare(`PRAGMA table_info("${tb}")`).all()) {
+    const n = db.prepare(`UPDATE "${tb}" SET "${col}" = CASE WHEN "${col}" > 0 THEN 1000000000000 ELSE -1000000000000 END WHERE typeof("${col}") = 'integer' AND ABS("${col}") > 9007199254740991`).run().changes;
+    if (n) console.log(`Починил ${n} огромных чисел в ${tb}.${col}`);
+  }
+}
+
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 16 * 1024 });
 wss.on('connection', (ws) => {
   let uid = null;
+  ws.on('error', () => {}); // слишком большое сообщение и т. п. — не роняем сервер
   ws.on('message', async (raw) => {
     let m;
     try { m = JSON.parse(raw); } catch { return; }
