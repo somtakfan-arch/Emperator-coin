@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><title>Сайт до утра</title>
+<link rel="stylesheet" href="fonts/rubik.css">
+<style>html,body{margin:0;background:#0d1018;overflow:hidden}#stage{width:720px;height:1280px}svg{display:block}text{font-family:Rubik,"DejaVu Sans",sans-serif}</style>
+</head><body><div id="stage"></div>
+<script src="engine.js"></script><script src="episodes.js"></script>
+<script>
+const n = +(new URLSearchParams(location.search).get('ep') || 1);
+let bal = 0, B;
+for (const ep of EPISODES) { ep.startBal = bal; const b = buildEpisode(ep); bal = b.endBal; if (ep.n === n) B = b; }
+window.DUR = B.dur;
+window.SOUND = soundEvents(B);
+window.draw = t => { document.getElementById('stage').innerHTML = drawFrame(B, t); };
+window.READY = Promise.all(['500', '700', '800', '900'].map(w => document.fonts.load(w + ' 40px Rubik', 'Аа₽1'))).then(() => draw(+(new URLSearchParams(location.search).get('t') || 1)));
+</script></body></html>
