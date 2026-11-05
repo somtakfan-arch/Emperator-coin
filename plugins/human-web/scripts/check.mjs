@@ -29,7 +29,7 @@ function loadConfig() {
   const overrides = user.overrides || {};
   const rules = base.rules.map(r => ({ ...r, sev: overrides[r.id] || r.sev }))
     .filter(r => r.sev !== 'off' && r.detect.length)
-    .map(r => ({ ...r, res: r.detect.map(src => new RegExp(src, 'giu')) }));
+    .map(r => ({ ...r, res: r.detect.map(d => typeof d === 'string' ? new RegExp(d, 'giu') : new RegExp(d.re, d.flags || 'giu')) }));
   return { rules, ignore: user.ignore || [] };
 }
 

@@ -404,11 +404,20 @@
       "id": "T05",
       "cat": "T",
       "sev": "block",
-      "title": "Капслок-«бровь» над каждой секцией",
-      "why": "Мелкое FEATURES / ВОЗМОЖНОСТИ над H2 дублирует сам H2.",
-      "fix": "Надстрочник только когда он несёт отдельную информацию: раздел, дата, категория.",
+      "title": "Капслок-надпись над секцией",
+      "why": "Мелкое цветное ВОЗМОЖНОСТИ / ТАРИФЫ / КАК ЭТО РАБОТАЕТ разрядкой над заголовком. Самый узнаваемый признак сгенерированной страницы: надпись повторяет заголовок под ней и стоит над каждой секцией.",
+      "fix": "Убрать совсем. Заголовок секции сам говорит, о чём она. Если над заголовком нужна информация (дата, раздел, автор), писать её обычным регистром без разрядки.",
       "detect": [
-        "uppercase[^\"']*tracking-(wide|wider|widest)"
+        "\\buppercase\\b[^\"'`]*\\btracking-",
+        "\\btracking-[^\"'`]*\\buppercase\\b",
+        "text-transform:\\s*uppercase[^}]*letter-spacing",
+        "letter-spacing[^}]*text-transform:\\s*uppercase",
+        "class=\"[^\"]*\\b(eyebrow|overline|kicker|pretitle|pre-title|section-label|section-tag|tagline-sm)\\b",
+        "font-variant(-caps)?:\\s*(all-)?small-caps",
+        {
+          "re": ">\\s*(?=[A-ZА-ЯЁ ]{6,}\\s*<)[A-ZА-ЯЁ]{2,}( [A-ZА-ЯЁ]{2,}){0,3}\\s*</(p|span|div|small|h6|li)>",
+          "flags": "gu"
+        }
       ],
       "max": 0
     },

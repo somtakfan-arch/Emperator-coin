@@ -29,7 +29,7 @@ header.top p{margin:0;max-width:68ch;color:var(--ink-2)}
 aside{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px);display:grid;gap:18px}
 @media (max-width:900px){aside{position:static}}
 .panel{background:var(--sheet);border:1px solid var(--rule);padding:14px}
-.panel h2{font:600 11px var(--f-mono);text-transform:uppercase;letter-spacing:.1em;margin:0 0 10px;color:var(--ink-2)}
+.panel h2{font:600 13px var(--f-body);margin:0 0 10px;color:var(--ink-2)}
 .tally{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-family:var(--f-mono)}
 .tally div{padding:6px 8px;border-left:3px solid}
 .tally b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
@@ -65,7 +65,7 @@ section.overview{margin-bottom:40px}
 .rule:target{outline:2px solid var(--mark)}
 .spec{border-right:1px solid var(--rule);min-width:0;display:flex;flex-direction:column}
 @media (max-width:720px){.spec{border-right:0;border-bottom:1px solid var(--rule)}}
-.spec-label{font:10px var(--f-mono);text-transform:uppercase;letter-spacing:.1em;color:var(--ink-2);padding:6px 10px;border-bottom:1px dashed var(--rule)}
+.spec-label{font:12px var(--f-body);color:var(--ink-2);padding:6px 10px;border-bottom:1px dashed var(--rule)}
 .spec-body{flex:1;display:flex;align-items:center;justify-content:center;padding:14px;overflow:hidden;min-height:150px;background:repeating-linear-gradient(45deg,transparent 0 8px,color-mix(in srgb,var(--rule) 25%,transparent) 8px 9px)}
 .spec-body>.ai{width:100%}
 .info{padding:12px 14px;display:grid;gap:8px;align-content:start;min-width:0}
@@ -73,7 +73,7 @@ section.overview{margin-bottom:40px}
 .rid{font:600 12px var(--f-mono);color:var(--mark)}
 .info h3{font:600 17px/1.3 var(--f-body);margin:2px 0 0;text-wrap:balance}
 .info p{margin:0;font-size:14px}
-.info .lbl{font:10px var(--f-mono);text-transform:uppercase;letter-spacing:.1em;color:var(--ink-2);display:block;margin-bottom:1px}
+.info .lbl{font:500 12px var(--f-body);color:var(--ink-2);display:block;margin-bottom:1px}
 .seg{display:inline-flex;border:1px solid var(--rule)}
 .seg label{cursor:pointer}
 .seg input{position:absolute;opacity:0;pointer-events:none}
@@ -316,7 +316,7 @@ function ruleHTML(r) {
   const seg = ['block','warn','off'].map(v =>
     `<label><input type="radio" name="sev-${r.id}" value="${v}" id="sev-${r.id}-${v}" ${sev[r.id]===v?'checked':''}><span class="s-${v}">${v}</span></label>`).join('');
   const detect = r.detect.length
-    ? `<details><summary>как ловит хук${r.max!=null?` · срабатывает, если больше ${r.max}`:''}</summary><pre>${esc(r.detect.join('\n'))}</pre></details>`
+    ? `<details><summary>как ловит хук${r.max!=null?` · срабатывает, если больше ${r.max}`:''}</summary><pre>${esc(r.detect.map(d => typeof d === 'string' ? d : d.re + '   (с учётом регистра)').join('\n'))}</pre></details>`
     : `<span class="manual">хук не ловит, только правило в скилле и /human-web:audit</span>`;
   return `<article class="rule${sev[r.id]==='off'?' is-off':''}" id="rule-${r.id}" data-id="${r.id}" data-cat="${r.cat}">
     <div class="spec"><div class="spec-label">так делает Claude</div><div class="spec-body">${S[r.id]||''}</div></div>
