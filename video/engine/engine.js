@@ -737,6 +737,7 @@ function parseSub(text) {
   return out;
 }
 function subsLayer(sh, lt) {
+  if (sh.noSubs) return '';
   let st, words, dur;
   if (sh.voT) {
     const cur = sh.voT.find(v => lt >= v[0] && lt < v[0] + v[1] + .3);
@@ -751,7 +752,7 @@ function subsLayer(sh, lt) {
   }
   const lines = [[]]; let len = 0;
   words.forEach((w, k) => { if (len + w[0].length > 22 && lines[lines.length - 1].length) { lines.push([]); len = 0; } lines[lines.length - 1].push(k); len += w[0].length + 1; });
-  const y0 = (sh.subY || (sh.type === 'title' ? 1210 : 1110)) - (lines.length - 1) * 26;
+  const y0 = (sh.subY || ({ title: 1210, outro: 800, card: 1060, list: 1060, vs: 1060 }[sh.type]) || 1110) - (lines.length - 1) * 26;
   let out = '';
   lines.forEach((ln, li) => {
     let spans = '';
