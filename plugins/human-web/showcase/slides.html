@@ -167,7 +167,7 @@ body{background:var(--bg);color:var(--ink);font:14px/1.5 var(--f-body);display:f
 <section class="slide" data-title="Как это работает"><div class="slide-in">
   <div class="slide-cap"><b>Как это работает</b><span>4</span></div>
   <div class="ai pad c">
-    <p class="eb">Как это работает</p>
+    <p class="eb" data-hw="T05">Как это работает</p>
     <h3 data-hw="C04">Просто. Быстро. Эффективно.</h3>
     <div class="g3" style="margin-top:28px" data-hw="L07">
       <div><div class="num" style="color:#c7d2fe">01</div><h4>Подключите</h4><p>Интеграция за пару минут.</p></div>
@@ -192,7 +192,7 @@ body{background:var(--bg);color:var(--ink);font:14px/1.5 var(--f-body);display:f
 <section class="slide" data-title="Тарифы"><div class="slide-in">
   <div class="slide-cap"><b>Тарифы</b><span>6</span></div>
   <div class="ai pad c">
-    <p class="eb">Тарифы</p>
+    <p class="eb" data-hw="T05">Тарифы</p>
     <h3>Простые и прозрачные цены</h3>
     <div class="g3" style="margin-top:28px;align-items:center" data-hw="L08">
       <div class="card"><h4>Старт</h4><div class="num" style="color:#111827">0 ₽</div><ul class="plain"><li><span class="chk">✓</span>3 проекта</li><li><span class="chk">✓</span>Базовая аналитика</li></ul><span class="b2" data-hw="C05">Начать</span></div>
@@ -301,7 +301,9 @@ const slides = [...deck.querySelectorAll('.slide')];
 const dotsEl = document.getElementById('dots');
 const statusEl = document.getElementById('status');
 const toastEl = document.getElementById('toast');
-const sent = [];
+let sent = [];
+try { sent = JSON.parse(sessionStorage.getItem('hw-sent') || '[]'); } catch {}
+const saveSent = () => { try { sessionStorage.setItem('hw-sent', JSON.stringify(sent)); } catch {} };
 let idx = 0, comments = null, mode = 'local', busy = false;
 
 slides.forEach((s, i) => {
@@ -366,6 +368,9 @@ deck.addEventListener('click', async e => {
   const text = describe(el);
   if (sent.includes(text)) { toast('Это уже отправлено'); return; }
   busy = true;
+  sent.push(text);
+  el.classList.add('hw-sent');
+  toast('Отправляю…');
   try {
     if (mode === 'claude') {
       await comments.sendToClaude({ anchor: await comments.anchorFor(el), text });
@@ -376,11 +381,12 @@ deck.addEventListener('click', async e => {
     } else {
       toast('Отмечено. Нажми «Скопировать отмеченное» и пришли в чат');
     }
-    sent.push(text);
-    el.classList.add('hw-sent');
+    saveSent();
     dotsEl.children[slides.indexOf(el.closest('.slide'))].classList.add('flagged');
     syncIdx();
   } catch (err) {
+    sent = sent.filter(t => t !== text);
+    el.classList.remove('hw-sent');
     const code = err && err.code;
     if (code === 'claude_unavailable') { mode = 'comment'; setStatus('off', 'Claude не слушает: сохраняю комментариями'); toast('Claude сейчас не на связи. Нажми ещё раз, сохраню комментарием'); }
     else if (code === 'rate_limited') toast('Слишком часто. Подожди пару секунд');
