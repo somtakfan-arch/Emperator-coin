@@ -5,3 +5,6 @@ engine/voices/
 build/fakty/*.wav
 build/fakty/*.json
 build/fakty/vo/
+build/brendy/*.wav
+build/brendy/*.json
+build/brendy/vo/

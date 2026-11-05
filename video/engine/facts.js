@@ -69,7 +69,7 @@ const voAt = (P, i, def) => (P.voT && P.voT[i]) ? P.voT[i][0] : def;
 T.hook = {
   draw(lt, P) {
     let s = bgFact(P, lt);
-    if (P.tag) { const p = pop(lt, .05); s += `<g transform="translate(${W / 2},170) scale(${p})"><rect x="-110" y="-34" width="220" height="68" rx="34" fill="${P.tagCol || YEL}" stroke="${OL}" stroke-width="6"/><text y="13" font-size="34" font-weight="900" fill="${OL}" text-anchor="middle">${esc(P.tag)}</text></g>`; }
+    if (P.tag) { const p = pop(lt, .05); s += `<g transform="translate(${W / 2},170) scale(${p})"><rect x="${-(P.tag.length * 11 + 40)}" y="-34" width="${P.tag.length * 22 + 80}" height="68" rx="34" fill="${P.tagCol || YEL}" stroke="${OL}" stroke-width="6"/><text y="13" font-size="34" font-weight="900" fill="${OL}" text-anchor="middle">${esc(P.tag)}</text></g>`; }
     const p = pop(lt, .15, .45);
     const r = richText(W / 2, 0, P.text, 76, 13);
     s += `<g transform="translate(0,${470 - r.h / 2}) translate(${W / 2},0) scale(${p}) translate(${-W / 2},0)">${r.s}</g>`;

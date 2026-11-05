@@ -796,7 +796,7 @@ function timeline(sh, si, vo, ep) {
   let t = sh.lead ?? .35;
   seq.forEach(([who, text], k) => {
     const v = vo[si + '_' + k]; if (!v) return;
-    if (who === 'n') o.voT.push([t, v.dur, text]);
+    if (who === 'n' || who === 'nb') o.voT.push([t, v.dur, text]);
     else if (who === 'A' || who === 'B') o.lines.push({ at: t, who, text, until: t + v.dur + .5 });
     else if (who === 'door') o.door = Object.assign({}, sh.door, { line: text, lineAt: t, until: t + v.dur + .8 });
     else if (who === 'teacher') o.teacher = Object.assign({}, sh.teacher, { at: t, text });

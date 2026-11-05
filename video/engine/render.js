@@ -3,7 +3,7 @@ const { chromium } = require('playwright');
 const { spawn, spawnSync } = require('child_process');
 const path = require('path'), fs = require('fs');
 const args = process.argv.slice(2);
-const eps = args[0] === 'all' ? [0,1,2,3,4,5,6,7,8,9,10] : args[0] === 'facts' ? [...Array(15)].map((_, i) => 101 + i) : args[0].split(',').map(Number);
+const eps = args[0] === 'all' ? [0,1,2,3,4,5,6,7,8,9,10] : args[0] === 'facts' ? [...Array(15)].map((_, i) => 101 + i) : args[0] === 'brands' ? [...Array(10)].map((_, i) => 201 + i) : args[0].split(',').map(Number);
 const out = path.resolve(args[1] || 'out');
 const preview = args.includes('--preview');
 fs.mkdirSync(out, { recursive: true });
@@ -37,7 +37,7 @@ fs.mkdirSync(out, { recursive: true });
     const r = spawnSync('python3', [path.join(__dirname, 'audio.py'), `${out}/ep${n}.json`, `${out}/ep${n}.wav`], { stdio: 'inherit' });
     if (r.status) process.exit(1);
     const FPS = 30, N = Math.round(dur * FPS);
-    const file = n > 100 ? `${out}/fakt-${String(n - 100).padStart(2, '0')}.mp4` : `${out}/seriya-${String(n).padStart(2, '0')}.mp4`;
+    const file = n > 200 ? `${out}/brend-${String(n - 200).padStart(2, '0')}.mp4` : n > 100 ? `${out}/fakt-${String(n - 100).padStart(2, '0')}.mp4` : `${out}/seriya-${String(n).padStart(2, '0')}.mp4`;
     const ff = spawn('ffmpeg', ['-v', 'error', '-y', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-', '-i', `${out}/ep${n}.wav`, '-c:v', 'libx264', '-preset', 'medium', '-crf', '22', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k', '-shortest', '-movflags', '+faststart', file], { stdio: ['pipe', 'inherit', 'inherit'] });
     const t0 = Date.now();
     for (let i = 0; i < N; i++) {
