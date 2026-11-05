@@ -131,7 +131,7 @@ body{background:var(--bg);color:var(--ink);font:14px/1.5 var(--f-body);display:f
           <span class="b bw pulse" data-hw="M04">Начать бесплатно</span>
           <span class="b2 b2g" data-hw="C05">Узнать больше</span>
         </div>
-        <p style="font-size:13px;margin-top:14px" data-hw="L06">Без карты · 14 дней бесплатно · Отмена в любой момент</p>
+        <p style="font-size:13px;margin-top:14px" data-hw="L13">Без карты · 14 дней бесплатно · Отмена в любой момент</p>
       </div>
     </div>
   </div>
@@ -339,7 +339,7 @@ function toast(t) { toastEl.textContent = t; toastEl.classList.add('show'); clea
 function describe(el) {
   const slide = el.closest('.slide');
   const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 140);
-  const cls = (el.getAttribute('class') || '').trim();
+  const cls = [...el.classList].filter(c => !c.startsWith('hw-')).join(' ');
   const rule = el.dataset.hw ? ` (по каталогу: ${el.dataset.hw})` : ' (в каталоге нет, новое)';
   return `Выглядит как ИИ. Слайд ${slides.indexOf(slide) + 1} «${slide.dataset.title}»: <${el.tagName.toLowerCase()}${cls ? ' class=' + cls : ''}> «${text || 'без текста'}»${rule}`;
 }
