@@ -2,3 +2,6 @@ build/*.wav
 build/*.json
 build/vo/
 engine/voices/
+build/fakty/*.wav
+build/fakty/*.json
+build/fakty/vo/
