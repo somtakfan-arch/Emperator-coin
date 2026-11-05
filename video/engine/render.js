@@ -3,7 +3,7 @@ const { chromium } = require('playwright');
 const { spawn, spawnSync } = require('child_process');
 const path = require('path'), fs = require('fs');
 const args = process.argv.slice(2);
-const eps = args[0] === 'all' ? [1,2,3,4,5,6,7,8,9,10] : args[0].split(',').map(Number);
+const eps = args[0] === 'all' ? [0,1,2,3,4,5,6,7,8,9,10] : args[0].split(',').map(Number);
 const out = path.resolve(args[1] || 'out');
 const preview = args.includes('--preview');
 fs.mkdirSync(out, { recursive: true });
@@ -15,6 +15,15 @@ fs.mkdirSync(out, { recursive: true });
     await p.goto('file://' + path.join(__dirname, 'player.html') + '?ep=' + n);
     await p.evaluate(() => READY);
     if (errs.length) { console.log('EP', n, 'ERR', errs); process.exit(1); }
+    const lines = await p.evaluate(() => VOICE_LINES);
+    if (lines.length) {
+      fs.writeFileSync(`${out}/ep${n}_lines.json`, JSON.stringify(lines));
+      const voices = process.env.PIPER_VOICES || path.join(__dirname, 'voices');
+      const r = spawnSync('python3', [path.join(__dirname, 'tts.py'), `${out}/ep${n}_lines.json`, path.join(out, 'vo'), voices], { encoding: 'utf8' });
+      if (r.status) { console.log(r.stderr); process.exit(1); }
+      const vo = JSON.parse(r.stdout.trim().split('\n').pop());
+      await p.evaluate(v => init(v), vo);
+    }
     const dur = await p.evaluate(() => DUR);
     if (preview) {
       const shots = await p.evaluate(() => 0);

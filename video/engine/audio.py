@@ -174,6 +174,16 @@ for at, kind, o in spec['events']:
         add(out, at, noise(.25, .08, True) * np.sin(np.pi * T(int(.25 * SR)) / .25), .08)
     elif kind == 'flip':
         add(out, at, noise(.18, .04, True), .18)
+    elif kind == 'vo':
+        with wave.open(o['file']) as wf:
+            x = np.frombuffer(wf.readframes(wf.getnframes()), dtype=np.int16).astype(np.float64) / 32768
+        add(out, at, x, .95)
+        i = int(at * SR); j = min(N, i + len(x) + int(.2 * SR))
+        duck[max(0, i - int(.1 * SR)):j] = np.minimum(duck[max(0, i - int(.1 * SR)):j], .35)
+    elif kind == 'rain':
+        n = int(o.get('d', 5) * SR); w = rng.standard_normal(n)
+        w = np.convolve(w, np.ones(8) / 8, mode='same') * np.minimum(1, T(n) / .5) * np.minimum(1, (n / SR - T(n)) / .5)
+        add(out, at, w, .07)
     elif kind == 'talk':
         base = VOICE.get(o.get('who', 'kid'), 450)
         syl = int(min(14, max(3, o.get('n', 10) / 3)))

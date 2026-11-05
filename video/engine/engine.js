@@ -41,6 +41,7 @@ const PRESETS = {
   gleb:    { hair: 'short', hairCol: '#c27b2a', top: '#b23a48', top2: '#9c3240', glasses: true },
   rustam:  { hair: 'bald', hairCol: '#2b2b2b', top: '#3f4a63', top2: '#36405a', mustache: true, beard: true, wide: 1.12 },
   baker:   { hair: 'bun', hairCol: '#c9a26b', top: '#f1e6d2', top2: '#e5d6bb', blushDefault: true },
+  man:     { hair: 'short', hairCol: '#5b5f66', top: '#6b7280', top2: '#5d6470', mustache: true },
   teacher: { hair: 'bun', hairCol: '#8b8f99', top: '#5b6b8a', top2: '#4f5e7b', glasses: true },
 };
 
@@ -205,6 +206,7 @@ const SITES = {
   folio: { name: 'Портфолио', tag: 'Сайты, которые работают', url: 'moi-saity.ru', bg: '#1b1f2a', acc: '#e6e8ee', ink: '#f3f4f7', btnInk: '#1b1f2a', icon: 'code', cards: ['#e6b36d', '#8a8f9c', '#f783ac'], labels: ['Колосок', 'Борода', 'Пион'] },
   dvor: { name: 'Сытый двор', tag: 'Доставка за 40 минут', url: 'sytyi-dvor.ru', bg: '#e9f3e1', acc: '#2f7d4f', ink: '#1f3b2a', icon: 'bowl', cards: ['#f4a261', '#e9c46a', '#a7c957'] },
   dvorapp: { name: 'Сытый двор', tag: 'Приложение · 4 ресторана', url: 'app.sytyi-dvor.ru', bg: '#e9f3e1', acc: '#2f7d4f', ink: '#1f3b2a', icon: 'bowl', cards: ['#f4a261', '#e9c46a', '#a7c957'], btn: 'Открыть' },
+  first: { name: 'Мой первый сайт', tag: 'Привет! Я учусь верстать', url: 'localhost:3000', bg: '#1b2a3a', acc: '#7dd3fc', ink: '#f3f4f7', btnInk: '#0f1a2c', icon: 'code', cards: ['#7dd3fc', '#bef264', '#f9a8d4'], btn: 'Нажми меня' },
   monitor: { product: true, title: 'Монитор 27"', price: '12 000 ₽', url: 'market.ru/monitor', icon: 'monitor' },
   laptop: { product: true, title: 'Ноутбук 16"', price: '95 000 ₽', url: 'market.ru/laptop', icon: 'laptop' },
 };
@@ -467,7 +469,7 @@ T.room = {
     if (P.broken) ev.push([P.broken, 'error']);
     let typing = false;
     for (let x = 0; x < d; x += .09) { const st = kf(P.k, x); if (st.typing) ev.push([x + Math.random() * .04, 'key']); }
-    (P.say || []).forEach(b => ev.push([b.at, 'talk', { who: 'kid', n: b.text.length }]));
+    if (!P.seq) (P.say || []).forEach(b => ev.push([b.at, 'talk', { who: 'kid', n: b.text.length }]));
     if (P.door && P.door.line) ev.push([P.door.lineAt, 'talk', { who: P.door.who || 'mom', n: P.door.line.length }]);
     return ev;
   },
@@ -625,18 +627,19 @@ T.talk = {
     const side = (who, x, kfl, faceDir) => {
       const st = kf(kfl, lt);
       const o = Object.assign({ who, look: [faceDir * .7, -.1] }, st);
-      const speaking = lines.some(l => l.who === (x < 360 ? 'A' : 'B') && talking(lt, l.at, l.text));
+      const speaking = lines.some(l => l.who === (x < 360 ? 'A' : 'B') && (l.until !== undefined ? lt >= l.at && lt < l.until - .5 : talking(lt, l.at, l.text)));
       if (speaking) { o.mouth = Math.floor(lt * 8) % 2 ? (st.mouthTalk || 'open') : (st.mouth || 'smile'); o.armR = (st.armR ?? 10) + Math.sin(lt * 6) * 14; }
       return `<g transform="translate(${x},1250) scale(.95)">${person(o)}</g>`;
     };
     s += side(P.A, 185, P.ak, 1) + side(P.B, 535, P.bk, -1);
+    if (P.rain) { s += `<rect width="${W}" height="${H}" fill="#2b3a55" opacity=".25"/>`; for (let i = 0; i < 70; i++) { const x = (rnd(i) * (W + 200) + lt * 260) % (W + 200) - 100, y = (rnd(i + 40) * H + lt * 1300) % H; s += `<line x1="${x}" y1="${y}" x2="${x - 12}" y2="${y + 40}" stroke="#cfe3ff" stroke-width="3" opacity=".55"/>`; } }
     if (cur && (cur.until === undefined || lt < cur.until)) {
       const left = cur.who === 'A';
       s += speech(left ? 280 : 440, cur.y ?? 590, cur.text, seg(lt, cur.at, cur.at + .35), left ? -80 : 80);
     }
     return s;
   },
-  sfx(P) { return (P.lines || []).map(l => [l.at, 'talk', { who: l.who === 'A' ? P.A : P.B, n: l.text.length }]); },
+  sfx(P) { return P.seq ? (P.rain ? [[0, 'rain', { d: P.d }]] : []) : (P.lines || []).map(l => [l.at, 'talk', { who: l.who === 'A' ? P.A : P.B, n: l.text.length }]); },
 };
 
 T.board = {
@@ -734,11 +737,18 @@ function parseSub(text) {
   return out;
 }
 function subsLayer(sh, lt) {
+  let st, words, dur;
+  if (sh.voT) {
+    const cur = sh.voT.find(v => lt >= v[0] && lt < v[0] + v[1] + .3);
+    if (!cur) return '';
+    st = cur[0]; words = parseSub(cur[2]); dur = cur[1] * .85;
+  } else {
   const list = sh.s || []; if (!list.length) return '';
   const pad = .15, span = (sh.d - pad * 2) / list.length;
   const i = Math.min(list.length - 1, Math.floor((lt - pad) / span));
   if (lt < pad || lt > sh.d - .08) return '';
-  const st = pad + i * span, words = parseSub(list[i]), dur = span * .65;
+  st = pad + i * span; words = parseSub(list[i]); dur = span * .65;
+  }
   const lines = [[]]; let len = 0;
   words.forEach((w, k) => { if (len + w[0].length > 22 && lines[lines.length - 1].length) { lines.push([]); len = 0; } lines[lines.length - 1].push(k); len += w[0].length + 1; });
   const y0 = (sh.subY || 1110) - (lines.length - 1) * 26;
@@ -752,9 +762,35 @@ function subsLayer(sh, lt) {
 }
 
 // ---------------- СБОРКА СЕРИИ ----------------
-function buildEpisode(ep) {
+// Озвученный кадр: seq = [[кто, текст], ...]. 'n' — рассказчик (идёт в субтитры),
+// 'A'/'B' — собеседники в диалоге, 'kid' — пузырь героя в комнате.
+function voiceLines(ep) {
+  const out = [];
+  ep.shots.forEach((sh, si) => (sh.seq || []).forEach(([who, text], k) => {
+    const w = who === 'A' ? sh.A : who === 'B' ? sh.B : who;
+    out.push({ id: si + '_' + k, who: w, text });
+  }));
+  return out;
+}
+function timeline(sh, si, vo) {
+  if (!sh.seq || !vo) return sh;
+  const o = Object.assign({}, sh, { voT: [], voEv: [], lines: [], say: [] });
+  let t = sh.lead ?? .35;
+  sh.seq.forEach(([who, text], k) => {
+    const v = vo[si + '_' + k]; if (!v) return;
+    if (who === 'n') o.voT.push([t, v.dur, text]);
+    else if (who === 'A' || who === 'B') o.lines.push({ at: t, who, text, until: t + v.dur + .5 });
+    else o.say.push({ at: t, text, until: t + v.dur + .5 });
+    o.voEv.push([t, v.file]);
+    t += v.dur + (sh.gap ?? .22);
+  });
+  o.d = Math.max(sh.d || 0, t + (sh.tail ?? .4));
+  return o;
+}
+function buildEpisode(ep, vo) {
   let t = 0, bal = ep.startBal || 0;
-  const shots = ep.shots.map(sh => {
+  const shots = ep.shots.map((sh0, si) => {
+    const sh = timeline(sh0, si, vo);
     const o = Object.assign({}, sh, { start: t, balStart: bal });
     if (sh.bal) { o.flash = { at: sh.balAt ?? (sh.type === 'pay' ? sh.at + 1.2 : 1), v: sh.bal }; bal += sh.bal; }
     o.balEnd = bal;
@@ -785,6 +821,7 @@ function soundEvents(B) {
   const ev = [];
   for (const sh of B.shots) {
     if (sh.start > 0) ev.push([sh.start - .12, 'whoosh']);
+    for (const v of sh.voEv || []) ev.push([sh.start + v[0], 'vo', { file: v[1] }]);
     for (const [at, k, o] of (T[sh.type].sfx ? T[sh.type].sfx(sh, sh.d) : [])) if (at < sh.d) ev.push([sh.start + at, k, o || {}]);
     for (const st of sh.stamps || []) ev.push([sh.start + st.at, 'stamp']);
     for (const a of sh.shake || []) ev.push([sh.start + a, 'thud']);
@@ -793,4 +830,4 @@ function soundEvents(B) {
   const moods = B.shots.map(sh => [sh.start, sh.mood || B.ep.mood || 'chill']);
   return { dur: B.dur, events: ev.map(e => [+e[0].toFixed(3), e[1], e[2] || {}]), moods };
 }
-if (typeof module !== 'undefined') module.exports = { buildEpisode, drawFrame, soundEvents };
+if (typeof module !== 'undefined') module.exports = { buildEpisode, drawFrame, soundEvents, voiceLines };
