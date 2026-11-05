@@ -1,0 +1,412 @@
+<title>Найди робота</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;600;800&display=swap">
+<style>
+/* Макет: экран-пульт. Сверху счётчик и статус связи, посередине слайд с образцом, снизу листалка. */
+:root{
+  --bg:#e9eae5; --bar:#f7f7f4; --ink:#1c1e1b; --ink-2:#5d6159; --line:#d2d4cc; --mark:#b4231f; --ok:#2f6b3a;
+  --f-body:"Golos Text",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#121412;--bar:#1c1f1c;--ink:#e7e9e3;--ink-2:#a1a59c;--line:#333732;--mark:#ff6b5e;--ok:#7cc488;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#121412;--bar:#1c1f1c;--ink:#e7e9e3;--ink-2:#a1a59c;--line:#333732;--mark:#ff6b5e;--ok:#7cc488;color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font:14px/1.5 var(--f-body);display:flex;flex-direction:column;overflow:hidden}
+.top,.bottom{background:var(--bar);border-color:var(--line);border-style:solid;border-width:0;display:flex;align-items:center;gap:12px;padding-block:9px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.top{border-bottom-width:1px;justify-content:space-between;flex-wrap:wrap}
+.bottom{border-top-width:1px;justify-content:space-between}
+.top h1{font:600 15px var(--f-body);margin:0}
+.top .hint{color:var(--ink-2);font-size:13px}
+.status{font:12px var(--f-mono);display:flex;align-items:center;gap:6px;color:var(--ink-2)}
+.status i{width:8px;height:8px;border-radius:50%;background:var(--ink-2)}
+.status.on i{background:var(--ok)}
+.status.off i{background:var(--mark)}
+.deck{flex:1;min-height:0;display:flex;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x mandatory;scrollbar-width:none;overscroll-behavior-x:contain}
+.deck::-webkit-scrollbar{display:none}
+.slide{flex:0 0 100%;scroll-snap-align:start;overflow-y:auto;padding-block:20px 28px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.slide-in{max-width:1040px;margin:0 auto;display:grid;gap:10px}
+.slide-cap{display:flex;justify-content:space-between;align-items:baseline;gap:10px;font:12px var(--f-mono);color:var(--ink-2)}
+.slide-cap b{font:600 16px var(--f-body);color:var(--ink)}
+.nav-btn{font:500 14px var(--f-body);border:1px solid var(--ink);background:transparent;color:var(--ink);padding:8px 14px;cursor:pointer;min-width:96px}
+.nav-btn:disabled{opacity:.35;cursor:default}
+.nav-btn:focus-visible{outline:2px solid var(--mark);outline-offset:2px}
+.dots{display:flex;gap:5px;flex-wrap:wrap;justify-content:center}
+.dots button{width:9px;height:9px;padding:0;border:1px solid var(--ink-2);background:transparent;cursor:pointer}
+.dots button[aria-current="true"]{background:var(--ink);border-color:var(--ink)}
+.dots button.flagged{border-color:var(--mark);background:var(--mark)}
+.count{font:12px var(--f-mono);color:var(--ink-2);white-space:nowrap}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(64px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bar);font:13px var(--f-body);padding:9px 14px;max-width:min(92vw,520px);z-index:20;pointer-events:none;opacity:0;transition:opacity .2s}
+.toast.show{opacity:1}
+.fallback{display:none;gap:6px;align-items:center}
+.fallback.show{display:flex}
+.fallback button{font:12px var(--f-body);border:1px solid var(--line);background:transparent;color:var(--ink);padding:4px 8px;cursor:pointer}
+
+/* Подсветка под пальцем */
+.ai [data-hw]{cursor:crosshair}
+.ai .hw-hover{outline:2px dashed #b4231f;outline-offset:3px}
+.ai .hw-sent{outline:3px solid #b4231f;outline-offset:3px}
+.ai .hw-sent::after{content:"отправлено";position:absolute;font:600 10px var(--f-mono);background:#b4231f;color:#fff;padding:2px 5px;transform:translate(-4px,-22px);pointer-events:none;letter-spacing:0;text-transform:none;-webkit-text-fill-color:#fff}
+
+/* ===== Образцы «как у AI». Цвета зафиксированы намеренно. ===== */
+.ai{font-family:Inter,system-ui,sans-serif;color:#111827;background:#fff;font-size:15px;line-height:1.55;position:relative;overflow:hidden;border-radius:14px;border:1px solid #e5e7eb}
+.ai *{box-sizing:border-box}
+.ai [data-hw]{position:relative}
+.ai h2{font-size:clamp(28px,4.6vw,52px);line-height:1.08;font-weight:800;letter-spacing:-.03em;margin:14px auto 12px;max-width:760px;color:#0f172a}
+.ai h3{font-size:clamp(22px,3vw,34px);line-height:1.15;font-weight:800;letter-spacing:-.02em;margin:6px 0;color:#0f172a}
+.ai h4{font-size:17px;font-weight:700;margin:10px 0 4px;color:#0f172a}
+.ai p{margin:6px 0;color:#6b7280}
+.ai .pad{padding:clamp(20px,4vw,48px)}
+.ai .c{text-align:center}
+.ai .mx{max-width:560px;margin-left:auto;margin-right:auto}
+.ai .grad{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff}
+.ai .grad h2,.ai .grad h3,.ai .grad h4{color:#fff}.ai .grad p{color:rgba(255,255,255,.85)}
+.ai .gtext{background:linear-gradient(90deg,#fde68a,#f9a8d4);-webkit-background-clip:text;background-clip:text;color:transparent}
+.ai .gtext2{background:linear-gradient(90deg,#6366f1,#ec4899);-webkit-background-clip:text;background-clip:text;color:transparent}
+.ai .glass{background:rgba(255,255,255,.14);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.3);border-radius:18px;padding:18px;color:#fff}
+.ai .card{background:#fff;border-radius:18px;box-shadow:0 10px 30px rgba(17,24,39,.09);padding:22px;transition:all .3s}
+.ai .card:hover{transform:translateY(-4px);box-shadow:0 20px 40px rgba(17,24,39,.14)}
+.ai .b{display:inline-block;padding:12px 24px;border-radius:999px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;font-weight:600;font-size:15px;border:0}
+.ai .bw{background:#fff;color:#5b21b6}
+.ai .b2{display:inline-block;padding:11px 23px;border-radius:999px;border:1px solid #d1d5db;color:#374151;font-weight:600;font-size:15px;background:#fff}
+.ai .b2g{background:transparent;color:#fff;border-color:rgba(255,255,255,.5)}
+.ai .pill{display:inline-block;padding:5px 14px;border-radius:999px;background:#eef2ff;color:#4f46e5;font-size:13px;font-weight:600;border:1px solid #c7d2fe}
+.ai .pillg{background:rgba(255,255,255,.18);color:#fff;border-color:rgba(255,255,255,.35)}
+.ai .eb{text-transform:uppercase;letter-spacing:.14em;font-size:12px;color:#6366f1;font-weight:700;margin:0}
+.ai .g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+.ai .row{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;align-items:center}
+.ai .blob{position:absolute;border-radius:50%;filter:blur(50px);opacity:.7;pointer-events:none}
+.ai .ico{font-size:30px;line-height:1}
+.ai .num{font-size:clamp(30px,4vw,44px);font-weight:800;color:#4f46e5;letter-spacing:-.02em}
+.ai .logo{font-weight:800;color:#9ca3af;letter-spacing:-.02em;font-size:20px}
+.ai .av{width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,#fbcfe8,#c7d2fe);flex:none}
+.ai .dots-bg{background-image:radial-gradient(#c7d2fe 1px,transparent 1px);background-size:16px 16px}
+.ai .pulse{animation:aipulse 1.6s infinite}
+@keyframes aipulse{0%,100%{box-shadow:0 0 0 0 rgba(118,75,162,.5)}50%{box-shadow:0 0 0 12px rgba(118,75,162,0)}}
+.ai .float{animation:aifloat 3s ease-in-out infinite}
+@keyframes aifloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.ai .caret::after{content:"|";animation:aiblink 1s steps(1) infinite;color:#6366f1}
+@keyframes aiblink{50%{opacity:0}}
+.ai code.k{display:block;font:13px/1.6 var(--f-mono);background:#0f172a;color:#cbd5e1;padding:16px;border-radius:12px;white-space:pre;overflow-x:auto;text-align:left}
+.ai .cm{color:#64748b}
+.ai .nav{display:flex;justify-content:space-between;align-items:center;padding:16px clamp(16px,4vw,40px);font-size:14px;color:#374151;gap:12px}
+.ai .nav .links{display:flex;gap:22px}
+.ai .chk{color:#4f46e5;font-weight:700;margin-right:6px}
+.ai ul.plain{list-style:none;padding:0;margin:12px 0;text-align:left;display:grid;gap:6px;color:#374151}
+.ai .faq{border-bottom:1px solid #e5e7eb;padding:14px 0;text-align:left}
+.ai .faq h4{display:flex;justify-content:space-between;margin:0}
+.ai .stars{color:#f59e0b;letter-spacing:2px}
+.ai .split{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+@media (max-width:720px){.ai .g3,.ai .split{grid-template-columns:minmax(0,1fr)}.ai .nav .links{display:none}}
+@media (prefers-reduced-motion:reduce){.ai .pulse,.ai .float,.ai .caret::after{animation:none}.ai .card{transition:none}}
+</style>
+
+<header class="top">
+  <div><h1>Найди робота</h1><span class="hint">Листай и тапай по всему, что выглядит как сделанное ИИ. Каждый тап сразу уходит Claude.</span></div>
+  <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+    <div class="fallback" id="fallback"><button type="button" id="copyList">Скопировать отмеченное</button></div>
+    <span class="status" id="status"><i></i><span>подключаюсь…</span></span>
+  </div>
+</header>
+
+<main class="deck" id="deck" aria-label="Слайды">
+
+<section class="slide" data-title="Шапка и первый экран"><div class="slide-in">
+  <div class="slide-cap"><b>Шапка и первый экран</b><span>1</span></div>
+  <div class="ai">
+    <div class="nav">
+      <b style="font-size:18px" data-hw="V07">⚡ Nexora</b>
+      <div class="links" data-hw="K03"><span>Возможности</span><span>Тарифы</span><span>Отзывы</span><span>FAQ</span></div>
+      <span class="b" style="padding:9px 18px;font-size:14px" data-hw="C05">Начать</span>
+    </div>
+    <div class="grad c pad" style="position:relative;padding-block:clamp(48px,8vw,96px)" data-hw="V01">
+      <div class="blob" style="width:240px;height:240px;background:#f0abfc;top:-60px;left:-40px" data-hw="V04"></div>
+      <div class="blob" style="width:260px;height:260px;background:#93c5fd;bottom:-90px;right:-40px" data-hw="V04"></div>
+      <div style="position:relative">
+        <span class="pill pillg" data-hw="L09">✨ Новое: AI-аналитика 2.0 →</span>
+        <h2 data-hw="C01">Раскройте весь потенциал вашего бизнеса с <span class="gtext" data-hw="V02">искусственным интеллектом</span></h2>
+        <p class="mx" data-hw="C02">Nexora — это не просто платформа — это ваш надёжный партнёр на пути к росту. Бесшовная интеграция, мгновенные инсайты и революционная автоматизация.</p>
+        <div class="row" style="margin-top:22px">
+          <span class="b bw pulse" data-hw="M04">Начать бесплатно</span>
+          <span class="b2 b2g" data-hw="C05">Узнать больше</span>
+        </div>
+        <p style="font-size:13px;margin-top:14px" data-hw="L13">Без карты · 14 дней бесплатно · Отмена в любой момент</p>
+      </div>
+    </div>
+  </div>
+</div></section>
+
+<section class="slide" data-title="Логотипы и цифры"><div class="slide-in">
+  <div class="slide-cap"><b>Логотипы и цифры</b><span>2</span></div>
+  <div class="ai pad c">
+    <p class="eb" data-hw="T05">Нам доверяют более 10 000 компаний</p>
+    <div class="row" style="gap:36px;margin:20px 0 36px;opacity:.6;filter:grayscale(1)" data-hw="L05"><span class="logo">◆ Acme</span><span class="logo">▲ Vertex</span><span class="logo">● Globex</span><span class="logo">■ Initech</span><span class="logo">✦ Umbrella</span></div>
+    <div class="g3 mx" data-hw="L06">
+      <div><div class="num">10K+</div><p>довольных клиентов</p></div>
+      <div><div class="num">99.9%</div><p>аптайм</p></div>
+      <div><div class="num">24/7</div><p>поддержка</p></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="slide" data-title="Возможности"><div class="slide-in">
+  <div class="slide-cap"><b>Возможности</b><span>3</span></div>
+  <div class="ai pad c" style="background:#f9fafb">
+    <p class="eb" data-hw="T05">Возможности</p>
+    <h3 data-hw="T04">Всё, Что Нужно Для Роста</h3>
+    <p class="mx" data-hw="T03">Мощные инструменты, которые помогут вашей команде работать эффективнее и достигать большего.</p>
+    <div class="g3" style="margin-top:28px;text-align:left" data-hw="L03">
+      <div class="card" data-hw="V06"><div class="ico" data-hw="V07">🚀</div><h4>Молниеносно</h4><p data-hw="C01">Ускорьте рабочие процессы в 10 раз с передовыми технологиями.</p></div>
+      <div class="card" data-hw="M01"><div class="ico" data-hw="V07">🔒</div><h4>Безопасно</h4><p data-hw="C10">Шифрование банковского уровня защищает ваши данные.</p></div>
+      <div class="card" data-hw="V05"><div class="ico" data-hw="V07">💡</div><h4>Умно</h4><p>AI-инсайты в реальном времени для правильных решений.</p></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="slide" data-title="Как это работает"><div class="slide-in">
+  <div class="slide-cap"><b>Как это работает</b><span>4</span></div>
+  <div class="ai pad c">
+    <p class="eb" data-hw="T05">Как это работает</p>
+    <h3 data-hw="C04">Просто. Быстро. Эффективно.</h3>
+    <div class="g3" style="margin-top:28px" data-hw="L07">
+      <div><div class="num" style="color:#c7d2fe">01</div><h4>Подключите</h4><p>Интеграция за пару минут.</p></div>
+      <div><div class="num" style="color:#c7d2fe">02</div><h4>Настройте</h4><p>Гибкие параметры под вас.</p></div>
+      <div><div class="num" style="color:#c7d2fe">03</div><h4>Растите</h4><p>Наблюдайте за результатом.</p></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="slide" data-title="Отзывы"><div class="slide-in">
+  <div class="slide-cap"><b>Отзывы</b><span>5</span></div>
+  <div class="ai pad c" style="background:#f9fafb">
+    <h3 data-hw="C08">Почему клиенты выбирают нас?</h3>
+    <div class="g3" style="margin-top:24px;text-align:left">
+      <div class="card" data-hw="C06"><div class="stars">★★★★★</div><p style="color:#374151" data-hw="C09">«Nexora полностью изменила то, как работает наша команда!»</p><div style="display:flex;gap:10px;align-items:center;margin-top:12px"><div class="av"></div><div><b>Сара Джонсон</b><p style="margin:0;font-size:13px">CEO в TechCorp</p></div></div></div>
+      <div class="card" data-hw="C06"><div class="stars">★★★★★</div><p style="color:#374151">«Лучшее решение, которое мы приняли в этом году. Рекомендую всем!»</p><div style="display:flex;gap:10px;align-items:center;margin-top:12px"><div class="av"></div><div><b>Михаил К.</b><p style="margin:0;font-size:13px">Основатель StartupX</p></div></div></div>
+      <div class="card" data-hw="C06"><div class="stars">★★★★★</div><p style="color:#374151">«Не представляем, как жили без этого инструмента раньше.»</p><div style="display:flex;gap:10px;align-items:center;margin-top:12px"><div class="av"></div><div><b>Анна Л.</b><p style="margin:0;font-size:13px">Head of Growth</p></div></div></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="slide" data-title="Тарифы"><div class="slide-in">
+  <div class="slide-cap"><b>Тарифы</b><span>6</span></div>
+  <div class="ai pad c">
+    <p class="eb" data-hw="T05">Тарифы</p>
+    <h3>Простые и прозрачные цены</h3>
+    <div class="g3" style="margin-top:28px;align-items:center" data-hw="L08">
+      <div class="card"><h4>Старт</h4><div class="num" style="color:#111827">0 ₽</div><ul class="plain"><li><span class="chk">✓</span>3 проекта</li><li><span class="chk">✓</span>Базовая аналитика</li></ul><span class="b2" data-hw="C05">Начать</span></div>
+      <div class="card grad" style="transform:scale(1.05)" data-hw="L08"><span class="pill" data-hw="V12">Самый популярный</span><h4>Про</h4><div class="num" style="color:#fff">990 ₽</div><ul class="plain" style="color:#fff"><li><span class="chk" style="color:#fff">✓</span>Безлимит проектов</li><li><span class="chk" style="color:#fff">✓</span>AI-инсайты</li><li><span class="chk" style="color:#fff">✓</span>Приоритетная поддержка</li></ul><span class="b bw" data-hw="C05">Начать сейчас</span></div>
+      <div class="card"><h4>Бизнес</h4><div class="num" style="color:#111827">2 990 ₽</div><ul class="plain"><li><span class="chk">✓</span>Всё из Про</li><li><span class="chk">✓</span>Персональный менеджер</li></ul><span class="b2" data-hw="C05">Связаться</span></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="slide" data-title="FAQ"><div class="slide-in">
+  <div class="slide-cap"><b>FAQ</b><span>7</span></div>
+  <div class="ai pad">
+    <h3 class="c" data-hw="T04">Часто Задаваемые Вопросы</h3>
+    <div class="mx" style="margin-top:18px" data-hw="C10">
+      <div class="faq"><h4>Это безопасно? <span>⌄</span></h4><p>Да! Мы используем шифрование банковского уровня и соответствуем всем стандартам.</p></div>
+      <div class="faq"><h4>Есть ли поддержка? <span>⌄</span></h4><p>Конечно! Наша команда на связи 24/7.</p></div>
+      <div class="faq"><h4>Можно ли отменить подписку? <span>⌄</span></h4><p>Разумеется! Отмена в один клик в любой момент.</p></div>
+    </div>
+  </div>
+</div></section>
+
+<section class="slide" data-title="Финальный призыв"><div class="slide-in">
+  <div class="slide-cap"><b>Финальный призыв</b><span>8</span></div>
+  <div class="ai pad">
+    <div class="grad c" style="border-radius:24px;padding:clamp(28px,5vw,56px) 20px" data-hw="L10">
+      <h3 data-hw="C08">Готовы вывести бизнес на новый уровень?</h3>
+      <p data-hw="L06">Присоединяйтесь к тысячам довольных клиентов уже сегодня.</p>
+      <span class="b bw" style="margin-top:16px" data-hw="C05">Начать сейчас</span>
+    </div>
+  </div>
+</div></section>
+
+<section class="slide" data-title="Футер"><div class="slide-in">
+  <div class="slide-cap"><b>Футер</b><span>9</span></div>
+  <div class="ai pad" style="font-size:14px">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:20px" data-hw="L11">
+      <div><b data-hw="C07">⚡ Ваша компания</b><p>Делаем будущее доступным.</p></div>
+      <div><b>Продукт</b><p>Возможности<br>Тарифы<br>Интеграции</p></div>
+      <div><b>Компания</b><p>О нас<br>Карьера<br>Блог</p></div>
+      <div><b>Правовое</b><p>Политика<br>Условия<br>Cookies</p></div>
+    </div>
+    <div style="border-top:1px solid #f3f4f6;margin-top:20px;padding-top:14px;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;color:#9ca3af">
+      <span data-hw="K04">© 2024 Ваша компания. Все права защищены.</span><span data-hw="L11">Сделано с ❤️</span>
+    </div>
+  </div>
+</div></section>
+
+<section class="slide" data-title="Стили по умолчанию"><div class="slide-in">
+  <div class="slide-cap"><b>Стили по умолчанию</b><span>10</span></div>
+  <div class="split">
+    <div class="ai pad" style="background:#f4f1ea" data-hw="V08"><h3 style="font-family:Georgia,serif;font-weight:400;letter-spacing:0">Ремесло и <i style="color:#c2410c">время</i></h3><p style="color:#57534e">Медленные вещи для внимательных людей.</p></div>
+    <div class="ai pad" style="background:#0a0a0a;border-color:#222" data-hw="V09"><h3 style="color:#fff">Build <span style="color:#39ff14">faster</span>.</h3><p style="color:#a3a3a3">The platform for builders.</p></div>
+    <div class="ai pad" style="background:linear-gradient(135deg,#4f46e5,#db2777)"><div class="glass" data-hw="V03"><b>Аналитика</b><p style="color:#fff;opacity:.85">+24% за неделю</p></div></div>
+    <div class="ai pad c dots-bg" data-hw="V11"><span class="pill" data-hw="V12">Beta</span><h3>Собирайте продукты</h3></div>
+  </div>
+</div></section>
+
+<section class="slide" data-title="Мелочи"><div class="slide-in">
+  <div class="slide-cap"><b>Мелочи</b><span>11</span></div>
+  <div class="split">
+    <div class="ai pad" style="display:grid;gap:10px">
+      <div style="border-left:4px solid #6366f1;border-radius:12px;background:#f8fafc;padding:14px" data-hw="V10"><h4 style="margin:0">Совет</h4><p>Используйте шаблоны для ускорения.</p></div>
+      <div style="border-left:4px solid #10b981;border-radius:12px;background:#f8fafc;padding:14px" data-hw="V10"><h4 style="margin:0">Готово</h4></div>
+    </div>
+    <div class="ai pad"><h3 class="caret" data-hw="M05">Мы создаём будущ</h3><p data-hw="C03">Мы сделали инструмент — простой, но мощный — который меняет всё. Результат — мгновенно.</p></div>
+    <div class="ai pad c"><p class="eb" data-hw="T05">О нас</p><h3 data-hw="L01">Мы меняем индустрию</h3><p data-hw="L01">Наша миссия — делать сложное простым. Мы верим в прозрачность и качество.</p></div>
+    <div class="ai pad"><div class="float" style="width:110px;height:70px;margin:0 auto 18px;border-radius:16px;background:linear-gradient(135deg,#c7d2fe,#fbcfe8)" data-hw="M04"></div><div class="c"><span class="b" data-hw="V05">Подписаться</span></div><h3 class="c" style="margin-top:14px" data-hw="C09">Попробуйте прямо сейчас!</h3></div>
+  </div>
+</div></section>
+
+<section class="slide" data-title="Код"><div class="slide-in">
+  <div class="slide-cap"><b>Код, который я пишу</b><span>12</span></div>
+  <div class="split">
+    <div class="ai pad"><code class="k" data-hw="K01"><span class="cm">&lt;!-- Hero Section --&gt;</span>
+&lt;div class="hero"&gt;…&lt;/div&gt;
+<span class="cm">&lt;!-- Features Section --&gt;</span>
+<span class="cm">/* ===== Pricing ===== */</span></code></div>
+    <div class="ai pad"><code class="k" data-hw="M02">&lt;section data-aos="fade-up"
+  data-aos-delay="100"&gt;
+<span class="cm">/* до скролла: opacity: 0 */</span></code></div>
+    <div class="ai pad"><code class="k" data-hw="K02">&lt;img src="https://source.unsplash.com
+  /random/800x600?office"&gt;
+&lt;a href="#" class="btn"&gt;Начать&lt;/a&gt;</code></div>
+    <div class="ai pad"><code class="k" data-hw="M03">.card, .btn, .link {
+  transition: all 0.3s ease;
+}
+.card:hover { transform: translateY(-4px); }</code></div>
+  </div>
+</div></section>
+
+</main>
+
+<footer class="bottom">
+  <button class="nav-btn" id="prev" type="button">← Назад</button>
+  <div style="display:grid;gap:6px;justify-items:center;min-width:0">
+    <div class="dots" id="dots"></div>
+    <span class="count" id="count"></span>
+  </div>
+  <button class="nav-btn" id="next" type="button">Дальше →</button>
+</footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+const deck = document.getElementById('deck');
+const slides = [...deck.querySelectorAll('.slide')];
+const dotsEl = document.getElementById('dots');
+const statusEl = document.getElementById('status');
+const toastEl = document.getElementById('toast');
+let sent = [];
+try { sent = JSON.parse(sessionStorage.getItem('hw-sent') || '[]'); } catch {}
+const saveSent = () => { try { sessionStorage.setItem('hw-sent', JSON.stringify(sent)); } catch {} };
+let idx = 0, comments = null, mode = 'local', busy = false;
+
+slides.forEach((s, i) => {
+  const b = document.createElement('button');
+  b.type = 'button'; b.setAttribute('aria-label', `Слайд ${i + 1}: ${s.dataset.title}`);
+  b.addEventListener('click', () => go(i));
+  dotsEl.appendChild(b);
+});
+
+function go(i) {
+  i = Math.max(0, Math.min(slides.length - 1, i));
+  deck.scrollTo({ left: i * deck.clientWidth, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+}
+function syncIdx() {
+  idx = Math.round(deck.scrollLeft / Math.max(1, deck.clientWidth));
+  [...dotsEl.children].forEach((d, i) => d.setAttribute('aria-current', i === idx));
+  document.getElementById('prev').disabled = idx === 0;
+  document.getElementById('next').disabled = idx === slides.length - 1;
+  document.getElementById('count').textContent = `${idx + 1} / ${slides.length} · отмечено ${sent.length}`;
+}
+deck.addEventListener('scroll', () => requestAnimationFrame(syncIdx), { passive: true });
+document.getElementById('prev').addEventListener('click', () => go(idx - 1));
+document.getElementById('next').addEventListener('click', () => go(idx + 1));
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight') go(idx + 1);
+  if (e.key === 'ArrowLeft') go(idx - 1);
+});
+window.addEventListener('resize', () => go(idx));
+syncIdx();
+
+function setStatus(cls, text) { statusEl.className = 'status ' + cls; statusEl.lastElementChild.textContent = text; }
+let toastT;
+function toast(t) { toastEl.textContent = t; toastEl.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => toastEl.classList.remove('show'), 2600); }
+
+function describe(el) {
+  const slide = el.closest('.slide');
+  const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 140);
+  const cls = [...el.classList].filter(c => !c.startsWith('hw-')).join(' ');
+  const rule = el.dataset.hw ? ` (по каталогу: ${el.dataset.hw})` : ' (в каталоге нет, новое)';
+  return `Выглядит как ИИ. Слайд ${slides.indexOf(slide) + 1} «${slide.dataset.title}»: <${el.tagName.toLowerCase()}${cls ? ' class=' + cls : ''}> «${text || 'без текста'}»${rule}`;
+}
+
+// Под пальцем: ближайший размеченный элемент, иначе сам элемент
+function pick(target) {
+  const card = target.closest('.ai');
+  if (!card) return null;
+  const tagged = target.closest('[data-hw]');
+  return tagged && card.contains(tagged) ? tagged : target;
+}
+let hovered = null;
+deck.addEventListener('pointerover', e => {
+  const el = pick(e.target);
+  if (hovered && hovered !== el) hovered.classList.remove('hw-hover');
+  hovered = el; if (el) el.classList.add('hw-hover');
+});
+deck.addEventListener('pointerleave', () => hovered && hovered.classList.remove('hw-hover'));
+
+deck.addEventListener('click', async e => {
+  const el = pick(e.target);
+  if (!el || busy) return;
+  e.preventDefault();
+  const text = describe(el);
+  if (sent.includes(text)) { toast('Это уже отправлено'); return; }
+  busy = true;
+  sent.push(text);
+  el.classList.add('hw-sent');
+  toast('Отправляю…');
+  try {
+    if (mode === 'claude') {
+      await comments.sendToClaude({ anchor: await comments.anchorFor(el), text });
+      toast('Отправлено Claude');
+    } else if (mode === 'comment') {
+      await comments.create({ anchor: await comments.anchorFor(el), text });
+      toast('Сохранено комментарием. Claude прочитает, когда попросишь');
+    } else {
+      toast('Отмечено. Нажми «Скопировать отмеченное» и пришли в чат');
+    }
+    saveSent();
+    dotsEl.children[slides.indexOf(el.closest('.slide'))].classList.add('flagged');
+    syncIdx();
+  } catch (err) {
+    sent = sent.filter(t => t !== text);
+    el.classList.remove('hw-sent');
+    const code = err && err.code;
+    if (code === 'claude_unavailable') { mode = 'comment'; setStatus('off', 'Claude не слушает: сохраняю комментариями'); toast('Claude сейчас не на связи. Нажми ещё раз, сохраню комментарием'); }
+    else if (code === 'rate_limited') toast('Слишком часто. Подожди пару секунд');
+    else if (code === 'consent_required' || code === 'forbidden' || code === 'not_granted') { mode = 'local'; setStatus('off', 'нет доступа: собираю список'); document.getElementById('fallback').classList.add('show'); toast('Нет доступа к комментариям. Нажми ещё раз, добавлю в список'); }
+    else toast('Не отправилось: ' + (err && err.message || 'неизвестная ошибка'));
+  } finally { busy = false; }
+});
+
+document.getElementById('copyList').addEventListener('click', e => {
+  const t = sent.join('\n') || 'Пока ничего не отмечено';
+  const btn = e.currentTarget;
+  navigator.clipboard.writeText(t).then(() => { btn.textContent = 'Скопировано'; }, () => { toast('Не удалось скопировать'); });
+});
+
+(async () => {
+  try { comments = window.claude && await window.claude.use('comments'); } catch { comments = null; }
+  if (!comments) { setStatus('off', 'не в claude.ai: собираю список'); document.getElementById('fallback').classList.add('show'); return; }
+  let st = 'off';
+  try { st = await comments.canSendToClaude(); } catch {}
+  if (st === 'available') { mode = 'claude'; setStatus('on', 'тапы уходят Claude'); }
+  else { mode = 'comment'; setStatus('off', st === 'no_session' ? 'Claude не на связи: сохраняю комментариями' : 'сохраняю комментариями'); }
+})();
+</script>

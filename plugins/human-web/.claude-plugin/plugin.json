@@ -1,0 +1,7 @@
+{
+  "name": "human-web",
+  "version": "0.1.0",
+  "description": "Убирает признаки AI-генерации из вёрстки сайтов: правила для Claude, хук-проверка после каждой записи файла и команда аудита.",
+  "author": { "name": "somtakfan-arch" },
+  "keywords": ["design", "frontend", "anti-slop", "landing"]
+}

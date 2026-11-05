@@ -1,0 +1,10 @@
+{
+  "extraKnownMarketplaces": {
+    "emperator-plugins": {
+      "source": { "source": "github", "repo": "somtakfan-arch/Emperator-coin" }
+    }
+  },
+  "enabledPlugins": {
+    "human-web@emperator-plugins": true
+  }
+}

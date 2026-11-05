@@ -1,0 +1,11 @@
+{
+  "name": "emperator-plugins",
+  "owner": { "name": "somtakfan-arch" },
+  "plugins": [
+    {
+      "name": "human-web",
+      "source": "./plugins/human-web",
+      "description": "Убирает признаки AI-генерации из вёрстки сайтов"
+    }
+  ]
+}
