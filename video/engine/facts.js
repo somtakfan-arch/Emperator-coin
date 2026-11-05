@@ -59,9 +59,8 @@ function bgFact(P, lt) {
   for (let i = 0; i < 14; i++) { const r = 40 + rnd(i + 3) * 90; s += `<circle cx="${rnd(i) * W}" cy="${(rnd(i + 20) * H + lt * 8 * (1 + rnd(i))) % H}" r="${r}" fill="#fff" opacity=".035"/>`; }
   return s;
 }
-function host(lt, P, x = 610, y = 1430, sc = .6) {
-  if (!P.k) return '';
-  const st = kf(P.k, lt);
+function host(lt, P, x = 615, y = 1490, sc = .6) {
+  const st = kf(P.k || [[0, { eyes: 'normal', mouth: 'smile' }]], lt);
   const kp = eo(seg(lt, .1, .5));
   return `<g transform="translate(${x},${y + (1 - kp) * 200}) scale(${sc})">${person(Object.assign({ who: 'kid', look: [.6, -.7], armL: 10, armR: 10 }, st))}</g>`;
 }
@@ -70,10 +69,10 @@ const voAt = (P, i, def) => (P.voT && P.voT[i]) ? P.voT[i][0] : def;
 T.hook = {
   draw(lt, P) {
     let s = bgFact(P, lt);
-    if (P.tag) { const p = pop(lt, .05); s += `<g transform="translate(${W / 2},230) scale(${p})"><rect x="-110" y="-34" width="220" height="68" rx="34" fill="${P.tagCol || YEL}" stroke="${OL}" stroke-width="6"/><text y="13" font-size="34" font-weight="900" fill="${OL}" text-anchor="middle">${esc(P.tag)}</text></g>`; }
+    if (P.tag) { const p = pop(lt, .05); s += `<g transform="translate(${W / 2},170) scale(${p})"><rect x="-110" y="-34" width="220" height="68" rx="34" fill="${P.tagCol || YEL}" stroke="${OL}" stroke-width="6"/><text y="13" font-size="34" font-weight="900" fill="${OL}" text-anchor="middle">${esc(P.tag)}</text></g>`; }
     const p = pop(lt, .15, .45);
     const r = richText(W / 2, 0, P.text, 76, 13);
-    s += `<g transform="translate(0,${440 - r.h / 2}) translate(${W / 2},0) scale(${p}) translate(${-W / 2},0)">${r.s}</g>`;
+    s += `<g transform="translate(0,${470 - r.h / 2}) translate(${W / 2},0) scale(${p}) translate(${-W / 2},0)">${r.s}</g>`;
     if (P.art) { const a = pop(lt, .5, .5); s += `<g transform="translate(${W / 2},${790 + Math.sin(lt * 2) * 8}) scale(${.7 * a})">${ART[P.art]()}</g>`; }
     s += host(lt, P, 360, P.art ? 1520 : 1420, .85);
     return s;
@@ -85,8 +84,8 @@ T.card = {
     let s = bgFact(P, lt);
     const a = pop(lt, .1, .5);
     const fl = Math.sin(lt * 2) * 10;
-    s += `<g transform="translate(${W / 2},${520 + fl}) scale(${(P.artScale || 1) * a}) rotate(${Math.sin(lt * 1.3) * 2})">${ART[P.art](...(P.artArgs || []))}</g>`;
-    if (P.cap) { const c = pop(lt, .35, .4); const r = richText(W / 2, 0, P.cap, 52, 18); s += `<g transform="translate(${W / 2},${880}) scale(${c}) translate(${-W / 2},0)">${r.s}</g>`; }
+    s += `<g transform="translate(${W / 2},${490 + fl}) scale(${(P.artScale || 1) * a}) rotate(${Math.sin(lt * 1.3) * 2})">${ART[P.art](...(P.artArgs || []))}</g>`;
+    if (P.cap) { const c = pop(lt, .35, .4); const r = richText(W / 2, 0, P.cap, 52, 18); s += `<g transform="translate(${W / 2},${830}) scale(${c}) translate(${-W / 2},0)">${r.s}</g>`; }
     s += host(lt, P);
     return s;
   },
