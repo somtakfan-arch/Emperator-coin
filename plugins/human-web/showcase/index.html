@@ -1,0 +1,387 @@
+<title>Human Web</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600&family=Unbounded:wght@500;700&family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;600;800&display=swap">
+<style>
+/* Макет: протокол осмотра. Слева пульт настройки, справа образцы «как делает Claude» и правило рядом. */
+:root{
+  --paper:#f2f3ef; --sheet:#ffffff; --ink:#1c1e1b; --ink-2:#565a53; --rule:#d6d8d0;
+  --mark:#b4231f; --mark-soft:#f6e3e1; --warn:#9a6a00; --warn-soft:#f5ecd6; --off:#8a8d86; --off-soft:#e8e9e4;
+  --f-display:"Unbounded","Arial Black",sans-serif;
+  --f-body:"Golos Text",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --paper:#161816; --sheet:#1f221f; --ink:#e7e9e3; --ink-2:#a3a79e; --rule:#343833;
+  --mark:#ff6b5e; --mark-soft:#3a1f1c; --warn:#e3b341; --warn-soft:#33291a; --off:#80847c; --off-soft:#272a26; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --paper:#161816; --sheet:#1f221f; --ink:#e7e9e3; --ink-2:#a3a79e; --rule:#343833;
+  --mark:#ff6b5e; --mark-soft:#3a1f1c; --warn:#e3b341; --warn-soft:#33291a; --off:#80847c; --off-soft:#272a26; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--paper);color:var(--ink);font:15px/1.55 var(--f-body)}
+.wrap{max-width:1240px;margin:0 auto;padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+header.top{display:grid;gap:10px;border-bottom:2px solid var(--ink);padding-bottom:18px;margin-bottom:28px}
+header.top h1{font:700 clamp(28px,5vw,46px)/1.05 var(--f-display);margin:0;letter-spacing:-.01em;text-wrap:balance}
+header.top p{margin:0;max-width:68ch;color:var(--ink-2)}
+.meta{font:12px var(--f-mono);color:var(--ink-2);display:flex;flex-wrap:wrap;gap:6px 18px}
+.layout{display:grid;grid-template-columns:270px minmax(0,1fr);gap:32px;align-items:start}
+@media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}}
+aside{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px);display:grid;gap:18px}
+@media (max-width:900px){aside{position:static}}
+.panel{background:var(--sheet);border:1px solid var(--rule);padding:14px}
+.panel h2{font:600 11px var(--f-mono);text-transform:uppercase;letter-spacing:.1em;margin:0 0 10px;color:var(--ink-2)}
+.tally{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;font-family:var(--f-mono)}
+.tally div{padding:6px 8px;border-left:3px solid}
+.tally b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.tally span{font-size:11px}
+.t-block{border-color:var(--mark)!important}.t-warn{border-color:var(--warn)!important}.t-off{border-color:var(--off)!important}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:12px var(--f-body);border:1px solid var(--rule);background:transparent;color:var(--ink);padding:4px 9px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.chip:focus-visible,.seg input:focus-visible+span,button:focus-visible,input:focus-visible{outline:2px solid var(--mark);outline-offset:2px}
+input[type="search"]{width:100%;font:14px var(--f-body);padding:7px 9px;border:1px solid var(--rule);background:var(--paper);color:var(--ink)}
+textarea{width:100%;height:160px;font:12px/1.45 var(--f-mono);border:1px solid var(--rule);background:var(--paper);color:var(--ink);padding:8px;resize:vertical}
+.row-btns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.btn{font:500 13px var(--f-body);padding:7px 12px;border:1px solid var(--ink);background:var(--ink);color:var(--paper);cursor:pointer}
+.btn.ghost{background:transparent;color:var(--ink)}
+.note{font-size:12px;color:var(--ink-2);margin:8px 0 0}
+.note code,.rule code{font-family:var(--f-mono);font-size:.9em}
+
+/* Общий вид */
+section.overview{margin-bottom:40px}
+.sec-h{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:0 0 12px}
+.sec-h h2{font:700 20px var(--f-display);margin:0}
+.sec-h p{margin:0;color:var(--ink-2);font-size:13px}
+.frame{border:1px solid var(--rule);background:var(--sheet);overflow:hidden}
+.frame-bar{display:flex;gap:6px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--rule);font:11px var(--f-mono);color:var(--ink-2)}
+.frame-bar i{width:8px;height:8px;border-radius:50%;background:var(--rule)}
+
+/* Каталог */
+.cat-h{font:700 15px var(--f-display);margin:34px 0 10px;padding-top:12px;border-top:1px solid var(--ink);display:flex;gap:10px;align-items:baseline}
+.cat-h span{font:12px var(--f-mono);color:var(--ink-2)}
+.rule{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:0;background:var(--sheet);border:1px solid var(--rule);margin-bottom:10px;scroll-margin-top:16px}
+@media (max-width:720px){.rule{grid-template-columns:minmax(0,1fr)}}
+.rule.is-off{opacity:.55}
+.rule:target{outline:2px solid var(--mark)}
+.spec{border-right:1px solid var(--rule);min-width:0;display:flex;flex-direction:column}
+@media (max-width:720px){.spec{border-right:0;border-bottom:1px solid var(--rule)}}
+.spec-label{font:10px var(--f-mono);text-transform:uppercase;letter-spacing:.1em;color:var(--ink-2);padding:6px 10px;border-bottom:1px dashed var(--rule)}
+.spec-body{flex:1;display:flex;align-items:center;justify-content:center;padding:14px;overflow:hidden;min-height:150px;background:repeating-linear-gradient(45deg,transparent 0 8px,color-mix(in srgb,var(--rule) 25%,transparent) 8px 9px)}
+.spec-body>.ai{width:100%}
+.info{padding:12px 14px;display:grid;gap:8px;align-content:start;min-width:0}
+.info-top{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap}
+.rid{font:600 12px var(--f-mono);color:var(--mark)}
+.info h3{font:600 17px/1.3 var(--f-body);margin:2px 0 0;text-wrap:balance}
+.info p{margin:0;font-size:14px}
+.info .lbl{font:10px var(--f-mono);text-transform:uppercase;letter-spacing:.1em;color:var(--ink-2);display:block;margin-bottom:1px}
+.seg{display:inline-flex;border:1px solid var(--rule)}
+.seg label{cursor:pointer}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg span{display:block;font:11px var(--f-mono);padding:4px 8px;color:var(--ink-2)}
+.seg input:checked+span.s-block{background:var(--mark);color:#fff}
+.seg input:checked+span.s-warn{background:var(--warn);color:#fff}
+.seg input:checked+span.s-off{background:var(--off);color:#fff}
+details{font-size:12px}
+details summary{cursor:pointer;color:var(--ink-2);font-family:var(--f-mono)}
+details pre{margin:6px 0 0;padding:8px;background:var(--paper);overflow-x:auto;font:11px/1.5 var(--f-mono);white-space:pre}
+.manual{font:11px var(--f-mono);color:var(--warn);background:var(--warn-soft);padding:2px 6px;justify-self:start}
+
+/* ===== Образцы: намеренно «как у AI». Цвета зафиксированы, это скриншоты. ===== */
+.ai{font-family:Inter,system-ui,sans-serif;color:#111827;background:#fff;font-size:13px;line-height:1.5;position:relative;overflow:hidden;border-radius:12px}
+.ai *{box-sizing:border-box}
+.ai h4{font-size:24px;line-height:1.1;font-weight:800;letter-spacing:-.03em;margin:6px 0;color:#0f172a}
+.ai h5{font-size:14px;font-weight:700;margin:6px 0 2px;color:#0f172a}
+.ai p{margin:4px 0;color:#6b7280}
+.ai .pad{padding:18px}
+.ai .c{text-align:center}
+.ai .grad{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff}
+.ai .grad h4,.ai .grad p{color:#fff}
+.ai .gtext{background:linear-gradient(90deg,#6366f1,#ec4899);-webkit-background-clip:text;background-clip:text;color:transparent}
+.ai .glass{background:rgba(255,255,255,.14);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.3);border-radius:16px;padding:12px;color:#fff}
+.ai .card{background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(17,24,39,.09);padding:14px;transition:all .3s}
+.ai .card:hover{transform:translateY(-4px);box-shadow:0 20px 40px rgba(17,24,39,.14)}
+.ai .b{display:inline-block;padding:8px 16px;border-radius:999px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;font-weight:600;font-size:12px;text-decoration:none}
+.ai .b2{display:inline-block;padding:7px 15px;border-radius:999px;border:1px solid #d1d5db;color:#374151;font-weight:600;font-size:12px;background:#fff}
+.ai .pill{display:inline-block;padding:3px 10px;border-radius:999px;background:#eef2ff;color:#4f46e5;font-size:11px;font-weight:600;border:1px solid #c7d2fe}
+.ai .eb{text-transform:uppercase;letter-spacing:.14em;font-size:10px;color:#6366f1;font-weight:700}
+.ai .g3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.ai .row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.ai .blob{position:absolute;border-radius:50%;filter:blur(40px);opacity:.7}
+.ai .ico{font-size:22px}
+.ai .num{font-size:22px;font-weight:800;color:#4f46e5}
+.ai .logo{font-weight:800;color:#9ca3af;letter-spacing:-.02em;font-size:13px}
+.ai .av{width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#fbcfe8,#c7d2fe);flex:none}
+.ai .dots{background-image:radial-gradient(#c7d2fe 1px,transparent 1px);background-size:14px 14px}
+.ai .pulse{animation:aipulse 1.6s infinite}
+@keyframes aipulse{0%,100%{box-shadow:0 0 0 0 rgba(118,75,162,.5)}50%{box-shadow:0 0 0 10px rgba(118,75,162,0)}}
+.ai .float{animation:aifloat 3s ease-in-out infinite}
+@keyframes aifloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+.ai .caret::after{content:"|";animation:aiblink 1s steps(1) infinite;color:#6366f1}
+@keyframes aiblink{50%{opacity:0}}
+.ai code.k{display:block;font:11px/1.5 var(--f-mono);background:#0f172a;color:#cbd5e1;padding:10px;border-radius:8px;white-space:pre;overflow-x:auto;text-align:left}
+.ai code.k .cm{color:#64748b}
+@media (prefers-reduced-motion:reduce){.ai .pulse,.ai .float,.ai .caret::after{animation:none}}
+@media (max-width:520px){.ai .g3{grid-template-columns:1fr}}
+
+/* Пины на общем примере */
+.pin{display:inline-block;align-self:center;font:600 9px/1 var(--f-mono);font-style:normal;background:#b4231f;color:#fff;padding:3px 4px;margin:0 3px;vertical-align:middle;text-decoration:none;letter-spacing:0;text-transform:none;border-radius:0;-webkit-text-fill-color:#fff}
+.pin:hover{background:#1c1e1b}
+.ai.land .nav{display:flex;justify-content:space-between;align-items:center;padding:12px 18px;font-size:12px;color:#374151;position:relative;z-index:1}
+.ai.land .nav .links{display:flex;gap:14px}
+@media (max-width:620px){.ai.land .nav .links{display:none}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="meta"><span>плагин human-web</span><span>v0.1</span><span id="m-count"></span></div>
+    <h1>Как выглядит сайт, который сделал Claude по умолчанию</h1>
+    <p>Слева образец того, как я верстаю без ограничений. Справа правило плагина: почему это выдаёт генерацию и что делать вместо этого. Для каждого правила выбери уровень: <b>block</b> заставляет переделать, <b>warn</b> только предупреждает, <b>off</b> выключает. Внизу пульта готовый файл настроек для проекта.</p>
+  </header>
+
+  <div class="layout">
+    <aside>
+      <div class="panel">
+        <h2>Сейчас включено</h2>
+        <div class="tally">
+          <div class="t-block"><b id="n-block">0</b><span>block</span></div>
+          <div class="t-warn"><b id="n-warn">0</b><span>warn</span></div>
+          <div class="t-off"><b id="n-off">0</b><span>off</span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>Фильтр</h2>
+        <input type="search" id="q" placeholder="Поиск: эмодзи, градиент, V07…" aria-label="Поиск по правилам">
+        <div class="chips" id="chips" style="margin-top:8px"></div>
+      </div>
+      <div class="panel">
+        <h2>Файл настроек</h2>
+        <textarea id="out" readonly aria-label="Содержимое .claude/human-web.json"></textarea>
+        <div class="row-btns">
+          <button class="btn" id="copy" type="button">Скопировать</button>
+          <button class="btn ghost" id="reset" type="button">Вернуть по умолчанию</button>
+        </div>
+        <p class="note">Сохрани как <code>.claude/human-web.json</code> в корне проекта. Туда попадают только изменённые правила. Или пришли мне этот JSON, и я поменяю значения по умолчанию в самом плагине.</p>
+      </div>
+    </aside>
+
+    <main>
+      <section class="overview">
+        <div class="sec-h"><h2>Всё вместе</h2><p>Типичный лендинг «с нуля». Красные метки ведут к правилу.</p></div>
+        <div class="frame">
+          <div class="frame-bar"><i></i><i></i><i></i><span>nexora.ai</span></div>
+          <div id="landing"></div>
+        </div>
+      </section>
+      <div id="catalog"></div>
+    </main>
+  </div>
+</div>
+
+<script>
+const DATA = {"version":1,"severities":{"block":"Хук возвращает Claude ошибку, и он обязан переделать","warn":"Хук пишет замечание, Claude решает сам","off":"Правило выключено"},"categories":{"V":"Визуал и цвет","L":"Композиция и секции","T":"Типографика","C":"Тексты","M":"Анимация и hover","K":"Код и ассеты"},"rules":[{"id":"V01","cat":"V","sev":"block","title":"Фиолетово-синий градиент в hero","why":"Самый узнаваемый признак сгенерированного лендинга: #667eea → #764ba2, from-purple-500 to-blue-500.","fix":"Брать цвет из предметной области проекта. Если градиент нужен, то между близкими оттенками одного тона.","detect":["#667eea","#764ba2","from-(purple|violet|indigo|fuchsia)-\\d{3}[^\"'`]*to-(blue|pink|purple|indigo|cyan|violet)-\\d{3}","linear-gradient\\([^)]*(#6366f1|#8b5cf6|#a855f7)[^)]*(#3b82f6|#ec4899|#06b6d4)"]},{"id":"V02","cat":"V","sev":"block","title":"Градиентный текст в заголовке","why":"bg-clip-text + text-transparent на ключевом слове заголовка встречается почти в каждом AI-лендинге.","fix":"Выделять слово весом, начертанием или одним сплошным акцентным цветом.","detect":["background-clip:\\s*text","bg-clip-text"]},{"id":"V03","cat":"V","sev":"warn","title":"Glassmorphism","why":"Полупрозрачные карточки с backdrop-blur и белой рамкой 10% стали шаблоном для «современного» вида.","fix":"Плотные поверхности. Blur допустим только у sticky-навигации поверх контента.","detect":["backdrop-filter:\\s*blur","backdrop-blur(-\\w+)?"],"max":1},{"id":"V04","cat":"V","sev":"block","title":"Светящиеся размытые пятна на фоне","why":"Абсолютные круги с blur-3xl по углам hero не несут смысла и повторяются от сайта к сайту.","fix":"Убрать. Если фон пустой, дать фактуру из темы: фото, схема, реальные данные.","detect":["blur-3xl","blur-\\[\\d{2,}px\\]","filter:\\s*blur\\(\\s*\\d{2,}px"]},{"id":"V05","cat":"V","sev":"warn","title":"Один и тот же радиус на всём","why":"rounded-2xl на кнопках, карточках, картинках и инпутах сразу стирает иерархию.","fix":"2-3 радиуса с ролями: мелкий для контролов, средний для поверхностей, 0 там, где элемент упирается в край.","detect":["rounded-(xl|2xl|3xl)\\b","border-radius:\\s*(1[2-9]|2\\d)px"],"max":6},{"id":"V06","cat":"V","sev":"warn","title":"Мягкая большая тень на каждой карточке","why":"shadow-xl везде делает страницу «парящей» и одинаковой.","fix":"Тень только у того, что реально над слоем: меню, модалка, тост. Карточки отделять фоном или линией.","detect":["shadow-(xl|2xl)\\b","box-shadow:\\s*0\\s+(10|20|25)px\\s+(30|40|50)px"],"max":2},{"id":"V07","cat":"V","sev":"block","title":"Эмодзи вместо иконок","why":"🚀 ✨ ⚡ 🔒 💡 🎯 в карточках фич и заголовках выдают генерацию с первого взгляда.","fix":"Одна система SVG-иконок под стиль бренда, либо без иконок вообще.","detect":["[\\u{1F680}\\u{2728}\\u{26A1}\\u{1F512}\\u{1F4A1}\\u{1F3AF}\\u{1F525}\\u{1F4C8}\\u{1F31F}\\u{2705}\\u{1F4AA}\\u{1F389}\\u{1F6E1}\\u{1F4CA}\\u{1F91D}\\u{1F48E}]"],"flags":"u"},{"id":"V08","cat":"V","sev":"warn","title":"Кремовый фон + засечки + терракота","why":"Второй по частоте «вкусный» шаблон: #F4F1EA, серифный заголовок, ржаво-оранжевый акцент.","fix":"Палитра из материалов темы, а не из «уютного редакционного» пресета.","detect":["#f4f1ea","#faf7f2","#f5f0e8","#c2410c","#d97757"]},{"id":"V09","cat":"V","sev":"warn","title":"Почти чёрный + кислотный неон","why":"Тёмный фон и один ядовито-зелёный или красный акцент: третий дефолтный «смелый» стиль.","fix":"Если тёмная тема, то акцент с умеренной насыщенностью, связанный с продуктом.","detect":["#00ff88","#39ff14","#ccff00","#b6ff00","#d4ff00","text-lime-400","bg-lime-400"]},{"id":"V10","cat":"V","sev":"warn","title":"Цветная полоска-рейка слева у скруглённой карточки","why":"border-l-4 + rounded на карточке: частый способ «оживить» блок, читается как шаблон.","fix":"Статус передавать бейджем, иконкой или фоном строки.","detect":["border-l-4[^\"']*rounded","rounded[^\"']*border-l-4"]},{"id":"V11","cat":"V","sev":"warn","title":"Сетка из точек или клеток на фоне","why":"radial-gradient точки и grid-паттерн под hero ничего не сообщают о продукте.","fix":"Фон без паттерна или паттерн из самой темы (миллиметровка для инженеров, карта для логистики).","detect":["radial-gradient\\([^)]*1px[^)]*transparent","bg-\\[radial-gradient","bg-grid"]},{"id":"L01","cat":"L","sev":"warn","title":"Всё выровнено по центру","why":"Центрированный hero, центрированные заголовки секций и центрированный текст в карточках подряд.","fix":"Левое выравнивание по умолчанию. Центр только для коротких одиночных фраз.","detect":["text-center","text-align:\\s*center"],"max":4},{"id":"L02","cat":"L","sev":"block","title":"Hero на весь экран","why":"min-h-screen / 100vh выталкивает содержимое из первого экрана и почти всегда пустой.","fix":"Высота по контенту, следующий блок должен выглядывать в первом экране.","detect":["min-h-screen","h-screen","(min-)?height:\\s*100vh"]},{"id":"L03","cat":"L","sev":"warn","title":"Три карточки фич в ряд","why":"Иконка + заголовок + две строки текста × 3. Дефолтная секция «Features».","fix":"Показать продукт в деле: скриншот, сценарий, сравнение до/после. Если список, то таблица или текст.","detect":["grid-cols-3","md:grid-cols-3","lg:grid-cols-3","repeat\\(3,\\s*1fr\\)"]},{"id":"L04","cat":"L","sev":"warn","title":"Конвейер секций","why":"Hero → логотипы → фичи → как работает → отзывы → тарифы → FAQ → CTA → футер. Порядок из шаблона, а не из задачи.","fix":"Собирать страницу под один главный вопрос посетителя. Секции, которые на него не отвечают, удалить.","detect":[]},{"id":"L05","cat":"L","sev":"block","title":"Полоса «Нам доверяют» с выдуманными логотипами","why":"Серые логотипы несуществующих или чужих компаний без разрешения.","fix":"Только реальные клиенты с согласия. Нет клиентов — нет полосы.","detect":["trusted by","нам доверяют","used by teams at","logo-cloud","grayscale[^\"']*opacity-(50|60)"]},{"id":"L06","cat":"L","sev":"warn","title":"Полоса круглых цифр","why":"10K+ пользователей · 99.9% аптайм · 24/7 поддержка. Цифры придуманы, чтобы заполнить место.","fix":"Только проверяемые цифры с источником, или убрать.","detect":["\\b\\d{1,3}[kK]\\+","99[.,]9\\s?%","24/7"]},{"id":"L07","cat":"L","sev":"warn","title":"Нумерация 01 / 02 / 03 без последовательности","why":"Номера ставят для «дизайнерского» вида, хотя порядок ничего не значит.","fix":"Номера только у реального процесса, где шаг 2 невозможен без шага 1.","detect":[">\\s*0[1-6]\\s*<",">\\s*0[1-6]\\s*[./]"]},{"id":"L08","cat":"L","sev":"warn","title":"Три тарифа, средний «Самый популярный»","why":"Шаблонная таблица цен с выделенной средней колонкой и галочками.","fix":"Столько тарифов, сколько есть на самом деле. Выделение только при реальных данных.","detect":["most popular","самый популярный","популярный выбор","best value"]},{"id":"L09","cat":"L","sev":"block","title":"Пилюля над заголовком «✨ Новое: …»","why":"Маленький бейдж-анонс над H1 есть почти во всех сгенерированных hero.","fix":"Если есть реальная новость, то отдельной строкой со ссылкой. Иначе убрать.","detect":["rounded-full[^>]*>\\s*(✨|🎉|🚀|New|Новое|Introducing)","(✨|🎉)\\s*(New|Новое|Introducing|Представляем)"]},{"id":"L10","cat":"L","sev":"warn","title":"Финальный CTA-баннер «Готовы начать?»","why":"Градиентная плашка перед футером с вопросом и двумя кнопками.","fix":"Одно конкретное действие в контексте последнего блока.","detect":["ready to (get started|transform|take|elevate)","готовы начать","готовы (вывести|изменить|преобразить)"]},{"id":"L11","cat":"L","sev":"warn","title":"Футер на 4 колонки с пустыми ссылками","why":"Product / Company / Resources / Legal, где половина ссылок ведёт на #.","fix":"Только существующие страницы. Маленький сайт — одна строка.","detect":["made with\\s*(❤️|♥|love)","сделано с\\s*(❤️|любовью)"]},{"id":"L12","cat":"L","sev":"warn","title":"Одинаковый вертикальный ритм","why":"py-24 у каждой секции: страница превращается в стопку одинаковых коробок.","fix":"Разные отступы по смыслу: плотно внутри темы, просторно между темами.","detect":["\\bpy-(20|24|32)\\b"],"max":3},{"id":"T01","cat":"T","sev":"block","title":"Inter / Space Grotesk / Poppins по умолчанию","why":"«Безопасные» шрифты, которые модель ставит, когда шрифт не задан.","fix":"Подбирать пару под тему. Inter допустим, только если это шрифт бренда.","detect":["family=Inter\\b","family=Space\\+Grotesk","family=Poppins","font-family:\\s*['\"]?(Inter|Space Grotesk|Poppins)\\b"]},{"id":"T02","cat":"T","sev":"warn","title":"Огромный жирный H1 с tracking-tight","why":"text-6xl font-bold tracking-tight как единственный типографический приём.","fix":"Шкала размеров и минимум два веса. Размер заголовка по длине фразы, а не максимальный.","detect":["text-(6xl|7xl|8xl)[^\"']*font-(bold|extrabold|black)","font-(bold|extrabold|black)[^\"']*text-(6xl|7xl|8xl)"]},{"id":"T03","cat":"T","sev":"warn","title":"Серый подзаголовок под каждым заголовком","why":"text-gray-500 max-w-2xl mx-auto после каждого H2. Пересказывает заголовок другими словами.","fix":"Подзаголовок только если он добавляет факт.","detect":["text-(gray|slate|zinc)-500[^\"']*max-w-(xl|2xl|3xl)[^\"']*mx-auto","mx-auto[^\"']*text-(gray|slate|zinc)-500"],"max":1},{"id":"T04","cat":"T","sev":"warn","title":"Title Case В Каждом Заголовке","why":"Английская привычка, перенесённая на любой язык. По-русски выглядит как машинный перевод.","fix":"Sentence case: заглавная только первая буква и имена собственные.","detect":["<h[1-3][^>]*>\\s*([А-ЯЁ][а-яё]+\\s+){2,}[А-ЯЁ][а-яё]+\\s*<\/h"]},{"id":"T05","cat":"T","sev":"warn","title":"Капслок-«бровь» над каждой секцией","why":"Мелкое FEATURES / ВОЗМОЖНОСТИ над H2 дублирует сам H2.","fix":"Надстрочник только когда он несёт отдельную информацию: раздел, дата, категория.","detect":["uppercase[^\"']*tracking-(wide|wider|widest)"],"max":1},{"id":"C01","cat":"C","sev":"block","title":"Маркетинговые штампы","why":"unlock, elevate, seamless, supercharge, revolutionize, cutting-edge, «раскройте потенциал», «бесшовный», «на новый уровень».","fix":"Сказать, что конкретно делает продукт и для кого. Глагол + объект + результат.","detect":["\\b(unlock|elevate|seamless(ly)?|supercharge|revolutioni[sz]e|cutting-edge|next-gen(eration)?|game-?changer|empower|harness|effortless(ly)?|streamline|unleash|skyrocket|leverage)\\b","раскро(йте|ет) (весь )?потенциал","бесшовн","революционн","на новый уровень","инновационн","передов(ые|ых) технолог","в один клик"]},{"id":"C02","cat":"C","sev":"block","title":"«Это не просто X — это Y»","why":"Конструкция-разворот: главный речевой маркер текста от модели.","fix":"Сразу сказать Y.","detect":["\\bnot just (a|an|the)?\\s*\\w+[^.]{0,40}(it'?s|—|-)","это не просто","не просто [а-яё]+\\s*[—-]\\s*(это|а)","больше,? чем просто"]},{"id":"C03","cat":"C","sev":"warn","title":"Тире на каждом шагу","why":"Длинное тире для вставок и «драматических» пауз в каждом втором предложении.","fix":"Точка или запятая. Тире только там, где его требует грамматика.","detect":["\\s—\\s"],"max":3},{"id":"C04","cat":"C","sev":"block","title":"Триады из одного слова","why":"«Быстро. Надёжно. Безопасно.» / «Fast. Secure. Reliable.»","fix":"Одно утверждение с доказательством вместо трёх прилагательных.","detect":[">\\s*[A-ZА-ЯЁ][a-zа-яё]+\\.\\s+[A-ZА-ЯЁ][a-zа-яё]+\\.\\s+[A-ZА-ЯЁ][a-zа-яё]+\\.\\s*<"]},{"id":"C05","cat":"C","sev":"warn","title":"Безликие кнопки","why":"Get Started, Learn More, «Начать», «Узнать больше». Непонятно, что произойдёт после клика.","fix":"Кнопка называет действие: «Открыть счёт», «Скачать прайс PDF», «Записаться на 15:00».","detect":[">\\s*(Get Started|Learn More|Start Now|Try (it )?(for )?free|Начать|Узнать больше|Подробнее|Начать сейчас)\\s*<"]},{"id":"C06","cat":"C","sev":"block","title":"Выдуманные отзывы","why":"«Sarah J., CEO at TechCorp» с аватаром из pravatar. Это фальсификация.","fix":"Только реальные отзывы с разрешения. Пока их нет, блока нет.","detect":["i\\.pravatar\\.cc","randomuser\\.me","ui-avatars\\.com","techcorp","acme (inc|corp)","ceo (at|of) [A-Z]\\w+(corp|tech|ly)"]},{"id":"C07","cat":"C","sev":"block","title":"Заглушки вместо контента","why":"Lorem ipsum, «Your Company», «John Doe», example.com в готовой вёрстке.","fix":"Реальный текст проекта. Если его нет, спросить, а не выдумывать.","detect":["lorem ipsum","your company","yourcompany","john doe","jane doe","example\\.com","ваша компания"]},{"id":"C08","cat":"C","sev":"warn","title":"Заголовки-вопросы","why":"«Готовы изменить подход к…?», «Устали от…?». Риторика вместо информации.","fix":"Утверждение с фактом.","detect":["<h[1-3][^>]*>[^<]{0,80}\\?\\s*<\/h"],"max":1},{"id":"C09","cat":"C","sev":"warn","title":"Восклицательный хайп","why":"«Попробуйте прямо сейчас!» «Это изменит всё!»","fix":"Без восклицаний в интерфейсе, кроме реальной эмоции пользователя.","detect":["[a-zа-яё]!\\s*<"],"max":1},{"id":"C10","cat":"C","sev":"warn","title":"FAQ из очевидных вопросов","why":"«Это безопасно? — Да! Мы используем шифрование банковского уровня.»","fix":"Вопросы, которые реально задают в поддержке, с конкретными ответами.","detect":["bank-level","банковского уровня","military-grade","военного уровня"]},{"id":"M01","cat":"M","sev":"warn","title":"Подъём карточки при наведении","why":"hover:-translate-y-1 hover:shadow-xl на всём подряд, включая некликабельное.","fix":"Hover-эффект только у кликабельного. Менять цвет или подчёркивание, а не прыгать.","detect":["hover:-translate-y","hover:scale-10[5-9]",":hover[^{]*\\{[^}]*translateY\\(-"],"max":1},{"id":"M02","cat":"M","sev":"block","title":"Fade-in-up каждой секции при скролле","why":"AOS / IntersectionObserver с opacity:0 на всех блоках. Контент невидим до скролла, скриншоты пустые.","fix":"Контент виден сразу. Одна осмысленная анимация на странице, если вообще нужна.","detect":["data-aos=","aos\\.js","aos\\.css","class=\"[^\"]*\\bfade-in-up\\b","animate__fadeInUp"]},{"id":"M03","cat":"M","sev":"warn","title":"transition-all duration-300 везде","why":"Анимируется всё сразу, включая layout. Признак копипасты.","fix":"Анимировать конкретные свойства (color, opacity, transform) и уважать prefers-reduced-motion.","detect":["transition-all","transition:\\s*all"],"max":2},{"id":"M04","cat":"M","sev":"warn","title":"Пульсирующие кнопки и плавающие картинки","why":"animate-pulse/bounce на CTA, float-анимация на иллюстрации hero.","fix":"Статичный CTA. Движение только для обратной связи на действие.","detect":["animate-(pulse|bounce|ping)","@keyframes\\s+float"]},{"id":"M05","cat":"M","sev":"warn","title":"Печатающийся заголовок","why":"Typewriter-эффект в H1 мешает прочитать главное.","fix":"Заголовок статичный.","detect":["typewriter","typed\\.js","new Typed\\("]},{"id":"K01","cat":"K","sev":"warn","title":"Комментарии-разделители секций","why":"<!-- Hero Section -->, /* ===== Features ===== */ в каждом блоке.","fix":"Семантические теги и осмысленные классы вместо комментариев-заголовков.","detect":["<!--\\s*(Hero|Features?|Testimonials?|Pricing|CTA|Footer|Navbar|FAQ)( Section)?\\s*-->","/\\*\\s*=+\\s*\\w+"]},{"id":"K02","cat":"K","sev":"block","title":"Случайные стоковые картинки-заглушки","why":"source.unsplash.com/random, picsum.photos, via.placeholder.com.","fix":"Реальные изображения проекта. Нет картинки — нет блока с картинкой.","detect":["source\\.unsplash\\.com","picsum\\.photos","via\\.placeholder\\.com","placehold\\.co","placeholder\\.com"]},{"id":"K03","cat":"K","sev":"warn","title":"Ссылки href=\"#\"","why":"Кнопки и пункты меню, которые никуда не ведут.","fix":"Реальный адрес или <button> с обработчиком.","detect":["href=\"#\""],"max":0},{"id":"K04","cat":"K","sev":"warn","title":"Захардкоженный год и «All rights reserved»","why":"© 2024 YourCompany. All rights reserved. Год устаревает, фраза юридически ничего не добавляет.","fix":"Год подставлять скриптом или не писать. Название — реальное юрлицо.","detect":["©\\s*20\\d\\d","all rights reserved","все права защищены"]},{"id":"K05","cat":"K","sev":"warn","title":"div-суп без семантики","why":"Вся страница из div без header/main/section/nav/footer.","fix":"Семантические теги, один h1, логичная иерархия заголовков.","detect":[]}]};
+const P = id => `<a class="pin" href="#rule-${id}">${id}</a>`;
+
+const LANDING = `
+<div class="ai land" style="border-radius:0">
+  <div class="nav"><b style="font-size:15px">⚡ Nexora</b>${P('V07')}
+    <div class="links"><span>Возможности</span><span>Тарифы</span><span>Отзывы</span><span>FAQ</span>${P('K03')}</div>
+    <span class="b">Начать</span></div>
+  <div class="grad c" style="position:relative;padding:44px 18px 54px;margin:0">
+    <div class="blob" style="width:160px;height:160px;background:#f0abfc;top:-30px;left:-30px"></div>
+    <div class="blob" style="width:180px;height:180px;background:#93c5fd;bottom:-60px;right:-20px"></div>
+    <div style="position:relative">
+      <span class="pill" style="background:rgba(255,255,255,.18);color:#fff;border-color:rgba(255,255,255,.35)">✨ Новое: AI-аналитика 2.0 →</span>${P('L09')}
+      <h4 style="font-size:clamp(24px,4vw,40px);margin:14px auto 8px;max-width:620px;color:#fff">Раскройте весь потенциал вашего бизнеса с <span style="background:linear-gradient(90deg,#fde68a,#f9a8d4);-webkit-background-clip:text;background-clip:text;color:transparent">искусственным интеллектом</span></h4>
+      <div>${P('V01')}${P('V02')}${P('V04')}${P('C01')}${P('T02')}${P('L01')}${P('L02')}</div>
+      <p style="max-width:460px;margin:8px auto 16px;color:rgba(255,255,255,.85)">Nexora — это не просто платформа — это ваш надёжный партнёр на пути к росту. Бесшовная интеграция, мгновенные инсайты и революционная автоматизация.</p>
+      <div>${P('C02')}${P('C03')}</div>
+      <div class="row" style="margin-top:8px"><span class="b pulse" style="background:#fff;color:#5b21b6">Начать бесплатно</span><span class="b2" style="background:transparent;color:#fff;border-color:rgba(255,255,255,.5)">Узнать больше</span>${P('C05')}${P('M04')}</div>
+    </div>
+  </div>
+  <div class="pad c">
+    <p class="eb">Нам доверяют более 10 000 компаний</p>
+    <div class="row" style="gap:22px;margin-top:8px;opacity:.6;filter:grayscale(1)"><span class="logo">◆ Acme</span><span class="logo">▲ Vertex</span><span class="logo">● Globex</span><span class="logo">■ Initech</span></div>
+    <div>${P('L05')}${P('T05')}</div>
+  </div>
+  <div class="pad c" style="padding-top:0"><div class="g3" style="max-width:520px;margin:0 auto">
+    <div><div class="num">10K+</div><p>клиентов</p></div><div><div class="num">99.9%</div><p>аптайм</p></div><div><div class="num">24/7</div><p>поддержка</p></div>
+  </div>${P('L06')}</div>
+  <div class="pad c" style="background:#f9fafb">
+    <p class="eb">Возможности</p>
+    <h4>Всё, Что Нужно Для Роста</h4>
+    <p style="max-width:380px;margin:0 auto 14px">Мощные инструменты, которые помогут вашей команде работать эффективнее.</p>
+    <div>${P('T04')}${P('T03')}</div>
+    <div class="g3" style="margin-top:10px">
+      <div class="card"><div class="ico">🚀</div><h5>Молниеносно</h5><p>Ускорьте процессы в 10 раз.</p></div>
+      <div class="card"><div class="ico">🔒</div><h5>Безопасно</h5><p>Шифрование банковского уровня.</p></div>
+      <div class="card"><div class="ico">💡</div><h5>Умно</h5><p>AI-инсайты в реальном времени.</p></div>
+    </div>
+    <div style="margin-top:6px">${P('L03')}${P('V05')}${P('V06')}${P('M01')}${P('M03')}${P('C10')}</div>
+  </div>
+  <div class="pad c">
+    <div class="card" style="max-width:420px;margin:0 auto;text-align:left">
+      <p style="color:#374151">«Nexora полностью изменила то, как работает наша команда. Не представляем, как жили без неё!»</p>
+      <div style="display:flex;gap:8px;align-items:center;margin-top:8px"><div class="av"></div><div><b style="font-size:12px">Сара Джонсон</b><p style="margin:0;font-size:11px">CEO в TechCorp</p></div></div>
+    </div>${P('C06')}${P('C09')}
+  </div>
+  <div class="pad"><div class="grad c" style="border-radius:20px;padding:26px 16px">
+    <h4 style="font-size:20px">Готовы вывести бизнес на новый уровень?</h4>
+    <p>Присоединяйтесь к тысячам довольных клиентов уже сегодня.</p>
+    <span class="b" style="background:#fff;color:#5b21b6;margin-top:8px">Начать сейчас</span>
+  </div>${P('L10')}${P('C08')}</div>
+  <div class="pad" style="border-top:1px solid #f3f4f6;font-size:11px;color:#9ca3af;display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <span>© 2024 Ваша компания. Все права защищены.</span><span>Сделано с ❤️</span>
+    <span>${P('K04')}${P('C07')}${P('L11')}${P('L04')}</span>
+  </div>
+</div>`;
+
+const S = {
+V01:`<div class="ai grad c pad"><h4>Ваш бизнес. Будущее.</h4><p>#667eea → #764ba2</p></div>`,
+V02:`<div class="ai pad"><h4>Создавайте <span class="gtext">быстрее</span> вместе</h4></div>`,
+V03:`<div class="ai grad pad" style="background:linear-gradient(135deg,#4f46e5,#db2777)"><div class="glass"><b>Аналитика</b><p style="color:#fff;opacity:.8">+24% за неделю</p></div></div>`,
+V04:`<div class="ai pad c" style="min-height:120px"><div class="blob" style="width:120px;height:120px;background:#c4b5fd;top:-30px;left:-20px"></div><div class="blob" style="width:120px;height:120px;background:#f9a8d4;bottom:-40px;right:-10px"></div><h4 style="position:relative">Будущее уже здесь</h4></div>`,
+V05:`<div class="ai pad" style="display:grid;gap:8px"><input style="border-radius:16px;border:1px solid #e5e7eb;padding:8px" placeholder="Email" aria-label="пример"><div style="display:flex;gap:8px"><div style="flex:1;height:44px;border-radius:16px;background:#eef2ff"></div><div style="flex:1;height:44px;border-radius:16px;background:#fce7f3"></div></div><span class="b" style="border-radius:16px;text-align:center">Подписаться</span></div>`,
+V06:`<div class="ai pad" style="background:#f9fafb"><div class="g3"><div class="card"><h5>A</h5></div><div class="card"><h5>B</h5></div><div class="card"><h5>C</h5></div></div></div>`,
+V07:`<div class="ai pad"><div class="g3 c"><div><div class="ico">🚀</div><h5>Скорость</h5></div><div><div class="ico">🔒</div><h5>Защита</h5></div><div><div class="ico">🎯</div><h5>Точность</h5></div></div></div>`,
+V08:`<div class="ai pad" style="background:#f4f1ea"><h4 style="font-family:Georgia,serif;font-weight:400;letter-spacing:0">Ремесло и <i style="color:#c2410c">время</i></h4><p style="color:#57534e">Медленные вещи для внимательных людей.</p></div>`,
+V09:`<div class="ai pad" style="background:#0a0a0a"><h4 style="color:#fff">Build <span style="color:#39ff14">faster</span>.</h4><p style="color:#a3a3a3">The platform for builders.</p></div>`,
+V10:`<div class="ai pad" style="display:grid;gap:8px"><div style="border-left:4px solid #6366f1;border-radius:12px;background:#f8fafc;padding:10px"><h5>Совет</h5><p>Используйте шаблоны.</p></div><div style="border-left:4px solid #10b981;border-radius:12px;background:#f8fafc;padding:10px"><h5>Готово</h5></div></div>`,
+V11:`<div class="ai pad c dots" style="min-height:120px"><span class="pill">Beta</span><h4>Собирайте продукты</h4></div>`,
+L01:`<div class="ai pad c"><p class="eb">О нас</p><h4>Мы меняем индустрию</h4><p>Наша миссия — делать сложное простым.</p><p>Мы верим в прозрачность и качество.</p></div>`,
+L02:`<div class="ai grad c" style="height:170px;display:flex;align-items:center;justify-content:center;flex-direction:column"><h4>Привет, мир</h4><p>min-h-screen · ниже пусто ↓</p></div>`,
+L03:`<div class="ai pad"><div class="g3"><div class="card"><div class="ico">⚡</div><h5>Быстро</h5><p>Короткий текст.</p></div><div class="card"><div class="ico">🛡️</div><h5>Надёжно</h5><p>Короткий текст.</p></div><div class="card"><div class="ico">✨</div><h5>Просто</h5><p>Короткий текст.</p></div></div></div>`,
+L04:`<div class="ai pad" style="font:12px var(--f-mono);display:grid;gap:4px">${['Hero','Логотипы клиентов','3 фичи','Как это работает: 01 02 03','Отзывы','Тарифы','FAQ','Готовы начать?','Футер'].map(s=>`<div style="background:#f1f5f9;border-radius:8px;padding:4px 8px;color:#334155">${s}</div>`).join('')}</div>`,
+L05:`<div class="ai pad c"><p class="eb">Нам доверяют</p><div class="row" style="gap:18px;margin-top:8px;filter:grayscale(1);opacity:.55"><span class="logo">◆ Acme</span><span class="logo">▲ Vertex</span><span class="logo">● Globex</span><span class="logo">■ Umbrella</span></div></div>`,
+L06:`<div class="ai pad c"><div class="g3"><div><div class="num">10K+</div><p>пользователей</p></div><div><div class="num">99.9%</div><p>аптайм</p></div><div><div class="num">24/7</div><p>поддержка</p></div></div></div>`,
+L07:`<div class="ai pad"><div class="g3"><div><div class="num" style="color:#c7d2fe">01</div><h5>Дизайн</h5></div><div><div class="num" style="color:#c7d2fe">02</div><h5>Качество</h5></div><div><div class="num" style="color:#c7d2fe">03</div><h5>Поддержка</h5></div></div></div>`,
+L08:`<div class="ai pad"><div class="g3" style="align-items:center"><div class="card c"><h5>Старт</h5><div class="num" style="color:#111">0 ₽</div></div><div class="card c grad" style="transform:scale(1.06)"><span class="pill" style="font-size:9px">Самый популярный</span><h5 style="color:#fff">Про</h5><div class="num" style="color:#fff">990 ₽</div></div><div class="card c"><h5>Бизнес</h5><div class="num" style="color:#111">2990 ₽</div></div></div></div>`,
+L09:`<div class="ai pad c"><span class="pill">✨ Новое: интеграция с AI →</span><h4>Работайте умнее</h4></div>`,
+L10:`<div class="ai pad"><div class="grad c" style="border-radius:16px;padding:20px"><h4 style="font-size:19px">Готовы начать?</h4><div class="row"><span class="b" style="background:#fff;color:#5b21b6">Начать</span><span class="b2" style="background:transparent;color:#fff">Связаться</span></div></div></div>`,
+L11:`<div class="ai pad" style="font-size:11px"><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">${['Продукт','Компания','Ресурсы','Правовое'].map(h=>`<div><b>${h}</b><p>Ссылка<br>Ссылка<br>Ссылка</p></div>`).join('')}</div><p class="c">Сделано с ❤️</p></div>`,
+L12:`<div class="ai" style="font:11px var(--f-mono)">${['Hero','Фичи','Отзывы','Цены'].map((s,i)=>`<div style="padding:16px;border-bottom:1px solid #e5e7eb;background:${i%2?'#f9fafb':'#fff'};color:#64748b">section · py-24 · ${s}</div>`).join('')}</div>`,
+T01:`<div class="ai pad"><h4 style="font-family:Inter">Inter, 800, -0.03em</h4><p style="font-family:Inter">Шрифт, который ставится, когда шрифт не задан.</p></div>`,
+T02:`<div class="ai pad c"><h4 style="font-size:34px">Создано для команд</h4></div>`,
+T03:`<div class="ai pad c"><h4>Наши возможности</h4><p style="max-width:300px;margin:0 auto">Откройте для себя инструменты, которые помогут вам достичь большего.</p></div>`,
+T04:`<div class="ai pad"><h4>Создавайте Лучшие Продукты Вместе</h4></div>`,
+T05:`<div class="ai pad"><p class="eb">Отзывы</p><h4 style="font-size:20px">Что говорят клиенты</h4><p class="eb" style="margin-top:12px">Тарифы</p><h4 style="font-size:20px">Простые цены</h4></div>`,
+C01:`<div class="ai pad"><h4 style="font-size:19px">Раскройте потенциал команды</h4><p>Бесшовная интеграция и революционный подход выведут ваш бизнес на новый уровень.</p></div>`,
+C02:`<div class="ai pad"><h4 style="font-size:19px">Это не просто CRM — это ваш партнёр по росту</h4></div>`,
+C03:`<div class="ai pad"><p style="color:#374151">Мы создали инструмент — простой, но мощный — который меняет всё. Результат — мгновенно. Команда — счастлива.</p></div>`,
+C04:`<div class="ai pad c"><h4>Быстро. Надёжно. Безопасно.</h4></div>`,
+C05:`<div class="ai pad c"><div class="row"><span class="b">Начать</span><span class="b2">Узнать больше</span><span class="b2">Подробнее</span></div></div>`,
+C06:`<div class="ai pad"><div class="card"><p style="color:#374151">«Это изменило всё в нашей работе!»</p><div style="display:flex;gap:8px;align-items:center;margin-top:6px"><div class="av"></div><div><b style="font-size:12px">Сара Дж.</b><p style="margin:0;font-size:11px">CEO в TechCorp · ★★★★★</p></div></div></div></div>`,
+C07:`<div class="ai pad"><h5>Ваша компания</h5><p>Lorem ipsum dolor sit amet, consectetur adipiscing.</p><p>Иван Иванов · hello@example.com</p></div>`,
+C08:`<div class="ai pad"><h4 style="font-size:19px">Устали от рутины?</h4><h4 style="font-size:19px">Готовы изменить подход?</h4></div>`,
+C09:`<div class="ai pad c"><h4 style="font-size:19px">Попробуйте прямо сейчас!</h4><p>Это изменит всё!</p></div>`,
+C10:`<div class="ai pad"><h5>Это безопасно? ⌄</h5><p>Да! Мы используем шифрование банковского уровня.</p><h5>Есть поддержка? ⌄</h5><p>Конечно! Мы на связи 24/7.</p></div>`,
+M01:`<div class="ai pad" style="background:#f9fafb"><div class="card" style="transform:translateY(-4px);box-shadow:0 20px 40px rgba(17,24,39,.14)"><h5>Наведите на меня</h5><p>hover:-translate-y-1, хотя карточка не ссылка</p></div></div>`,
+M02:`<div class="ai pad"><code class="k"><span class="cm">&lt;!-- каждая секция --&gt;</span>
+&lt;section data-aos="fade-up"
+  data-aos-delay="100"&gt;
+<span class="cm">/* до скролла: opacity: 0 */</span></code></div>`,
+M03:`<div class="ai pad"><code class="k">.card, .btn, .link, .icon {
+  transition: all 0.3s ease;
+}</code></div>`,
+M04:`<div class="ai pad c"><div class="float" style="width:70px;height:46px;margin:0 auto 12px;border-radius:12px;background:linear-gradient(135deg,#c7d2fe,#fbcfe8)"></div><span class="b pulse">Начать бесплатно</span></div>`,
+M05:`<div class="ai pad"><h4 class="caret">Мы создаём будущ</h4></div>`,
+K01:`<div class="ai pad"><code class="k"><span class="cm">&lt;!-- Hero Section --&gt;</span>
+&lt;div class="hero"&gt;…&lt;/div&gt;
+<span class="cm">&lt;!-- Features Section --&gt;</span>
+<span class="cm">/* ===== Pricing ===== */</span></code></div>`,
+K02:`<div class="ai pad"><code class="k">&lt;img src="https://source.unsplash.com
+  /random/800x600?office"&gt;
+&lt;img src="https://via.placeholder.com/150"&gt;</code></div>`,
+K03:`<div class="ai pad"><code class="k">&lt;a href="#" class="btn"&gt;Начать&lt;/a&gt;
+&lt;a href="#"&gt;Тарифы&lt;/a&gt;
+&lt;a href="#"&gt;Политика&lt;/a&gt;</code></div>`,
+K04:`<div class="ai pad c" style="font-size:11px;color:#9ca3af">© 2024 YourCompany. All rights reserved.</div>`,
+K05:`<div class="ai pad"><code class="k">&lt;div class="nav"&gt;
+  &lt;div class="nav-item"&gt;…
+&lt;div class="hero"&gt;
+  &lt;div class="title"&gt;Заголовок&lt;/div&gt;</code></div>`
+};
+
+const ORDER = Object.keys(DATA.categories);
+const DEFAULTS = Object.fromEntries(DATA.rules.map(r => [r.id, r.sev]));
+const KEY = 'human-web-sev';
+let sev = { ...DEFAULTS };
+try { Object.assign(sev, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch {}
+let catFilter = 'all', query = '';
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function ruleHTML(r) {
+  const seg = ['block','warn','off'].map(v =>
+    `<label><input type="radio" name="sev-${r.id}" value="${v}" id="sev-${r.id}-${v}" ${sev[r.id]===v?'checked':''}><span class="s-${v}">${v}</span></label>`).join('');
+  const detect = r.detect.length
+    ? `<details><summary>как ловит хук${r.max!=null?` · срабатывает, если больше ${r.max}`:''}</summary><pre>${esc(r.detect.join('\n'))}</pre></details>`
+    : `<span class="manual">хук не ловит, только правило в скилле и /human-web:audit</span>`;
+  return `<article class="rule${sev[r.id]==='off'?' is-off':''}" id="rule-${r.id}" data-id="${r.id}" data-cat="${r.cat}">
+    <div class="spec"><div class="spec-label">так делает Claude</div><div class="spec-body">${S[r.id]||''}</div></div>
+    <div class="info">
+      <div class="info-top"><div><span class="rid">${r.id}</span><h3>${esc(r.title)}</h3></div><div class="seg" role="radiogroup" aria-label="Уровень ${r.id}">${seg}</div></div>
+      <p><span class="lbl">почему видно, что это AI</span>${esc(r.why)}</p>
+      <p><span class="lbl">что делать вместо</span>${esc(r.fix)}</p>
+      ${detect}
+    </div></article>`;
+}
+
+function render() {
+  document.getElementById('landing').innerHTML = LANDING;
+  document.getElementById('catalog').innerHTML = ORDER.map(c => {
+    const rs = DATA.rules.filter(r => r.cat === c);
+    return `<div class="cat-block" data-cat="${c}"><h2 class="cat-h">${esc(DATA.categories[c])} <span>${c}01–${c}${String(rs.length).padStart(2,'0')}</span></h2>${rs.map(ruleHTML).join('')}</div>`;
+  }).join('');
+  document.getElementById('chips').innerHTML =
+    [['all','Все'], ...ORDER.map(c => [c, DATA.categories[c]])]
+      .map(([k,l]) => `<button type="button" class="chip" data-cat="${k}" aria-pressed="${k===catFilter}">${esc(l)}</button>`).join('');
+  document.getElementById('m-count').textContent = `${DATA.rules.length} правил`;
+  update();
+}
+
+function update() {
+  const n = { block:0, warn:0, off:0 };
+  Object.values(sev).forEach(v => n[v]++);
+  for (const k in n) document.getElementById('n-'+k).textContent = n[k];
+  const overrides = {};
+  for (const id in sev) if (sev[id] !== DEFAULTS[id]) overrides[id] = sev[id];
+  document.getElementById('out').value = JSON.stringify({ overrides, ignore: [] }, null, 2);
+  try { localStorage.setItem(KEY, JSON.stringify(overrides)); } catch {}
+}
+
+function applyFilter() {
+  const q = query.trim().toLowerCase();
+  document.querySelectorAll('.rule').forEach(el => {
+    const r = DATA.rules.find(x => x.id === el.dataset.id);
+    const okCat = catFilter === 'all' || r.cat === catFilter;
+    const okQ = !q || (r.id + ' ' + r.title + ' ' + r.why + ' ' + r.fix).toLowerCase().includes(q);
+    el.hidden = !(okCat && okQ);
+  });
+  document.querySelectorAll('.cat-block').forEach(b => { b.hidden = !b.querySelector('.rule:not([hidden])'); });
+}
+
+document.addEventListener('change', e => {
+  const m = e.target.name && e.target.name.match(/^sev-(\w+)$/);
+  if (!m) return;
+  sev[m[1]] = e.target.value;
+  e.target.closest('.rule').classList.toggle('is-off', e.target.value === 'off');
+  update();
+});
+document.addEventListener('click', e => {
+  const chip = e.target.closest('.chip');
+  if (chip) {
+    catFilter = chip.dataset.cat;
+    document.querySelectorAll('.chip').forEach(c => c.setAttribute('aria-pressed', c === chip));
+    applyFilter();
+  }
+});
+document.getElementById('q').addEventListener('input', e => { query = e.target.value; applyFilter(); });
+document.getElementById('reset').addEventListener('click', () => { sev = { ...DEFAULTS }; render(); applyFilter(); });
+document.getElementById('copy').addEventListener('click', e => {
+  const ta = document.getElementById('out'), btn = e.currentTarget;
+  const done = () => { btn.textContent = 'Скопировано'; setTimeout(() => btn.textContent = 'Скопировать', 1500); };
+  navigator.clipboard.writeText(ta.value).then(done, () => { ta.select(); btn.textContent = 'Выделено, нажми Ctrl+C'; });
+});
+
+render();
+</script>
