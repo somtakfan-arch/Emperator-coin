@@ -470,7 +470,7 @@ T.room = {
     let typing = false;
     for (let x = 0; x < d; x += .09) { const st = kf(P.k, x); if (st.typing) ev.push([x + Math.random() * .04, 'key']); }
     if (!P.seq) (P.say || []).forEach(b => ev.push([b.at, 'talk', { who: 'kid', n: b.text.length }]));
-    if (P.door && P.door.line) ev.push([P.door.lineAt, 'talk', { who: P.door.who || 'mom', n: P.door.line.length }]);
+    if (P.door && P.door.line && !P.seq) ev.push([P.door.lineAt, 'talk', { who: P.door.who || 'mom', n: P.door.line.length }]);
     return ev;
   },
 };
@@ -614,7 +614,7 @@ T.school = {
     if (P.bell) ev.push([.1, 'bell']);
     if (P.grade) ev.push([P.grade.at, 'stamp'], [P.grade.at + .1, P.grade.good ? 'success' : 'loss']);
     const st = kf(P.k, 99); if (st.sleep) ev.push([st.sleep + .8, 'snore']);
-    if (P.teacher) ev.push([P.teacher.at, 'talk', { who: 'teacher', n: P.teacher.text.length }]);
+    if (P.teacher && !P.seq) ev.push([P.teacher.at, 'talk', { who: 'teacher', n: P.teacher.text.length }]);
     return ev;
   },
 };
@@ -751,7 +751,7 @@ function subsLayer(sh, lt) {
   }
   const lines = [[]]; let len = 0;
   words.forEach((w, k) => { if (len + w[0].length > 22 && lines[lines.length - 1].length) { lines.push([]); len = 0; } lines[lines.length - 1].push(k); len += w[0].length + 1; });
-  const y0 = (sh.subY || 1110) - (lines.length - 1) * 26;
+  const y0 = (sh.subY || (sh.type === 'title' ? 1210 : 1110)) - (lines.length - 1) * 26;
   let out = '';
   lines.forEach((ln, li) => {
     let spans = '';
@@ -764,22 +764,41 @@ function subsLayer(sh, lt) {
 // ---------------- СБОРКА СЕРИИ ----------------
 // Озвученный кадр: seq = [[кто, текст], ...]. 'n' — рассказчик (идёт в субтитры),
 // 'A'/'B' — собеседники в диалоге, 'kid' — пузырь героя в комнате.
+const NUMW = ['ноль', 'один', 'два', 'три', 'четыре', 'пять', 'шесть', 'семь', 'восемь', 'девять', 'десять'];
+// Сценарий голоса из готовых данных кадра: первая фраза рассказчика, потом реплики, потом остальной рассказ.
+function autoSeq(sh, ep) {
+  if (sh.seq) return sh.seq;
+  if (sh.type === 'title') return [['n', `Серия ${NUMW[ep.n]}. ${ep.n === 10 ? 'Финал. ' : ''}${sh.name}.`]];
+  if (sh.type === 'tease') return [['n', sh.kicker && !sh.kicker.startsWith('В следующей') ? sh.name + '.' : 'В следующей серии — ' + sh.name + '.']];
+  const n = (sh.s || []).map(x => ['n', x]);
+  const talk = [];
+  (sh.lines || []).forEach(l => talk.push([l.who, l.text]));
+  if (sh.door && sh.door.line) talk.push(['door', sh.door.line]);
+  if (sh.teacher) talk.push(['teacher', sh.teacher.text]);
+  (sh.say || []).forEach(b => talk.push(['kid', b.text]));
+  return n.length ? [n[0], ...talk, ...n.slice(1)] : talk;
+}
 function voiceLines(ep) {
   const out = [];
-  ep.shots.forEach((sh, si) => (sh.seq || []).forEach(([who, text], k) => {
-    const w = who === 'A' ? sh.A : who === 'B' ? sh.B : who;
+  if (!ep.voiced) return out;
+  ep.shots.forEach((sh, si) => autoSeq(sh, ep).forEach(([who, text], k) => {
+    const w = who === 'A' ? sh.A : who === 'B' ? sh.B : who === 'door' ? (sh.door.who || 'mom') : who;
     out.push({ id: si + '_' + k, who: w, text });
   }));
   return out;
 }
-function timeline(sh, si, vo) {
-  if (!sh.seq || !vo) return sh;
-  const o = Object.assign({}, sh, { voT: [], voEv: [], lines: [], say: [] });
+function timeline(sh, si, vo, ep) {
+  if (!vo) return sh;
+  const seq = autoSeq(sh, ep);
+  if (!seq.length) return sh;
+  const o = Object.assign({}, sh, { seq, voT: [], voEv: [], lines: [], say: [] });
   let t = sh.lead ?? .35;
-  sh.seq.forEach(([who, text], k) => {
+  seq.forEach(([who, text], k) => {
     const v = vo[si + '_' + k]; if (!v) return;
     if (who === 'n') o.voT.push([t, v.dur, text]);
     else if (who === 'A' || who === 'B') o.lines.push({ at: t, who, text, until: t + v.dur + .5 });
+    else if (who === 'door') o.door = Object.assign({}, sh.door, { line: text, lineAt: t, until: t + v.dur + .8 });
+    else if (who === 'teacher') o.teacher = Object.assign({}, sh.teacher, { at: t, text });
     else o.say.push({ at: t, text, until: t + v.dur + .5 });
     o.voEv.push([t, v.file]);
     t += v.dur + (sh.gap ?? .22);
@@ -790,7 +809,7 @@ function timeline(sh, si, vo) {
 function buildEpisode(ep, vo) {
   let t = 0, bal = ep.startBal || 0;
   const shots = ep.shots.map((sh0, si) => {
-    const sh = timeline(sh0, si, vo);
+    const sh = timeline(sh0, si, vo, ep);
     const o = Object.assign({}, sh, { start: t, balStart: bal });
     if (sh.bal) { o.flash = { at: sh.balAt ?? (sh.type === 'pay' ? sh.at + 1.2 : 1), v: sh.bal }; bal += sh.bal; }
     o.balEnd = bal;

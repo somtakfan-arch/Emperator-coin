@@ -3,7 +3,7 @@ const KOL = { from: 'Пекарня «Колосок»', col: '#f59e0b', letter:
 
 const EPISODES = [
 // ───────────── 0 ─────────────
-{ n: 0, title: 'Как всё началось', mood: 'sad', shots: [
+{ n: 0, title: 'Как всё началось', mood: 'sad', voiced: true, shots: [
   { type: 'title', d: 3, kicker: 'Серия 0', name: 'Как всё началось', kid: { eyes: 'normal', mouth: 'flat' }, lead: .6, subY: 1210,
     seq: [['n', 'Серия ноль. *Как всё началось*']] },
   { type: 'talk', d: 6, day: '−30', time: '15:40', place: 'street', A: 'kid', B: 'den',
@@ -44,10 +44,10 @@ const EPISODES = [
     k: [[0, { eyes: 'tired', mouth: 'flat' }], [1.6, { eyes: 'normal', look: [.8, .7] }], [3.3, { eyes: 'wide', mouth: 'o', look: [0, -.4] }]],
     notifs: [{ at: 3.2, ...KOL, text: 'Здравствуйте! Нужен сайт', y: 400 }],
     seq: [['n', 'А потом, ночью, телефон *вибрирует*.']], lead: 1.4 },
-  { type: 'tease', d: 2.6, kicker: 'Дальше — серия 1', name: 'Первый заказ' },
+  { type: 'tease', d: 2.6, kicker: 'Дальше — серия 1', name: 'Первый заказ', seq: [['n', 'Дальше — серия один. Первый заказ.']] },
 ]},
 // ───────────── 1 ─────────────
-{ n: 1, title: 'Первый заказ', mood: 'chill', shots: [
+{ n: 1, title: 'Первый заказ', mood: 'chill', voiced: true, shots: [
   { type: 'title', d: 2.2, kicker: 'Серия 1', name: 'Первый заказ', kid: { eyes: 'tired', mouth: 'flat' } },
   { type: 'room', d: 5.2, day: 1, time: '23:47', zoom: [1, 1.07, 400, 800], buzz: [.5, 2.8],
     k: [[0, { eyes: 'tired', mouth: 'flat' }], [1.1, { eyes: 'normal', look: [.8, .7] }], [2.6, { eyes: 'wide', mouth: 'o', armR: -35 }]],
@@ -84,7 +84,7 @@ const EPISODES = [
   { type: 'tease', d: 2.2, name: 'Сарафан' },
 ]},
 // ───────────── 2 ─────────────
-{ n: 2, title: 'Сарафан', mood: 'chill', shots: [
+{ n: 2, title: 'Сарафан', mood: 'chill', voiced: true, shots: [
   { type: 'title', d: 2.2, kicker: 'Серия 2', name: 'Сарафан', kid: { eyes: 'happy', mouth: 'smile' } },
   { type: 'talk', d: 6, day: 5, time: '16:20', place: 'bakery', A: 'kid', B: 'baker',
     ak: [[0, { eyes: 'normal', mouth: 'smile' }], [2.6, { blush: true, eyes: 'happy' }]], bk: [[0, { eyes: 'happy', mouth: 'grin' }]],
@@ -115,7 +115,7 @@ const EPISODES = [
   { type: 'tease', d: 2.2, name: 'Три дедлайна' },
 ]},
 // ───────────── 3 ─────────────
-{ n: 3, title: 'Три дедлайна', mood: 'tense', shots: [
+{ n: 3, title: 'Три дедлайна', mood: 'tense', voiced: true, shots: [
   { type: 'title', d: 2.2, kicker: 'Серия 3', name: 'Три дедлайна', kid: { eyes: 'wide', mouth: 'o', sweat: true } },
   { type: 'room', d: 5.6, day: 12, time: ['16:05', '19:30'], monitor: true, light: 'evening', flying: true,
     k: [[0, { typing: true, mouth: 'flat', sweat: true }]], screen2: [[0, { m: 'site:boroda' }]],
@@ -147,7 +147,7 @@ const EPISODES = [
   { type: 'tease', d: 2.2, name: 'Слишком хорошо' },
 ]},
 // ───────────── 4 ─────────────
-{ n: 4, title: 'Слишком хорошо', mood: 'tense', shots: [
+{ n: 4, title: 'Слишком хорошо', mood: 'tense', voiced: true, shots: [
   { type: 'title', d: 2.2, kicker: 'Серия 4', name: 'Слишком хорошо', kid: { eyes: 'wide', mouth: 'grin' } },
   { type: 'room', d: 6.2, day: 15, time: '21:30', buzz: [.3, 1.4], zoom: [1, 1.06, 360, 700],
     k: [[0, { eyes: 'normal', mouth: 'flat', look: [.8, .7] }], [1.4, { eyes: 'wide', mouth: 'o', look: [0, -.6] }], [3, { mouth: 'grin' }]],
@@ -177,7 +177,7 @@ const EPISODES = [
   { type: 'tease', d: 2.2, name: 'Демпинг' },
 ]},
 // ───────────── 5 ─────────────
-{ n: 5, title: 'Демпинг', mood: 'sad', shots: [
+{ n: 5, title: 'Демпинг', mood: 'sad', voiced: true, shots: [
   { type: 'title', d: 2.2, kicker: 'Серия 5', name: 'Демпинг', kid: { eyes: 'sad', mouth: 'flat' } },
   { type: 'browser', d: 5.4, day: 18, time: '19:00', site: 'gleb', modes: [[0, { m: 'live' }]],
     k: [[0, { eyes: 'normal', mouth: 'flat' }], [1.6, { eyes: 'wide', mouth: 'o' }]],
@@ -212,7 +212,7 @@ const EPISODES = [
   { type: 'tease', d: 2.2, name: 'Мама узнала' },
 ]},
 // ───────────── 6 ─────────────
-{ n: 6, title: 'Мама узнала', mood: 'sad', shots: [
+{ n: 6, title: 'Мама узнала', mood: 'sad', voiced: true, shots: [
   { type: 'title', d: 2.2, kicker: 'Серия 6', name: 'Мама узнала', kid: { eyes: 'wide', mouth: 'o', sweat: true } },
   { type: 'school', d: 5.4, day: 29, time: '10:20', board: ['Контрольная', '2x² − 8 = 0', 'x = ?'],
     k: [[0, { eyes: 'tired', mouth: 'flat' }], [2.4, { eyes: 'wide', mouth: 'o', sweat: true }]],
@@ -243,7 +243,7 @@ const EPISODES = [
   { type: 'tease', d: 2.2, name: 'Суббота' },
 ]},
 // ───────────── 7 ─────────────
-{ n: 7, title: 'Суббота', mood: 'chill', shots: [
+{ n: 7, title: 'Суббота', mood: 'chill', voiced: true, shots: [
   { type: 'title', d: 2.2, kicker: 'Серия 7', name: 'Суббота', kid: { eyes: 'normal', mouth: 'smirk' } },
   { type: 'talk', d: 6.4, day: 33, time: '12:00', place: 'cafe', A: 'kid', B: 'rustam',
     ak: [[0, { eyes: 'normal', mouth: 'smile' }]], bk: [[0, { eyes: 'normal', mouth: 'flat' }], [4.2, { eyes: 'happy', mouth: 'grin' }]],
@@ -272,7 +272,7 @@ const EPISODES = [
   { type: 'tease', d: 2.2, name: 'Пятница, 19:00' },
 ]},
 // ───────────── 8 ─────────────
-{ n: 8, title: 'Пятница, 19:00', mood: 'tense', shots: [
+{ n: 8, title: 'Пятница, 19:00', mood: 'tense', voiced: true, shots: [
   { type: 'title', d: 2.2, kicker: 'Серия 8', name: 'Пятница, 19:00', kid: { eyes: 'wide', mouth: 'o' } },
   { type: 'browser', d: 5, day: 52, time: ['19:00', '19:12'], site: 'dvor', modes: [[0, { m: 'live', traffic: .6, peak: 8400, hot: true }]], k: null,
     stamps: [{ at: .8, text: 'блогер выложил обзор', col: '#e64980', x: 400, y: 260 }],
@@ -306,7 +306,7 @@ const EPISODES = [
   { type: 'tease', d: 2.2, name: 'Глеб' },
 ]},
 // ───────────── 9 ─────────────
-{ n: 9, title: 'Глеб', mood: 'chill', shots: [
+{ n: 9, title: 'Глеб', mood: 'chill', voiced: true, shots: [
   { type: 'title', d: 2.2, kicker: 'Серия 9', name: 'Глеб', kid: { eyes: 'normal', mouth: 'flat' } },
   { type: 'room', d: 5.4, day: 54, time: '20:00', light: 'night',
     k: [[0, { eyes: 'normal', mouth: 'flat', look: [-.8, -.5] }], [2.6, { eyes: 'sad', mouth: 'wave' }]],
@@ -337,7 +337,7 @@ const EPISODES = [
   { type: 'tease', d: 2.2, name: 'Запуск', sub: 'финал сезона' },
 ]},
 // ───────────── 10 ─────────────
-{ n: 10, title: 'Запуск', mood: 'win', shots: [
+{ n: 10, title: 'Запуск', mood: 'win', voiced: true, shots: [
   { type: 'title', d: 2.2, kicker: 'Серия 10 · финал', name: 'Запуск', kid: { eyes: 'normal', mouth: 'smirk' } },
   { type: 'calendar', d: 4.6, day: 88, time: '08:00', pages: [['май', '14', 'воскресенье'], ['май', '17', 'среда'], ['май', '20', 'суббота']], flip: [.2, 1.6],
     notes: [{ at: 2.0, text: 'Экзамен', x: 160, y: 300, col: '#ffc9c9' }, { at: 2.5, text: 'Запуск', x: 560, y: 320, col: '#d3f9d8' }],

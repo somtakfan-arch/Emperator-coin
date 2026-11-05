@@ -24,11 +24,19 @@ CAST = {
     'man':     ('dmitri', 0.88, 0.9),
     'rustam':  ('dmitri', 0.85, 1.05),
 }
+# как читать числа (Piper путает падежи)
+SAY = {
+    '22 500': 'двадцать две тысячи пятьсот', '18 750': 'восемнадцать тысяч семьсот пятьдесят',
+    '25 000': 'двадцать пять тысяч', '150 000': 'сто пятьдесят тысяч', '75 000': 'семьдесят пять тысяч',
+    '16:00': 'шестнадцать ноль-ноль', '19:00': 'девятнадцать ноль-ноль', '№': 'номер ',
+}
 models = {}
 res = {}
 for ln in lines:
     model, pitch, slow = CAST.get(ln['who'], CAST['n'])
     text = ln['text'].replace('*', '')
+    for k, v in SAY.items():
+        text = text.replace(k, v)
     key = hashlib.md5(f"{model}|{pitch}|{slow}|{text}".encode()).hexdigest()[:12]
     path = os.path.join(out_dir, key + '.wav')
     if not os.path.exists(path):
