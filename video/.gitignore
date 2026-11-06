@@ -8,3 +8,6 @@ build/fakty/vo/
 build/brendy/*.wav
 build/brendy/*.json
 build/brendy/vo/
+build/idei/*.wav
+build/idei/*.json
+build/idei/vo/

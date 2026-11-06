@@ -100,7 +100,7 @@ T.list = {
       const at = voAt(P, i + (P.offset ?? 1), .6 + i * .9);
       if (lt < at) return;
       const p = pop(lt, at, .35), y = 420 + i * 150;
-      s += `<g transform="translate(${W / 2},${y}) scale(${p})"><rect x="-300" y="-56" width="600" height="112" rx="24" fill="#fff" stroke="${OL}" stroke-width="7"/><circle cx="-240" r="38" fill="${P.acc || YEL}" stroke="${OL}" stroke-width="6"/><text x="-240" y="14" font-size="40" font-weight="900" fill="${OL}" text-anchor="middle">${i + 1}</text><text x="-180" y="13" font-size="${it.length > 22 ? 30 : 36}" font-weight="800" fill="${OL}">${esc(it)}</text></g>`;
+      s += `<g transform="translate(${W / 2},${y}) scale(${p})"><rect x="-300" y="-56" width="600" height="112" rx="24" fill="#fff" stroke="${OL}" stroke-width="7"/><circle cx="-240" r="38" fill="${P.acc || YEL}" stroke="${OL}" stroke-width="6"/><text x="-240" y="14" font-size="40" font-weight="900" fill="${OL}" text-anchor="middle">${i + 1}</text><text x="-180" y="13" font-size="${Math.min(34, Math.floor(460 / (it.length * .66)))}" font-weight="800" fill="${OL}">${esc(it)}</text></g>`;
     });
     s += host(lt, P);
     return s;
