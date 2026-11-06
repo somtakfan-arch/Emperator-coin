@@ -3,19 +3,19 @@
 <link rel="stylesheet" href="fonts/rubik.css">
 <style>html,body{margin:0;background:#0d1018;overflow:hidden}#stage{width:720px;height:1280px}svg{display:block}text{font-family:Rubik,"DejaVu Sans",sans-serif}</style>
 </head><body><div id="stage"></div>
-<script src="engine.js"></script><script src="episodes.js"></script><script src="facts.js"></script><script src="brands.js"></script><script src="ideas.js"></script>
+<script src="engine.js"></script><script src="episodes.js"></script><script src="facts.js"></script><script src="brands.js"></script><script src="ideas.js"></script><script src="bots.js"></script>
 <script>
 const n = +(new URLSearchParams(location.search).get('ep') ?? 1);
 let B;
 function build(vo) {
   let bal = 0;
-  for (const ep of EPISODES.concat(FACTS, BRANDS, IDEAS)) { ep.startBal = bal; const b = buildEpisode(ep, ep.n === n ? vo : null); bal = b.endBal; if (ep.n === n) B = b; }
+  for (const ep of EPISODES.concat(FACTS, BRANDS, IDEAS, BOTS)) { ep.startBal = bal; const b = buildEpisode(ep, ep.n === n ? vo : null); bal = b.endBal; if (ep.n === n) B = b; }
   window.DUR = B.dur;
   window.SOUND = soundEvents(B);
   return B.dur;
 }
 build(null);
-window.VOICE_LINES = voiceLines(EPISODES.concat(FACTS, BRANDS, IDEAS).find(e => e.n === n));
+window.VOICE_LINES = voiceLines(EPISODES.concat(FACTS, BRANDS, IDEAS, BOTS).find(e => e.n === n));
 window.init = vo => build(vo);
 window.draw = t => { document.getElementById('stage').innerHTML = drawFrame(B, t); };
 window.READY = Promise.all(['500', '700', '800', '900'].map(w => document.fonts.load(w + ' 40px Rubik', 'Аа₽1'))).then(() => draw(+(new URLSearchParams(location.search).get('t') || 1)));

@@ -11,3 +11,6 @@ build/brendy/vo/
 build/idei/*.wav
 build/idei/*.json
 build/idei/vo/
+build/boty/*.wav
+build/boty/*.json
+build/boty/vo/
