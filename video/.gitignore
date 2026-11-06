@@ -14,3 +14,6 @@ build/idei/vo/
 build/boty/*.wav
 build/boty/*.json
 build/boty/vo/
+build/boty/*.wav
+build/boty/*.json
+build/boty/vo/
