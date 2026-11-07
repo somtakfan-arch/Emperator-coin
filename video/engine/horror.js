@@ -277,5 +277,5 @@ const HORROR = [
   hs('end', [N('Кажется, ты только что рассказал *всем*.'), N('Ну что… *ты прочитал* правила?')], { name: 'Ты прочитал правила?', noSubs: false, sfx: [['v1', 'stinger']] }),
 ]},
 ];
-HORROR.forEach(f => { f.voiced = true; f.shots.forEach(s => { s.d = s.d || 3; s.lead = s.lead ?? .6; s.gap = s.gap ?? .6; s.tail = s.tail ?? 1.0; s.hlCol = HRED; if (s.zoomIn) s.zoom = [1, 1.12, 360, 700]; }); });
+HORROR.forEach(f => { f.voiced = true; if (f.n === 503) f.shots.forEach(sh => { sh.tail = sh.tail ?? 1.35; sh.lead = sh.lead ?? .75; }); f.shots.forEach(s => { s.d = s.d || 3; s.lead = s.lead ?? .6; s.gap = s.gap ?? .6; s.tail = s.tail ?? 1.0; s.hlCol = HRED; if (s.zoomIn) s.zoom = [1, 1.12, 360, 700]; }); });
 if (typeof module !== 'undefined') module.exports = { HORROR };
