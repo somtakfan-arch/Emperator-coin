@@ -38,7 +38,7 @@ fs.mkdirSync(out, { recursive: true });
     if (r.status) process.exit(1);
     const FPS = 30, N = Math.round(dur * FPS);
     const file = n > 510 ? `${out}/foto-${String(n - 510).padStart(2, '0')}.mp4` : n > 500 ? `${out}/horror-${String(n - 500).padStart(2, '0')}.mp4` : n > 400 ? `${out}/bot-${String(n - 400).padStart(2, '0')}.mp4` : n > 300 ? `${out}/ideya-${String(n - 300).padStart(2, '0')}.mp4` : n > 200 ? `${out}/brend-${String(n - 200).padStart(2, '0')}.mp4` : n > 100 ? `${out}/fakt-${String(n - 100).padStart(2, '0')}.mp4` : `${out}/seriya-${String(n).padStart(2, '0')}.mp4`;
-    const ff = spawn('ffmpeg', ['-v', 'error', '-y', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-', '-i', `${out}/ep${n}.wav`, '-c:v', 'libx264', '-preset', 'medium', '-crf', '22', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k', '-shortest', '-movflags', '+faststart', file], { stdio: ['pipe', 'inherit', 'inherit'] });
+    const ff = spawn('ffmpeg', ['-v', 'error', '-y', '-f', 'image2pipe', '-framerate', String(FPS), '-c:v', 'mjpeg', '-i', '-', '-i', `${out}/ep${n}.wav`, '-c:v', 'libx264', '-preset', 'medium', '-crf', '22', '-maxrate', '4M', '-bufsize', '8M', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '160k', '-shortest', '-movflags', '+faststart', file], { stdio: ['pipe', 'inherit', 'inherit'] });
     const t0 = Date.now();
     for (let i = 0; i < N; i++) {
       await p.evaluate(t => draw(t), i / FPS);
