@@ -234,6 +234,11 @@ for at, kind, o in spec['events']:
         for k in range(nn): add(out, at + k * sp, noise(.12, .025) , .25 if o.get('fast') else .15)
     elif kind == 'drop':
         d = o.get('d', 5); n = int(d * SR); x = T(n); add(out, at, np.sin(2 * np.pi * np.cumsum(90 - 40 * x / d) / SR) * np.minimum(1, x / .5) * np.minimum(1, (d - x) / .5), .12)
+    elif kind == 'shutter':
+        add(out, at, noise(.05, .01, True), .5); add(out, at + .07, noise(.06, .012, True), .45); add(out, at, tone(4200, .05, .001, .01), .08)
+    elif kind == 'static':
+        d = o.get('d', 1); n = int(d * SR); w = rng.standard_normal(n) * (np.sin(2 * np.pi * 7 * T(n)) > -.3)
+        add(out, at, w * np.minimum(1, (d - T(n)) / .05), .12)
     elif kind == 'talk':
         base = VOICE.get(o.get('who', 'kid'), 450)
         syl = int(min(14, max(3, o.get('n', 10) / 3)))

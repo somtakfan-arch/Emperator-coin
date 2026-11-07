@@ -30,6 +30,7 @@ EL = {
     'h_den': ('el', 'TX3LPaxmHKxFdv7VOQHJ', 0.40, 0.40),  # Liam — Дэн
     'h_kid': ('el', 'iP95p4xoKVk53GoZ742B', 0.45, 0.30),  # Chris — герой
     'h_old': ('el', 'pqHfZKP75CvOlQylNhV4', 0.50, 0.30),  # Bill — старик-сосед
+    'h_whis': ('el', 'pFZP5JQG7iQjIQuC4Bku', 0.25, 0.60),  # Lily — шёпот
 }
 # как читать числа (Piper путает падежи)
 SAY = {

@@ -20,3 +20,6 @@ build/boty/vo/
 build/horror/*.wav
 build/horror/*.json
 build/horror/vo/
+build/foto/*.wav
+build/foto/*.json
+build/foto/vo/

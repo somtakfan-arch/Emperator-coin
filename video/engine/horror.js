@@ -160,7 +160,7 @@ SC.dayHall = (lt, P) => {
 SC.title = (lt, P) => {
   const fl = rnd(Math.floor(lt * 14)) > .15 ? 1 : .3;
   let s = `<rect width="${W}" height="${H}" fill="#050507"/>${snowLayer(lt, 40, '#8a92a6')}`;
-  s += `<text x="360" y="520" font-size="34" font-weight="700" fill="#8a92a6" text-anchor="middle" letter-spacing="6">ПРАВИЛА ПОДЪЕЗДА</text>`;
+  s += `<text x="360" y="520" font-size="34" font-weight="700" fill="#8a92a6" text-anchor="middle" letter-spacing="6">${esc(P.series ?? 'ПРАВИЛА ПОДЪЕЗДА')}</text>`;
   s += `<text x="360" y="610" font-size="44" font-weight="800" fill="#c9ced8" text-anchor="middle" opacity="${eo(seg(lt, .3, .9))}">${esc(P.kicker)}</text>`;
   wrap(P.name, 14).forEach((l, i) => s += `<text x="360" y="${720 + i * 86}" font-size="78" font-weight="900" fill="${HRED}" text-anchor="middle" opacity="${fl * eo(seg(lt, .6, 1.3))}">${esc(l)}</text>`);
   return { bg: s, dark: 0 };
