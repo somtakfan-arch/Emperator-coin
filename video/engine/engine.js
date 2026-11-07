@@ -756,7 +756,7 @@ function subsLayer(sh, lt) {
   let out = '';
   lines.forEach((ln, li) => {
     let spans = '';
-    ln.forEach(k => { const ap = st + dur * k / words.length; const p = seg(lt, ap, ap + .12); spans += `<tspan fill="${words[k][1] ? YEL : '#fff'}" fill-opacity="${p}" stroke-opacity="${p}">${esc(words[k][0])} </tspan>`; });
+    ln.forEach(k => { const ap = st + dur * k / words.length; const p = seg(lt, ap, ap + .12); spans += `<tspan fill="${words[k][1] ? (sh.hlCol || YEL) : '#fff'}" fill-opacity="${p}" stroke-opacity="${p}">${esc(words[k][0])} </tspan>`; });
     out += `<text x="${W / 2}" y="${y0 + li * 54}" font-size="42" font-weight="800" text-anchor="middle" stroke="#0b0d12" stroke-width="10" stroke-linejoin="round" paint-order="stroke" xml:space="preserve">${spans}</text>`;
   });
   return out;
@@ -796,7 +796,7 @@ function timeline(sh, si, vo, ep) {
   let t = sh.lead ?? .35;
   seq.forEach(([who, text], k) => {
     const v = vo[si + '_' + k]; if (!v) return;
-    if (who === 'n' || who === 'nb') o.voT.push([t, v.dur, text]);
+    if (who === 'n' || who === 'nb' || (who.startsWith('h_') && who !== 'A' && who !== 'B')) o.voT.push([t, v.dur, text]);
     else if (who === 'A' || who === 'B') o.lines.push({ at: t, who, text, until: t + v.dur + .5 });
     else if (who === 'door') o.door = Object.assign({}, sh.door, { line: text, lineAt: t, until: t + v.dur + .8 });
     else if (who === 'teacher') o.teacher = Object.assign({}, sh.teacher, { at: t, text });
@@ -819,9 +819,10 @@ function buildEpisode(ep, vo) {
   });
   return { ep, shots, dur: t, endBal: bal };
 }
+const rtv = (sh, a) => (typeof a === 'string' && typeof rt === 'function') ? rt(sh, a) : a;
 function camera(sh, lt) {
   let tr = '';
-  for (const a of sh.shake || []) { const p = seg(lt, a, a + .4); if (p > 0 && p < 1) { const k = (1 - p) * 14; tr += `translate(${Math.sin(lt * 90) * k},${Math.cos(lt * 77) * k}) `; } }
+  for (const a0 of sh.shake || []) { const a = rtv(sh, a0); const p = seg(lt, a, a + .4); if (p > 0 && p < 1) { const k = (1 - p) * 14; tr += `translate(${Math.sin(lt * 90) * k},${Math.cos(lt * 77) * k}) `; } }
   if (sh.zoom) { const [z0, z1, cx = 360, cy = 760] = sh.zoom; const z = lerp(z0, z1, eio(seg(lt, 0, sh.d))); tr += `translate(${cx},${cy}) scale(${z}) translate(${-cx},${-cy})`; }
   return tr;
 }
@@ -844,7 +845,7 @@ function soundEvents(B) {
     for (const v of sh.voEv || []) ev.push([sh.start + v[0], 'vo', { file: v[1] }]);
     for (const [at, k, o] of (T[sh.type].sfx ? T[sh.type].sfx(sh, sh.d) : [])) if (at < sh.d) ev.push([sh.start + at, k, o || {}]);
     for (const st of sh.stamps || []) ev.push([sh.start + st.at, 'stamp']);
-    for (const a of sh.shake || []) ev.push([sh.start + a, 'thud']);
+    for (const a of sh.shake || []) ev.push([sh.start + rtv(sh, a), 'thud']);
     if (sh.flash && sh.type !== 'pay') ev.push([sh.start + sh.flash.at, sh.flash.v > 0 ? 'coins' : 'loss']);
   }
   const moods = B.shots.map(sh => [sh.start, sh.mood || B.ep.mood || 'chill']);

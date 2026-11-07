@@ -17,3 +17,6 @@ build/boty/vo/
 build/boty/*.wav
 build/boty/*.json
 build/boty/vo/
+build/horror/*.wav
+build/horror/*.json
+build/horror/vo/

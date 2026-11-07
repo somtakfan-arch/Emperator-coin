@@ -61,6 +61,7 @@ MOODS = {
     'chill': dict(bpm=88, chords=[[57, 60, 64, 67], [53, 57, 60, 64], [48, 52, 55, 59], [55, 59, 62, 65]], drums=1, hats=2, bright=1.0),
     'tense': dict(bpm=104, chords=[[57, 60, 64], [57, 60, 64], [58, 62, 65], [56, 60, 63]], drums=1, hats=4, bright=.8),
     'sad':   dict(bpm=72, chords=[[50, 53, 57], [46, 50, 53], [53, 57, 60], [48, 52, 55]], drums=0, hats=0, bright=.7),
+    'horror': dict(bpm=60, chords=[[45, 48, 51], [44, 47, 51], [45, 48, 52], [41, 44, 48]], drums=0, hats=0, bright=.3, horror=True),
     'win':   dict(bpm=96, chords=[[48, 52, 55, 60], [55, 59, 62, 67], [57, 60, 64, 69], [53, 57, 60, 65]], drums=1, hats=2, bright=1.2),
 }
 moods = spec['moods']
@@ -96,6 +97,13 @@ while t < D:
                 add(mus, tb, noise(.2, .06), .12)
             for h in range(M['hats']):
                 add(mus, tb + h * beat / M['hats'], noise(.05, .012, True), .05)
+    elif M.get('horror'):
+        n = int(bar * SR); x = T(n)
+        dr = sum(np.sin(2 * np.pi * m2f(ch[0] - 24) * (1 + d) * x) for d in (0, .004, -.006)) / 3
+        add(mus, t, dr * np.minimum(1, x / 1.0) * np.minimum(1, (bar - x) / 1.0), .16)
+        if bar_i % 2 == 0:
+            add(mus, t + beat * 1.5, tone(m2f(ch[1] + 24), 2.5, .003, 1.2, 'tri'), .035)
+            add(mus, t + beat * 1.53, tone(m2f(ch[1] + 25), 2.5, .003, 1.2, 'tri'), .02)
     else:
         # без барабанов — тихие колокольчики
         for q in range(4):
@@ -184,6 +192,48 @@ for at, kind, o in spec['events']:
         n = int(o.get('d', 5) * SR); w = rng.standard_normal(n)
         w = np.convolve(w, np.ones(8) / 8, mode='same') * np.minimum(1, T(n) / .5) * np.minimum(1, (n / SR - T(n)) / .5)
         add(out, at, w, .07)
+    elif kind == 'stinger':
+        n = int(1.6 * SR); x = T(n)
+        w = sum(np.sin(2 * np.pi * f * x) for f in (55, 58.3, 110, 233, 466)) / 5 * np.exp(-x / .6)
+        add(out, at, w + noise(1.6, .25, True) * .4, .5)
+        i = int(at * SR); duck[i:i + int(1.2 * SR)] = np.minimum(duck[i:i + int(1.2 * SR)], .3)
+    elif kind == 'ding':
+        add(out, at, tone(1318, 1.4, .002, .6), .12); add(out, at + .02, tone(1760, 1.2, .002, .5), .06)
+    elif kind in ('hum', 'drone'):
+        d = o.get('d', 5); n = int(d * SR); x = T(n)
+        f = 50 if kind == 'hum' else 41
+        w = (np.sin(2 * np.pi * f * x) + .4 * np.sin(2 * np.pi * f * 2.01 * x)) * np.minimum(1, x / .8) * np.minimum(1, (d - x) / .8)
+        add(out, at, w, .07 if kind == 'hum' else .12)
+    elif kind == 'fbuzz':
+        d = max(.3, o.get('d', 1)); n = int(d * SR); x = T(n)
+        gate = (np.sin(2 * np.pi * 9 * x) > .2).astype(float)
+        add(out, at, np.sign(np.sin(2 * np.pi * 120 * x)) * gate * .5, .05)
+    elif kind == 'heart':
+        d = o.get('d', 4); k = 0.0
+        while k < d:
+            for off, g in ((0, .5), (.18, .35)):
+                n2 = int(.2 * SR); x = T(n2); add(out, at + k + off, np.sin(2 * np.pi * np.cumsum(60 * np.exp(-x * 8) + 35) / SR) * np.exp(-x / .07), g)
+            k += .8
+    elif kind == 'clunk':
+        add(out, at, noise(.3, .06), .3); add(out, at, sweep(140, 60, .3, .1), .45)
+    elif kind == 'slide':
+        n = int(1.2 * SR); add(out, at, noise(1.2, 1.0) * np.sin(np.pi * T(n) / 1.2) * .5, .06)
+    elif kind == 'whisper':
+        n = int(1.5 * SR); x = T(n); w = noise(1.5, 3, True) * (np.sin(2 * np.pi * 3 * x) * .5 + .5) * np.sin(np.pi * x / 1.5)
+        add(out, at, w, .06)
+    elif kind == 'click':
+        add(out, at, noise(.04, .006, True), .35); add(out, at, tone(2400, .05, .001, .01), .1)
+    elif kind == 'switch':
+        add(out, at, noise(.05, .008, True), .4)
+    elif kind == 'knock':
+        n = int(.25 * SR); x = T(n); add(out, at, (np.sin(2 * np.pi * np.cumsum(180 * np.exp(-x * 15) + 70) / SR) + noise(.25, .02) * .6) * np.exp(-x / .05), .55)
+    elif kind == 'chain':
+        for k in range(5): add(out, at + k * .05, tone(3000 + k * 300, .1, .001, .03), .08)
+    elif kind == 'steps':
+        nn = o.get('n', 4); sp = .28 if o.get('fast') else .55
+        for k in range(nn): add(out, at + k * sp, noise(.12, .025) , .25 if o.get('fast') else .15)
+    elif kind == 'drop':
+        d = o.get('d', 5); n = int(d * SR); x = T(n); add(out, at, np.sin(2 * np.pi * np.cumsum(90 - 40 * x / d) / SR) * np.minimum(1, x / .5) * np.minimum(1, (d - x) / .5), .12)
     elif kind == 'talk':
         base = VOICE.get(o.get('who', 'kid'), 450)
         syl = int(min(14, max(3, o.get('n', 10) / 3)))
