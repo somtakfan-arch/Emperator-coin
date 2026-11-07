@@ -635,7 +635,7 @@ T.talk = {
     if (P.rain) { s += `<rect width="${W}" height="${H}" fill="#2b3a55" opacity=".25"/>`; for (let i = 0; i < 70; i++) { const x = (rnd(i) * (W + 200) + lt * 260) % (W + 200) - 100, y = (rnd(i + 40) * H + lt * 1300) % H; s += `<line x1="${x}" y1="${y}" x2="${x - 12}" y2="${y + 40}" stroke="#cfe3ff" stroke-width="3" opacity=".55"/>`; } }
     if (cur && (cur.until === undefined || lt < cur.until)) {
       const left = cur.who === 'A';
-      s += speech(left ? 280 : 440, cur.y ?? 590, cur.text, seg(lt, cur.at, cur.at + .35), left ? -80 : 80);
+      s += speech(left ? 280 : 440, cur.y ?? 590, cur.text.replace(/\*/g, ''), seg(lt, cur.at, cur.at + .35), left ? -80 : 80);
     }
     return s;
   },

@@ -84,7 +84,7 @@ SC.doors = (lt, P) => {
 SC.note = (lt, P) => {
   let s = `<rect width="${W}" height="${H}" fill="#1a1c22"/>`;
   s += `<g transform="translate(360,620) rotate(${-2 + Math.sin(lt * .6)}) scale(${1 + seg(lt, 0, 6) * .04})"><rect x="-300" y="-430" width="600" height="860" fill="${P.red ? '#e9cfc6' : '#efe6cf'}" stroke="#00000033" stroke-width="2"/><rect x="-60" y="-450" width="120" height="40" fill="#d9d0b8" opacity=".9"/>`;
-  s += `<text x="0" y="-350" font-size="40" font-weight="700" fill="#2a2016" text-anchor="middle" font-family="DejaVu Serif" font-style="italic">${esc(P.head || 'Правила для жильцов')}</text><text x="0" y="-305" font-size="30" fill="#2a2016" text-anchor="middle" font-family="DejaVu Serif" font-style="italic">${esc(P.sub || 'после 00:00')}</text>`;
+  s += `<text x="0" y="-350" font-size="40" font-weight="700" fill="#2a2016" text-anchor="middle" font-family="DejaVu Serif" font-style="italic">${esc(P.head || 'Правила для жильцов')}</text><text x="0" y="-305" font-size="30" fill="#2a2016" text-anchor="middle" font-family="DejaVu Serif" font-style="italic">${esc(P.sub ?? 'после 00:00')}</text>`;
   let y = -220;
   (P.rules || []).forEach((r, i) => {
     const at = rt(P, r.at ?? 0); if (lt < at) { y += 40 + wrap(r.text, 26).length * 44; return; }
@@ -187,8 +187,8 @@ T.hor = {
     });
     if (sc.fg) s += sc.fg;
     const cur = [...(P.lines || [])].reverse().find(l => lt >= l.at && lt < l.until);
-    if (cur && P.chars) { const c = P.chars[cur.who === 'A' ? 0 : 1] || P.chars[0]; s += speech(clamp(c.x, 200, 520), P.bubbleY ?? 380, cur.text, seg(lt, cur.at, cur.at + .3), clamp(c.x - clamp(c.x, 200, 520), -120, 120)); }
-    if (cur && !P.chars) s += speech(360, P.bubbleY ?? 300, cur.text, seg(lt, cur.at, cur.at + .3), 0, true);
+    if (cur && P.chars) { const c = P.chars[cur.who === 'A' ? 0 : 1] || P.chars[0]; s += speech(clamp(c.x, 200, 520), P.bubbleY ?? 380, cur.text.replace(/\*/g, ''), seg(lt, cur.at, cur.at + .3), clamp(c.x - clamp(c.x, 200, 520), -120, 120)); }
+    if (cur && !P.chars) s += speech(360, P.bubbleY ?? 300, cur.text.replace(/\*/g, ''), seg(lt, cur.at, cur.at + .3), 0, true);
     const dark = (sc.dark || 0) + (P.dark || 0);
     if (dark > 0) s += `<rect width="${W}" height="${H}" fill="#000" opacity="${clamp(dark, 0, .9)}"/>`;
     if (sc.tint) s += `<rect width="${W}" height="${H}" fill="${sc.tint}" opacity=".12"/>`;
