@@ -22,6 +22,9 @@ CAST = {
     'teacher': ('irina', 0.92, 1.05),
     'man':     ('dmitri', 0.88, 0.9),
     'rustam':  ('dmitri', 0.85, 1.05),
+    'h_pn':    ('dmitri', 0.94, 1.10),  # хоррор-рассказчик на Piper: ниже и медленнее
+    'h_pkid':  ('ruslan', 1.14, 0.92),
+    'h_pden':  ('denis', 1.10, 0.92),
 }
 # ElevenLabs (ключ подставляет сетевой прокси, в коде его нет): кто → ('el', voice_id, stability, style)
 EL = {

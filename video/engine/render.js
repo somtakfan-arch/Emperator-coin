@@ -3,7 +3,7 @@ const { chromium } = require('playwright');
 const { spawn, spawnSync } = require('child_process');
 const path = require('path'), fs = require('fs');
 const args = process.argv.slice(2);
-const eps = args[0] === 'all' ? [0,1,2,3,4,5,6,7,8,9,10] : args[0] === 'facts' ? [...Array(15)].map((_, i) => 101 + i) : args[0] === 'brands' ? [...Array(10)].map((_, i) => 201 + i) : args[0] === 'ideas' ? [...Array(15)].map((_, i) => 301 + i) : args[0] === 'bots' ? [401, 402, 403, 404, 405] : args[0] === 'horror' ? [501, 502, 503] : args[0] === 'foto' ? [511, 512] : args[0].split(',').map(Number);
+const eps = args[0] === 'all' ? [0,1,2,3,4,5,6,7,8,9,10] : args[0] === 'facts' ? [...Array(15)].map((_, i) => 101 + i) : args[0] === 'brands' ? [...Array(10)].map((_, i) => 201 + i) : args[0] === 'ideas' ? [...Array(15)].map((_, i) => 301 + i) : args[0] === 'bots' ? [401, 402, 403, 404, 405] : args[0] === 'horror' ? [501, 502, 503] : args[0] === 'foto' ? [511, 512] : args[0] === 'foto3' ? [513, 514, 515] : args[0].split(',').map(Number);
 const out = path.resolve(args[1] || 'out');
 const preview = args.includes('--preview');
 fs.mkdirSync(out, { recursive: true });

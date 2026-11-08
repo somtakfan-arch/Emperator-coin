@@ -101,7 +101,7 @@ SC.denRoom = (lt, P) => {
   s += `<rect x="${wx + 10 + gap}" y="${wy + 10}" width="${ww - 20 - gap * .3}" height="${wh - 20}" fill="#3a2c20" stroke="#05070c" stroke-width="6"/><circle cx="${wx + 40 + gap}" cy="${wy + 380}" r="10" fill="#c9b48a"/>`;
   if (flash) s += `<rect x="${wx + 10}" y="${wy + 10}" width="${gap}" height="${wh - 20}" fill="#fff"/><rect width="${W}" height="${H}" fill="#fff" opacity=".35"/>`;
   // матрасы и спящие
-  s += sleeper(240, 1100, .75, { eyes: kfr(P.kidEyes, lt, P).e || 'closed', p: kfr(P.kidP, lt, P) })+ sleeper(260, 1230, .75, { who: 'den', blanket: '#7a5a3a', eyes: kfr(P.denEyes, lt, P).e || 'closed' });
+  s += sleeper(240, 1100, .75, { eyes: kfr(P.kidEyes, lt, P).e || 'closed', p: kfr(P.kidP, lt, P) })+ (P.denGone ? `<g transform="translate(260,1230) scale(.75)"><rect x="-260" y="-40" width="520" height="150" rx="20" fill="#2a3042"/><path d="M-130,-10 Q60,-40 260,10 L260,30 L-130,30Z" fill="#7a5a3a"/></g><g transform="translate(300,1180) rotate(30)"><rect x="-6" y="-60" width="12" height="90" fill="#8a5a3a"/><rect x="-30" y="-80" width="60" height="30" rx="6" fill="#6b7280"/></g>` : sleeper(260, 1230, .75, { who: 'den', blanket: '#7a5a3a', eyes: kfr(P.denEyes, lt, P).e || 'closed' }));
   if (torch) s += `<path d="M120,1100 L${wx + 20},${wy} L${wx + ww},${wy + wh} Z" fill="#fff5c8" opacity=".14"/>`;
   return { bg: s, dark: torch ? 0 : .25 };
 };
