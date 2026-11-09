@@ -575,6 +575,53 @@ def _store_message(storage: Storage, message: Message, business_connection_id: s
     )
 
 
+# Owner saves a (possibly one-time) media by REPLYING to it with one of these
+# keywords. Telegram's Bot API exposes no reliable "view-once" flag, so saving
+# can't be automatic — that would re-save every ordinary photo/voice someone
+# replies to. The owner opts in explicitly instead, the way most such bots work.
+_SAVE_TRIGGERS = {
+    "+", "save", "сейв", "сохрани", "сохранить", "сохранить это", "сохранить медиа",
+    "📥", "💾", ".сохранить", ".save", ".сохрани",
+}
+
+
+async def _save_replied_media(context, storage, conn, bcid, message, reply) -> bool:
+    """The owner replied to a media message with a save keyword — re-send that
+    media to the owner's DM (saved). Returns True if the reply was a save action
+    (so the caller can stop further processing of that keyword message)."""
+    if getattr(message.chat, "type", "private") != "private":
+        return False
+    owner_id = conn["owner_user_id"]
+    reply_kind, reply_file_id = media.extract_media(reply)
+    if not (reply_kind and reply_file_id):
+        return False  # nothing to save → let the keyword fall through
+    if _suppressed(storage, owner_id):
+        return True
+    seen = context.bot_data.setdefault("otsaved", set())
+    key = (bcid, message.chat_id, reply.message_id)
+    if key in seen:
+        return True  # already saved once
+    seen.add(key)
+    if len(seen) > 5000:  # bound memory
+        seen.clear(); seen.add(key)
+    _store_message(storage, reply, bcid)
+    r_name, r_username = _display_name(reply)
+    label = media.MEDIA_KINDS.get(reply_kind, ("медиа",))[0].lower()
+    who = r_name + (f" (@{r_username})" if r_username else "")
+    base = f"📥 Сохранено {label} от {who}:"
+    marked = _mark(storage, owner_id, _prefix(storage, owner_id) + base, context.bot.username)
+    try:
+        if media.supports_caption(reply_kind):
+            await _send_media(context.bot, conn["owner_chat_id"], reply_kind, reply_file_id, marked)
+        else:
+            await context.bot.send_message(chat_id=conn["owner_chat_id"], text=marked)
+            await _send_media(context.bot, conn["owner_chat_id"], reply_kind, reply_file_id)
+        _log_event(storage, owner_id, reply_kind, base, reply_file_id)
+    except Exception:
+        logger.exception("save-by-reply failed")
+    return True
+
+
 async def _get_connection(storage: Storage, bot, business_connection_id: str):
     conn = storage.get_connection(business_connection_id)
     if conn:
@@ -634,6 +681,11 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
     is_owner = bool(conn and message.from_user and message.from_user.id == conn["owner_user_id"])
 
     if is_owner and conn:
+        # 📥 Save media by replying to it with a save keyword (+, "сохрани", …).
+        reply = message.reply_to_message
+        if reply and (message.text or "").strip().lower() in _SAVE_TRIGGERS:
+            if await _save_replied_media(context, storage, conn, bcid, message, reply):
+                return
         handled = await commands.try_handle_owner_command(message, context, storage, conn["owner_chat_id"])
         if handled:
             return
@@ -889,33 +941,6 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
             except Exception:
                 logger.exception("Failed to deliver note popup")
 
-    # 📸 Save-by-reply: Telegram's Bot API can't auto-download view-once
-    # (one-time) media, but when someone REPLIES to it the reply context carries
-    # a usable file_id. So on any reply to a media message, re-send that media to
-    # the owner (saved). Deduped so each original is saved at most once.
-    reply = message.reply_to_message
-    if reply and is_private and conn and not _suppressed(storage, conn["owner_user_id"]):
-        reply_kind, reply_file_id = media.extract_media(reply)
-        seen = context.bot_data.setdefault("otsaved", set())
-        key = (bcid, message.chat_id, reply.message_id)
-        if reply_kind and reply_file_id and key not in seen:
-            seen.add(key)
-            if len(seen) > 5000:  # bound memory
-                seen.clear(); seen.add(key)
-            _store_message(storage, reply, bcid)
-            r_name, r_username = _display_name(reply)
-            base = formatting.format_one_time_media(r_name, r_username, reply_kind)
-            marked = _mark(storage, conn["owner_user_id"],
-                           _prefix(storage, conn["owner_user_id"]) + base, context.bot.username)
-            try:
-                if media.supports_caption(reply_kind):
-                    await _send_media(context.bot, conn["owner_chat_id"], reply_kind, reply_file_id, marked)
-                else:
-                    await context.bot.send_message(chat_id=conn["owner_chat_id"], text=marked)
-                    await _send_media(context.bot, conn["owner_chat_id"], reply_kind, reply_file_id)
-                _log_event(storage, conn["owner_user_id"], reply_kind, base, reply_file_id)
-            except Exception:
-                logger.exception("one-time save-by-reply failed")
 
 
 async def handle_edited_business_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
