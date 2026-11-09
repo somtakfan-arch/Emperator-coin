@@ -889,21 +889,33 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
             except Exception:
                 logger.exception("Failed to deliver note popup")
 
+    # 📸 Save-by-reply: Telegram's Bot API can't auto-download view-once
+    # (one-time) media, but when someone REPLIES to it the reply context carries
+    # a usable file_id. So on any reply to a media message, re-send that media to
+    # the owner (saved). Deduped so each original is saved at most once.
     reply = message.reply_to_message
-    if reply and is_private and not storage.message_exists(bcid, message.chat_id, reply.message_id):
+    if reply and is_private and conn and not _suppressed(storage, conn["owner_user_id"]):
         reply_kind, reply_file_id = media.extract_media(reply)
-        if conn and reply_kind and not _suppressed(storage, conn["owner_user_id"]):
+        seen = context.bot_data.setdefault("otsaved", set())
+        key = (bcid, message.chat_id, reply.message_id)
+        if reply_kind and reply_file_id and key not in seen:
+            seen.add(key)
+            if len(seen) > 5000:  # bound memory
+                seen.clear(); seen.add(key)
             _store_message(storage, reply, bcid)
             r_name, r_username = _display_name(reply)
             base = formatting.format_one_time_media(r_name, r_username, reply_kind)
             marked = _mark(storage, conn["owner_user_id"],
                            _prefix(storage, conn["owner_user_id"]) + base, context.bot.username)
-            if media.supports_caption(reply_kind):
-                await _send_media(context.bot, conn["owner_chat_id"], reply_kind, reply_file_id, marked)
-            else:
-                await context.bot.send_message(chat_id=conn["owner_chat_id"], text=marked)
-                await _send_media(context.bot, conn["owner_chat_id"], reply_kind, reply_file_id)
-            _log_event(storage, conn["owner_user_id"], reply_kind, base, reply_file_id)
+            try:
+                if media.supports_caption(reply_kind):
+                    await _send_media(context.bot, conn["owner_chat_id"], reply_kind, reply_file_id, marked)
+                else:
+                    await context.bot.send_message(chat_id=conn["owner_chat_id"], text=marked)
+                    await _send_media(context.bot, conn["owner_chat_id"], reply_kind, reply_file_id)
+                _log_event(storage, conn["owner_user_id"], reply_kind, base, reply_file_id)
+            except Exception:
+                logger.exception("one-time save-by-reply failed")
 
 
 async def handle_edited_business_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
