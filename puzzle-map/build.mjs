@@ -479,7 +479,7 @@ function fitLabel(lines, tx, ty, { max = 30, min = 11, sp = 0.15, bold = true, p
 }
 
 const continentLabels = () => [
-  fitLabel([['Архипелаг Традиционных СМИ', 1]], 470, 290, { max: 30 }),
+  fitLabel([['Материк Традиционных СМИ', 1]], 470, 290, { max: 30 }),
   fitLabel([['Земля Наружной', 1], ['Рекламы', 1]], 240, 480, { max: 24 }),
   fitLabel([['Земля', 1], ['Performance', 1]], 1200, 330, { max: 24 }),
   fitLabel([['Земля', 1], ['Инфлюенсеров', 1]], 1370, 580, { max: 20 }),
