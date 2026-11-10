@@ -735,6 +735,9 @@ async def _post_init(application: Application) -> None:
     if userbot.enabled():
         application.create_task(userbot.birthday_loop(application))
         logger.info("🎂 Userbot birthday feature enabled.")
+        if userbot.ALWAYS_ONLINE:
+            application.create_task(userbot.online_loop(application))
+            logger.info("🟢 Userbot always-online enabled.")
 
 
 def _restore_seed_if_needed() -> None:

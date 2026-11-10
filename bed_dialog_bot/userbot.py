@@ -23,6 +23,11 @@ SESSION = os.environ.get("USERBOT_SESSION", "")
 TZ_OFFSET = int(os.environ.get("BIRTHDAY_TZ_OFFSET", "3"))
 SET_HOUR = int(os.environ.get("BIRTHDAY_SET_HOUR", "23"))
 SET_MIN = int(os.environ.get("BIRTHDAY_SET_MINUTE", "59"))
+# Always-online: keep ONE persistent MTProto connection and refresh the "online"
+# status every few dozen seconds. Telegram keeps you "online" for a couple of
+# minutes after each updateStatus, so pinging well within that keeps it solid.
+ONLINE_PING_SEC = int(os.environ.get("USERBOT_ONLINE_PING_SEC", "50"))
+ALWAYS_ONLINE = os.environ.get("USERBOT_ALWAYS_ONLINE", "1") == "1"
 
 
 def enabled() -> bool:
@@ -63,6 +68,44 @@ async def set_birthday(day: int, month: int, year=None, notify: bool = True):
             await client.disconnect()
         except Exception:
             pass
+
+
+async def online_loop(application=None) -> None:
+    """Keep the owner's account showing 'online' 24/7.
+
+    Holds ONE persistent client and refreshes status every ONLINE_PING_SEC. On
+    any connection error it reconnects with a short backoff. Uses the same
+    single account session, so it never touches anyone else.
+    """
+    if not enabled() or not ALWAYS_ONLINE:
+        return
+    try:
+        from telethon import TelegramClient
+        from telethon.sessions import StringSession
+        from telethon.tl.functions.account import UpdateStatusRequest
+    except Exception as e:
+        logger.error("online_loop: import telethon failed: %r", e)
+        return
+    logger.info("🟢 Userbot always-online loop started (refresh every %ds).", ONLINE_PING_SEC)
+    while True:
+        client = TelegramClient(StringSession(SESSION), API_ID, API_HASH)
+        try:
+            await asyncio.wait_for(client.connect(), timeout=60)
+            if not await client.is_user_authorized():
+                logger.error("online_loop: session not authorized")
+                await asyncio.sleep(300)
+                continue
+            while True:
+                await client(UpdateStatusRequest(offline=False))
+                await asyncio.sleep(ONLINE_PING_SEC)
+        except Exception:
+            logger.exception("online_loop: connection/status error — reconnecting")
+        finally:
+            try:
+                await client.disconnect()
+            except Exception:
+                pass
+        await asyncio.sleep(15)  # backoff before reconnecting
 
 
 async def birthday_loop(application=None) -> None:
