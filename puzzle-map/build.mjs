@@ -3,6 +3,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { geoPath, geoGraticule, geoContains } from 'd3-geo';
+import { geoMiller } from 'd3-geo-projection';
+import { feature } from 'topojson-client';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const W = 1500, H = 1000;
@@ -35,19 +38,28 @@ const fontCss = `
 text{font-family:'OST','Old Standard TT',Georgia,serif;}
 `;
 
+// ---------- world map (Miller, Pacific-centred) ----------
+const topo = JSON.parse(fs.readFileSync(path.join(dir, 'node_modules/world-atlas/land-50m.json'), 'utf8'));
+const LAND = feature(topo, topo.objects.land);
+const proj = geoMiller().rotate([-150, 0]).scale(1416 / (2 * Math.PI)).translate([750, 500]).precision(0.2);
+const geo = geoPath(proj);
+const isLand = (x, y) => { const ll = proj.invert([x, y]); return ll && geoContains(LAND, ll); };
+
 // ---------- key points ----------
-const LAMP = { x: 330, y: 282 };
+// lighthouse island is drawn in local coords and placed with this transform
+const LH = { s: 0.72, tx: 960 - 330 * 0.72, ty: 590 - 620 * 0.72 };
+const LAMP = { x: 960, y: 282 * LH.s + LH.ty };
 
 const shipsSafe = [
-  { x: 640, y: 395, s: 0.95, label: 'Оптимизация ROI' },
-  { x: 880, y: 305, s: 0.85, label: 'Эффективный медиамикс' },
-  { x: 815, y: 545, s: 1.0, label: 'Прозрачные закупки' },
-  { x: 575, y: 745, s: 0.95, label: 'Защищённый бюджет' },
+  { x: 1075, y: 305, s: 0.6, label: 'Оптимизация ROI' },
+  { x: 790, y: 432, s: 0.58, label: 'Эффективный медиамикс' },
+  { x: 1100, y: 520, s: 0.62, label: 'Прозрачные закупки' },
+  { x: 1000, y: 760, s: 0.6, label: 'Защищённый бюджет' },
 ];
 const shipsAudit = [
-  { x: 1110, y: 255, s: 0.8, rot: -5, flip: false, label: 'Поиск зон роста' },
-  { x: 1085, y: 545, s: 0.82, rot: 6, flip: false, label: 'Анализ контрактов' },
-  { x: 975, y: 770, s: 0.8, rot: -4, flip: false, label: 'Аудит тендеров' },
+  { x: 880, y: 272, s: 0.52, rot: -5, flip: false, label: 'Аудит тендеров' },
+  { x: 1205, y: 650, s: 0.52, rot: 6, flip: false, label: 'Поиск зон роста' },
+  { x: 610, y: 785, s: 0.52, rot: -4, flip: false, label: 'Анализ контрактов' },
 ];
 
 // keep-out boxes for wave texture
@@ -87,7 +99,7 @@ function reef(cx, cy, n = 7, spread = 70) {
   out += `<ellipse cx="${cx}" cy="${cy}" rx="${spread + 22}" ry="${spread * 0.55 + 16}" fill="none" stroke="${RED}" stroke-width="1.4" stroke-dasharray="2 5" opacity=".75"/>`;
   for (let i = 0; i < n; i++) {
     const x = cx + rr(-spread, spread), y = cy + rr(-spread * 0.45, spread * 0.45);
-    const s = rr(9, 20);
+    const s = rr(spread * 0.18, spread * 0.3) + 3;
     const pts = [];
     const k = 6 + Math.floor(rnd() * 3);
     for (let j = 0; j < k; j++) {
@@ -100,7 +112,7 @@ function reef(cx, cy, n = 7, spread = 70) {
     out += `<path d="M${f(x - s * 0.3)},${f(y - s * 0.9)} l${f(s * 0.25)},${f(s * 0.7)}" stroke="#a89072" stroke-width="1.4"/>`;
   }
   // submerged-rock crosses (old chart notation)
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < 7; i++) {
     const x = cx + rr(-spread - 10, spread + 10), y = cy + rr(-spread * 0.5, spread * 0.5);
     out += `<path d="M${f(x - 4)},${f(y)} h8 M${f(x)},${f(y - 4)} v8" stroke="${INK}" stroke-width="1.3"/>`;
   }
@@ -125,7 +137,7 @@ function whirlpool(cx, cy, R = 70) {
   return `<g class="whirlpool">${out}</g>`;
 }
 
-function stormCloud(cx, cy) {
+function stormCloud(cx, cy, k = 1) {
   const blobs = [[-70, 10, 34], [-38, -12, 40], [5, -26, 48], [50, -8, 40], [82, 12, 30], [-20, 18, 34], [30, 20, 34]];
   const outline = blobs.map(([x, y, r]) => `<circle cx="${cx + x}" cy="${cy + y}" r="${r + 2.2}" fill="${INK}"/>`).join('');
   const body = blobs.map(([x, y, r]) => `<circle cx="${cx + x}" cy="${cy + y}" r="${r}" fill="url(#cloudFill)"/>`).join('');
@@ -135,8 +147,8 @@ function stormCloud(cx, cy) {
     rain += `<path d="M${f(x)},${f(y)} l-10,${f(rr(26, 50))}" stroke="#4b4236" stroke-width="1.2" opacity=".55"/>`;
   }
   const bolt = `<path d="M${cx + 12},${cy + 36} l-22,46 h18 l-16,48 l40,-62 h-19 l17,-32 Z" fill="#e3b442" stroke="${INK}" stroke-width="1.4"/>`;
-  ko(cx - 115, cy - 80, cx + 120, cy + 140);
-  return `<g class="storm">${rain}${outline}${body}${bolt}</g>`;
+  ko(cx - 115 * k, cy - 80 * k, cx + 120 * k, cy + 140 * k);
+  return `<g class="storm" transform="translate(${cx} ${cy}) scale(${k}) translate(${-cx} ${-cy})">${rain}${outline}${body}${bolt}</g>`;
 }
 
 function fogBank(cx, cy, w = 300) {
@@ -211,8 +223,8 @@ function compass(cx, cy, R) {
   for (let d = 45; d < 360; d += 90) out += point(d, R * 0.75, R * 0.13, '#e9d9b0', '#8a6a3c');
   for (let d = 0; d < 360; d += 90) out += point(d, R * 0.98, R * 0.16, d === 0 ? '#c9473a' : '#f3e6c6', d === 0 ? RED : INK);
   out += `<circle cx="${cx}" cy="${cy}" r="5" fill="${CREAM}" stroke="${INK}" stroke-width="1.2"/>`;
-  const lbl = [['С', 0, -R - 26], ['Ю', 0, R + 36], ['В', R + 30, 7], ['З', -R - 30, 7]];
-  out += lbl.map(([t, x, y]) => `<text x="${cx + x}" y="${cy + y}" text-anchor="middle" font-size="19" font-weight="700" fill="${t === 'С' ? RED : INK}">${t}</text>`).join('');
+  const lbl = [['С', 0, -R - 20], ['Ю', 0, R + 32], ['В', R + 25, 6], ['З', -R - 25, 6]];
+  out += lbl.map(([t, x, y]) => `<text x="${cx + x}" y="${cy + y}" text-anchor="middle" font-size="16" font-weight="700" fill="${t === 'С' ? RED : INK}">${t}</text>`).join('');
   ko(cx - R - 40, cy - R - 45, cx + R + 40, cy + R + 45);
   return `<g class="compass">${out}</g>`;
 }
@@ -248,13 +260,13 @@ function island() {
     const x = cx + Math.cos(a) * 160, y = cy + Math.sin(a) * 70;
     surf += `<path d="M${f(x - 8)},${f(y)} q4,-4 8,0 t8,0" fill="none" stroke="${INK}" stroke-width="1" opacity=".55"/>`;
   }
-  ko(150, 520, 520, 720);
+  ko(840, 505, 1080, 640);
   return `<g class="island">${water}<path d="${d}" fill="url(#landFill)" stroke="${INK}" stroke-width="1.8"/>
   <path d="${d}" fill="url(#hatch)" opacity=".5"/>${surf}${rocks}</g>`;
 }
 
 function lighthouse() {
-  const x = LAMP.x;
+  const x = 330; // local coords, placed via LH transform
   const baseY = 600, topY = 312, bw = 44, tw = 27;
   const tower = `M${x - bw},${baseY} L${x - tw},${topY} L${x + tw},${topY} L${x + bw},${baseY} Z`;
   let stripes = '';
@@ -300,43 +312,42 @@ function lighthouse() {
 
 // ---------- light ----------
 function light() {
-  const L = 1500;
+  const L = 720;
   const beam = (deg, half, op) => {
     const a1 = (deg - half) * Math.PI / 180, a2 = (deg + half) * Math.PI / 180;
-    return `<path d="M${LAMP.x},${LAMP.y} L${f(LAMP.x + Math.cos(a1) * L)},${f(LAMP.y + Math.sin(a1) * L)} L${f(LAMP.x + Math.cos(a2) * L)},${f(LAMP.y + Math.sin(a2) * L)} Z" fill="url(#beamFill)" opacity="${op}"/>`;
+    return `<path d="M${f(LAMP.x)},${f(LAMP.y)} L${f(LAMP.x + Math.cos(a1) * L)},${f(LAMP.y + Math.sin(a1) * L)} L${f(LAMP.x + Math.cos(a2) * L)},${f(LAMP.y + Math.sin(a2) * L)} Z" fill="url(#beamFill)" opacity="${op}"/>`;
   };
-  // edges of beams as fine engraved lines
   const ray = (deg, len, op) => {
     const a = deg * Math.PI / 180;
-    return `<line x1="${LAMP.x}" y1="${LAMP.y}" x2="${f(LAMP.x + Math.cos(a) * len)}" y2="${f(LAMP.y + Math.sin(a) * len)}" stroke="#b8862e" stroke-width="1" opacity="${op}"/>`;
+    return `<line x1="${f(LAMP.x)}" y1="${f(LAMP.y)}" x2="${f(LAMP.x + Math.cos(a) * len)}" y2="${f(LAMP.y + Math.sin(a) * len)}" stroke="#b8862e" stroke-width="1" opacity="${op}"/>`;
   };
   let rays = '';
-  for (let d = -40; d <= 80; d += 4) rays += ray(d, rr(560, 760), 0.28);
+  for (let d = 0; d < 360; d += 5) rays += ray(d, rr(300, 470), 0.26);
   return `<g class="light">
-  <ellipse cx="${LAMP.x + 330}" cy="${LAMP.y + 230}" rx="640" ry="470" fill="url(#glow)"/>
-  ${beam(-14, 7, 0.9)}${beam(10, 8, 0.95)}${beam(34, 7, 0.9)}${beam(60, 7, 0.85)}${beam(-160, 5, 0.5)}
+  <ellipse cx="985" cy="520" rx="390" ry="350" fill="url(#glow)"/>
+  ${[-160, -105, -35, 15, 55, 95, 140, 200].map((d, i) => beam(d, 6, i % 2 ? 0.8 : 0.95)).join('')}
   <g filter="url(#blur3)">${rays}</g>
-  <circle cx="${LAMP.x}" cy="${LAMP.y}" r="70" fill="url(#lampHalo)"/>
+  <circle cx="${f(LAMP.x)}" cy="${f(LAMP.y)}" r="60" fill="url(#lampHalo)"/>
 </g>`;
 }
 
 // ---------- fairway ----------
-const FAIRWAY = 'M478,640 C545,606 640,612 720,632 S880,656 960,642 S1150,612 1240,626 S1400,646 1456,632';
+const FAIRWAY = 'M165,700 C190,700 200,748 252,748 S330,712 390,700 S470,688 530,700 S610,712 690,705 S775,698 805,678 S838,640 858,614';
 
 function fairway() {
   return `<g class="fairway">
   <path d="${FAIRWAY}" fill="none" stroke="${CREAM}" stroke-width="9" opacity=".7"/>
   <path id="fairwayPath" d="${FAIRWAY}" fill="none" stroke="${RED}" stroke-width="3.2" stroke-dasharray="13 9" stroke-linecap="round"/>
-  <text font-size="17" font-style="italic" font-weight="700" fill="${RED}" letter-spacing=".4" dy="-9">
-    <textPath href="#fairwayPath" startOffset="25%">Стратегия оптимизации медиазакупок</textPath>
+  <text font-size="14" font-style="italic" font-weight="700" fill="${RED}" letter-spacing=".3" dy="-7">
+    <textPath href="#fairwayPath" startOffset="27%">Стратегия оптимизации медиазакупок</textPath>
   </text>
-  <path d="M1441,622 L1458,632 L1440,641" fill="none" stroke="${RED}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M841,618 L860,610 L857,630" fill="none" stroke="${RED}" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
 </g>`;
 }
 
 // ---------- cartouche ----------
 function cartouche() {
-  const cx = 750, y0 = 58, w = 660, h = 104;
+  const cx = 750, y0 = 846, w = 640, h = 98;
   const x0 = cx - w / 2, x1 = cx + w / 2;
   ko(x0 - 30, y0 - 10, x1 + 30, y0 + h + 10);
   const scroll = (x, dir) => `<path d="M${x},${y0 + 8} c${dir * -26},-6 ${dir * -34},18 ${dir * -18},26 c${dir * 12},6 ${dir * 18},-6 ${dir * 10},-12" fill="none" stroke="${INK}" stroke-width="1.6"/>
@@ -345,7 +356,7 @@ function cartouche() {
   <path d="M${x0},${y0} H${x1} Q${x1 + 18},${y0 + h / 2} ${x1},${y0 + h} H${x0} Q${x0 - 18},${y0 + h / 2} ${x0},${y0} Z" fill="url(#cartFill)" stroke="${INK}" stroke-width="2.2"/>
   <path d="M${x0 + 10},${y0 + 8} H${x1 - 10} Q${x1 + 4},${y0 + h / 2} ${x1 - 10},${y0 + h - 8} H${x0 + 10} Q${x0 - 4},${y0 + h / 2} ${x0 + 10},${y0 + 8} Z" fill="none" stroke="${INK}" stroke-width=".9"/>
   ${scroll(x0, 1)}${scroll(x1, -1)}
-  <text x="${cx}" y="${y0 + 50}" text-anchor="middle" font-size="35" font-weight="700" fill="${INK}">Прозрачность, которая спасает бюджеты</text>
+  <text x="${cx}" y="${y0 + 50}" text-anchor="middle" font-size="33" font-weight="700" fill="${INK}">Прозрачность, которая спасает бюджеты</text>
   <path d="M${cx - 150},${y0 + 66} H${cx - 18} M${cx + 18},${y0 + 66} H${cx + 150}" stroke="${INK}" stroke-width="1"/>
   <path d="M${cx},${y0 + 60} l6,6 l-6,6 l-6,-6 Z" fill="${RED}"/>
   <text x="${cx}" y="${y0 + 90}" text-anchor="middle" font-size="20" font-style="italic" fill="${INK}">Надёжный ориентир в шторме медиарынка</text>
@@ -381,6 +392,36 @@ function frame() {
 </g>`;
 }
 
+// ---------- world ----------
+function world() {
+  const d = geo(LAND);
+  const grat = geo(geoGraticule().step([15, 15])());
+  const outline = geo({ type: 'Sphere' });
+  const name = (x, y, t, size, { rot = 0, sp = 3, op = .75, it = false } = {}) =>
+    `<text x="${x}" y="${y}" text-anchor="middle" font-size="${size}" letter-spacing="${sp}" fill="${INK}" opacity="${op}" ${it ? 'font-style="italic"' : ''} ${rot ? `transform="rotate(${rot} ${x} ${y})"` : ''}>${t}</text>`;
+  return `<g class="world">
+  <clipPath id="sphereClip"><path d="${outline}"/></clipPath>
+  <g clip-path="url(#sphereClip)">
+  <path d="${grat}" fill="none" stroke="#7d5f3a" stroke-width=".6" opacity=".35"/>
+  <path d="${d}" fill="none" stroke="${INK}" stroke-width="16" stroke-linejoin="round" opacity=".05"/>
+  <path d="${d}" fill="none" stroke="${INK}" stroke-width="9" stroke-linejoin="round" opacity=".07"/>
+  <path d="${d}" fill="none" stroke="${INK}" stroke-width="4" stroke-linejoin="round" opacity=".12"/>
+  <path d="${d}" fill="url(#landFill2)" stroke="${INK}" stroke-width="1.1" stroke-linejoin="round"/>
+  <path d="${d}" fill="url(#hatch)" opacity=".18"/>
+  </g>
+  ${name(470, 250, 'Евразия', 30, { sp: 10 })}
+  ${name(235, 470, 'Африка', 24, { sp: 8 })}
+  ${name(1232, 352, 'Северная Америка', 17, { sp: 4 })}
+  ${name(1370, 560, 'Южная', 18, { sp: 4 })}${name(1370, 582, 'Америка', 18, { sp: 4 })}
+  ${name(680, 615, 'Австралия', 16, { sp: 3 })}
+  ${name(1235, 915, 'Антарктида', 20, { sp: 10, op: .6 })}
+  ${name(1150, 425, 'Тихий океан', 24, { sp: 8, it: true, op: .6 })}
+  ${name(470, 765, 'Индийский океан', 19, { sp: 5, it: true, op: .6 })}
+  ${name(62, 480, 'Атлантический океан', 15, { sp: 3, it: true, op: .55, rot: -90 })}
+  ${name(640, 82, 'Северный Ледовитый океан', 16, { sp: 4, it: true, op: .6 })}
+</g>`;
+}
+
 // ---------- rhumb lines ----------
 function rhumbs(cx, cy) {
   let out = '';
@@ -392,25 +433,25 @@ function rhumbs(cx, cy) {
 }
 
 // ---------- assemble: elements that register keep-out first ----------
-const COMPASS = { x: 770, y: 862, r: 46 };
+const COMPASS = { x: 108, y: 640, r: 36 };
 
 const layerThreats = [
-  fogBank(185, 150, 300),
-  dangerLabel(185, 150, ['Отсутствие', 'отчётности']),
-  fogBank(125, 410, 210),
-  dangerLabel(125, 410, ['Неэффективный', 'инвентарь'], 16),
-  stormCloud(1325, 150),
-  dangerLabel(1330, 295, ['Низкий Viewability', '(невидимая реклама)'], 16),
-  whirlpool(1360, 470, 62),
-  dangerLabel(1360, 545, ['Фрод: боты и', 'некачественный трафик'], 15),
-  whirlpool(1360, 760, 58),
-  dangerLabel(1350, 838, ['Репутационные риски', '(Brand Safety)'], 15),
-  reef(175, 840, 7, 62),
-  dangerLabel(175, 908, ['Скрытые комиссии'], 16),
-  reef(450, 880, 6, 58),
-  dangerLabel(450, 940 - 3, ['Наценка посредников'], 16),
-  reef(1130, 890, 7, 62),
-  dangerLabel(1130, 940 - 3, ['Непрозрачные скидки (rebates)'], 15),
+  fogBank(985, 112, 260),
+  dangerLabel(985, 112, ['Неэффективный инвентарь'], 14),
+  fogBank(1400, 282, 150),
+  dangerLabel(1395, 282, ['Отсутствие', 'отчётности'], 14),
+  stormCloud(1395, 705, 0.55),
+  dangerLabel(1385, 798, ['Низкий Viewability', '(невидимая реклама)'], 13),
+  whirlpool(1352, 382, 34),
+  dangerLabel(1352, 438, ['Фрод: боты и', 'плохой трафик'], 13),
+  whirlpool(150, 195, 34),
+  dangerLabel(150, 250, ['Репутационные риски', '(Brand Safety)'], 13),
+  reef(800, 605, 6, 26),
+  dangerLabel(812, 548, ['Скрытые комиссии'], 13),
+  reef(300, 650, 6, 30),
+  dangerLabel(300, 604, ['Наценка посредников'], 13),
+  reef(480, 555, 6, 30),
+  dangerLabel(480, 510, ['Непрозрачные скидки (rebates)'], 13),
 ].join('\n');
 
 const layerShips = [
@@ -425,8 +466,8 @@ const layerShips = [
 ].join('\n');
 
 const layerLabels = [
-  ...shipsSafe.map(s => ribbon(s.x, s.y + 34, s.label, { color: GREEN, size: 17 })),
-  ...shipsAudit.map(s => ribbon(s.x, s.y + 32, s.label, { color: AMBER, size: 16, italic: true })),
+  ...shipsSafe.map(s => ribbon(s.x, s.y + 24, s.label, { color: GREEN, size: 14 })),
+  ...shipsAudit.map(s => ribbon(s.x, s.y + 22, s.label, { color: AMBER, size: 13, italic: true })),
 ].join('\n');
 
 // course-correction arcs for audit ships (they check the lighthouse signal)
@@ -441,13 +482,13 @@ const layerIsland = island();
 const layerLighthouse = lighthouse();
 const layerCompass = compass(COMPASS.x, COMPASS.y, COMPASS.r);
 const layerCart = cartouche();
-ko(300, 180, 360, 620); // lighthouse tower
+ko(925, 200, 1000, 600); // lighthouse tower
 
 // sea wave texture
 let waves = '';
-for (let i = 0; i < 900 && waves.split('<path').length < 260; i++) {
+for (let i = 0; i < 900 && waves.split('<path').length < 240; i++) {
   const x = rr(60, W - 80), y = rr(60, H - 60);
-  if (!free(x, y) || !free(x + 26, y)) continue;
+  if (!free(x, y) || !free(x + 26, y) || isLand(x, y) || isLand(x + 26, y)) continue;
   const s = rr(5, 9);
   waves += `<path d="M${f(x)},${f(y)} q${f(s)},${f(-s * 0.7)} ${f(s * 2)},0 q${f(s)},${f(-s * 0.7)} ${f(s * 2)},0" fill="none" stroke="${INK}" stroke-width="1" opacity="${f(rr(0.22, 0.42))}"/>`;
 }
@@ -465,13 +506,14 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" wid
 <radialGradient id="glow" cx="50%" cy="50%" r="50%">
   <stop offset="0" stop-color="#fff6cf" stop-opacity=".85"/><stop offset=".6" stop-color="#fbe9a8" stop-opacity=".45"/><stop offset="1" stop-color="#f6dd8e" stop-opacity="0"/>
 </radialGradient>
-<radialGradient id="beamFill" cx="${LAMP.x}" cy="${LAMP.y}" r="1150" gradientUnits="userSpaceOnUse">
+<radialGradient id="beamFill" cx="${LAMP.x}" cy="${LAMP.y}" r="720" gradientUnits="userSpaceOnUse">
   <stop offset="0" stop-color="#fffbe6" stop-opacity=".95"/><stop offset=".45" stop-color="#fff2bf" stop-opacity=".55"/><stop offset=".8" stop-color="#fbe7a2" stop-opacity="0"/>
 </radialGradient>
 <radialGradient id="lampHalo"><stop offset="0" stop-color="#fffef2"/><stop offset=".4" stop-color="#fff3b8" stop-opacity=".9"/><stop offset="1" stop-color="#ffe9a0" stop-opacity="0"/></radialGradient>
 <linearGradient id="lampFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffbe2"/><stop offset="1" stop-color="#f5c94e"/></linearGradient>
 <linearGradient id="sailFill" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fbf4df"/><stop offset=".7" stop-color="#efe0bb"/><stop offset="1" stop-color="#d9c294"/></linearGradient>
 <linearGradient id="landFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfb27a"/><stop offset="1" stop-color="#a98552"/></linearGradient>
+<linearGradient id="landFill2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e3cd98"/><stop offset="1" stop-color="#d4b67c"/></linearGradient>
 <linearGradient id="rockFill" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9c8668"/><stop offset="1" stop-color="#5f4b35"/></linearGradient>
 <linearGradient id="cloudFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a8070"/><stop offset="1" stop-color="#4a4236"/></linearGradient>
 <linearGradient id="cartFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f8efd6"/><stop offset="1" stop-color="#ead8ad"/></linearGradient>
@@ -495,12 +537,12 @@ ${brig}
 <rect width="${W}" height="${H}" fill="url(#parch)"/>
 <rect width="${W}" height="${H}" filter="url(#stains)" opacity=".55"/>
 ${rhumbs(COMPASS.x, COMPASS.y)}
+${world()}
 <g class="waves">${waves}</g>
 ${light()}
 ${layerThreats}
 ${fairway()}
-${layerIsland}
-${layerLighthouse}
+<g transform="translate(${f(LH.tx)} ${f(LH.ty)}) scale(${LH.s})">${layerIsland}${layerLighthouse}</g>
 ${layerShips}
 ${layerLabels}
 ${layerCompass}
