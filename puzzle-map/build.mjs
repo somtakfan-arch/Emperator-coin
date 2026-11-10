@@ -414,7 +414,7 @@ function world() {
   ${name(1232, 352, 'Северная Америка', 17, { sp: 4 })}
   ${name(1370, 560, 'Южная', 18, { sp: 4 })}${name(1370, 582, 'Америка', 18, { sp: 4 })}
   ${name(680, 615, 'Австралия', 16, { sp: 3 })}
-  ${name(1235, 915, 'Антарктида', 20, { sp: 10, op: .6 })}
+  ${name(750, 915, 'Антарктида', 20, { sp: 10, op: .6 })}
   ${name(1150, 425, 'Тихий океан', 24, { sp: 8, it: true, op: .6 })}
   ${name(470, 765, 'Индийский океан', 19, { sp: 5, it: true, op: .6 })}
   ${name(62, 480, 'Атлантический океан', 15, { sp: 3, it: true, op: .55, rot: -90 })}
@@ -466,7 +466,7 @@ const layerShips = [
 ].join('\n');
 
 // подписи под кораблями убраны по просьбе заказчика; под маяком — «Надёжный ориентир»
-const layerLabels = ribbon(960, 662, 'Надёжный ориентир', { color: INK, size: 15 });
+const layerLabels = ribbon(960, 662, 'Надёжный ориентир в шторме медиарынка', { color: INK, size: 15 });
 
 // course-correction arcs for audit ships (they check the lighthouse signal)
 const layerCourse = shipsAudit.map(s => {
@@ -544,7 +544,6 @@ ${fairway()}
 ${layerShips}
 ${layerLabels}
 ${layerCompass}
-${layerCart}
 <rect width="${W}" height="${H}" filter="url(#noise)" opacity=".18" style="mix-blend-mode:multiply"/>
 <rect width="${W}" height="${H}" fill="url(#vignette)"/>
 ${frame()}
