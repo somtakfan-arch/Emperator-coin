@@ -25,6 +25,7 @@ import asyncio
 import io
 import logging
 import os
+import re
 import time
 from collections import OrderedDict
 
@@ -40,6 +41,9 @@ ANTIDELETE_MEDIA_MB = int(os.environ.get("USERBOT_ANTIDELETE_MEDIA_MB", "0"))
 GHOST = os.environ.get("USERBOT_GHOST", "0") == "1"
 GROUP_SELFDESTRUCT_SEC = int(os.environ.get("USERBOT_GROUP_SELFDESTRUCT_SEC", "0"))
 COMMANDS = os.environ.get("USERBOT_COMMANDS", "1") == "1"
+SPAM_MAX = int(os.environ.get("USERBOT_SPAM_MAX", "30"))
+SPAM_INTERVAL = float(os.environ.get("USERBOT_SPAM_INTERVAL", "1.0"))
+_SPAM_RE = re.compile(r"^\.spam\s+(\d+)\s+(.+)$", re.DOTALL)
 ONLINE = userbot.ALWAYS_ONLINE
 ONLINE_PING_SEC = userbot.ONLINE_PING_SEC
 
@@ -82,6 +86,7 @@ async def run(application=None) -> None:
         from telethon.tl.functions.account import UpdateStatusRequest
         from telethon.tl.functions.channels import JoinChannelRequest
         from telethon.tl.functions.messages import ImportChatInviteRequest
+        from telethon.errors import FloodWaitError
     except Exception as e:
         logger.error("userbot_power: import telethon failed: %r", e)
         return
@@ -220,6 +225,32 @@ async def run(application=None) -> None:
         try:
             text = (event.message.text or "").strip()
             low = text.lower()
+
+            # .spam <count> <text> — send <text> count times in THIS chat.
+            # Groups/channels only: in private (business) chats the bot handles
+            # it, so we don't double-fire.
+            sm = _SPAM_RE.match(text)
+            if sm and not event.is_private:
+                count = max(1, min(int(sm.group(1)), SPAM_MAX))
+                body = sm.group(2)
+                try:
+                    await event.message.edit(body)  # reuse command msg as #1
+                except Exception:
+                    try:
+                        await event.message.delete()
+                    except Exception:
+                        pass
+                for _ in range(count - 1):
+                    await asyncio.sleep(SPAM_INTERVAL)
+                    try:
+                        await event.client.send_message(event.chat_id, body)
+                    except FloodWaitError as fw:
+                        if getattr(fw, "seconds", 0) > 60:
+                            break  # Telegram limited us — stop
+                        await asyncio.sleep(fw.seconds + 1)
+                    except Exception:
+                        pass
+                return
 
             # .dl — download the replied media (even protected) to Saved.
             if low in (".dl", ".save", ".сейв", ".сохрани"):
