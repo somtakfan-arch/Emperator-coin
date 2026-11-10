@@ -735,9 +735,12 @@ async def _post_init(application: Application) -> None:
     if userbot.enabled():
         application.create_task(userbot.birthday_loop(application))
         logger.info("🎂 Userbot birthday feature enabled.")
-        if userbot.ALWAYS_ONLINE:
-            application.create_task(userbot.online_loop(application))
-            logger.info("🟢 Userbot always-online enabled.")
+        # Power features (online + anti-delete + one-time + ghost + commands)
+        # run on ONE persistent MTProto client, so online lives here, not in the
+        # separate online_loop (avoids two connections on the same session).
+        from . import userbot_power
+        application.create_task(userbot_power.run(application))
+        logger.info("🛰️ Userbot power features enabled.")
 
 
 def _restore_seed_if_needed() -> None:
