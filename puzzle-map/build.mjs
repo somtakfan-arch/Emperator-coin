@@ -3,9 +3,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { geoPath, geoGraticule, geoContains } from 'd3-geo';
 import { geoMiller } from 'd3-geo-projection';
 import { feature } from 'topojson-client';
+import opentype from 'opentype.js';
 
 const dir = path.dirname(fileURLToPath(import.meta.url));
 const W = 1500, H = 1000;
@@ -43,7 +45,22 @@ const topo = JSON.parse(fs.readFileSync(path.join(dir, 'node_modules/world-atlas
 const LAND = feature(topo, topo.objects.land);
 const proj = geoMiller().rotate([-150, 0]).scale(1416 / (2 * Math.PI)).translate([750, 500]).precision(0.2);
 const geo = geoPath(proj);
-const isLand = (x, y) => { const ll = proj.invert([x, y]); return ll && geoContains(LAND, ll); };
+// land mask rasterised once in headless Chromium (fast pixel lookups)
+const MASK = await (async () => {
+  const { chromium } = createRequire(import.meta.url)('playwright');
+  const b = await chromium.launch();
+  const pg = await b.newPage();
+  const data = await pg.evaluate(([d, w, h]) => {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    const ctx = c.getContext('2d'); ctx.fill(new Path2D(d));
+    const px = ctx.getImageData(0, 0, w, h).data, out = new Array(w * h);
+    for (let i = 0; i < w * h; i++) out[i] = px[i * 4 + 3] > 200 ? 1 : 0;
+    return out;
+  }, [geo(LAND), W, H]);
+  await b.close();
+  return Uint8Array.from(data);
+})();
+const isLand = (x, y) => { x = Math.round(x); y = Math.round(y); return x >= 0 && y >= 0 && x < W && y < H && MASK[y * W + x] === 1; };
 
 // ---------- key points ----------
 // lighthouse island is drawn in local coords and placed with this transform
@@ -392,13 +409,103 @@ function frame() {
 </g>`;
 }
 
+// ---------- rivers of traffic (stylised, across the Digital continent) ----------
+function rivers() {
+  const R = '#4f6e7d';
+  const main = [
+    'M372,300 C385,270 365,240 395,215 S420,170 405,140',
+    'M470,300 C490,270 455,240 478,205 S470,165 482,132',
+    'M590,285 C610,250 585,225 612,195 S630,160 645,128',
+    'M260,250 C290,262 300,290 335,300',
+  ];
+  const trib = ['M395,215 C370,210 350,225 330,220', 'M478,205 C505,212 520,230 540,226', 'M612,195 C640,205 660,230 690,235', 'M405,170 C430,175 445,190 470,188'];
+  return `<g class="rivers" fill="none" stroke-linecap="round">
+    ${main.map(d => `<path d="${d}" stroke="${R}" stroke-width="2.4" opacity=".8"/>`).join('')}
+    ${trib.map(d => `<path d="${d}" stroke="${R}" stroke-width="1.3" opacity=".7"/>`).join('')}
+  </g>`;
+}
+
+// ---------- current of ineffective budgets ----------
+const CURRENT = 'M600,602 C545,612 495,640 440,628 S360,612 318,648';
+const CURRENT_TXT = 'M318,672 C360,640 400,650 440,656 S545,640 600,630';
+function current() {
+  let lines = '';
+  for (const o of [-9, 0, 9]) lines += `<path d="${CURRENT}" transform="translate(0 ${o})" fill="none" stroke="#2f4f5a" stroke-width="1.4" stroke-dasharray="${o ? '18 7' : '26 6'}" opacity=".75"/>`;
+  return `<g class="current">
+  <path d="${CURRENT}" fill="none" stroke="#2f4f5a" stroke-width="26" opacity=".1" stroke-linecap="round"/>
+  ${lines}
+  <path d="M332,628 L314,650 L340,652" fill="none" stroke="#2f4f5a" stroke-width="2.2" stroke-linejoin="round"/>
+  <path id="currentPath" d="${CURRENT_TXT}" fill="none"/>
+  <text font-size="12.5" font-style="italic" font-weight="700" fill="#2f4f5a" stroke="#f3e6c4" stroke-width="3" paint-order="stroke"><textPath href="#currentPath" startOffset="8%">Течение Неэффективных Бюджетов</textPath></text>
+</g>`;
+}
+
 // ---------- world ----------
+const name = (x, y, t, size, { rot = 0, sp = 3, op = .75, it = false } = {}) =>
+    `<text x="${x}" y="${y}" text-anchor="middle" font-size="${size}" letter-spacing="${sp}" fill="${INK}" stroke="#f3e6c4" stroke-width="3.2" stroke-linejoin="round" paint-order="stroke" opacity="${Math.min(1, op + .2)}" ${it ? 'font-style="italic"' : ''} ${rot ? `transform="rotate(${rot} ${x} ${y})"` : ''}>${t}</text>`;
+// ---------- continent labels: auto-fit so the whole text sits on land ----------
+const FONT_R = opentype.parse(fs.readFileSync(path.join(dir, 'fonts', 'ost-r.ttf')).buffer);
+const FONT_B = opentype.parse(fs.readFileSync(path.join(dir, 'fonts', 'ost-b.ttf')).buffer);
+const textW = (t, size, sp, bold) => (bold ? FONT_B : FONT_R).getAdvanceWidth(t, size) + sp * (t.length - 1);
+
+function landBoxOk(x0, y0, x1, y1) {
+  if (x0 < 56 || y0 < 56 || x1 > W - 56 || y1 > H - 56) return false;
+  for (let x = x0; x <= x1; x += 4) for (let y = y0; y <= y1; y += 4) {
+    if (!isLand(x, y) || !free(x, y)) return false;
+  }
+  return isLand(x1, y1) && free(x1, y1);
+}
+
+// lines: [[text, relSize]], tries biggest size first, nearest to target
+function fitLabel(lines, tx, ty, { max = 30, min = 11, sp = 0.15, bold = true, pad = 7, radius = 160 } = {}) {
+  for (let size = max; size >= min; size -= 1) {
+    const ls = lines.map(([t, k]) => ({ t, size: size * k }));
+    const lh = ls.map(l => l.size * 1.12);
+    const H = lh.reduce((a, b) => a + b, 0);
+    const Wd = Math.max(...ls.map(l => textW(l.t, l.size, l.size * sp, bold)));
+    let best = null;
+    for (let dy = -radius; dy <= radius; dy += 4) for (let dx = -radius; dx <= radius; dx += 4) {
+      const d = dx * dx + dy * dy;
+      if (d > radius * radius || (best && d >= best.d)) continue;
+      const cx = tx + dx, cy = ty + dy;
+      if (landBoxOk(cx - Wd / 2 - pad, cy - H / 2 - pad, cx + Wd / 2 + pad, cy + H / 2 + pad)) best = { d, cx, cy };
+    }
+    if (best) {
+      ko(best.cx - Wd / 2 - pad, best.cy - H / 2 - pad, best.cx + Wd / 2 + pad, best.cy + H / 2 + pad);
+      let y = best.cy - H / 2;
+      return ls.map((l, i) => { y += lh[i]; const out = `<text x="${f(best.cx)}" y="${f(y - l.size * 0.22)}" text-anchor="middle" font-size="${f(l.size)}" ${bold ? 'font-weight="700"' : ''} letter-spacing="${f(l.size * sp)}" fill="${INK}" stroke="#ead7a8" stroke-width="3" stroke-linejoin="round" paint-order="stroke">${l.t}</text>`; return out; }).join('');
+    }
+  }
+  throw new Error('no fit for ' + lines.map(l => l[0]).join(' '));
+}
+
+const continentLabels = () => [
+  fitLabel([['Материк Digital', 1]], 470, 300, { max: 34 }),
+  fitLabel([['Земля Наружной', 1], ['Рекламы', 1]], 240, 480, { max: 24 }),
+  fitLabel([['Земля', 1], ['Performance', 1]], 1200, 330, { max: 24 }),
+  fitLabel([['Земля', 1], ['Инфлюенсеров', 1]], 1370, 580, { max: 20 }),
+  fitLabel([['Архипелаг', 1], ['Традиционных СМИ', 1]], 683, 580, { max: 14, min: 9, radius: 60, pad: 4 }),
+  fitLabel([['Неизведанные Каналы', 1]], 300, 895, { max: 26, radius: 260 }),
+].join('\n');
+
+const placeNames = () => `<g class="names">
+  ${continentLabels()}
+  ${name(560, 196, 'Реки Трафика', 14, { sp: 2, it: true, op: .85 })}
+  ${name(527, 455, 'Залив', 12, { sp: 1, it: true, op: .85 })}${name(527, 469, 'Соцсетей', 12, { sp: 1, it: true, op: .85 })}
+  ${name(413, 452, 'Залив', 12, { sp: 1, it: true, op: .85 })}${name(413, 466, 'Соцсетей', 12, { sp: 1, it: true, op: .85 })}
+  ${name(735, 300, 'мыс Видеохостингов', 12, { sp: 1, it: true, op: .9 })}
+  <path d="M790,292 l12,-8" stroke="${INK}" stroke-width="1" opacity=".7"/>
+  ${name(690, 682, 'о. Телевидения', 12, { sp: 1, op: .9 })}
+  ${name(746, 528, 'о. Радио', 12, { sp: 1, op: .9 })}
+  ${name(858, 722, 'о. Прессы', 12, { sp: 1, op: .9 })}
+  ${name(1140, 400, 'Океан Больших Данных', 21, { sp: 3, it: true, op: .7 })}
+  ${name(1140, 424, '(Big Data)', 16, { sp: 4, it: true, op: .7 })}
+</g>`;
+
 function world() {
   const d = geo(LAND);
   const grat = geo(geoGraticule().step([15, 15])());
   const outline = geo({ type: 'Sphere' });
-  const name = (x, y, t, size, { rot = 0, sp = 3, op = .75, it = false } = {}) =>
-    `<text x="${x}" y="${y}" text-anchor="middle" font-size="${size}" letter-spacing="${sp}" fill="${INK}" opacity="${op}" ${it ? 'font-style="italic"' : ''} ${rot ? `transform="rotate(${rot} ${x} ${y})"` : ''}>${t}</text>`;
   return `<g class="world">
   <clipPath id="sphereClip"><path d="${outline}"/></clipPath>
   <g clip-path="url(#sphereClip)">
@@ -409,16 +516,7 @@ function world() {
   <path d="${d}" fill="url(#landFill2)" stroke="${INK}" stroke-width="1.1" stroke-linejoin="round"/>
   <path d="${d}" fill="url(#hatch)" opacity=".18"/>
   </g>
-  ${name(470, 250, 'Евразия', 30, { sp: 10 })}
-  ${name(235, 470, 'Африка', 24, { sp: 8 })}
-  ${name(1232, 352, 'Северная Америка', 17, { sp: 4 })}
-  ${name(1370, 560, 'Южная', 18, { sp: 4 })}${name(1370, 582, 'Америка', 18, { sp: 4 })}
-  ${name(680, 615, 'Австралия', 16, { sp: 3 })}
-  ${name(750, 915, 'Антарктида', 20, { sp: 10, op: .6 })}
-  ${name(1150, 425, 'Тихий океан', 24, { sp: 8, it: true, op: .6 })}
-  ${name(470, 765, 'Индийский океан', 19, { sp: 5, it: true, op: .6 })}
-  ${name(62, 480, 'Атлантический океан', 15, { sp: 3, it: true, op: .55, rot: -90 })}
-  ${name(640, 82, 'Северный Ледовитый океан', 16, { sp: 4, it: true, op: .6 })}
+  ${rivers()}
 </g>`;
 }
 
@@ -539,10 +637,12 @@ ${world()}
 <g class="waves">${waves}</g>
 ${light()}
 ${layerThreats}
+${current()}
 ${fairway()}
 <g transform="translate(${f(LH.tx)} ${f(LH.ty)}) scale(${LH.s})">${layerIsland}${layerLighthouse}</g>
 ${layerShips}
 ${layerLabels}
+${placeNames()}
 ${layerCompass}
 <rect width="${W}" height="${H}" filter="url(#noise)" opacity=".18" style="mix-blend-mode:multiply"/>
 <rect width="${W}" height="${H}" fill="url(#vignette)"/>
