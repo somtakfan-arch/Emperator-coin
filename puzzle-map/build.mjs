@@ -47,7 +47,7 @@ const isLand = (x, y) => { const ll = proj.invert([x, y]); return ll && geoConta
 
 // ---------- key points ----------
 // lighthouse island is drawn in local coords and placed with this transform
-const LH = { s: 0.72, tx: 960 - 330 * 0.72, ty: 590 - 620 * 0.72 };
+const LH = { s: 0.55, tx: 960 - 330 * 0.55, ty: 600 - 620 * 0.55 };
 const LAMP = { x: 960, y: 282 * LH.s + LH.ty };
 
 const shipsSafe = [
@@ -260,7 +260,7 @@ function island() {
     const x = cx + Math.cos(a) * 160, y = cy + Math.sin(a) * 70;
     surf += `<path d="M${f(x - 8)},${f(y)} q4,-4 8,0 t8,0" fill="none" stroke="${INK}" stroke-width="1" opacity=".55"/>`;
   }
-  ko(840, 505, 1080, 640);
+  ko(875, 560, 1050, 700);
   return `<g class="island">${water}<path d="${d}" fill="url(#landFill)" stroke="${INK}" stroke-width="1.8"/>
   <path d="${d}" fill="url(#hatch)" opacity=".5"/>${surf}${rocks}</g>`;
 }
@@ -465,10 +465,8 @@ const layerShips = [
   }),
 ].join('\n');
 
-const layerLabels = [
-  ...shipsSafe.map(s => ribbon(s.x, s.y + 24, s.label, { color: GREEN, size: 14 })),
-  ...shipsAudit.map(s => ribbon(s.x, s.y + 22, s.label, { color: AMBER, size: 13, italic: true })),
-].join('\n');
+// подписи под кораблями убраны по просьбе заказчика; под маяком — «Надёжный ориентир»
+const layerLabels = ribbon(960, 662, 'Надёжный ориентир', { color: INK, size: 15 });
 
 // course-correction arcs for audit ships (they check the lighthouse signal)
 const layerCourse = shipsAudit.map(s => {
@@ -482,7 +480,7 @@ const layerIsland = island();
 const layerLighthouse = lighthouse();
 const layerCompass = compass(COMPASS.x, COMPASS.y, COMPASS.r);
 const layerCart = cartouche();
-ko(925, 200, 1000, 600); // lighthouse tower
+ko(935, 370, 985, 590); // lighthouse tower
 
 // sea wave texture
 let waves = '';
