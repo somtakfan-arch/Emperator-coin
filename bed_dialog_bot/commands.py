@@ -32,6 +32,9 @@ SPAM_ABUSE_WINDOW = 600
 
 _BAN_RE = re.compile(r"^\.ban\s+(\d+)\s*$")
 _UNBAN_RE = re.compile(r"^\.unban\s*$")
+_MUTE_RE = re.compile(r"^\.mute\s*$")
+_UNMUTE_RE = re.compile(r"^\.unmute\s*$")
+_NOMUTE_RE = re.compile(r"^\.nomute\s*$")
 _SPAM_RE = re.compile(r"^\.spam\s+(\d+)\s+(.+)$", re.DOTALL)
 _HELP_RE = re.compile(r"^\.help(?:\s+(\S+))?\s*$")
 _SELFDESTRUCT_RE = re.compile(r"^\.selfdestruct\s+(\d+)\s+(.+)$", re.DOTALL)
@@ -254,6 +257,11 @@ HELP_TEXT = (
     ".unban — снять бан раньше времени\n"
     "💡 Забаненный может освободиться сам, написав «unban» — но бан от "
     "🔱 ULTRA PREMIUM несокрушим, его так не снять.\n"
+    ".mute — замутить собеседника навсегда: бот тихо удаляет его сообщения "
+    "(без таймера и без уведомления ему)\n"
+    ".unmute — размутить\n"
+    ".nomute — обход мута: тумблер, пропускает сообщения даже при муте "
+    "(повтори .nomute, чтобы выключить)\n"
     ".spam <количество> <сообщение> — отправить сообщение N раз подряд "
     f"(максимум {config.FREE_SPAM_MAX} сообщений за {SPAM_WINDOW_SECONDS} секунд, "
     f"с премиумом — до {config.PREMIUM_SPAM_MAX})\n"
@@ -767,6 +775,41 @@ async def try_handle_owner_command(
     if _UNBAN_RE.match(text):
         storage.clear_ban(bcid, chat_id)
         await _edit_command_message(context, bcid, chat_id, message_id, mark("Вы разбанены."))
+        return True
+
+    # 🔇 Mute: silence this contact "forever" — the bot deletes their incoming
+    # messages. Unlike .ban it has no timer and shows no "you're banned" notice:
+    # the contact just sees their messages vanish. .nomute (per-owner "обход
+    # мута") temporarily lets muted contacts' messages through without unmuting.
+    if _MUTE_RE.match(text):
+        storage.mute_contact(message.from_user.id, chat_id)
+        bypass = storage.get_setting(f"nomute:{message.from_user.id}") == "1"
+        extra = "\n⚠️ Сейчас включён обход мута (.nomute) — сообщения пока проходят." if bypass else ""
+        await _edit_command_message(
+            context, bcid, chat_id, message_id,
+            mark("🔇 Собеседник в муте навсегда — его сообщения будут удаляться.\n"
+                 "Размутить: напиши .unmute" + extra))
+        return True
+
+    if _UNMUTE_RE.match(text):
+        storage.unmute_contact(message.from_user.id, chat_id)
+        await _edit_command_message(context, bcid, chat_id, message_id,
+                                    mark("🔊 Собеседник размучен — пишет как обычно."))
+        return True
+
+    if _NOMUTE_RE.match(text):
+        uid = message.from_user.id
+        on = storage.get_setting(f"nomute:{uid}") != "1"
+        storage.set_setting(f"nomute:{uid}", "1" if on else "0")
+        if on:
+            await _edit_command_message(
+                context, bcid, chat_id, message_id,
+                mark("🎙 Обход мута включён. Теперь сообщения собеседников будут "
+                     "проходить даже во время мута.\nВыключить: .nomute ещё раз."))
+        else:
+            await _edit_command_message(
+                context, bcid, chat_id, message_id,
+                mark("🔇 Обход мута выключен. Мут снова удаляет сообщения."))
         return True
 
     emoji_match = _EMOJI_RE.match(text)

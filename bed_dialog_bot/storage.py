@@ -455,6 +455,14 @@ CREATE TABLE IF NOT EXISTS chat_mutes (
     PRIMARY KEY (owner_user_id, chat_id)
 );
 
+-- Owner muted this contact "forever": while muted (and the owner's mute-bypass
+-- is OFF) the bot auto-deletes the contact's incoming messages.
+CREATE TABLE IF NOT EXISTS contact_mutes (
+    owner_user_id INTEGER NOT NULL,
+    chat_id INTEGER NOT NULL,
+    PRIMARY KEY (owner_user_id, chat_id)
+);
+
 CREATE TABLE IF NOT EXISTS reminders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -3657,6 +3665,30 @@ class Storage:
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT 1 FROM chat_mutes WHERE owner_user_id = ? AND chat_id = ?",
+                (owner_user_id, chat_id),
+            ).fetchone()
+        return row is not None
+
+    # --- per-contact mute (.mute): bot deletes the contact's messages ---
+
+    def mute_contact(self, owner_user_id: int, chat_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO contact_mutes (owner_user_id, chat_id) VALUES (?, ?)",
+                (owner_user_id, chat_id),
+            )
+
+    def unmute_contact(self, owner_user_id: int, chat_id: int) -> None:
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM contact_mutes WHERE owner_user_id = ? AND chat_id = ?",
+                (owner_user_id, chat_id),
+            )
+
+    def is_contact_muted(self, owner_user_id: int, chat_id: int) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM contact_mutes WHERE owner_user_id = ? AND chat_id = ?",
                 (owner_user_id, chat_id),
             ).fetchone()
         return row is not None

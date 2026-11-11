@@ -901,6 +901,21 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
                         logger.exception("Failed to warn owner about delete right")
             return
 
+        # 🔇 Mute: while the contact is muted AND the owner's mute-bypass
+        # (.nomute / "обход мута") is OFF, delete the contact's incoming
+        # messages so they're silenced. Bypass ON → messages come through.
+        if (storage.is_contact_muted(owner_id, message.chat_id)
+                and storage.get_setting(f"nomute:{owner_id}") != "1"):
+            storage.delete_message(bcid, message.chat_id, message.message_id)
+            try:
+                await context.bot.do_api_request(
+                    "deleteBusinessMessages",
+                    api_kwargs={"business_connection_id": bcid,
+                                "message_ids": [message.message_id]})
+            except Exception:
+                logger.exception("mute delete failed in chat %s", message.chat_id)
+            return
+
         await _ghost_mirror(message, context, storage, conn)
         await _autoreply(message, context, storage, conn)
 
