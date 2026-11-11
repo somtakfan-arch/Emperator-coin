@@ -1329,7 +1329,7 @@ test('весёлое: гадание, загадка и секретный ст�
   c.ws.send(JSON.stringify({ t: 'emote', e: 'ГГ' })); // эмодзи шлётся без ответа
   await c.waitFor((m) => m.t === 'table' && m.table?.seats?.find((s) => s.me)?.emote === 'ГГ');
   const mine = mt.table.seats.find((s) => s.me).cards.map((x) => x >> 2).sort();
-  const sd = await c.waitFor((m) => m.t === 'table' && m.table?.result && m.table.seats.some((s) => !s.me && s.cards), 60000).catch(() => null);
+  const sd = await c.waitFor((m) => m.t === 'table' && /Зеркало/.test(m.table?.title || '') && m.table?.result && m.table.seats.some((s) => !s.me && s.cards), 60000).catch(() => null); // только зеркальный стол, не секретный из начала теста
   // карты сравниваем внутри одной раздачи
   const myCards = sd?.table.seats.find((x) => x.me)?.cards;
   if (sd && myCards) for (const s of sd.table.seats.filter((x) => !x.me && x.cards)) assert.deepEqual(s.cards.map((x) => x >> 2).sort(), myCards.map((x) => x >> 2).sort());
