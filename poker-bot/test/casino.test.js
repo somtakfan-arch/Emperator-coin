@@ -241,6 +241,7 @@ test('логика: блэкджек-очки, баккара-правила, в
   assert.equal(C.minesMult(24, 1), 24.25);
   assert.equal(C.towerMult('hard', 1), 1.94);
   assert.equal(C.crashAt(0), 1);
+  assert.ok(C.crashAt(5000) > 2 && C.crashAt(10000) > 7 && C.crashAt(10000) < 8 && C.crashAt(20000) > 200, 'краш: разгоняется');
   for (let r = 0; r < 13; r++) for (const d of ['hi', 'lo']) assert.ok(C.hlStep(r, d) > 1, `хай-лоу: ${r} ${d} — выигрыш должен быть больше ставки`);
   // баккара: на большой выборке доли как у настоящей игры (игрок ~44.6%, банкир ~45.9%, ничья ~9.5%)
   const cnt = { p: 0, b: 0, t: 0 };

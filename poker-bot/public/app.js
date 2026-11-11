@@ -3995,8 +3995,8 @@ const GAME_LIST = [
   { id: 'dragontiger', name: 'Дракон и Тигр', emoji: '🐉', color: '#f4511e', desc: 'Чья карта старше' },
 ];
 const GAME = Object.fromEntries(GAME_LIST.map((g) => [g.id, g]));
-const CRASH_K = 0.00006;
-const CRASH_X = (ms) => Math.floor(Math.exp(CRASH_K * Math.max(0, ms)) * 100 + 1e-9) / 100;
+const crashMul = (ms) => Math.exp(0.00012 * ms + 8e-9 * ms * ms); // как на сервере: скорость растёт со временем
+const CRASH_X = (ms) => Math.floor(crashMul(Math.max(0, ms)) * 100 + 1e-9) / 100;
 const RL_RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
 const RL_ORDER = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
 const SLOT_SYMS = ['🍒', '🍋', '🍊', '🍇', '🔔', '⭐', '7️⃣', '💎'];
@@ -4139,21 +4139,42 @@ function wheelGradient(list, colorOf) {
   const step = 360 / list.length;
   return `conic-gradient(${list.map((x, i) => `${colorOf(x)} ${i * step}deg ${(i + 1) * step}deg`).join(',')})`;
 }
-function spinTo(st, idx, n) { // поворот, чтобы сектор idx оказался под стрелкой сверху
-  const seg = 360 / n, cur = st.rot || 0;
+function spinTo(st, idx, n, turns = 5, key = 'rot') { // поворот, чтобы сектор idx оказался сверху
+  const seg = 360 / n, cur = st[key] || 0;
   const want = (360 - (idx * seg + seg / 2)) % 360;
-  st.rot = cur + 360 * 5 + ((want - (cur % 360)) + 720) % 360;
-  return st.rot;
+  st[key] = cur + 360 * turns + ((want - (cur % 360)) + 720) % 360;
+  return st[key];
 }
+// запуск вращения: элемент только что перерисован — сначала «фиксируем» старое положение, потом крутим
+function spinEl(el, transform, ms, ease = 'cubic-bezier(0.12, 0.62, 0.08, 1)') {
+  if (!el) return;
+  el.style.transition = 'none';
+  void el.offsetWidth;
+  el.style.transition = `transform ${ms}ms ${ease}`;
+  el.style.transform = transform;
+}
+// подписи по кругу (числа рулетки, множители колеса) — крутятся вместе с колесом
+const wheelLabels = (list, text, cls = '') => { const seg = 360 / list.length; return list.map((x, i) => h('div', { class: `wl ${cls}`, style: `transform:rotate(${i * seg + seg / 2}deg)` }, h('span', {}, text(x)))); };
+// «тик-тик» стрелки, пока колесо крутится
+function tickPointer(id, ms) {
+  const p = document.getElementById(id);
+  if (!p) return;
+  p.classList.add('ticking');
+  let left = ms, step = 60;
+  const tick = () => { if (left <= 0) return p.classList.remove('ticking'); p.style.animationDuration = `${Math.min(400, step)}ms`; step *= 1.06; left -= step; setTimeout(tick, step); };
+  tick();
+}
+
 function rouletteUI(g) {
   const st = cs(g);
   st.bets ||= {};
   const chip = betOf(g);
   const total = Object.values(st.bets).reduce((a, b) => a + b, 0);
-  const add = (key) => { st.bets[key] = (st.bets[key] || 0) + chip; render(); };
+  const add = (key) => { if (S.animUntil > Date.now()) return; st.bets[key] = (st.bets[key] || 0) + chip; render(); };
   const lbl = (key) => (st.bets[key] ? h('span', { class: 'rl-chip' }, fmtShort(st.bets[key])) : null);
   const last = st.last;
-  const cell = (n) => h('button', { class: `rl-n ${n === 0 ? 'z' : RL_RED.has(n) ? 'r' : 'k'} ${last?.result === n && !S.animUntil ? 'hit' : ''}`, onclick: () => add(`n:${n}`) }, String(n), lbl(`n:${n}`));
+  const colorCls = (n) => (n === 0 ? 'z' : RL_RED.has(n) ? 'r' : 'k');
+  const cell = (n) => h('button', { class: `rl-n ${colorCls(n)} ${last?.result === n ? 'hit' : ''}`, onclick: () => add(`n:${n}`) }, String(n), lbl(`n:${n}`));
   const out = (key, text, cls = '') => h('button', { class: `rl-o ${cls}`, onclick: () => add(key) }, text, lbl(key));
   const spin = async () => {
     if (!total) return toast('Нажми на поле, чтобы поставить фишки');
@@ -4161,19 +4182,29 @@ function rouletteUI(g) {
     const r = await cplay({ game: g, bets });
     if (!r) return;
     st.prev = { ...st.bets };
-    const el = document.getElementById('rl-wheel');
-    const rot = spinTo(st, RL_ORDER.indexOf(r.result), 37);
-    if (el) el.style.transform = `rotate(${rot}deg)`;
-    const ball = document.getElementById('rl-res'); if (ball) ball.textContent = '…';
-    animate(3300, () => { st.last = r; cresult(g, r, `выпало ${r.result} ${r.result === 0 ? 'зеро' : RL_RED.has(r.result) ? 'красное' : 'чёрное'}`); (st.lastNums ||= []).unshift(r.result); st.lastNums.length = Math.min(12, st.lastNums.length); });
+    const MS = 5200;
+    // колесо — по часовой, шарик — против, в конце шарик падает в лунку под стрелкой
+    spinEl(document.getElementById('rl-wheel'), `rotate(${spinTo(st, RL_ORDER.indexOf(r.result), 37, 4)}deg)`, MS);
+    st.brot = Math.floor((st.brot || 0) / 360) * 360 - 360 * 8;
+    spinEl(document.getElementById('rl-track'), `rotate(${st.brot}deg)`, MS - 300, 'cubic-bezier(0.2, 0.55, 0.15, 1)');
+    const ball = document.getElementById('rl-ball');
+    if (ball) { ball.classList.remove('in'); void ball.offsetWidth; ball.classList.add('drop'); }
+    const res = document.getElementById('rl-res'); if (res) { res.textContent = ''; res.className = 'wheel-hub spin'; }
+    const btn = document.getElementById('rl-spin'); if (btn) { btn.disabled = true; btn.textContent = '…'; }
+    animate(MS + 200, () => { st.last = r; cresult(g, r, `выпало ${r.result} ${r.result === 0 ? 'зеро' : RL_RED.has(r.result) ? 'красное' : 'чёрное'}`); (st.lastNums ||= []).unshift(r.result); st.lastNums.length = Math.min(14, st.lastNums.length); });
   };
   return [
     h('div', { class: 'rl-top' },
-      h('div', { class: 'wheel-wrap' }, h('div', { class: 'wheel-ptr' }), h('div', { id: 'rl-wheel', class: 'wheel rl', style: `background:${wheelGradient(RL_ORDER, (n) => (n === 0 ? '#16a34a' : RL_RED.has(n) ? '#d32f2f' : '#1b1b1f'))};transform:rotate(${st.rot || 0}deg)` }),
-        h('div', { id: 'rl-res', class: `wheel-hub ${last ? (last.result === 0 ? 'z' : RL_RED.has(last.result) ? 'r' : 'k') : ''}` }, last ? String(last.result) : '?')),
-      h('div', { class: 'col', style: 'gap:6px;flex:1;min-width:0' },
-        resBanner(g) || h('div', { class: 'small muted' }, 'Нажимай на числа и поля — каждая фишка = ставка ниже.'),
-        st.lastNums?.length > 0 && h('div', { class: 'row', style: 'gap:4px;flex-wrap:wrap' }, st.lastNums.map((n) => h('span', { class: `rl-mini ${n === 0 ? 'z' : RL_RED.has(n) ? 'r' : 'k'}` }, n))))),
+      h('div', { class: 'rl-wheel-wrap' },
+        h('div', { id: 'rl-wheel', class: 'wheel rl', style: `background:${wheelGradient(RL_ORDER, (n) => (n === 0 ? '#16a34a' : RL_RED.has(n) ? '#c62828' : '#18181b'))};transform:rotate(${st.rot || 0}deg)` },
+          wheelLabels(RL_ORDER, (n) => n), h('div', { class: 'rl-inner' }, h('div', { class: 'rl-cross' }))),
+        h('div', { id: 'rl-track', class: 'rl-track', style: `transform:rotate(${st.brot || 0}deg)` }, h('div', { id: 'rl-ball', class: `rl-ball ${last ? 'in' : ''}` })),
+        h('div', { id: 'rl-res', class: `wheel-hub ${last ? colorCls(last.result) : ''}` }, last ? String(last.result) : '')),
+      h('div', { class: 'rl-side' },
+        h('button', { id: 'rl-spin', class: 'rl-spin', onclick: spin }, h('div', { style: 'font-size:22px' }, '⟳'), h('div', {}, 'Крутить')),
+        h('div', { class: 'small', style: 'text-align:center' }, total ? `На поле: ${fmt(total)}` : 'Поставь фишки'),
+        st.lastNums?.length > 0 && h('div', { class: 'row', style: 'gap:3px;flex-wrap:wrap;justify-content:center' }, st.lastNums.slice(0, 8).map((n) => h('span', { class: `rl-mini ${colorCls(n)}` }, n))))),
+    resBanner(g),
     h('div', { class: 'rl-board' },
       h('div', { class: 'rl-zero' }, cell(0)),
       h('div', { class: 'rl-grid' }, Array.from({ length: 36 }, (_, i) => cell(i + 1))),
@@ -4182,8 +4213,8 @@ function rouletteUI(g) {
       h('div', { class: 'rl-outs' }, out('low', '1–18'), out('even', 'Чёт'), out('red', '◆', 'r'), out('black', '◆', 'k'), out('odd', 'Нечет'), out('high', '19–36'))),
     betBox(g, false, 'Фишка (сколько ставишь за нажатие)'),
     h('div', { class: 'grid2' },
-      cbtn2(`Очистить${total ? ` (${fmt(total)})` : ''}`, () => { st.bets = {}; render(); }),
-      cbtn2('Повторить', () => { if (st.prev) { st.bets = { ...st.prev }; render(); } }, { disabled: !st.prev })),
+      cbtn2(`Очистить${total ? ` (${fmt(total)})` : ''}`, () => { if (!S.animUntil) { st.bets = {}; render(); } }),
+      cbtn2('Повторить', () => { if (st.prev && !S.animUntil) { st.bets = { ...st.prev }; render(); } }, { disabled: !st.prev })),
     cbtn(total ? `Крутить · ${fmt(total)}` : 'Крутить', spin),
     h('div', { class: 'small muted' }, 'Число ×36 · дюжина и колонка ×3 · цвет, чёт/нечет, половина ×2. Зеро — все внешние ставки проигрывают.'),
   ];
@@ -4224,23 +4255,36 @@ function slotsUI(g) {
   const st = cs(g);
   st.grid ||= [6, 7, 6, 0, 1, 2, 3, 4, 5];
   const winCells = new Set((st.lines || []).flatMap((l) => SLOT_LINES[l.i]));
+  const LINE_NAMES = ['верхняя', 'средняя', 'нижняя', 'диагональ ↘', 'диагональ ↗'];
   const spin = async () => {
     const r = await cplay({ game: g, bet: betOf(g) });
     if (!r) return;
     st.lines = [];
-    const cells = [...document.querySelectorAll('.slot-cell')];
-    cells.forEach((c) => c.classList.remove('win'));
-    const stopAt = [700, 1000, 1300];
-    const t0 = Date.now();
-    const iv = setInterval(() => {
-      const t = Date.now() - t0;
-      cells.forEach((c, i) => { const col = i % 3; c.textContent = t < stopAt[col] ? SLOT_SYMS[Math.floor(Math.random() * 8)] : SLOT_SYMS[r.grid[i]]; c.classList.toggle('spin', t < stopAt[col]); });
-      if (t >= 1300) clearInterval(iv);
-    }, 60);
-    animate(1400, () => { st.grid = r.grid; st.lines = r.lines; cresult(g, r, r.lines.length ? `линий: ${r.lines.length}` : 'мимо'); });
+    const DUR = [1200, 1650, 2100];
+    for (let col = 0; col < 3; col++) {
+      const strip = document.getElementById(`reel-${col}`);
+      if (!strip) continue;
+      // лента: сверху новые символы, ниже 24 случайных, внизу текущие — едет вниз, как настоящий барабан
+      const syms = [0, 1, 2].map((row) => r.grid[row * 3 + col])
+        .concat(Array.from({ length: 24 }, () => Math.floor(Math.random() * 8)))
+        .concat([0, 1, 2].map((row) => st.grid[row * 3 + col]));
+      const N = syms.length;
+      strip.replaceChildren(...syms.map((x) => h('div', { class: 'sym' }, SLOT_SYMS[x])));
+      strip.style.transition = 'none';
+      strip.style.transform = `translateY(${(-(N - 3) / N) * 100}%)`;
+      void strip.offsetWidth;
+      strip.classList.add('moving');
+      strip.style.transition = `transform ${DUR[col]}ms cubic-bezier(0.3, 0.05, 0.2, 1.06)`;
+      strip.style.transform = 'translateY(0)';
+      setTimeout(() => { strip.classList.remove('moving'); try { tg?.HapticFeedback?.impactOccurred('light'); } catch {} }, DUR[col] - 120);
+    }
+    animate(2250, () => { st.grid = r.grid; st.lines = r.lines; cresult(g, r, r.lines.length ? r.lines.map((l) => `${LINE_NAMES[l.i]} ×${l.x}`).join(', ') : 'мимо'); });
   };
   return [
-    h('div', { class: 'slots-box' }, h('div', { class: 'slots' }, st.grid.map((x, i) => h('div', { class: `slot-cell ${winCells.has(i) ? 'win' : ''}` }, SLOT_SYMS[x])))),
+    h('div', { class: 'slots-box' },
+      h('div', { class: 'slots' }, [0, 1, 2].map((col) => h('div', { class: 'reel' },
+        h('div', { id: `reel-${col}`, class: 'strip' }, [0, 1, 2].map((row) => h('div', { class: `sym ${winCells.has(row * 3 + col) ? 'win' : ''}` }, SLOT_SYMS[st.grid[row * 3 + col]])))))),
+      h('div', { class: 'slots-line' })),
     resBanner(g),
     betBox(g, false, 'Ставка за спин (делится на 5 линий)'),
     cbtn('Крутить', spin),
@@ -4260,7 +4304,7 @@ function diceUI(g) {
     const r = await cplay({ game: g, target: st.target, over: st.over, bet: betOf(g) });
     if (!r) return;
     const mk = document.getElementById('dice-mk');
-    if (mk) { mk.style.left = `${r.roll}%`; mk.textContent = r.roll.toFixed(2); mk.className = `dice-mk ${r.ok ? 'w' : 'l'}`; }
+    if (mk) { mk.style.transition = 'none'; void mk.offsetWidth; mk.style.transition = ''; mk.style.left = `${r.roll}%`; mk.textContent = r.roll.toFixed(2); mk.className = `dice-mk ${r.ok ? 'w' : 'l'}`; }
     animate(650, () => { st.roll = r.roll; st.ok = r.ok; cresult(g, r, `выпало ${r.roll.toFixed(2)}`); });
   };
   const zone = st.over ? `left:${st.target}%;right:0` : `left:0;right:${100 - st.target}%`;
@@ -4300,7 +4344,7 @@ function crashTick() {
     if (S.screen !== 'cg' || S.cg !== 'crash') return;
     const t = nowSrv() - st.live.start;
     const x = CRASH_X(t);
-    const el = document.getElementById('crash-x'); if (el) el.textContent = `×${x.toFixed(2)}`;
+    const el = document.getElementById('crash-x'); if (el) { el.textContent = `×${x.toFixed(2)}`; el.style.color = x >= 10 ? '#ffd54f' : x >= 2 ? '#7ef0a8' : '#fff'; }
     const btn = document.getElementById('crash-out'); if (btn) btn.textContent = `Забрать ${fmt(Math.floor(st.live.bet * x))}`;
     drawCrash(t, false);
   }, 50);
@@ -4310,11 +4354,11 @@ function drawCrash(t, crashed) {
   if (!cv) return;
   const w = (cv.width = cv.clientWidth * 2), hh = (cv.height = cv.clientHeight * 2);
   const ctx = cv.getContext('2d');
-  const T = Math.max(8000, t * 1.15), X = Math.max(2, Math.exp(CRASH_K * T));
+  const T = Math.max(6000, t * 1.15), X = Math.max(2, crashMul(T));
   ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 2;
   for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(0, (hh * i) / 4); ctx.lineTo(w, (hh * i) / 4); ctx.stroke(); }
   ctx.beginPath();
-  for (let i = 0; i <= 60; i++) { const tt = (t * i) / 60, x = Math.exp(CRASH_K * tt); const px = (tt / T) * w, py = hh - ((x - 1) / (X - 1)) * hh * 0.9; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+  for (let i = 0; i <= 60; i++) { const tt = (t * i) / 60, x = crashMul(tt); const px = (tt / T) * w, py = hh - ((x - 1) / (X - 1)) * hh * 0.9; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
   ctx.strokeStyle = crashed ? '#ff5252' : '#4dd0e1'; ctx.lineWidth = 6; ctx.stroke();
 }
 function crashUI(g) {
@@ -4433,7 +4477,7 @@ function coinUI(g) {
     const el = document.getElementById('coin');
     st.rot = (st.rot || 0) + 1800 + (r.side !== (st.face || 'h') ? 180 : 0);
     st.face = r.side;
-    if (el) el.style.transform = `rotateY(${st.rot}deg)`;
+    spinEl(el, `rotateY(${st.rot}deg)`, 1200, 'cubic-bezier(0.2, 0.7, 0.2, 1)');
     animate(1300, () => { st.streak = r.ok ? (st.streak || 0) + 1 : 0; cresult(g, r, `${r.side === 'h' ? 'орёл' : 'решка'}${st.streak > 1 ? ` · серия ${st.streak}` : ''}`); });
   };
   return [
@@ -4452,16 +4496,18 @@ function wheelUI(g) {
   const spin = async () => {
     const r = await cplay({ game: g, bet: betOf(g) });
     if (!r) return;
-    const el = document.getElementById('fw');
-    const rot = spinTo(st, r.i, WHEEL.length);
-    if (el) el.style.transform = `rotate(${rot}deg)`;
-    animate(3300, () => { st.last = r.mult; cresult(g, r, `×${r.mult}`); });
+    const MS = 5000;
+    spinEl(document.getElementById('fw'), `rotate(${spinTo(st, r.i, WHEEL.length, 6)}deg)`, MS);
+    tickPointer('fw-ptr', MS);
+    const hub = document.getElementById('fw-hub'); if (hub) hub.textContent = '🎡';
+    animate(MS + 150, () => { st.last = r.mult; cresult(g, r, `×${r.mult}`); });
   };
   const kinds = [...new Set(WHEEL)].sort((a, b) => a - b);
   return [
-    h('div', { class: 'wheel-wrap big' }, h('div', { class: 'wheel-ptr' }),
-      h('div', { id: 'fw', class: 'wheel', style: `background:${wheelGradient(WHEEL, (x) => WHEEL_COL[x])};transform:rotate(${st.rot || 0}deg)` }),
-      h('div', { class: 'wheel-hub' }, st.last != null ? `×${st.last}` : '🎡')),
+    h('div', { class: 'wheel-wrap big' }, h('div', { id: 'fw-ptr', class: 'wheel-ptr' }),
+      h('div', { id: 'fw', class: 'wheel fw', style: `background:${wheelGradient(WHEEL, (x) => WHEEL_COL[x])};transform:rotate(${st.rot || 0}deg)` },
+        wheelLabels(WHEEL, (x) => (x ? `×${x}` : '·'), 'fw-l'), h('div', { class: 'fw-studs' })),
+      h('button', { id: 'fw-hub', class: 'wheel-hub fw-hub', onclick: spin }, st.last != null ? `×${st.last}` : 'КРУТИТЬ')),
     resBanner(g),
     h('div', { class: 'row', style: 'gap:6px;flex-wrap:wrap;justify-content:center' }, kinds.map((x) => h('span', { class: 'wh-leg', style: `background:${WHEEL_COL[x]}` }, `×${x} · ${WHEEL.filter((y) => y === x).length}/30`))),
     betBox(g),

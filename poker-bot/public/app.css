@@ -1157,7 +1157,7 @@ textarea.buyin-input { resize: vertical; font: inherit; }
 /* колёса: рулетка и колесо фортуны */
 .wheel-wrap { position: relative; width: 150px; height: 150px; flex-shrink: 0; }
 .wheel-wrap.big { width: min(300px, 80vw); height: min(300px, 80vw); margin: 0 auto; }
-.wheel { width: 100%; height: 100%; border-radius: 50%; border: 6px solid #2a2a2a; box-shadow: 0 0 0 3px color-mix(in srgb, var(--gc) 70%, #fff), 0 10px 30px rgba(0,0,0,0.5); transition: transform 3.2s cubic-bezier(0.12, 0.7, 0.12, 1); }
+.wheel { width: 100%; height: 100%; border-radius: 50%; border: 6px solid #2a2a2a; box-shadow: 0 0 0 3px color-mix(in srgb, var(--gc) 70%, #fff), 0 10px 30px rgba(0,0,0,0.5); }
 .wheel-ptr { position: absolute; top: -6px; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 11px solid transparent; border-right: 11px solid transparent; border-top: 20px solid #fff; z-index: 2; filter: drop-shadow(0 2px 3px rgba(0,0,0,0.6)); }
 .wheel-hub { position: absolute; inset: 32%; border-radius: 50%; background: #10181b; border: 3px solid rgba(255,255,255,0.3); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 22px; }
 .wheel-hub.r { background: #c62828; } .wheel-hub.k { background: #151517; } .wheel-hub.z { background: #15803d; }
@@ -1268,3 +1268,43 @@ textarea.buyin-input { resize: vertical; font: inherit; }
 .hub-emoji { color: #fff; }
 .cg h1.h2 { font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cg > .row.between > .row { min-width: 0; }
+
+/* ---------- кручение: рулетка, слоты, колесо ---------- */
+.wheel { position: relative; transition: none; }
+.wl { position: absolute; left: 50%; top: 0; width: 22px; margin-left: -11px; height: 50%; transform-origin: 50% 100%; text-align: center; pointer-events: none; }
+.wl span { display: block; padding-top: 4px; font-size: 9.5px; font-weight: 800; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.8); }
+.rl-top { display: flex; gap: 12px; align-items: center; }
+.rl-wheel-wrap { position: relative; width: min(215px, 56vw); aspect-ratio: 1; flex-shrink: 0; }
+.wheel.rl { border: 7px solid #5a3a1a; box-shadow: 0 0 0 3px #c9a24a, 0 12px 30px rgba(0,0,0,0.6), inset 0 0 0 2px rgba(255,255,255,0.15); }
+.rl-inner { position: absolute; inset: 21%; border-radius: 50%; background: radial-gradient(circle, #7a5326 0%, #4a2f12 60%, #2c1a08 100%); box-shadow: inset 0 0 12px rgba(0,0,0,0.7), 0 0 0 3px #c9a24a; }
+.rl-cross { position: absolute; inset: 30%; border-radius: 50%; background: radial-gradient(circle, #f3d27a, #b8862b); box-shadow: 0 0 0 4px rgba(0,0,0,0.25); }
+.rl-cross::before, .rl-cross::after { content: ''; position: absolute; left: 50%; top: -55%; width: 4px; margin-left: -2px; height: 210%; background: linear-gradient(#f3d27a, #b8862b); border-radius: 2px; }
+.rl-cross::after { transform: rotate(90deg); }
+.rl-track { position: absolute; inset: 0; pointer-events: none; }
+.rl-ball { position: absolute; left: 50%; top: 1.5%; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff, #cfd8dc 60%, #8a979c); box-shadow: 0 2px 4px rgba(0,0,0,0.6); transition: top 0.6s cubic-bezier(0.5, 0, 0.7, 1.4); }
+.rl-ball.in { top: 9%; }
+.rl-ball.drop { top: 1.5%; animation: ball-drop 5s forwards; }
+@keyframes ball-drop { 0%, 62% { top: 1.5%; } 72% { top: 7%; } 78% { top: 4.5%; } 86%, 100% { top: 9%; } }
+.rl-wheel-wrap .wheel-hub { inset: 36%; font-size: 20px; z-index: 2; pointer-events: none; background: transparent; border: 0; text-shadow: 0 2px 6px #000; }
+.rl-wheel-wrap .wheel-hub.r, .rl-wheel-wrap .wheel-hub.k, .rl-wheel-wrap .wheel-hub.z { border-radius: 50%; border: 2px solid #f3d27a; }
+.rl-side { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.rl-spin { width: 100%; max-width: 130px; aspect-ratio: 1; border-radius: 50%; border: 0; background: radial-gradient(circle at 35% 30%, #ff7a73, var(--gc) 55%, #7f1515); color: #fff; font-weight: 900; font-size: 15px; box-shadow: 0 0 0 4px rgba(255,255,255,0.12), 0 10px 26px color-mix(in srgb, var(--gc) 55%, transparent); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.rl-spin:active:not(:disabled) { transform: scale(0.95); }
+.rl-spin:disabled { opacity: 0.6; }
+
+.slots-box { position: relative; }
+.slots { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.reel { aspect-ratio: 1 / 3; overflow: hidden; border-radius: 14px; background: linear-gradient(180deg, #bdb4cc 0%, #fff 18%, #fff 82%, #bdb4cc 100%); box-shadow: inset 0 8px 14px rgba(0,0,0,0.35), inset 0 -8px 14px rgba(0,0,0,0.35); }
+.strip { display: flex; flex-direction: column; will-change: transform; }
+.sym { aspect-ratio: 1; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: clamp(32px, 10.5vw, 50px); border-bottom: 1px solid rgba(0,0,0,0.06); }
+.strip.moving .sym { filter: blur(2.5px); }
+.sym.win { animation: slotwin 0.7s ease infinite alternate; background: radial-gradient(circle, rgba(255,213,79,0.6), transparent 70%); }
+.slots-line { position: absolute; left: 6px; right: 6px; top: 50%; height: 2px; margin-top: -1px; background: rgba(255,82,82,0.55); pointer-events: none; }
+
+.wheel.fw { border: 8px solid #3a2414; box-shadow: 0 0 0 3px #d9a15b, 0 14px 34px rgba(0,0,0,0.6); }
+.fw-l span { font-size: 11px; padding-top: 8px; }
+.fw-studs { position: absolute; inset: -2px; border-radius: 50%; background: repeating-conic-gradient(#ffe7a8 0deg 2deg, transparent 2deg 12deg); -webkit-mask: radial-gradient(circle, transparent 66%, #000 67%, #000 69%, transparent 70%); mask: radial-gradient(circle, transparent 66%, #000 67%, #000 69%, transparent 70%); pointer-events: none; }
+.fw-hub { cursor: pointer; inset: 34%; font-size: 14px; color: #fff; background: radial-gradient(circle at 35% 30%, #e0a868, var(--gc) 60%, #5a3416); border: 3px solid #ffe7a8; box-shadow: 0 6px 16px rgba(0,0,0,0.5); z-index: 2; }
+.wheel-ptr { transform-origin: 50% 0; }
+.wheel-ptr.ticking { animation: ptr-tick 120ms ease-in-out infinite alternate; }
+@keyframes ptr-tick { from { transform: translateX(-50%) rotate(0deg); } to { transform: translateX(-50%) rotate(-16deg); } }

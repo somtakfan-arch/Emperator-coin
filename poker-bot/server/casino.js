@@ -209,9 +209,12 @@ function dice(uid, m) {
 }
 
 // ==================== 5. Краш (множитель растёт, забери до взрыва) ====================
-export const CRASH_K = 0.00006; // множитель = e^(k·мс): 10 с → 1.82×, 30 с → 6×, 60 с → 36×
-export const crashAt = (ms) => fl2(Math.exp(CRASH_K * Math.max(0, ms)));
-const crashTime = (x) => Math.log(x) / CRASH_K;
+// множитель = e^(A·t + B·t²), t в мс: скорость растёт со временем.
+// 5 с → 2.2×, 10 с → 7.4×, 13 с → 18×, 20 с → 270×, ~22 с → 1000×
+export const CRASH_A = 0.00012, CRASH_B = 8e-9;
+const crashLn = (ms) => CRASH_A * ms + CRASH_B * ms * ms;
+export const crashAt = (ms) => fl2(Math.exp(crashLn(Math.max(0, ms))));
+const crashTime = (x) => (-CRASH_A + Math.sqrt(CRASH_A ** 2 + 4 * CRASH_B * Math.log(x))) / (2 * CRASH_B);
 const crashTimers = new Map();
 function crashResolve(uid, s, now) { // авто-вывод или взрыв, если время пришло
   const tA = s.auto && s.auto < s.crash ? s.start + crashTime(s.auto) : Infinity;
@@ -249,7 +252,9 @@ function crash(uid, m) {
       const auto = m.auto ? Number(m.auto) : null;
       if (auto != null && !(auto >= 1.01 && auto <= 1000)) throw new Error('Авто-вывод — от 1.01× до 1000×');
       const r = rnd();
-      const cr = Math.min(1000, Math.max(1, fl2(0.97 / (1 - r))));
+      // шанс дожить до ×x = 0.97 / x (отдача 97% на любой цели); всё, что ниже ×1.08, — взрыв сразу (≈10% раундов)
+      let cr = Math.min(1000, fl2(0.97 / (1 - r)));
+      if (cr < 1.08) cr = 1;
       s = { bet, start: now, crash: cr, auto: auto ? fl2(auto) : null };
       if (cr <= 1) return crashEnd(uid, s, 0); // взрыв сразу
       setState(uid, 'crash', s);
