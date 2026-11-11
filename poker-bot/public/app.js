@@ -120,6 +120,7 @@ async function run(msg) {
 
 function onMessage(m) {
   if (m.now) skew = m.now - Date.now();
+  if (m.t === 'crashTick') return crashOnTick(m); // 10 раз в секунду — без полной перерисовки
   if (m.rid && waiting.has(m.rid)) {
     const w = waiting.get(m.rid);
     waiting.delete(m.rid);
@@ -189,10 +190,7 @@ function onMessage(m) {
       go('friends');
       break;
     case 'casinoInfo': S.cinfo = m; break;
-    case 'casino':
-      // краш: авто-вывод или взрыв пришёл с сервера сам
-      if (m.push && m.game === 'crash' && m.over) { crashOver(m); drawCrash(0, true); }
-      break;
+    case 'crashRound': crashOnRound(m); if (S.screen !== 'cg' || S.cg !== 'crash') return; break;
     case 'coachNow':
       S.coachNow = m;
       if (m.ten) { toast(`🎯 10 правильных решений подряд!${m.chips ? ` +${m.chips}` : ''}`); confetti(); }
@@ -640,6 +638,7 @@ const BACK = { cg: 'hub', lobby: 'hub', course: 'school', trainers: 'school', sa
 
 function go(screen) {
   if (S.animUntil) finishAnim();
+  if (S.screen === 'cg' && S.cg === 'crash' && screen !== 'cg') { send({ t: 'casino', game: 'crash', a: 'unwatch' }); S.crash = null; }
   if (screen === 'hub') send({ t: 'casinoInfo' });
   if (screen !== 'table' && S.screen === 'table' && S.table) S.tableHidden = true;
   if (screen === 'table') S.tableHidden = false;
@@ -4115,10 +4114,10 @@ async function openGame(g) {
   go('cg');
   if (!S.cinfo) send({ t: 'casinoInfo' });
   if (['blackjack', 'mines', 'hilo', 'videopoker', 'tower', 'crash'].includes(g)) {
-    const r = await run({ t: 'casino', game: g, a: 'state' });
+    const r = await run({ t: 'casino', game: g, a: g === 'crash' ? 'watch' : 'state' });
     if (!r || r.none) return;
     const st = cs(g);
-    if (g === 'crash') { if (r.live) { st.live = r; crashTick(); } else if (r.over) crashOver(r); }
+    if (g === 'crash') crashOnRound(r);
     else { st.s = r; if (g === 'videopoker') st.hold = [false, false, false, false, false]; }
     render();
   }
@@ -4327,71 +4326,113 @@ function diceUI(g) {
 }
 
 // ---------- 5. Краш ----------
-function crashOver(r) {
+// ---------- краш: общий раунд для всех ----------
+function crashOnRound(m) {
+  const prev = S.crash;
+  S.crash = m;
   const st = cs('crash');
-  st.live = null;
-  st.lastCrash = r.crash;
-  (st.points ||= []).unshift(r.crash);
-  st.points.length = Math.min(st.points.length, 14);
-  cresult('crash', r, r.cashed ? `забрал на ×${r.cashed} · взрыв был на ×${r.crash}` : `взрыв на ×${r.crash}`);
+  // взрыв: если ставил и не забрал — показываем проигрыш (один раз за раунд)
+  if (m.phase === 'crashed' && st.doneRound !== m.id) {
+    st.doneRound = m.id;
+    (st.points ||= []).unshift(m.C);
+    st.points.length = Math.min(st.points.length, 16);
+    if (m.mine && !m.mine.cash) cresult('crash', { win: 0, bet: m.mine.bet }, `взрыв на ×${m.C.toFixed(2)}`);
+    try { if (m.mine && !m.mine.cash) tg?.HapticFeedback?.notificationOccurred('error'); } catch {}
+  }
+  // ставка на следующий раунд, сделанная заранее
+  if (m.phase === 'bet' && prev?.id !== m.id && st.queued) { const q = st.queued; st.queued = null; crashBet(q.auto); }
 }
-let crashIv = null;
-function crashTick() {
-  clearInterval(crashIv);
-  crashIv = setInterval(() => {
-    const st = cs('crash');
-    if (!st.live) { clearInterval(crashIv); return; }
-    if (S.screen !== 'cg' || S.cg !== 'crash') return;
-    const t = nowSrv() - st.live.start;
-    const x = CRASH_X(t);
-    const el = document.getElementById('crash-x'); if (el) { el.textContent = `×${x.toFixed(2)}`; el.style.color = x >= 10 ? '#ffd54f' : x >= 2 ? '#7ef0a8' : '#fff'; }
-    const btn = document.getElementById('crash-out'); if (btn) btn.textContent = `Забрать ${fmt(Math.floor(st.live.bet * x))}`;
-    drawCrash(t, false);
-  }, 50);
+function crashOnTick(m) {
+  const c = S.crash;
+  if (!c || m.id !== c.id) return;
+  if (c.phase === 'bet') { c.phase = 'fly'; c.pts = [1]; }
+  c.pts[m.k] = m.x; c.x = m.x; c.k = m.k;
+  for (const e of m.cash) { const p = c.players.find((p) => p.name === e.name && !p.cash && (e.bot ? p.bot : !p.bot)); if (p) { p.cash = e.x; p.win = e.win; } }
+  if (S.screen !== 'cg' || S.cg !== 'crash') return;
+  const el = document.getElementById('crash-x');
+  if (el) { el.textContent = `×${m.x.toFixed(2)}`; el.style.color = m.x >= 10 ? '#ffd54f' : m.x >= 2 ? '#7ef0a8' : '#fff'; }
+  const btn = document.getElementById('crash-out');
+  if (btn && c.mine && !c.mine.cash) btn.textContent = `Забрать ${fmt(Math.floor(c.mine.bet * m.x))} · ×${m.x.toFixed(2)}`;
+  drawCrash();
+  if (m.cash.length) render(); // кто-то забрал — обновляем список игроков
 }
-function drawCrash(t, crashed) {
+let crashCd = null;
+setInterval(() => { // обратный отсчёт до старта
+  const c = S.crash, el = document.getElementById('crash-cd');
+  if (!c || !el || c.phase !== 'bet') return;
+  const left = Math.max(0, c.betEnd - nowSrv());
+  el.textContent = `Старт через ${(left / 1000).toFixed(1)} с`;
+  const bar = document.getElementById('crash-bar'); if (bar) bar.style.width = `${Math.min(100, (left / 7000) * 100)}%`;
+}, 100);
+function drawCrash() {
   const cv = document.getElementById('crash-cv');
-  if (!cv) return;
+  const c = S.crash;
+  if (!cv || !c) return;
   const w = (cv.width = cv.clientWidth * 2), hh = (cv.height = cv.clientHeight * 2);
   const ctx = cv.getContext('2d');
-  const T = Math.max(6000, t * 1.15), X = Math.max(2, crashMul(T));
-  ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 2;
-  for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(0, (hh * i) / 4); ctx.lineTo(w, (hh * i) / 4); ctx.stroke(); }
-  ctx.beginPath();
-  for (let i = 0; i <= 60; i++) { const tt = (t * i) / 60, x = crashMul(tt); const px = (tt / T) * w, py = hh - ((x - 1) / (X - 1)) * hh * 0.9; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
-  ctx.strokeStyle = crashed ? '#ff5252' : '#4dd0e1'; ctx.lineWidth = 6; ctx.stroke();
+  const pts = (c.pts || [1]).filter((x) => x != null);
+  const n = Math.max(60, pts.length * 1.12);
+  const top = Math.max(2, ...pts) * 1.12;
+  const X = (i) => 10 + (i / n) * (w - 70), Y = (x) => hh - 14 - ((x - 1) / (top - 1)) * (hh - 60);
+  ctx.strokeStyle = 'rgba(255,255,255,0.07)'; ctx.lineWidth = 2; ctx.fillStyle = 'rgba(255,255,255,0.35)'; ctx.font = '20px Inter, sans-serif';
+  for (const g of [1.5, 2, 3, 5, 10, 25, 50, 100, 250, 500, 1000].filter((g) => g < top).slice(-4)) { ctx.beginPath(); ctx.moveTo(0, Y(g)); ctx.lineTo(w, Y(g)); ctx.stroke(); ctx.fillText(`×${g}`, w - 64, Y(g) - 4); }
+  if (c.phase === 'bet' || pts.length < 2) return;
+  const boom = c.phase === 'crashed';
+  const col = boom ? '#ff5252' : '#4dd0e1';
+  const grad = ctx.createLinearGradient(0, 0, 0, hh); grad.addColorStop(0, boom ? 'rgba(255,82,82,0.35)' : 'rgba(77,208,225,0.35)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
+  ctx.beginPath(); ctx.moveTo(X(0), hh);
+  pts.forEach((x, i) => ctx.lineTo(X(i), Y(x)));
+  ctx.lineTo(X(pts.length - 1), hh); ctx.closePath(); ctx.fillStyle = grad; ctx.fill();
+  ctx.beginPath(); pts.forEach((x, i) => (i ? ctx.lineTo(X(i), Y(x)) : ctx.moveTo(X(i), Y(x))));
+  ctx.strokeStyle = col; ctx.lineWidth = 6; ctx.lineJoin = 'round'; ctx.stroke();
+  ctx.font = '44px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(boom ? '💥' : '🚀', X(pts.length - 1), Y(pts[pts.length - 1]) - 6);
+}
+async function crashBet(auto) {
+  const r = await run({ t: 'casino', game: 'crash', a: 'bet', bet: betOf('crash'), ...(auto ? { auto } : {}) });
+  if (r) { applyChips(r); crashOnRound(r); cs('crash').res = null; render(); }
 }
 function crashUI(g) {
-  const st = cs(g);
-  const start = async () => {
-    const auto = st.autoOn ? Number(st.auto) : null;
-    const r = await cplay({ game: g, a: 'start', bet: betOf(g), ...(auto ? { auto } : {}) });
-    if (!r) return;
-    if (r.over) { crashOver(r); render(); return; }
-    applyChips(r);
-    st.live = r; st.res = null;
-    render(); crashTick();
-  };
+  const st = cs(g), c = S.crash;
+  if (!c) return [h('div', { class: 'crash-box' }, h('div', { class: 'crash-x' }, '…'))];
+  const mine = c.mine;
+  const auto = () => (st.autoOn ? Number(st.auto ?? 2) : null);
   const out = async () => {
-    if (!st.live) return;
-    const r = await req({ t: 'casino', game: g, a: 'cashout' }).catch(() => null); // взрыв мог прийти раньше — тогда итог уже показан
-    if (r?.over) { applyChips(r); crashOver(r); render(); }
+    const r = await req({ t: 'casino', game: g, a: 'cashout' }).catch((e) => { toast(e.message); return null; });
+    if (r) { applyChips(r); crashOnRound(r); cresult(g, r, `забрал на ×${r.cashed.toFixed(2)}`); render(); }
   };
-  setTimeout(() => drawCrash(st.live ? nowSrv() - st.live.start : 0, !st.live && st.lastCrash), 0);
+  setTimeout(drawCrash, 0);
+  const histCol = (p) => (p >= 10 ? 'gold' : p >= 2 ? 'w' : 'l');
+  let action;
+  if (c.phase === 'fly' && mine && !mine.cash) action = h('button', { id: 'crash-out', class: 'cbtn big', onclick: out }, `Забрать ${fmt(Math.floor(mine.bet * c.x))} · ×${c.x.toFixed(2)}`);
+  else if (mine?.cash) action = h('div', { class: 'cres win' }, h('div', { class: 'b', style: 'font-size:18px' }, `Вывел на ×${mine.cash.toFixed(2)} · +${fmt(mine.win - mine.bet)}`), h('div', { class: 'small' }, c.phase === 'fly' ? 'ракета летит дальше…' : `взрыв был на ×${c.C?.toFixed(2)}`));
+  else if (c.phase === 'bet' && mine) action = h('button', { class: 'cbtn big', disabled: true }, `Ставка ${fmt(mine.bet)} принята${mine.auto ? ` · авто ×${mine.auto}` : ''}`);
+  else if (c.phase === 'bet') action = cbtn(`Поставить ${fmt(betOf(g))}`, () => crashBet(auto()));
+  else action = st.queued ? cbtn2('Отменить ставку на следующий раунд', () => { st.queued = null; render(); })
+    : cbtn(`Ставка на следующий раунд · ${fmt(betOf(g))}`, () => { st.queued = { auto: auto() }; toast('Поставлю, как только начнётся приём ставок'); render(); });
+  const players = c.players || [];
+  const sum = players.reduce((a, p) => a + p.bet, 0);
   return [
-    h('div', { class: 'crash-box' },
+    h('div', { class: `crash-box ${c.phase}` },
       h('canvas', { id: 'crash-cv', class: 'crash-cv' }),
-      h('div', { id: 'crash-x', class: `crash-x ${!st.live && st.lastCrash ? 'boom' : ''}` }, st.live ? '×1.00' : st.lastCrash ? `×${st.lastCrash.toFixed(2)}` : '×1.00'),
-      !st.live && st.lastCrash && h('div', { class: 'crash-sub' }, '💥 взрыв')),
-    st.points?.length > 0 && h('div', { class: 'row', style: 'gap:4px;flex-wrap:wrap' }, st.points.map((p) => h('span', { class: `chip-x ${p >= 2 ? 'w' : 'l'}` }, `${p.toFixed(2)}×`))),
-    resBanner(g),
-    st.live ? h('button', { id: 'crash-out', class: 'cbtn big', onclick: out }, `Забрать ${fmt(st.live.bet)}`)
-      : [betBox(g),
-        h('label', { class: 'toggle-row glass', style: 'padding:10px 12px;border-radius:14px;gap:8px' },
-          h('input', { type: 'checkbox', checked: !!st.autoOn, onchange: (e) => { st.autoOn = e.target.checked; render(); } }), h('span', {}, 'Авто-вывод на'),
-          h('input', { id: 'crash-auto', class: 'bet-in', style: 'width:90px', type: 'number', step: '0.1', min: 1.01, value: st.auto ?? 2, oninput: (e) => { st.auto = e.target.value; } }), h('span', {}, '×')),
-        cbtn('Старт', start)],
-    h('div', { class: 'small muted' }, 'Множитель растёт, пока ракета не взорвётся. Успей забрать — или поставь авто-вывод.'),
+      c.phase === 'bet' ? h('div', { class: 'crash-x small-x' }, h('div', { class: 'col', style: 'align-items:center;gap:8px' }, h('div', { id: 'crash-cd' }, 'Старт через …'), h('div', { class: 'crash-barw' }, h('div', { id: 'crash-bar', class: 'crash-bar' }))))
+        : h('div', { id: 'crash-x', class: `crash-x ${c.phase === 'crashed' ? 'boom' : ''}`, style: c.phase === 'fly' ? `color:${c.x >= 10 ? '#ffd54f' : c.x >= 2 ? '#7ef0a8' : '#fff'}` : '' }, `×${(c.phase === 'crashed' ? c.C : c.x).toFixed(2)}`),
+      c.phase === 'crashed' && h('div', { class: 'crash-sub' }, '💥 взрыв')),
+    h('div', { class: 'row', style: 'gap:4px;flex-wrap:wrap' }, (c.hist || []).slice(0, 14).map((p) => h('span', { class: `chip-x ${histCol(p)}` }, `${p.toFixed(2)}×`))),
+    !mine?.cash && resBanner(g),
+    action,
+    !(mine && c.phase !== 'crashed') && [betBox(g),
+      h('label', { class: 'toggle-row glass', style: 'padding:10px 12px;border-radius:14px;gap:8px' },
+        h('input', { type: 'checkbox', checked: !!st.autoOn, onchange: (e) => { st.autoOn = e.target.checked; render(); } }), h('span', {}, 'Авто-вывод на'),
+        h('input', { id: 'crash-auto', class: 'bet-in', style: 'width:90px', type: 'number', step: '0.1', min: 1.01, value: st.auto ?? 2, oninput: (e) => { st.auto = e.target.value; } }), h('span', {}, '×'))],
+    h('div', { class: 'glass card', style: 'gap:6px;padding:10px 12px' },
+      h('div', { class: 'row between small muted' }, h('span', {}, `Игроков в раунде: ${players.length}`), h('span', {}, `ставок на ${fmt(sum)}`)),
+      players.length ? players.map((p) => h('div', { class: `crash-pl ${p.me ? 'me' : ''} ${p.cash ? 'won' : c.phase === 'crashed' ? 'lost' : ''}` },
+        h('span', { class: 'nm' }, `${p.bot ? '🤖 ' : ''}${p.name}${p.me ? ' (ты)' : ''}`),
+        h('span', {}, fmt(p.bet)),
+        h('span', { class: 'cx' }, p.cash ? `×${p.cash.toFixed(2)} · +${fmt(p.win)}` : c.phase === 'crashed' ? '—' : '…')))
+        : h('div', { class: 'small muted' }, 'Пока никто не поставил')),
+    h('div', { class: 'small muted' }, 'Раунды идут для всех по таймеру: 7 секунд на ставки, потом взлёт. Забери до взрыва — после вывода ракета летит дальше. Боты отмечены 🤖.'),
   ];
 }
 

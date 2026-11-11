@@ -1126,6 +1126,7 @@ wss.on('connection', (ws) => {
   });
   ws.on('close', () => {
     if (!uid) return;
+    if ((sockets.get(uid)?.size ?? 0) <= 1) casino.crashUnwatch(uid);
     if ((sockets.get(uid)?.size ?? 0) <= 1) handlers.unwatch(uid);
     seen.set(uid, Date.now());
     const set = sockets.get(uid);
@@ -1141,7 +1142,7 @@ casino.setHooks({
   notify: (uid, msg) => { hub.send(uid, msg); hub.sendMe(uid); },
   onSettle: (uid, game, bet, win) => { if (win >= bet * 20 && win >= 1000) addFeed(uid, 'casino', `${CASINO_NAMES[game]}: выигрыш ${win.toLocaleString('ru')} (×${Math.floor(win / bet)})`); },
 });
-casino.crashRecover();
+casino.crashStart({ send: (uid, msg) => hub.send(uid, msg), botNames: CROWD.map((c) => c.name) }); // краш крутится всегда, для всех
 
 // ---------- Запуск ----------
 

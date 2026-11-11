@@ -208,72 +208,170 @@ function dice(uid, m) {
   });
 }
 
-// ==================== 5. Краш (множитель растёт, забери до взрыва) ====================
-// множитель = e^(A·t + B·t²), t в мс: скорость растёт со временем.
-// 5 с → 2.2×, 10 с → 7.4×, 13 с → 18×, 20 с → 270×, ~22 с → 1000×
-export const CRASH_A = 0.00012, CRASH_B = 8e-9;
-const crashLn = (ms) => CRASH_A * ms + CRASH_B * ms * ms;
-export const crashAt = (ms) => fl2(Math.exp(crashLn(Math.max(0, ms))));
-const crashTime = (x) => (-CRASH_A + Math.sqrt(CRASH_A ** 2 + 4 * CRASH_B * Math.log(x))) / (2 * CRASH_B);
-const crashTimers = new Map();
-function crashResolve(uid, s, now) { // авто-вывод или взрыв, если время пришло
-  const tA = s.auto && s.auto < s.crash ? s.start + crashTime(s.auto) : Infinity;
-  const tC = s.start + crashTime(s.crash);
-  if (now >= tA) return crashEnd(uid, s, s.auto);
-  if (now >= tC) return crashEnd(uid, s, 0);
-  return null;
+// ==================== 5. Краш — общий раунд для всех по таймеру ====================
+// Ставки 7 с → полёт (линия рывками: взлёты и провалы) → взрыв → пауза → новый раунд.
+// Точка взрыва C выбирается заранее; линия доходит до C впервые ровно в момент взрыва,
+// поэтому авто-вывод на ×x срабатывает с шансом P(C ≥ x) — отдача не зависит от рывков.
+// P(C ≥ x) = 0.85·x^−a до ×25 (≈15% раундов — взрыв сразу), дальше 0.97/x (отдача 97%).
+db.exec('CREATE TABLE IF NOT EXISTS crash_live (user_id INTEGER PRIMARY KEY, round INTEGER NOT NULL, bet INTEGER NOT NULL, auto REAL)');
+const CRASH_BET_MS = Number(process.env.CRASH_BET_MS) || 7000;
+const CRASH_PAUSE_MS = Number(process.env.CRASH_PAUSE_MS) || 3500;
+const CRASH_TICK = 100;
+const CP0 = 0.85, CP25 = 0.97 / 25, CA = Math.log(CP0 / CP25) / Math.log(25);
+export const crashSurvive = (x) => (x <= 1 ? 1 : x <= 25 ? CP0 * x ** -CA : 0.97 / x); // шанс, что долетит до ×x
+export function crashPoint(u = rnd()) {
+  const v = 1 - u; // (0, 1]
+  if (v > CP0) return 1;
+  const c = v >= CP25 ? (CP0 / v) ** (1 / CA) : 0.97 / v;
+  return Math.min(1000, Math.max(1.01, fl2(c)));
 }
-function crashEnd(uid, s, x) {
-  clearTimeout(crashTimers.get(uid)); crashTimers.delete(uid);
-  delState(uid, 'crash');
-  const win = settle(uid, 'crash', s.bet, x ? s.bet * x : 0);
-  return { over: true, crash: s.crash, cashed: x || null, win, bet: s.bet };
+const gauss = (r) => Math.sqrt(-2 * Math.log(1 - r())) * Math.cos(2 * Math.PI * r());
+// линия полёта по тикам (100 мс): разгон + шум + рывки вверх и провалы; последний тик = C
+export function crashPath(C, r = rnd) {
+  const pts = [1];
+  if (C <= 1) return pts;
+  const target = Math.log(C);
+  let L = 0;
+  for (let k = 1; k < 900; k++) {
+    let d = 0.006 + 0.0006 * k + 0.03 * gauss(r);
+    const u = r();
+    if (u < 0.035) d += 0.05 + r() * 0.2; // взлёт
+    else if (u < 0.07) d -= 0.04 + r() * 0.15; // провал
+    L = Math.max(0, L + d);
+    if (L >= target) break;
+    pts.push(Math.max(1, fl2(Math.exp(L))));
+  }
+  pts.push(C);
+  return pts;
 }
-function crashArm(uid, s) {
-  const tA = s.auto && s.auto < s.crash ? s.start + crashTime(s.auto) : Infinity;
-  const at = Math.min(tA, s.start + crashTime(s.crash));
-  clearTimeout(crashTimers.get(uid));
-  crashTimers.set(uid, setTimeout(() => {
-    try {
-      const r = tx(() => { const cur = getState(uid, 'crash'); return cur && cur.start === s.start ? crashResolve(uid, cur, Date.now() + 5) : null; });
-      if (r) notify(uid, { t: 'casino', game: 'crash', push: true, ...r });
-    } catch {}
-  }, Math.max(0, at - Date.now()) + 5));
+
+let sendTo = () => {}; // (uid, msg) — без обновления баланса
+let botNames = ['Бот'];
+const CR = { id: 0, phase: 'off', betEnd: 0, flyStart: 0, path: [1], k: 0, C: 1, bets: new Map(), hist: [], cash: [], timer: null, botSeq: 0 };
+const crashWatch = new Set();
+const crashX = () => CR.path[Math.min(CR.k, CR.path.length - 1)] || 1;
+function crashPlayers() {
+  return [...CR.bets.values()].sort((a, b) => b.bet - a.bet).slice(0, 40)
+    .map((b) => ({ name: b.name, bet: b.bet, cash: b.cash || null, win: b.win || 0, bot: !!b.bot, me: b.uid }));
 }
+function crashView(uid) {
+  const mine = CR.bets.get(uid);
+  return {
+    id: CR.id, phase: CR.phase, betEnd: CR.betEnd, flyStart: CR.flyStart, k: CR.k,
+    pts: CR.phase === 'bet' ? [1] : CR.path.slice(0, CR.k + 1), x: CR.phase === 'bet' ? 1 : crashX(),
+    C: CR.phase === 'crashed' ? CR.C : null, hist: CR.hist.slice(0, 16),
+    players: crashPlayers().map((p) => ({ ...p, me: p.me === uid })),
+    mine: mine ? { bet: mine.bet, auto: mine.auto || null, cash: mine.cash || null, win: mine.win || 0 } : null,
+  };
+}
+function crashBroadcast() { for (const uid of crashWatch) sendTo(uid, { t: 'crashRound', ...crashView(uid) }); }
+let bcastTimer = null;
+const crashBroadcastSoon = () => { if (!bcastTimer) bcastTimer = setTimeout(() => { bcastTimer = null; crashBroadcast(); }, 150); };
+
+function crashCashOut(b, x) {
+  b.cash = x;
+  b.win = Math.floor(b.bet * x);
+  CR.cash.push({ name: b.name, x, win: b.win, bot: !!b.bot });
+  if (b.uid > 0) {
+    tx(() => { settle(b.uid, 'crash', b.bet, b.win); db.prepare('DELETE FROM crash_live WHERE user_id = ?').run(b.uid); });
+  }
+}
+function crashNewRound() {
+  CR.id++;
+  CR.phase = 'bet';
+  CR.betEnd = Date.now() + CRASH_BET_MS;
+  CR.C = crashPoint();
+  CR.path = crashPath(CR.C);
+  CR.k = 0;
+  CR.bets = new Map();
+  CR.cash = [];
+  // боты тоже ставят — помечены 🤖, фишки у них не настоящие
+  const n = 5 + randomInt(0, 9);
+  const names = [...botNames].sort(() => rnd() - 0.5); // в одном раунде имена не повторяются
+  for (let i = 0; i < n; i++) {
+    setTimeout(() => {
+      if (CR.phase !== 'bet') return;
+      const id = -(++CR.botSeq);
+      const bet = Math.max(10, Math.round(Math.exp(3.5 + rnd() * 6) / 10) * 10);
+      const auto = rnd() < 0.15 ? null : fl2(Math.min(200, 1.1 + (-Math.log(1 - rnd())) ** 1.6 * 2.2));
+      CR.bets.set(id, { uid: id, name: names[i % names.length], bet, auto: auto || fl2(1.2 + rnd() * 6), bot: true });
+      crashBroadcastSoon();
+    }, randomInt(200, Math.max(300, CRASH_BET_MS - 300)));
+  }
+  crashBroadcast();
+  CR.timer = setTimeout(crashFly, CRASH_BET_MS);
+}
+function crashFly() {
+  CR.phase = 'fly';
+  CR.flyStart = Date.now();
+  CR.k = 0;
+  crashBroadcast();
+  const step = () => {
+    const last = CR.k >= CR.path.length - 1;
+    if (!last) CR.k++;
+    const x = crashX();
+    for (const b of CR.bets.values()) if (!b.cash && b.auto && b.auto <= x) { // авто-вывод ровно на своём множителе
+      try { crashCashOut(b, b.auto); if (b.uid > 0) notify(b.uid, { t: 'toast', text: `🚀 Авто-вывод ×${b.auto}: +${b.win.toLocaleString('ru')}` }); } catch {}
+    }
+    const cash = CR.cash.splice(0);
+    for (const uid of crashWatch) sendTo(uid, { t: 'crashTick', id: CR.id, k: CR.k, x, cash });
+    if (CR.k >= CR.path.length - 1) return crashBoom();
+    CR.timer = setTimeout(step, CRASH_TICK);
+  };
+  if (CR.path.length === 1) return crashBoom(); // взрыв сразу
+  CR.timer = setTimeout(step, CRASH_TICK);
+}
+function crashBoom() {
+  CR.phase = 'crashed';
+  for (const b of CR.bets.values()) if (!b.cash && b.uid > 0) {
+    try { tx(() => { settle(b.uid, 'crash', b.bet, 0); db.prepare('DELETE FROM crash_live WHERE user_id = ?').run(b.uid); }); } catch {}
+  }
+  CR.hist.unshift(CR.C);
+  CR.hist.length = Math.min(CR.hist.length, 30);
+  crashBroadcast();
+  CR.timer = setTimeout(crashNewRound, CRASH_PAUSE_MS);
+}
+// запуск: ставки раунда, прерванного перезапуском сервера, возвращаем
+export function crashStart(opts = {}) {
+  if (opts.send) sendTo = opts.send;
+  if (opts.botNames?.length) botNames = opts.botNames;
+  for (const r of db.prepare('SELECT user_id, bet FROM crash_live').all()) {
+    try { tx(() => { settle(r.user_id, 'crash', r.bet, r.bet); db.prepare('DELETE FROM crash_live WHERE user_id = ?').run(r.user_id); }); } catch {}
+  }
+  if (CR.phase === 'off') crashNewRound();
+}
+export const crashUnwatch = (uid) => crashWatch.delete(uid);
 function crash(uid, m) {
-  return tx(() => {
-    const now = Date.now();
-    let s = getState(uid, 'crash');
-    if (s) { const r = crashResolve(uid, s, now); if (r) { if (m.a === 'state' || m.a === 'cashout') return r; s = null; } }
-    if (m.a === 'state') return s ? { live: true, start: s.start, bet: s.bet, auto: s.auto || null } : { none: true };
-    if (m.a === 'start') {
-      if (s) throw new Error('Раунд уже идёт');
+  if (CR.phase === 'off') crashStart();
+  if (m.a === 'watch' || m.a === 'state') { crashWatch.add(uid); return crashView(uid); }
+  if (m.a === 'unwatch') { crashWatch.delete(uid); return { ok: true }; }
+  if (m.a === 'bet') {
+    if (CR.phase !== 'bet') throw new Error('Ставки закрыты — дождись следующего раунда');
+    if (CR.bets.has(uid)) throw new Error('Ты уже поставил в этом раунде');
+    const auto = m.auto ? Number(m.auto) : null;
+    if (auto != null && !(auto >= 1.01 && auto <= 1000)) throw new Error('Авто-вывод — от 1.01× до 1000×');
+    tx(() => {
       const bet = take(uid, 'crash', m.bet);
-      const auto = m.auto ? Number(m.auto) : null;
-      if (auto != null && !(auto >= 1.01 && auto <= 1000)) throw new Error('Авто-вывод — от 1.01× до 1000×');
-      const r = rnd();
-      // шанс дожить до ×x = 0.97 / x (отдача 97% на любой цели); всё, что ниже ×1.08, — взрыв сразу (≈10% раундов)
-      let cr = Math.min(1000, fl2(0.97 / (1 - r)));
-      if (cr < 1.08) cr = 1;
-      s = { bet, start: now, crash: cr, auto: auto ? fl2(auto) : null };
-      if (cr <= 1) return crashEnd(uid, s, 0); // взрыв сразу
-      setState(uid, 'crash', s);
-      crashArm(uid, s);
-      return { live: true, start: s.start, bet, auto: s.auto };
-    }
-    if (m.a === 'cashout') {
-      need(s);
-      const x = crashAt(now - s.start);
-      if (x >= s.crash) return crashEnd(uid, s, 0);
-      return crashEnd(uid, s, Math.max(1, x));
-    }
-    throw new Error('Неизвестный ход');
-  });
+      db.prepare('INSERT OR REPLACE INTO crash_live (user_id, round, bet, auto) VALUES (?, ?, ?, ?)').run(uid, CR.id, bet, auto);
+      const name = db.prepare('SELECT name FROM users WHERE id = ?').get(uid)?.name || 'Игрок';
+      CR.bets.set(uid, { uid, name, bet, auto: auto ? fl2(auto) : null });
+    });
+    crashWatch.add(uid);
+    crashBroadcastSoon();
+    return crashView(uid);
+  }
+  if (m.a === 'cashout') {
+    const b = CR.bets.get(uid);
+    if (!b) throw new Error('В этом раунде ставки нет');
+    if (b.cash) throw new Error('Уже забрал');
+    if (CR.phase !== 'fly' || CR.k >= CR.path.length - 1) throw new Error('Не успел — ракета взорвалась');
+    crashCashOut(b, crashX());
+    return { ...crashView(uid), cashed: b.cash, win: b.win, bet: b.bet };
+  }
+  throw new Error('Неизвестный ход');
 }
-// после перезапуска сервера — снова завести таймеры раундов краша
-export function crashRecover() {
-  for (const r of db.prepare("SELECT user_id, data FROM casino_state WHERE game = 'crash'").all()) crashArm(r.user_id, JSON.parse(r.data));
-}
+// для тестов
+export const crashDebug = () => ({ id: CR.id, phase: CR.phase, C: CR.C, k: CR.k, len: CR.path.length });
 
 // ==================== 6. Мины (поле 5×5) ====================
 export const minesMult = (mines, k) => { let x = 0.97; for (let i = 0; i < k; i++) x *= (25 - i) / (25 - mines - i); return fl2(x); };
