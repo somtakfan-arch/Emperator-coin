@@ -50,6 +50,7 @@ const ICONS = {
   chip: '<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/>',
   plus: '<path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>',
   gift: '<path d="M4 11h16v9H4zM3 7h18v4H3zM12 7v13M12 7c-1.5-3-5-3.5-5-1s3 1 5 1c2 0 5 1.5 5-1s-3.5-2-5 1" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',
+  games: '<rect x="4" y="4" width="7" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="13" y="4" width="7" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="4" y="13" width="7" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="13" y="13" width="7" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="2"/>',
   star: '<path d="M12 3l2.7 5.6 6.1.8-4.5 4.2 1.1 6.1L12 16.8l-5.4 2.9 1.1-6.1-4.5-4.2 6.1-.8z" fill="#f2c94c"/>',
 };
 function icon(name, size = 20) {
@@ -186,6 +187,11 @@ function onMessage(m) {
       toast('Друг встал из-за стола');
       S.table = null;
       go('friends');
+      break;
+    case 'casinoInfo': S.cinfo = m; break;
+    case 'casino':
+      // краш: авто-вывод или взрыв пришёл с сервера сам
+      if (m.push && m.game === 'crash' && m.over) { crashOver(m); drawCrash(0, true); }
       break;
     case 'coachNow':
       S.coachNow = m;
@@ -630,9 +636,11 @@ function leaveTableScreen(tournamentId) {
 
 // ---------- Навигация ----------
 
-const BACK = { course: 'school', trainers: 'school', sandbox: 'school', community: 'school', mistakes: 'school', glossary: 'school', flopTable: 'school', dm: 'friends', pprofile: 'lobby', eco: 'progress', fun: 'lobby', stats: 'profile', style: 'profile', school: 'lobby', chart: 'school', quiz: 'school', exam: 'school', history: 'friends', replay: 'history', botlab: 'lobby', training: 'lobby', tutorial: 'lobby', admin: 'profile', friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
+const BACK = { cg: 'hub', lobby: 'hub', course: 'school', trainers: 'school', sandbox: 'school', community: 'school', mistakes: 'school', glossary: 'school', flopTable: 'school', dm: 'friends', pprofile: 'lobby', eco: 'progress', fun: 'lobby', stats: 'profile', style: 'profile', school: 'lobby', chart: 'school', quiz: 'school', exam: 'school', history: 'friends', replay: 'history', botlab: 'lobby', training: 'lobby', tutorial: 'lobby', admin: 'profile', friends: 'lobby', progress: 'lobby', solo: 'tours', mixed: 'lobby', bots: 'lobby', tours: 'lobby', tour: 'tours', create: 'tours', wallet: 'lobby', profile: 'lobby', table: 'lobby' };
 
 function go(screen) {
+  if (S.animUntil) finishAnim();
+  if (screen === 'hub') send({ t: 'casinoInfo' });
   if (screen !== 'table' && S.screen === 'table' && S.table) S.tableHidden = true;
   if (screen === 'table') S.tableHidden = false;
   S.screen = screen;
@@ -1989,7 +1997,7 @@ function openStart(startParam) {
   if (hash === 'profile') return go('profile');
   if (hash === 'progress') return go('progress');
   if (hash === 'stats') return openStats();
-  go('lobby');
+  go('hub'); // при входе — всегда меню игр
 }
 
 tg?.BackButton.onClick(() => back());
@@ -2041,7 +2049,7 @@ function header(title, right) {
 function nav() {
   const item = (screen, ic, text) => h('button', { class: S.screen === screen ? 'on' : '', onclick: () => go(screen) }, icon(ic), text);
   return h('nav', { class: 'nav' },
-    item('lobby', 'home', 'Лобби'), item('tours', 'trophy', 'Турниры'), item('progress', 'gift', 'Награды'),
+    item('hub', 'games', 'Игры'), item('lobby', 'home', 'Покер'), item('tours', 'trophy', 'Турниры'), item('progress', 'gift', 'Награды'),
     item('wallet', 'wallet', 'Кошелёк'), item('profile', 'user', 'Профиль'));
 }
 
@@ -2131,6 +2139,7 @@ function lobbyScreen() {
   return h('div', { class: 'screen' },
     h('div', { class: 'row between' },
       h('div', { class: 'row' },
+        h('button', { class: 'icon-btn', 'aria-label': 'Назад', onclick: () => go('hub') }, icon('back', 18)), // к меню игр
         h('div', { class: 'avatar' }, initial(me.name)),
         h('div', { class: 'col' },
           h('div', { class: 'b', style: 'font-size:15px' }, me.name),
@@ -3964,7 +3973,687 @@ function combosScreen() {
 
 // ---------- Рендер ----------
 
-const SCREENS = { course: courseScreen, trainers: trainersScreen, sandbox: sandboxScreen, community: communityScreen, mistakes: mistakesScreen, glossary: glossaryScreen, flopTable: flopTableScreen, dm: dmScreen, pprofile: pprofileScreen, eco: ecoScreen, fun: funScreen, stats: statsScreen, style: styleScreen, school: schoolScreen, chart: chartScreen, quiz: quizScreen, exam: examScreen, history: historyScreen, replay: replayScreen, botlab: botLabScreen, training: trainingScreen, tutorial: tutorialScreen, admin: adminScreen, friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
+// ==================== Меню игр и казино ====================
+// Игровые фишки, не настоящие деньги. Всё решает сервер, тут — только картинка и анимации.
+
+const GAME_LIST = [
+  { id: 'poker', name: 'Покер', emoji: '♠', color: '#2e9e5b', desc: 'Холдем, боты, турниры' },
+  { id: 'roulette', name: 'Рулетка', emoji: '🎯', color: '#e53935', desc: 'Число, цвет, дюжины' },
+  { id: 'blackjack', name: 'Блэкджек', emoji: '🃏', color: '#1e88e5', desc: 'Набери 21, обыграй дилера' },
+  { id: 'slots', name: 'Слоты', emoji: '🎰', color: '#8e24aa', desc: '3×3, пять линий' },
+  { id: 'crash', name: 'Краш', emoji: '🚀', color: '#00acc1', desc: 'Забери до взрыва' },
+  { id: 'mines', name: 'Мины', emoji: '💣', color: '#00897b', desc: 'Открывай клетки, не наступи' },
+  { id: 'dice', name: 'Кости', emoji: '🎲', color: '#fb8c00', desc: 'Больше или меньше числа' },
+  { id: 'plinko', name: 'Плинко', emoji: '🔻', color: '#d81b60', desc: 'Шарик падает в множитель' },
+  { id: 'coin', name: 'Монетка', emoji: '🪙', color: '#f9c74f', ink: '#1a1405', desc: 'Орёл или решка' },
+  { id: 'wheel', name: 'Колесо', emoji: '🎡', color: '#b87333', desc: 'Колесо фортуны' },
+  { id: 'baccarat', name: 'Баккара', emoji: '👑', color: '#3949ab', desc: 'Игрок, банкир, ничья' },
+  { id: 'hilo', name: 'Хай-лоу', emoji: '↕️', color: '#90a4ae', ink: '#0d1418', desc: 'Выше или ниже карта' },
+  { id: 'keno', name: 'Кено', emoji: '🔢', color: '#c0ca33', ink: '#151804', desc: 'Выбери числа, жди совпадений' },
+  { id: 'videopoker', name: 'Видео-покер', emoji: '🎴', color: '#039be5', desc: 'Валеты и старше' },
+  { id: 'tower', name: 'Башня', emoji: '🗼', color: '#5e35b1', desc: 'Поднимайся выше этаж за этажом' },
+  { id: 'dragontiger', name: 'Дракон и Тигр', emoji: '🐉', color: '#f4511e', desc: 'Чья карта старше' },
+];
+const GAME = Object.fromEntries(GAME_LIST.map((g) => [g.id, g]));
+const CRASH_K = 0.00006;
+const CRASH_X = (ms) => Math.floor(Math.exp(CRASH_K * Math.max(0, ms)) * 100 + 1e-9) / 100;
+const RL_RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
+const RL_ORDER = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
+const SLOT_SYMS = ['🍒', '🍋', '🍊', '🍇', '🔔', '⭐', '7️⃣', '💎'];
+const SLOT_PAY = [10, 17, 25, 42, 100, 250, 1000, 4000];
+const SLOT_LINES = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 4, 8], [6, 4, 2]];
+const WHEEL = [0, 1.5, 0, 2, 0, 1.5, 0, 3, 0, 1.5, 0, 2, 0, 0, 5, 1.5, 0, 2, 0, 1.5, 0, 3, 0, 1.5, 0, 2, 0, 1.5, 0, 0];
+const WHEEL_COL = { 0: '#2b2f36', 1.5: '#3d8bfd', 2: '#22c55e', 3: '#f59e0b', 5: '#ef4444' };
+const PLINKO = {
+  low: [10, 3, 1.6, 1.4, 1.1, 1, 0.5, 1, 1.1, 1.4, 1.6, 3, 10],
+  mid: [33, 11, 4, 2, 1.1, 0.6, 0.3, 0.6, 1.1, 2, 4, 11, 33],
+  high: [170, 24, 8.1, 2, 0.7, 0.2, 0.2, 0.2, 0.7, 2, 8.1, 24, 170],
+};
+const VP_PAY = [['royal', 'Флеш-рояль', 250], ['sflush', 'Стрит-флеш', 50], ['quads', 'Каре', 25], ['full', 'Фулл-хаус', 9], ['flush', 'Флеш', 6], ['straight', 'Стрит', 4], ['trips', 'Сет', 3], ['twopair', 'Две пары', 2], ['jacks', 'Пара валетов+', 1]];
+const TOWER_D = { easy: [4, 1, 'Легко'], mid: [3, 1, 'Средне'], hard: [2, 1, 'Сложно'], expert: [3, 2, 'Эксперт'] };
+const towerX = (d, l) => (l ? Math.floor(0.97 * (TOWER_D[d][0] / (TOWER_D[d][0] - TOWER_D[d][1])) ** l * 100 + 1e-9) / 100 : 1);
+const minesX = (m, k) => { let x = 0.97; for (let i = 0; i < k; i++) x *= (25 - i) / (25 - m - i); return Math.floor(x * 100 + 1e-9) / 100; };
+
+// ---------- общее ----------
+function cs(g) { return (S.cst ||= {})[g] || ((S.cst[g] = {})); } // состояние игры на клиенте
+function betOf(g) { return (S.cbet ||= loadBets())[g] ?? 100; }
+function loadBets() { try { return JSON.parse(localStorage.getItem('cbets') || '{}'); } catch { return {}; } }
+function setBet(g, v) {
+  v = Math.max(10, Math.min(1e9, Math.floor(Number(v)) || 10));
+  (S.cbet ||= loadBets())[g] = v;
+  try { localStorage.setItem('cbets', JSON.stringify(S.cbet)); } catch {}
+}
+function applyChips(r) { if (r?.chips != null && S.me) S.me.chips = r.chips; }
+// пока идёт анимация, экран не перерисовываем — потом показываем итог
+function animate(ms, after) {
+  S.animUntil = Date.now() + ms;
+  S.animAfter = after || null;
+  clearTimeout(S.animT);
+  S.animT = setTimeout(() => { finishAnim(); render(); }, ms);
+}
+function finishAnim() { // досрочно (ушёл с экрана) — итог всё равно засчитываем
+  clearTimeout(S.animT);
+  S.animUntil = 0;
+  const f = S.animAfter; S.animAfter = null;
+  f?.();
+}
+async function cplay(msg) {
+  if (S.animUntil > Date.now()) return null;
+  return run({ t: 'casino', ...msg });
+}
+// итог раунда: плашка, история, звук
+function cresult(g, r, extra = '') {
+  const st = cs(g);
+  const net = r.win - r.bet;
+  st.res = { win: r.win, bet: r.bet, net, text: extra };
+  (st.hist ||= []).unshift({ net, x: r.bet ? r.win / r.bet : 0 });
+  st.hist.length = Math.min(st.hist.length, 14);
+  st.sess = (st.sess || 0) + net;
+  applyChips(r);
+  if (r.win >= r.bet * 10 && r.win > 0) { confetti(); try { tg?.HapticFeedback?.notificationOccurred('success'); } catch {} }
+  else try { tg?.HapticFeedback?.impactOccurred(net > 0 ? 'medium' : 'light'); } catch {}
+}
+function resBanner(g) {
+  const r = cs(g).res;
+  if (!r) return null;
+  const cls = r.net > 0 ? 'win' : r.net === 0 ? 'push' : 'lose';
+  return h('div', { class: `cres ${cls}` },
+    h('div', { class: 'b', style: 'font-size:20px' }, r.net > 0 ? `+${fmt(r.net)}` : r.net === 0 ? 'Возврат ставки' : `−${fmt(-r.net)}`),
+    h('div', { class: 'small' }, [r.text, r.win > 0 && r.bet ? `выплата ${fmt(r.win)} (×${(r.win / r.bet).toFixed(2)})` : null].filter(Boolean).join(' · ')));
+}
+function histStrip(g) {
+  const st = cs(g);
+  if (!st.hist?.length) return null;
+  return h('div', { class: 'chist' },
+    h('span', { class: 'small muted' }, `За сессию: `, h('b', { style: `color:${st.sess >= 0 ? 'var(--green)' : '#ff8a80'}` }, `${st.sess >= 0 ? '+' : '−'}${fmt(Math.abs(st.sess))}`)),
+    h('div', { class: 'chist-row' }, st.hist.map((x) => h('span', { class: `chip-x ${x.net > 0 ? 'w' : x.net === 0 ? 'p' : 'l'}` }, `${x.x.toFixed(x.x >= 10 ? 0 : 2)}×`))));
+}
+function betBox(g, disabled = false, label = 'Ставка') {
+  const v = betOf(g);
+  const set = (x) => { setBet(g, x); render(); };
+  return h('div', { class: 'betbox' },
+    h('div', { class: 'row between' }, h('span', { class: 'small muted' }, label), h('span', { class: 'small muted' }, `баланс ${fmt(S.me?.chips)}`)),
+    h('div', { class: 'row', style: 'gap:6px' },
+      h('input', { id: `bet-${g}`, class: 'bet-in', type: 'number', inputmode: 'numeric', min: 10, value: v, disabled, oninput: (e) => setBet(g, e.target.value) }),
+      h('button', { class: 'bet-b', disabled, onclick: () => set(v / 2) }, '½'),
+      h('button', { class: 'bet-b', disabled, onclick: () => set(v * 2) }, '×2'),
+      h('button', { class: 'bet-b', disabled, onclick: () => set(10) }, 'мин'),
+      h('button', { class: 'bet-b', disabled, onclick: () => set(Math.min(S.me?.chips || 10, 1e9)) }, 'макс')),
+    h('div', { class: 'row', style: 'gap:6px' }, [100, 500, 1000, 5000, 25000].map((x) => h('button', { class: `bet-q ${v === x ? 'on' : ''}`, disabled, onclick: () => set(x) }, fmtShort(x)))));
+}
+const cbtn = (text, onclick, extra = {}) => h('button', { class: 'cbtn', onclick, ...extra }, text);
+const cbtn2 = (text, onclick, extra = {}) => h('button', { class: 'cbtn ghost', onclick, ...extra }, text);
+const segOf = (opts, cur, pick, disabled) => h('div', { class: 'seg' }, opts.map(([v, t]) => h('button', { class: cur === v ? 'on' : '', disabled, onclick: () => pick(v) }, t)));
+
+// ---------- меню игр ----------
+function hubScreen() {
+  const me = S.me;
+  const active = new Set(S.cinfo?.active || []);
+  const my = Object.fromEntries((S.cinfo?.my || []).map((x) => [x.game, x]));
+  return h('div', { class: 'screen hub' },
+    h('div', { class: 'row between' },
+      h('div', { class: 'row' }, h('div', { class: 'avatar' }, initial(me.name)), h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:15px' }, me.name), h('div', { class: 'small muted' }, 'Во что играем сегодня?'))),
+      balancePill()),
+    h('div', { class: 'hub-grid' }, GAME_LIST.map((g) => h('button', {
+      class: `hub-tile ${g.id === 'poker' ? 'wide' : ''}`, style: `--gc:${g.color};--gi:${g.ink || '#fff'}`,
+      onclick: () => (g.id === 'poker' ? go('lobby') : openGame(g.id)),
+    },
+    h('div', { class: 'hub-emoji' }, g.emoji),
+    h('div', { class: 'col', style: 'gap:2px;align-items:flex-start;min-width:0' },
+      h('div', { class: 'hub-name' }, g.name),
+      h('div', { class: 'hub-desc' }, g.desc),
+      my[g.id] && h('div', { class: 'hub-desc' }, `сыграно ${fmt(my[g.id].n)}${my[g.id].best > 0 ? ` · лучший ${fmt(my[g.id].best)}` : ''}`)),
+    active.has(g.id) && h('span', { class: 'hub-badge' }, '▶ доиграть')))),
+    S.cinfo?.big?.length > 0 && h('div', { class: 'glass card', style: 'gap:6px' }, h('div', { class: 'b' }, '🔥 Крупные выигрыши за сутки'),
+      S.cinfo.big.slice(0, 6).map((b) => h('div', { class: 'row between small' }, h('span', {}, `${GAME[b.game]?.emoji || ''} ${b.name}`), h('b', { style: 'color:var(--green)' }, `${fmt(b.win)} · ×${Math.floor(b.win / b.bet)}`)))),
+    h('div', { class: 'small muted', style: 'text-align:center;line-height:1.4' }, 'Все игры — на игровые фишки. Это не настоящие деньги, вывести их нельзя.'),
+    h('div', { style: 'height:70px' }), nav());
+}
+
+async function openGame(g) {
+  S.cg = g;
+  go('cg');
+  if (!S.cinfo) send({ t: 'casinoInfo' });
+  if (['blackjack', 'mines', 'hilo', 'videopoker', 'tower', 'crash'].includes(g)) {
+    const r = await run({ t: 'casino', game: g, a: 'state' });
+    if (!r || r.none) return;
+    const st = cs(g);
+    if (g === 'crash') { if (r.live) { st.live = r; crashTick(); } else if (r.over) crashOver(r); }
+    else { st.s = r; if (g === 'videopoker') st.hold = [false, false, false, false, false]; }
+    render();
+  }
+}
+
+function cgScreen() {
+  const g = S.cg, G = GAME[g];
+  const body = { roulette: rouletteUI, blackjack: blackjackUI, slots: slotsUI, dice: diceUI, crash: crashUI, mines: minesUI, plinko: plinkoUI, coin: coinUI, wheel: wheelUI, baccarat: baccaratUI, hilo: hiloUI, keno: kenoUI, videopoker: vpUI, tower: towerUI, dragontiger: dtUI }[g];
+  return h('div', { class: 'screen cg', style: `--gc:${G.color};--gi:${G.ink || '#fff'}` },
+    header(`${G.emoji} ${G.name}`, balancePill()),
+    body(g),
+    histStrip(g),
+    h('div', { style: 'height:20px' }));
+}
+
+// ---------- 1. Рулетка ----------
+function wheelGradient(list, colorOf) {
+  const step = 360 / list.length;
+  return `conic-gradient(${list.map((x, i) => `${colorOf(x)} ${i * step}deg ${(i + 1) * step}deg`).join(',')})`;
+}
+function spinTo(st, idx, n) { // поворот, чтобы сектор idx оказался под стрелкой сверху
+  const seg = 360 / n, cur = st.rot || 0;
+  const want = (360 - (idx * seg + seg / 2)) % 360;
+  st.rot = cur + 360 * 5 + ((want - (cur % 360)) + 720) % 360;
+  return st.rot;
+}
+function rouletteUI(g) {
+  const st = cs(g);
+  st.bets ||= {};
+  const chip = betOf(g);
+  const total = Object.values(st.bets).reduce((a, b) => a + b, 0);
+  const add = (key) => { st.bets[key] = (st.bets[key] || 0) + chip; render(); };
+  const lbl = (key) => (st.bets[key] ? h('span', { class: 'rl-chip' }, fmtShort(st.bets[key])) : null);
+  const last = st.last;
+  const cell = (n) => h('button', { class: `rl-n ${n === 0 ? 'z' : RL_RED.has(n) ? 'r' : 'k'} ${last?.result === n && !S.animUntil ? 'hit' : ''}`, onclick: () => add(`n:${n}`) }, String(n), lbl(`n:${n}`));
+  const out = (key, text, cls = '') => h('button', { class: `rl-o ${cls}`, onclick: () => add(key) }, text, lbl(key));
+  const spin = async () => {
+    if (!total) return toast('Нажми на поле, чтобы поставить фишки');
+    const bets = Object.entries(st.bets).map(([k, a]) => { const [kk, v] = k.split(':'); return { k: kk, v: v == null ? undefined : Number(v), a }; });
+    const r = await cplay({ game: g, bets });
+    if (!r) return;
+    st.prev = { ...st.bets };
+    const el = document.getElementById('rl-wheel');
+    const rot = spinTo(st, RL_ORDER.indexOf(r.result), 37);
+    if (el) el.style.transform = `rotate(${rot}deg)`;
+    const ball = document.getElementById('rl-res'); if (ball) ball.textContent = '…';
+    animate(3300, () => { st.last = r; cresult(g, r, `выпало ${r.result} ${r.result === 0 ? 'зеро' : RL_RED.has(r.result) ? 'красное' : 'чёрное'}`); (st.lastNums ||= []).unshift(r.result); st.lastNums.length = Math.min(12, st.lastNums.length); });
+  };
+  return [
+    h('div', { class: 'rl-top' },
+      h('div', { class: 'wheel-wrap' }, h('div', { class: 'wheel-ptr' }), h('div', { id: 'rl-wheel', class: 'wheel rl', style: `background:${wheelGradient(RL_ORDER, (n) => (n === 0 ? '#16a34a' : RL_RED.has(n) ? '#d32f2f' : '#1b1b1f'))};transform:rotate(${st.rot || 0}deg)` }),
+        h('div', { id: 'rl-res', class: `wheel-hub ${last ? (last.result === 0 ? 'z' : RL_RED.has(last.result) ? 'r' : 'k') : ''}` }, last ? String(last.result) : '?')),
+      h('div', { class: 'col', style: 'gap:6px;flex:1;min-width:0' },
+        resBanner(g) || h('div', { class: 'small muted' }, 'Нажимай на числа и поля — каждая фишка = ставка ниже.'),
+        st.lastNums?.length > 0 && h('div', { class: 'row', style: 'gap:4px;flex-wrap:wrap' }, st.lastNums.map((n) => h('span', { class: `rl-mini ${n === 0 ? 'z' : RL_RED.has(n) ? 'r' : 'k'}` }, n))))),
+    h('div', { class: 'rl-board' },
+      h('div', { class: 'rl-zero' }, cell(0)),
+      h('div', { class: 'rl-grid' }, Array.from({ length: 36 }, (_, i) => cell(i + 1))),
+      h('div', { class: 'rl-cols' }, [1, 2, 3].map((c) => out(`col:${c}`, `2:1`))),
+      h('div', { class: 'rl-outs' }, out('dozen:1', '1–12'), out('dozen:2', '13–24'), out('dozen:3', '25–36')),
+      h('div', { class: 'rl-outs' }, out('low', '1–18'), out('even', 'Чёт'), out('red', '◆', 'r'), out('black', '◆', 'k'), out('odd', 'Нечет'), out('high', '19–36'))),
+    betBox(g, false, 'Фишка (сколько ставишь за нажатие)'),
+    h('div', { class: 'grid2' },
+      cbtn2(`Очистить${total ? ` (${fmt(total)})` : ''}`, () => { st.bets = {}; render(); }),
+      cbtn2('Повторить', () => { if (st.prev) { st.bets = { ...st.prev }; render(); } }, { disabled: !st.prev })),
+    cbtn(total ? `Крутить · ${fmt(total)}` : 'Крутить', spin),
+    h('div', { class: 'small muted' }, 'Число ×36 · дюжина и колонка ×3 · цвет, чёт/нечет, половина ×2. Зеро — все внешние ставки проигрывают.'),
+  ];
+}
+
+// ---------- 2. Блэкджек ----------
+function blackjackUI(g) {
+  const st = cs(g), s = st.s;
+  const act = async (a) => {
+    const r = await cplay(a === 'deal' ? { game: g, a, bet: betOf(g) } : { game: g, a });
+    if (!r) return;
+    st.s = r;
+    if (r.over) cresult(g, r, r.blackjack ? 'Блэкджек!' : `дилер ${r.dealerTotal > 21 ? 'перебрал' : r.dealerTotal}`);
+    else applyChips(r);
+    render();
+  };
+  const live = s && !s.over;
+  const RES = { win: 'Выигрыш', lose: 'Проигрыш', push: 'Ничья', bust: 'Перебор', bj: 'Блэкджек!' };
+  return [
+    h('div', { class: 'cfelt', style: 'min-height:250px' },
+      h('div', { class: 'small muted' }, 'Дилер', s ? ` · ${s.dealerTotal}` : ''),
+      h('div', { class: 'cardrow' }, s ? [s.dealer.map((c) => pcard(c, 'lg')), live && pcard(null, 'lg')] : [pcard(null, 'lg'), pcard(null, 'lg')]),
+      h('div', { style: 'height:12px' }),
+      s ? s.hands.map((hd, i) => h('div', { class: `bj-hand ${live && i === s.cur ? 'cur' : ''}` },
+        h('div', { class: 'small muted' }, `${s.hands.length > 1 ? `Рука ${i + 1} · ` : 'Ты · '}${hd.total}${hd.bet ? ` · ставка ${fmt(hd.bet)}` : ''}${hd.res ? ` · ${RES[hd.res]}` : ''}`),
+        h('div', { class: 'cardrow' }, hd.cards.map((c) => pcard(c, 'lg')))))
+        : h('div', { class: 'small muted', style: 'text-align:center;padding:20px 0' }, 'Блэкджек платит 3:2 · дилер берёт до 17')),
+    resBanner(g),
+    live ? h('div', { class: 'grid2' },
+      cbtn('Ещё', () => act('hit')), cbtn2('Хватит', () => act('stand')),
+      cbtn2('Удвоить', () => act('double'), { disabled: !s.canDouble }), cbtn2('Разделить', () => act('split'), { disabled: !s.canSplit }))
+      : [betBox(g), cbtn('Раздать', () => act('deal'))],
+  ];
+}
+
+// ---------- 3. Слоты ----------
+function slotsUI(g) {
+  const st = cs(g);
+  st.grid ||= [6, 7, 6, 0, 1, 2, 3, 4, 5];
+  const winCells = new Set((st.lines || []).flatMap((l) => SLOT_LINES[l.i]));
+  const spin = async () => {
+    const r = await cplay({ game: g, bet: betOf(g) });
+    if (!r) return;
+    st.lines = [];
+    const cells = [...document.querySelectorAll('.slot-cell')];
+    cells.forEach((c) => c.classList.remove('win'));
+    const stopAt = [700, 1000, 1300];
+    const t0 = Date.now();
+    const iv = setInterval(() => {
+      const t = Date.now() - t0;
+      cells.forEach((c, i) => { const col = i % 3; c.textContent = t < stopAt[col] ? SLOT_SYMS[Math.floor(Math.random() * 8)] : SLOT_SYMS[r.grid[i]]; c.classList.toggle('spin', t < stopAt[col]); });
+      if (t >= 1300) clearInterval(iv);
+    }, 60);
+    animate(1400, () => { st.grid = r.grid; st.lines = r.lines; cresult(g, r, r.lines.length ? `линий: ${r.lines.length}` : 'мимо'); });
+  };
+  return [
+    h('div', { class: 'slots-box' }, h('div', { class: 'slots' }, st.grid.map((x, i) => h('div', { class: `slot-cell ${winCells.has(i) ? 'win' : ''}` }, SLOT_SYMS[x])))),
+    resBanner(g),
+    betBox(g, false, 'Ставка за спин (делится на 5 линий)'),
+    cbtn('Крутить', spin),
+    h('div', { class: 'glass card paytable' }, h('div', { class: 'small muted' }, 'Три в ряд на линии (3 строки и 2 диагонали), × ставку линии'),
+      h('div', { class: 'pay-grid' }, SLOT_SYMS.map((s, i) => h('div', { class: 'row between small' }, h('span', {}, `${s}${s}${s}`), h('b', {}, `×${SLOT_PAY[i]}`))),
+        h('div', { class: 'row between small' }, h('span', {}, '🍒🍒 слева'), h('b', {}, '×2.5')))),
+  ];
+}
+
+// ---------- 4. Кости ----------
+function diceUI(g) {
+  const st = cs(g);
+  st.target ??= 50; st.over ??= false;
+  const chance = st.over ? 100 - st.target : st.target;
+  const mult = Math.floor((98 / chance) * 100) / 100;
+  const roll = async () => {
+    const r = await cplay({ game: g, target: st.target, over: st.over, bet: betOf(g) });
+    if (!r) return;
+    const mk = document.getElementById('dice-mk');
+    if (mk) { mk.style.left = `${r.roll}%`; mk.textContent = r.roll.toFixed(2); mk.className = `dice-mk ${r.ok ? 'w' : 'l'}`; }
+    animate(650, () => { st.roll = r.roll; st.ok = r.ok; cresult(g, r, `выпало ${r.roll.toFixed(2)}`); });
+  };
+  const zone = st.over ? `left:${st.target}%;right:0` : `left:0;right:${100 - st.target}%`;
+  return [
+    h('div', { class: 'cfelt', style: 'gap:14px' },
+      h('div', { class: 'dice-big' }, st.roll != null ? st.roll.toFixed(2) : '—'),
+      h('div', { class: 'dice-bar' }, h('div', { class: 'dice-zone', style: zone }),
+        h('div', { id: 'dice-mk', class: `dice-mk ${st.roll == null ? 'hide' : st.ok ? 'w' : 'l'}`, style: `left:${st.roll ?? 50}%` }, st.roll != null ? st.roll.toFixed(2) : '')),
+      h('div', { class: 'row between small muted' }, h('span', {}, '0'), h('span', {}, '50'), h('span', {}, '100'))),
+    resBanner(g),
+    segOf([[false, `Меньше ${st.target}`], [true, `Больше ${st.target}`]], st.over, (v) => { st.over = v; if ((v ? 100 - st.target : st.target) > 97) st.target = v ? 3 : 97; render(); }),
+    h('input', { type: 'range', class: 'crange', min: 2, max: 98, value: st.target, oninput: (e) => { let t = Number(e.target.value); const c = st.over ? 100 - t : t; if (c > 97) t = st.over ? 3 : 97; st.target = t; render(); } }),
+    h('div', { class: 'grid3 small' },
+      h('div', { class: 'stat-box' }, h('div', { class: 'muted' }, 'Шанс'), h('b', {}, `${chance}%`)),
+      h('div', { class: 'stat-box' }, h('div', { class: 'muted' }, 'Множитель'), h('b', {}, `×${mult}`)),
+      h('div', { class: 'stat-box' }, h('div', { class: 'muted' }, 'Выигрыш'), h('b', {}, fmt(Math.floor(betOf(g) * mult))))),
+    betBox(g),
+    cbtn('Бросить', roll),
+  ];
+}
+
+// ---------- 5. Краш ----------
+function crashOver(r) {
+  const st = cs('crash');
+  st.live = null;
+  st.lastCrash = r.crash;
+  (st.points ||= []).unshift(r.crash);
+  st.points.length = Math.min(st.points.length, 14);
+  cresult('crash', r, r.cashed ? `забрал на ×${r.cashed} · взрыв был на ×${r.crash}` : `взрыв на ×${r.crash}`);
+}
+let crashIv = null;
+function crashTick() {
+  clearInterval(crashIv);
+  crashIv = setInterval(() => {
+    const st = cs('crash');
+    if (!st.live) { clearInterval(crashIv); return; }
+    if (S.screen !== 'cg' || S.cg !== 'crash') return;
+    const t = nowSrv() - st.live.start;
+    const x = CRASH_X(t);
+    const el = document.getElementById('crash-x'); if (el) el.textContent = `×${x.toFixed(2)}`;
+    const btn = document.getElementById('crash-out'); if (btn) btn.textContent = `Забрать ${fmt(Math.floor(st.live.bet * x))}`;
+    drawCrash(t, false);
+  }, 50);
+}
+function drawCrash(t, crashed) {
+  const cv = document.getElementById('crash-cv');
+  if (!cv) return;
+  const w = (cv.width = cv.clientWidth * 2), hh = (cv.height = cv.clientHeight * 2);
+  const ctx = cv.getContext('2d');
+  const T = Math.max(8000, t * 1.15), X = Math.max(2, Math.exp(CRASH_K * T));
+  ctx.strokeStyle = 'rgba(255,255,255,0.08)'; ctx.lineWidth = 2;
+  for (let i = 1; i < 4; i++) { ctx.beginPath(); ctx.moveTo(0, (hh * i) / 4); ctx.lineTo(w, (hh * i) / 4); ctx.stroke(); }
+  ctx.beginPath();
+  for (let i = 0; i <= 60; i++) { const tt = (t * i) / 60, x = Math.exp(CRASH_K * tt); const px = (tt / T) * w, py = hh - ((x - 1) / (X - 1)) * hh * 0.9; i ? ctx.lineTo(px, py) : ctx.moveTo(px, py); }
+  ctx.strokeStyle = crashed ? '#ff5252' : '#4dd0e1'; ctx.lineWidth = 6; ctx.stroke();
+}
+function crashUI(g) {
+  const st = cs(g);
+  const start = async () => {
+    const auto = st.autoOn ? Number(st.auto) : null;
+    const r = await cplay({ game: g, a: 'start', bet: betOf(g), ...(auto ? { auto } : {}) });
+    if (!r) return;
+    if (r.over) { crashOver(r); render(); return; }
+    applyChips(r);
+    st.live = r; st.res = null;
+    render(); crashTick();
+  };
+  const out = async () => {
+    if (!st.live) return;
+    const r = await req({ t: 'casino', game: g, a: 'cashout' }).catch(() => null); // взрыв мог прийти раньше — тогда итог уже показан
+    if (r?.over) { applyChips(r); crashOver(r); render(); }
+  };
+  setTimeout(() => drawCrash(st.live ? nowSrv() - st.live.start : 0, !st.live && st.lastCrash), 0);
+  return [
+    h('div', { class: 'crash-box' },
+      h('canvas', { id: 'crash-cv', class: 'crash-cv' }),
+      h('div', { id: 'crash-x', class: `crash-x ${!st.live && st.lastCrash ? 'boom' : ''}` }, st.live ? '×1.00' : st.lastCrash ? `×${st.lastCrash.toFixed(2)}` : '×1.00'),
+      !st.live && st.lastCrash && h('div', { class: 'crash-sub' }, '💥 взрыв')),
+    st.points?.length > 0 && h('div', { class: 'row', style: 'gap:4px;flex-wrap:wrap' }, st.points.map((p) => h('span', { class: `chip-x ${p >= 2 ? 'w' : 'l'}` }, `${p.toFixed(2)}×`))),
+    resBanner(g),
+    st.live ? h('button', { id: 'crash-out', class: 'cbtn big', onclick: out }, `Забрать ${fmt(st.live.bet)}`)
+      : [betBox(g),
+        h('label', { class: 'toggle-row glass', style: 'padding:10px 12px;border-radius:14px;gap:8px' },
+          h('input', { type: 'checkbox', checked: !!st.autoOn, onchange: (e) => { st.autoOn = e.target.checked; render(); } }), h('span', {}, 'Авто-вывод на'),
+          h('input', { id: 'crash-auto', class: 'bet-in', style: 'width:90px', type: 'number', step: '0.1', min: 1.01, value: st.auto ?? 2, oninput: (e) => { st.auto = e.target.value; } }), h('span', {}, '×')),
+        cbtn('Старт', start)],
+    h('div', { class: 'small muted' }, 'Множитель растёт, пока ракета не взорвётся. Успей забрать — или поставь авто-вывод.'),
+  ];
+}
+
+// ---------- 6. Мины ----------
+function minesUI(g) {
+  const st = cs(g), s = st.s;
+  st.mines ??= 3;
+  const live = s && !s.over;
+  const act = async (msg) => {
+    const r = await cplay({ game: g, ...msg });
+    if (!r) return;
+    st.s = r;
+    if (r.over) { cresult(g, r, r.boom != null ? 'мина!' : `открыто ${r.opened.length}`); try { if (r.boom != null) tg?.HapticFeedback?.notificationOccurred('error'); } catch {} }
+    else applyChips(r);
+    render();
+  };
+  const cell = (i) => {
+    const open = s?.opened.includes(i), bomb = s?.over && s.bombs?.includes(i);
+    return h('button', { class: `mn ${open ? 'gem' : ''} ${bomb ? 'bomb' : ''} ${s?.boom === i ? 'boom' : ''} ${s?.over && !open && !bomb ? 'dim' : ''}`, disabled: !live || open, onclick: () => act({ a: 'open', cell: i }) }, open ? '💎' : bomb ? '💣' : '');
+  };
+  return [
+    h('div', { class: 'mines' }, Array.from({ length: 25 }, (_, i) => cell(i))),
+    resBanner(g),
+    live ? [h('div', { class: 'grid2 small' },
+      h('div', { class: 'stat-box' }, h('div', { class: 'muted' }, 'Сейчас'), h('b', {}, `×${s.mult}`)),
+      h('div', { class: 'stat-box' }, h('div', { class: 'muted' }, 'Следующая'), h('b', {}, `×${s.next}`))),
+    cbtn(s.opened.length ? `Забрать ${fmt(Math.floor(s.bet * s.mult))}` : 'Открой клетку', () => act({ a: 'cashout' }), { disabled: !s.opened.length })]
+      : [h('div', { class: 'small muted' }, `Мин на поле: ${st.mines} · первая клетка ×${minesX(st.mines, 1)}`),
+        segOf([[1, '1'], [3, '3'], [5, '5'], [10, '10'], [15, '15'], [20, '20'], [24, '24']], st.mines, (v) => { st.mines = v; render(); }),
+        betBox(g), cbtn('Играть', () => act({ a: 'start', mines: st.mines, bet: betOf(g) }))],
+  ];
+}
+
+// ---------- 7. Плинко ----------
+function plinkoUI(g) {
+  const st = cs(g);
+  st.risk ||= 'low';
+  const M = PLINKO[st.risk];
+  const colOf = (x) => (x >= 10 ? '#ef4444' : x >= 3 ? '#f97316' : x >= 1.1 ? '#eab308' : x >= 1 ? '#84cc16' : '#64748b');
+  const drop = async () => {
+    const r = await run({ t: 'casino', game: g, risk: st.risk, bet: betOf(g) });
+    if (!r) return;
+    const board = document.getElementById('plk');
+    if (!board) { cresult(g, r); render(); return; }
+    const W = board.clientWidth, s = W / 14, rowH = (board.clientHeight - 30) / 12;
+    const ball = h('div', { class: 'plk-ball' });
+    board.append(ball);
+    let k = 0, R = 0;
+    const place = () => { ball.style.left = `${W / 2 + (R - k / 2) * s}px`; ball.style.top = `${k * rowH}px`; };
+    place();
+    const iv = setInterval(() => {
+      if (k >= 12) { clearInterval(iv); return; }
+      R += r.path[k]; k++; place();
+    }, 120);
+    st.pending = (st.pending || 0) + 1;
+    S.animUntil = Math.max(S.animUntil || 0, Date.now() + 1700);
+    setTimeout(() => {
+      ball.remove();
+      const slot = document.querySelector(`.plk-slot[data-i="${r.slot}"]`);
+      slot?.classList.add('hit'); setTimeout(() => slot?.classList.remove('hit'), 400);
+      st.pending--;
+      cresult(g, r, `×${r.mult}`);
+      if (!st.pending) { S.animUntil = 0; render(); }
+    }, 1650);
+  };
+  return [
+    h('div', { id: 'plk', class: 'plinko' },
+      Array.from({ length: 12 }, (_, row) => Array.from({ length: row + 3 }, (_, j) => h('div', { class: 'plk-peg', style: `left:calc(50% + ${(j - (row + 2) / 2) * (100 / 14)}%);top:calc(${row} * (100% - 30px) / 12 + 4px)` }))),
+      h('div', { class: 'plk-slots' }, M.map((x, i) => h('div', { class: 'plk-slot', 'data-i': i, style: `background:${colOf(x)}` }, x >= 10 ? Math.round(x) : x)))),
+    resBanner(g),
+    segOf([['low', 'Низкий риск'], ['mid', 'Средний'], ['high', 'Высокий']], st.risk, (v) => { st.risk = v; render(); }),
+    betBox(g),
+    cbtn('Бросить шарик', drop),
+  ];
+}
+
+// ---------- 8. Монетка ----------
+function coinUI(g) {
+  const st = cs(g);
+  const flip = async (side) => {
+    const r = await cplay({ game: g, side, bet: betOf(g) });
+    if (!r) return;
+    const el = document.getElementById('coin');
+    st.rot = (st.rot || 0) + 1800 + (r.side !== (st.face || 'h') ? 180 : 0);
+    st.face = r.side;
+    if (el) el.style.transform = `rotateY(${st.rot}deg)`;
+    animate(1300, () => { st.streak = r.ok ? (st.streak || 0) + 1 : 0; cresult(g, r, `${r.side === 'h' ? 'орёл' : 'решка'}${st.streak > 1 ? ` · серия ${st.streak}` : ''}`); });
+  };
+  return [
+    h('div', { class: 'cfelt', style: 'align-items:center;padding:26px 0' },
+      h('div', { class: 'coin-wrap' }, h('div', { id: 'coin', class: 'coin', style: `transform:rotateY(${st.rot || 0}deg)` }, h('div', { class: 'coin-face h' }, '🦅'), h('div', { class: 'coin-face t' }, '1')))),
+    resBanner(g),
+    betBox(g),
+    h('div', { class: 'grid2' }, cbtn('🦅 Орёл', () => flip('h')), cbtn('1 Решка', () => flip('t'))),
+    h('div', { class: 'small muted' }, 'Угадал — ×1.96.'),
+  ];
+}
+
+// ---------- 9. Колесо ----------
+function wheelUI(g) {
+  const st = cs(g);
+  const spin = async () => {
+    const r = await cplay({ game: g, bet: betOf(g) });
+    if (!r) return;
+    const el = document.getElementById('fw');
+    const rot = spinTo(st, r.i, WHEEL.length);
+    if (el) el.style.transform = `rotate(${rot}deg)`;
+    animate(3300, () => { st.last = r.mult; cresult(g, r, `×${r.mult}`); });
+  };
+  const kinds = [...new Set(WHEEL)].sort((a, b) => a - b);
+  return [
+    h('div', { class: 'wheel-wrap big' }, h('div', { class: 'wheel-ptr' }),
+      h('div', { id: 'fw', class: 'wheel', style: `background:${wheelGradient(WHEEL, (x) => WHEEL_COL[x])};transform:rotate(${st.rot || 0}deg)` }),
+      h('div', { class: 'wheel-hub' }, st.last != null ? `×${st.last}` : '🎡')),
+    resBanner(g),
+    h('div', { class: 'row', style: 'gap:6px;flex-wrap:wrap;justify-content:center' }, kinds.map((x) => h('span', { class: 'wh-leg', style: `background:${WHEEL_COL[x]}` }, `×${x} · ${WHEEL.filter((y) => y === x).length}/30`))),
+    betBox(g),
+    cbtn('Крутить колесо', spin),
+  ];
+}
+
+// ---------- 10. Баккара и 15. Дракон и Тигр ----------
+function zoneBets(g, zones) {
+  const st = cs(g);
+  st.z ||= {};
+  return h('div', { class: 'zones' }, zones.map(([k, t, x]) => h('button', { class: `zone ${st.z[k] ? 'on' : ''}`, onclick: () => { st.z[k] = (st.z[k] || 0) + betOf(g); render(); } },
+    h('div', { class: 'b' }, t), h('div', { class: 'small muted' }, x), st.z[k] ? h('div', { class: 'zone-amt' }, fmt(st.z[k])) : null)));
+}
+function baccaratUI(g) {
+  const st = cs(g), r = st.r;
+  const total = Object.values(st.z || {}).reduce((a, b) => a + b, 0);
+  const deal = async () => {
+    if (!total) return toast('Нажми на поле, чтобы поставить');
+    const res = await cplay({ game: g, player: st.z.p || 0, banker: st.z.b || 0, tie: st.z.t || 0 });
+    if (!res) return;
+    st.prev = { ...st.z };
+    st.r = res; st.anim = true;
+    render();
+    animate(2200, () => { st.anim = false; cresult(g, res, res.w === 'p' ? `игрок ${res.pt}:${res.bt}` : res.w === 'b' ? `банкир ${res.bt}:${res.pt}` : `ничья ${res.pt}:${res.bt}`); });
+  };
+  const side = (title, cards, tot, win) => h('div', { class: `bac-side ${r && !st.anim && win ? 'won' : ''}` }, h('div', { class: 'small muted' }, `${title}${r && !st.anim ? ` · ${tot}` : ''}`),
+    h('div', { class: 'cardrow' }, cards ? cards.map((c, i) => h('div', { class: st.anim ? 'flipin' : '', style: `animation-delay:${(title === 'Игрок' ? i * 2 : i * 2 + 1) * 0.3}s` }, pcard(c, 'lg'))) : [pcard(null, 'lg'), pcard(null, 'lg')]));
+  return [
+    h('div', { class: 'cfelt', style: 'gap:10px' }, side('Игрок', r?.p, r?.pt, r?.w === 'p'), side('Банкир', r?.b, r?.bt, r?.w === 'b')),
+    resBanner(g),
+    zoneBets(g, [['p', 'Игрок', '×2'], ['t', 'Ничья', '×9'], ['b', 'Банкир', '×1.95']]),
+    betBox(g, false, 'Фишка (за нажатие на поле)'),
+    h('div', { class: 'grid2' }, cbtn2('Очистить', () => { st.z = {}; render(); }), cbtn2('Повторить', () => { if (st.prev) { st.z = { ...st.prev }; render(); } }, { disabled: !st.prev })),
+    cbtn(total ? `Раздать · ${fmt(total)}` : 'Раздать', deal),
+    h('div', { class: 'small muted' }, 'Чья сумма ближе к 9, тот и выиграл. Ничья возвращает ставки на игрока и банкира.'),
+  ];
+}
+function dtUI(g) {
+  const st = cs(g), r = st.r;
+  const total = Object.values(st.z || {}).reduce((a, b) => a + b, 0);
+  const deal = async () => {
+    if (!total) return toast('Нажми на поле, чтобы поставить');
+    const res = await cplay({ game: g, dragon: st.z.d || 0, tiger: st.z.tg || 0, tie: st.z.t || 0 });
+    if (!res) return;
+    st.prev = { ...st.z };
+    st.r = res; st.anim = true;
+    render();
+    animate(1300, () => { st.anim = false; cresult(g, res, res.w === 'd' ? 'дракон' : res.w === 'tg' ? 'тигр' : 'ничья'); });
+  };
+  return [
+    h('div', { class: 'cfelt dt' },
+      h('div', { class: `dt-side ${r && !st.anim && r.w === 'd' ? 'won' : ''}` }, h('div', { class: 'dt-title' }, '🐉 Дракон'), h('div', { class: st.anim ? 'flipin' : '' }, pcard(r ? r.d : null, 'lg'))),
+      h('div', { class: 'dt-vs' }, 'VS'),
+      h('div', { class: `dt-side ${r && !st.anim && r.w === 'tg' ? 'won' : ''}` }, h('div', { class: 'dt-title' }, '🐯 Тигр'), h('div', { class: st.anim ? 'flipin' : '', style: 'animation-delay:.5s' }, pcard(r ? r.tg : null, 'lg')))),
+    resBanner(g),
+    zoneBets(g, [['d', 'Дракон', '×2'], ['t', 'Ничья', '×12'], ['tg', 'Тигр', '×2']]),
+    betBox(g, false, 'Фишка (за нажатие на поле)'),
+    h('div', { class: 'grid2' }, cbtn2('Очистить', () => { st.z = {}; render(); }), cbtn2('Повторить', () => { if (st.prev) { st.z = { ...st.prev }; render(); } }, { disabled: !st.prev })),
+    cbtn(total ? `Открыть карты · ${fmt(total)}` : 'Открыть карты', deal),
+    h('div', { class: 'small muted' }, 'Старшая карта побеждает, туз — младший. При ничьей ставки на дракона и тигра возвращаются наполовину.'),
+  ];
+}
+
+// ---------- 11. Хай-лоу ----------
+function hiloUI(g) {
+  const st = cs(g), s = st.s;
+  const live = s && !s.over;
+  const act = async (msg) => {
+    const r = await cplay({ game: g, ...msg });
+    if (!r) return;
+    st.s = r;
+    if (r.over) cresult(g, r, r.win ? `шагов ${r.steps}` : 'не угадал');
+    else applyChips(r);
+    render();
+  };
+  const r = s ? s.card >> 2 : 6;
+  const hiT = r === 12 ? 'Такой же' : r === 0 ? 'Выше' : 'Выше или равно';
+  const loT = r === 0 ? 'Такой же' : r === 12 ? 'Ниже' : 'Ниже или равно';
+  return [
+    h('div', { class: 'cfelt', style: 'align-items:center;gap:10px' },
+      h('div', { class: 'hl-card' }, pcard(s ? s.card : null, 'lg')),
+      s && h('div', { class: 'b' }, `×${s.mult} · угадано ${s.steps}`),
+      s?.hist?.length > 0 && h('div', { class: 'row', style: 'gap:3px;flex-wrap:wrap;justify-content:center' }, s.hist.slice(-12).map((x) => h('div', { class: `hl-h ${x.skip ? 'sk' : x.ok ? 'ok' : 'no'}` }, pcard(x.card, 'sm'))))),
+    resBanner(g),
+    live ? [h('div', { class: 'grid2' }, cbtn(`⬆ ${hiT} ×${s.hi}`, () => act({ a: 'hi' })), cbtn(`⬇ ${loT} ×${s.lo}`, () => act({ a: 'lo' }))),
+      h('div', { class: 'grid2' }, cbtn2('Пропустить карту', () => act({ a: 'skip' })), cbtn2(s.steps ? `Забрать ${fmt(Math.floor(s.bet * s.mult))}` : 'Забрать', () => act({ a: 'cashout' }), { disabled: !s.steps }))]
+      : [betBox(g), cbtn('Начать', () => act({ a: 'start', bet: betOf(g) }))],
+    h('div', { class: 'small muted' }, 'Угадай, будет следующая карта выше или ниже. Каждый верный ответ умножает выигрыш.'),
+  ];
+}
+
+// ---------- 12. Кено ----------
+function kenoUI(g) {
+  const st = cs(g);
+  st.picks ||= [];
+  const r = st.r;
+  const toggle = (n) => { if (S.animUntil > Date.now()) return; st.r = null; const i = st.picks.indexOf(n); if (i >= 0) st.picks.splice(i, 1); else if (st.picks.length < 10) st.picks.push(n); else toast('Не больше 10 чисел'); render(); };
+  const play = async () => {
+    if (!st.picks.length) return toast('Выбери от 1 до 10 чисел');
+    const res = await cplay({ game: g, picks: st.picks, bet: betOf(g) });
+    if (!res) return;
+    st.r = res; st.anim = true;
+    render();
+    animate(10 * 140 + 300, () => { st.anim = false; cresult(g, res, `совпало ${res.hits} из ${st.picks.length}`); });
+  };
+  const order = r ? Object.fromEntries(r.drawn.map((n, i) => [n, i])) : {};
+  const table = KENO_TABLE(st.picks.length);
+  return [
+    h('div', { class: 'keno' }, Array.from({ length: 40 }, (_, i) => {
+      const n = i + 1, pick = st.picks.includes(n), dr = r && order[n] != null;
+      return h('button', { class: `kn ${pick ? 'pick' : ''} ${dr ? (pick ? 'hit' : 'drawn') : ''} ${dr && st.anim ? 'anim' : ''}`, style: dr && st.anim ? `animation-delay:${order[n] * 0.14}s` : '', onclick: () => toggle(n) }, String(n));
+    })),
+    resBanner(g),
+    table && h('div', { class: 'keno-pay' }, table.map((x, hh) => (x ? h('span', { class: `chip-x ${r && r.hits === hh ? 'w' : ''}` }, `${hh}: ×${x}`) : null))),
+    h('div', { class: 'grid2' },
+      cbtn2('Случайные', () => { st.r = null; const n = st.picks.length || 5; const all = Array.from({ length: 40 }, (_, i) => i + 1).sort(() => Math.random() - 0.5); st.picks = all.slice(0, n); render(); }),
+      cbtn2('Очистить', () => { st.picks = []; st.r = null; render(); })),
+    betBox(g),
+    cbtn(`Играть · выбрано ${st.picks.length}/10`, play),
+  ];
+}
+// таблица выплат кено — с сервера (вместе с итогами игр)
+function KENO_TABLE(k) { return k ? S.cinfo?.keno?.[k] || null : null; }
+
+// ---------- 13. Видео-покер ----------
+function vpUI(g) {
+  const st = cs(g), s = st.s;
+  const live = s && !s.over;
+  st.hold ||= [false, false, false, false, false];
+  const deal = async () => {
+    const r = await cplay({ game: g, a: 'deal', bet: betOf(g) });
+    if (!r) return;
+    st.s = r; applyChips(r);
+    // подсказка: держим то, что уже собрано
+    st.hold = r.rank ? [true, true, true, true, true] : [false, false, false, false, false];
+    render();
+  };
+  const draw = async () => {
+    const r = await cplay({ game: g, a: 'draw', hold: st.hold });
+    if (!r) return;
+    st.s = r;
+    cresult(g, r, r.rank ? VP_PAY.find((x) => x[0] === r.rank)[1] : 'ничего');
+    render();
+  };
+  return [
+    h('div', { class: 'cfelt', style: 'gap:10px' },
+      h('div', { class: 'vp-cards' }, (s ? s.hand : [null, null, null, null, null]).map((c, i) => h('button', { class: `vp-c ${live && st.hold[i] ? 'held' : ''}`, disabled: !live, onclick: () => { st.hold[i] = !st.hold[i]; render(); } }, pcard(c, 'lg'), h('div', { class: 'vp-hold' }, live && st.hold[i] ? 'ДЕРЖУ' : '')))),
+      s?.rank && h('div', { class: 'b', style: 'text-align:center;color:#ffe082' }, VP_PAY.find((x) => x[0] === s.rank)[1])),
+    resBanner(g),
+    h('div', { class: 'glass card paytable' }, VP_PAY.map(([k, n, x]) => h('div', { class: `row between small ${s?.rank === k ? 'pt-on' : ''}` }, h('span', {}, n), h('b', {}, `×${x}`)))),
+    live ? cbtn('Заменить карты', draw) : [betBox(g), cbtn('Раздать', deal)],
+    live && h('div', { class: 'small muted' }, 'Нажми на карты, которые оставить, остальные заменятся.'),
+  ];
+}
+
+// ---------- 14. Башня ----------
+function towerUI(g) {
+  const st = cs(g), s = st.s;
+  st.diff ||= 'mid';
+  const live = s && !s.over;
+  const d = s?.diff || st.diff, cols = TOWER_D[d][0];
+  const act = async (msg) => {
+    const r = await cplay({ game: g, ...msg });
+    if (!r) return;
+    st.s = r;
+    if (r.over) cresult(g, r, r.boom ? 'ловушка!' : `этаж ${r.lvl}`);
+    else applyChips(r);
+    render();
+  };
+  const rows = [];
+  for (let lv = 7; lv >= 0; lv--) {
+    const picked = s?.picks?.[lv];
+    const bombs = s?.over ? s.bombs?.[lv] || [] : [];
+    rows.push(h('div', { class: `tw-row ${live && s.lvl === lv ? 'cur' : ''}` },
+      h('div', { class: 'tw-cells', style: `grid-template-columns:repeat(${cols},1fr)` }, Array.from({ length: cols }, (_, c) => {
+        const isPick = picked === c, isBomb = bombs.includes(c);
+        return h('button', { class: `tw-c ${isPick ? (isBomb ? 'boom' : 'ok') : isBomb ? 'bomb' : ''}`, disabled: !live || s.lvl !== lv, onclick: () => act({ a: 'pick', col: c }) }, isPick ? (isBomb ? '💥' : '⭐') : isBomb ? '💀' : '');
+      })),
+      h('div', { class: 'tw-x' }, `×${towerX(d, lv + 1)}`)));
+  }
+  return [
+    h('div', { class: 'tower' }, rows),
+    resBanner(g),
+    live ? cbtn(s.lvl ? `Забрать ${fmt(Math.floor(s.bet * s.mult))}` : 'Выбери клетку на первом этаже', () => act({ a: 'cashout' }), { disabled: !s.lvl })
+      : [segOf(Object.entries(TOWER_D).map(([k, v]) => [k, v[2]]), st.diff, (v) => { st.diff = v; st.s = null; render(); }),
+        betBox(g), cbtn('Начать подъём', () => act({ a: 'start', diff: st.diff, bet: betOf(g) }))],
+  ];
+}
+
+
+const SCREENS = { hub: hubScreen, cg: cgScreen, course: courseScreen, trainers: trainersScreen, sandbox: sandboxScreen, community: communityScreen, mistakes: mistakesScreen, glossary: glossaryScreen, flopTable: flopTableScreen, dm: dmScreen, pprofile: pprofileScreen, eco: ecoScreen, fun: funScreen, stats: statsScreen, style: styleScreen, school: schoolScreen, chart: chartScreen, quiz: quizScreen, exam: examScreen, history: historyScreen, replay: replayScreen, botlab: botLabScreen, training: trainingScreen, tutorial: tutorialScreen, admin: adminScreen, friends: friendsScreen, progress: progressScreen, solo: soloScreen, mixed: mixedScreen, combos: combosScreen, lobby: lobbyScreen, bots: botsScreen, table: tableScreen, tours: toursScreen, tour: tourScreen, create: createScreen, wallet: walletScreen, profile: profileScreen };
 
 function render() {
   const app = document.getElementById('app');
@@ -3972,6 +4661,7 @@ function render() {
   const focusId = active?.id && active.tagName !== 'BUTTON' ? active.id : null;
   if (S.error) return app.replaceChildren(h('div', { class: 'screen' }, h('div', { class: 'center-msg' }, h('div', { class: 'h2' }, 'Покер'), h('div', { class: 'muted' }, S.error))));
   if (!S.me || S.screen === 'loading') return app.replaceChildren(h('div', { class: 'screen' }, h('div', { class: 'center-msg muted' }, S.connected ? 'Входим…' : 'Подключаемся…')));
+  if (S.animUntil > Date.now() && S.screen === 'cg') return; // идёт анимация игры — не мешаем
   app.replaceChildren(SCREENS[S.screen]());
   // ты за столом, но смотришь меню — маленькая плашка, нажми чтобы вернуться
   if (S.table && S.screen !== 'table' && !S.table.watching) {
@@ -3994,7 +4684,7 @@ function render() {
     bar.style.width = `${Math.max(0, Math.min(100, (left / total) * 100))}%`;
     requestAnimationFrame(() => { bar.style.transition = `width ${Math.max(0, left)}ms linear`; bar.style.width = '0%'; });
   }
-  if (tg) S.screen === 'lobby' ? tg.BackButton.hide() : tg.BackButton.show();
+  if (tg) S.screen === 'hub' ? tg.BackButton.hide() : tg.BackButton.show();
 }
 
 // Обратный отсчёт хода: обновляем только цифры, без перерисовки (не сбивает слайдер)

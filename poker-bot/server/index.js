@@ -25,6 +25,7 @@ import * as social3 from './social3.js';
 import { addFeed } from './feed.js';
 import * as admin2 from './admin2.js';
 import * as learn2 from './learn2.js';
+import * as casino from './casino.js';
 import { MEMES } from './game/table.js';
 import { GameTable } from './game/table.js';
 import { ghostHour } from '../core/bots.js';
@@ -613,6 +614,13 @@ const handlers = {
   // ---------- удобство: поиск игроков, напоминания ----------
   findPlayers: (uid, m) => ({ t: 'players', players: admin.findPlayers(m.q, uid) }),
   setRemind(uid, m) { db.prepare('UPDATE users SET no_remind = ? WHERE id = ?').run(m.on ? 0 : 1, uid); return { t: 'ok' }; },
+  // ---------- казино ----------
+  casino(uid, m) {
+    if (admin2.maintenance() && !config.adminIds.includes(uid)) throw new Error(`Техработы: ${admin2.maintenance()}`);
+    const r = casino.play(uid, m);
+    return { t: 'casino', ...r, chips: getUser(uid).chips }; // баланс — в ответе: клиент покажет его после анимации
+  },
+  casinoInfo: (uid) => ({ t: 'casinoInfo', ...casino.info(uid), keno: casino.KENO }),
   // ---------- обучение 2 ----------
   instantCoach(uid, m) { if (m.on) instantUsers.add(uid); else instantUsers.delete(uid); return { t: 'ok' }; },
   course: (uid) => ({ t: 'course', course: learn2.courseView(uid), problem: learn2.dailyProblem(uid), tip: learn2.eveningTip() }),
@@ -1126,6 +1134,14 @@ wss.on('connection', (ws) => {
     hub.lobbyChanged();
   });
 });
+
+// ---------- Казино: крупные выигрыши в ленту, раунды краша — после перезапуска ----------
+const CASINO_NAMES = { roulette: 'Рулетка', blackjack: 'Блэкджек', slots: 'Слоты', dice: 'Кости', crash: 'Краш', mines: 'Мины', plinko: 'Плинко', coin: 'Монетка', wheel: 'Колесо', baccarat: 'Баккара', hilo: 'Хай-лоу', keno: 'Кено', videopoker: 'Видео-покер', tower: 'Башня', dragontiger: 'Дракон и Тигр' };
+casino.setHooks({
+  notify: (uid, msg) => { hub.send(uid, msg); hub.sendMe(uid); },
+  onSettle: (uid, game, bet, win) => { if (win >= bet * 20 && win >= 1000) addFeed(uid, 'casino', `${CASINO_NAMES[game]}: выигрыш ${win.toLocaleString('ru')} (×${Math.floor(win / bet)})`); },
+});
+casino.crashRecover();
 
 // ---------- Запуск ----------
 
