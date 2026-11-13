@@ -217,12 +217,13 @@ db.exec('CREATE TABLE IF NOT EXISTS crash_live (user_id INTEGER PRIMARY KEY, rou
 const CRASH_BET_MS = Number(process.env.CRASH_BET_MS) || 7000;
 const CRASH_PAUSE_MS = Number(process.env.CRASH_PAUSE_MS) || 3500;
 const CRASH_TICK = 100;
-const CP0 = 0.85, CP25 = 0.97 / 25, CA = Math.log(CP0 / CP25) / Math.log(25);
-export const crashSurvive = (x) => (x <= 1 ? 1 : x <= 25 ? CP0 * x ** -CA : 0.97 / x); // шанс, что долетит до ×x
+// ×100+ — примерно 3 раунда из 100 (по решению владельца: на высоких иксах казино в минусе), ×1000 — 0.3%
+const CP0 = 0.85, CP25 = 0.97 / 25, CP100 = 0.03, CA = Math.log(CP0 / CP25) / Math.log(25), CG = Math.log(CP25 / CP100) / Math.log(4);
+export const crashSurvive = (x) => (x <= 1 ? 1 : x <= 25 ? CP0 * x ** -CA : x <= 100 ? CP25 * (x / 25) ** -CG : (CP100 * 100) / x); // шанс, что долетит до ×x
 export function crashPoint(u = rnd()) {
   const v = 1 - u; // (0, 1]
   if (v > CP0) return 1;
-  const c = v >= CP25 ? (CP0 / v) ** (1 / CA) : 0.97 / v;
+  const c = v >= CP25 ? (CP0 / v) ** (1 / CA) : v >= CP100 ? 25 * (CP25 / v) ** (1 / CG) : (CP100 * 100) / v;
   return Math.min(1000, Math.max(1.01, fl2(c)));
 }
 const gauss = (r) => Math.sqrt(-2 * Math.log(1 - r())) * Math.cos(2 * Math.PI * r());

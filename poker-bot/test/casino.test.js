@@ -259,8 +259,10 @@ test('логика: блэкджек-очки, баккара-правила, в
   const pts = Array.from({ length: 100000 }, () => C.crashPoint());
   const surv = (x) => pts.filter((c) => c >= x).length / pts.length;
   assert.ok(Math.abs(pts.filter((c) => c === 1).length / pts.length - 0.15) < 0.01);
-  for (const x of [1.5, 2, 5, 10, 25, 50]) assert.ok(surv(x) * x < 1.02, `краш авто ×${x}: ${surv(x) * x}`);
+  for (const x of [1.5, 2, 5, 10, 25]) assert.ok(surv(x) * x < 1.02, `краш авто ×${x}: ${surv(x) * x}`);
   assert.ok(surv(25) > 0.035);
+  assert.ok(Math.abs(surv(100) - 0.03) < 0.003, `×100+: ${surv(100)}`); // часто ×100+ — по просьбе владельца
+  assert.ok(surv(1000) > 0.001 && surv(1000) < 0.006);
   for (const c of [1, 1.3, 7, 40, 1000]) { const p = C.crashPath(c); assert.equal(p[p.length - 1], c); assert.ok(p.slice(0, -1).every((x) => x < c && x >= 1)); }
   for (let r = 0; r < 13; r++) for (const d of ['hi', 'lo']) assert.ok(C.hlStep(r, d) > 1, `хай-лоу: ${r} ${d} — выигрыш должен быть больше ставки`);
   // баккара: на большой выборке доли как у настоящей игры (игрок ~44.6%, банкир ~45.9%, ничья ~9.5%)
