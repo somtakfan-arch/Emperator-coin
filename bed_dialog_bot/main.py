@@ -657,6 +657,55 @@ def _run_boot_admin(storage) -> None:
         logger.exception("BOOT_MAKE_PROMOS failed")
 
 
+async def _run_boot_broadcast(application: Application) -> None:
+    """One-shot broadcast driven by the BOOT_BROADCAST env var, so an operator
+    can fire a mailing to ALL users by setting the text and redeploying.
+
+    Guarded by a per-text hash flag (marked BEFORE sending) so a restart never
+    re-sends the same text to everyone. Changing the text = a new broadcast.
+    If SUBSCRIBE_CHANNEL is set (and BOOT_BROADCAST_SALE != "0"), the 50⭐ promo
+    buttons are attached to every message. Sent as HTML."""
+    import os as _os
+    import hashlib as _hash
+    storage: Storage = application.bot_data["storage"]
+    text = (_os.environ.get("BOOT_BROADCAST", "") or "").strip()
+    if not text:
+        return
+    sig = _hash.sha1(text.encode("utf-8")).hexdigest()[:12]
+    if storage.get_setting(f"bootbcast:{sig}") == "1":
+        return
+    storage.set_setting(f"bootbcast:{sig}", "1")  # mark first → no double-send
+    try:
+        from . import config, handlers
+        kb = None
+        if config.SUBSCRIBE_CHANNEL and _os.environ.get("BOOT_BROADCAST_SALE", "1") == "1":
+            try:
+                kb = handlers._sale_keyboard()
+            except Exception:
+                kb = None
+        recipients = storage.all_user_ids()
+        logger.warning("BOOT_BROADCAST: sending to %d users (sig %s)…", len(recipients), sig)
+        sent = failed = 0
+        for uid in recipients:
+            try:
+                await application.bot.send_message(
+                    chat_id=uid, text=text, parse_mode="HTML",
+                    reply_markup=kb, disable_web_page_preview=True)
+                sent += 1
+            except Exception:
+                failed += 1
+            await asyncio.sleep(0.05)
+        logger.warning("BOOT_BROADCAST done (sig %s): delivered %d, failed %d", sig, sent, failed)
+        try:
+            await application.bot.send_message(
+                chat_id=config.BACKUP_CHAT_ID,
+                text=f"📢 Рассылка завершена: доставлено {sent}, не удалось {failed}.")
+        except Exception:
+            pass
+    except Exception:
+        logger.exception("BOOT_BROADCAST failed")
+
+
 DEFAULT_BDAY_TEXT = (
     "🎉 Приве-е-ет! С Днём Рождения! 🎂🥳\n"
     "Желаю тебе всего самого лучшего: здоровья, счастья, любви и чтобы все "
@@ -724,6 +773,7 @@ async def _birthday_congrats_loop(application: Application) -> None:
 
 async def _post_init(application: Application) -> None:
     _run_boot_admin(application.bot_data["storage"])
+    application.create_task(_run_boot_broadcast(application))
     application.create_task(_reminder_loop(application))
     application.create_task(_crypto_loop(application))
     application.create_task(_deposit_loop(application))
