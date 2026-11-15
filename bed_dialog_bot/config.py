@@ -45,6 +45,16 @@ LOG_EXCLUDE_USER_IDS = {
 }
 
 PREMIUM_STARS_PRICE = int(os.environ.get("PREMIUM_STARS_PRICE", "100"))
+
+# 📣 Channel-subscriber promo: premium for SUB_PROMO_STARS⭐ / SUB_PROMO_DAYS
+# days to members of SUBSCRIBE_CHANNEL. The bot must be an admin (or member) of
+# that channel to verify a user via getChatMember. Empty SUBSCRIBE_CHANNEL = the
+# promo is OFF (the /sale command and button stay hidden). Set it to the channel
+# @username (e.g. "@mychannel") or its numeric id (e.g. "-1001234567890").
+SUBSCRIBE_CHANNEL = os.environ.get("SUBSCRIBE_CHANNEL", "").strip()
+SUBSCRIBE_CHANNEL_LINK = os.environ.get("SUBSCRIBE_CHANNEL_LINK", "").strip()
+SUB_PROMO_STARS = int(os.environ.get("SUB_PROMO_STARS", "50"))
+SUB_PROMO_DAYS = int(os.environ.get("SUB_PROMO_DAYS", "30"))
 # TikTok creator partnership: premium-day reward tiers an admin can grant on
 # approval (each becomes a single-use promo code sent to the creator).
 TIKTOK_REWARD_TIERS = [

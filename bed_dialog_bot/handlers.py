@@ -106,6 +106,33 @@ def _fmt_premium(ts) -> str:
         return "надолго"
 
 
+async def _is_subscribed(context, user_id: int) -> bool:
+    """True if user_id is a member of config.SUBSCRIBE_CHANNEL. The bot must be
+    an admin/member of that channel to check. Returns False on any error
+    (channel unset, bot not admin, user not found)."""
+    if not config.SUBSCRIBE_CHANNEL:
+        return False
+    try:
+        m = await context.bot.get_chat_member(config.SUBSCRIBE_CHANNEL, user_id)
+        return getattr(m, "status", None) in ("member", "administrator", "creator", "owner")
+    except Exception:
+        return False
+
+
+def _sale_keyboard():
+    """Button row for the 50⭐ subscriber promo."""
+    rows = []
+    link = config.SUBSCRIBE_CHANNEL_LINK or (
+        f"https://t.me/{config.SUBSCRIBE_CHANNEL.lstrip('@')}"
+        if config.SUBSCRIBE_CHANNEL.startswith("@") else "")
+    if link:
+        rows.append([InlineKeyboardButton("📣 Подписаться на канал", url=link)])
+    rows.append([InlineKeyboardButton(
+        f"✅ Я подписан — премиум за {config.SUB_PROMO_STARS}⭐",
+        callback_data="subpromo:buy", api_kwargs={"style": "success"})])
+    return InlineKeyboardMarkup(rows)
+
+
 async def _submit_ticket(message, context, storage: Storage, ticket_message: str,
                          *, kind: str = "support", photo_file_id=None) -> int:
     """Create a ticket (optionally with a photo) and notify the ticket admins."""
@@ -5460,6 +5487,20 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             else:
                 await message.reply_text("🎁 Этот розыгрыш не найден или уже завершён.")
             return
+        # 🎁 Subscriber promo deep link: ?start=sale
+        if payload == "sale":
+            if not config.SUBSCRIBE_CHANNEL:
+                await message.reply_text("🎁 Акция пока не запущена. Загляни позже!")
+            else:
+                await message.reply_text(
+                    f"🎁 <b>Премиум на {config.SUB_PROMO_DAYS} дней за "
+                    f"{config.SUB_PROMO_STARS}⭐</b> — только для подписчиков канала!\n\n"
+                    f"Обычная цена — {config.PREMIUM_STARS_PRICE}⭐, для подписчиков — "
+                    f"всего {config.SUB_PROMO_STARS}⭐.\n\n"
+                    "1️⃣ Подпишись на канал\n"
+                    "2️⃣ Нажми «Я подписан» — проверю и выдам счёт.",
+                    parse_mode="HTML", reply_markup=_sale_keyboard())
+            return
         if payload and not was_known:
             _record_pending_referral(payload, message.from_user.id, storage)
         # One-time free trial for brand-new users (disabled when TRIAL_DAYS<=0).
@@ -7814,6 +7855,22 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
         await message.reply_text("🔍 Найдено:\n\n" + "\n".join(lines))
         return
 
+    if text.startswith("/sale") or text.startswith("/promo") or text.startswith("/akcia"):
+        if not config.SUBSCRIBE_CHANNEL:
+            await message.reply_text("🎁 Акция пока не запущена. Загляни позже!")
+            return
+        await message.reply_text(
+            f"🎁 <b>Премиум на {config.SUB_PROMO_DAYS} дней за "
+            f"{config.SUB_PROMO_STARS}⭐</b> — только для подписчиков канала!\n\n"
+            f"Обычная цена — {config.PREMIUM_STARS_PRICE}⭐. Для подписчиков — "
+            f"всего {config.SUB_PROMO_STARS}⭐.\n\n"
+            "1️⃣ Подпишись на канал\n"
+            "2️⃣ Нажми «Я подписан» — проверю и выдам счёт на "
+            f"{config.SUB_PROMO_STARS}⭐.",
+            parse_mode="HTML", reply_markup=_sale_keyboard(),
+        )
+        return
+
     if text.startswith("/help"):
         parts = text.split(maxsplit=1)
         if len(parts) == 2:
@@ -9953,6 +10010,27 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text="❓ Задайте любой вопрос по Telegram одним сообщением: /ask <вопрос>",
+        )
+    elif query.data == "subpromo:buy":
+        if not config.SUBSCRIBE_CHANNEL:
+            await query.answer()
+            return
+        if not await _is_subscribed(context, query.from_user.id):
+            await query.answer(
+                "❌ Ты ещё не подписан на канал. Подпишись и нажми снова.",
+                show_alert=True)
+            return
+        await query.answer("✅ Подписка подтверждена!")
+        await context.bot.send_invoice(
+            chat_id=query.message.chat_id,
+            title=f"💎 Премиум {config.SUB_PROMO_DAYS} дн. (подписчику)",
+            description=f"Премиум на {config.SUB_PROMO_DAYS} дней по акции для "
+                        f"подписчиков канала — {config.SUB_PROMO_STARS}⭐ вместо "
+                        f"{config.PREMIUM_STARS_PRICE}⭐.",
+            payload=f"premium:{query.from_user.id}:{config.SUB_PROMO_DAYS}",
+            currency="XTR",
+            prices=[LabeledPrice("Премиум (акция)", config.SUB_PROMO_STARS)],
+            provider_token="",
         )
     elif query.data.startswith("buy:"):
         await query.answer()
