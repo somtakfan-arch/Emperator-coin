@@ -218,6 +218,23 @@ HELP_COMMANDS = [
         "<b>.unban</b>\n\nСнять бан с собеседника раньше времени.",
     ),
     (
+        "mute", "🔇 .mute",
+        "<b>.mute</b>\n\nЗамутить собеседника <b>навсегда</b>: бот тихо "
+        "<b>удаляет</b> все его сообщения — без таймера и без уведомления ему "
+        "(в отличие от <code>.ban</code>). Нужно право «удалять сообщения».\n\n"
+        "Размутить — <code>.unmute</code>.",
+    ),
+    (
+        "unmute", "🔊 .unmute",
+        "<b>.unmute</b>\n\nСнять мут с собеседника — он снова пишет как обычно.",
+    ),
+    (
+        "nomute", "🎙 .nomute",
+        "<b>🎙 Обход мута</b>\n\nТумблер: пока включён, сообщения мьютнутых "
+        "собеседников <b>проходят</b> даже во время мута (мут остаётся "
+        "взведён). Повтори <code>.nomute</code>, чтобы выключить.",
+    ),
+    (
         "spam", "📣 .spam",
         f"<b>.spam &lt;кол-во&gt; &lt;текст&gt;</b>\n\nОтправить сообщение подряд "
         f"несколько раз. Бесплатно — до {config.FREE_SPAM_MAX} за "
@@ -483,11 +500,47 @@ PREMIUM_HELP_KEYS = {
     "topdelete",
 }
 
+# Commands organized into categories ("по полочкам"). Each key must exist in
+# HELP_COMMANDS; every key is placed in exactly one category so nothing is lost.
+HELP_CATEGORIES = [
+    ("mod", "🛡 Модерация",
+     ["ban", "unban", "mute", "unmute", "nomute", "stopspam"]),
+    ("modes", "🎭 Режимы общения",
+     ["afk", "autoreply", "ghost", "quiet", "pause", "kawai", "style", "clone",
+      "watermark", "badge"]),
+    ("pranks", "😈 Пранки",
+     ["spam", "fake", "type", "animate", "troll", "selfdestruct", "seen", "spek"]),
+    ("media", "🎬 Медиа",
+     ["media"]),
+    ("games", "🎮 Игры",
+     ["games", "fungames"]),
+    ("text", "✍️ Текст",
+     ["tools"]),
+    ("utils", "🧰 Утилиты",
+     ["info", "chatstatus", "note", "alert", "remind", "find", "digest",
+      "analytics", "topdelete", "export", "prefix", "lang", "stats", "status",
+      "profile", "achievements"]),
+    ("account", "👤 Аккаунт и BED",
+     ["start", "premium", "ref", "top", "gift", "redeem", "partner", "support"]),
+]
+_CAT_INDEX = {ck: (title, keys) for ck, title, keys in HELP_CATEGORIES}
+_KEY_CATEGORY = {k: ck for ck, _t, keys in HELP_CATEGORIES for k in keys}
+
+
+def _help_button(key: str, label: str, free_idx: list) -> InlineKeyboardButton:
+    if key in PREMIUM_HELP_KEYS:
+        style = "primary"  # blue = premium
+    else:
+        style = "success" if free_idx[0] % 2 == 0 else "danger"  # green/red
+        free_idx[0] += 1
+    return InlineKeyboardButton(label, callback_data=f"help:{key}",
+                                api_kwargs={"style": style})
+
 
 def build_help_menu_text() -> str:
     return (
         "<b>📖 Справочник команд</b>\n"
-        "<i>Нажмите на команду — покажу, что она делает.</i>\n\n"
+        "<i>Выбери категорию — внутри все команды с описанием.</i>\n\n"
         "💬 <b>.команды</b> пишутся прямо в чат с собеседником "
         "(текст скрывается сам).\n"
         "📱 <b>/команды</b> — в личном чате с ботом.\n"
@@ -532,9 +585,11 @@ def find_help(query: str):
     return None
 
 
-def build_help_detail_keyboard() -> InlineKeyboardMarkup:
+def build_help_detail_keyboard(key: str | None = None) -> InlineKeyboardMarkup:
+    cat = _KEY_CATEGORY.get(key or "")
+    back_cb = f"help:cat:{cat}" if cat else "help:back"
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("⬅️ К списку команд", callback_data="help:back",
+        [InlineKeyboardButton("⬅️ Назад", callback_data=back_cb,
                               api_kwargs={"style": "primary"})],
         [InlineKeyboardButton("🏛 В меню", callback_data="menu:main",
                               api_kwargs={"style": "danger"})],
@@ -542,10 +597,50 @@ def build_help_detail_keyboard() -> InlineKeyboardMarkup:
 
 
 def build_cmds_keyboard() -> InlineKeyboardMarkup:
-    """The /help command grid plus a 'back to main menu' button."""
-    rows = [list(r) for r in build_help_menu_keyboard().inline_keyboard]
+    """Top level of /help: one button per CATEGORY (two per row)."""
+    rows = []
+    for i in range(0, len(HELP_CATEGORIES), 2):
+        row = []
+        for ck, title, _keys in HELP_CATEGORIES[i : i + 2]:
+            row.append(InlineKeyboardButton(
+                title, callback_data=f"help:cat:{ck}",
+                api_kwargs={"style": "primary"}))
+        rows.append(row)
     rows.append([InlineKeyboardButton("🏛 В меню", callback_data="menu:main",
                                       api_kwargs={"style": "danger"})])
+    return InlineKeyboardMarkup(rows)
+
+
+def build_help_category_text(cat_key: str) -> str:
+    entry = _CAT_INDEX.get(cat_key)
+    if not entry:
+        return build_help_menu_text()
+    title, _keys = entry
+    return (f"<b>{title}</b>\n"
+            "<i>Нажми на команду — покажу, что она делает.</i>\n\n"
+            "💎 — доступно с премиумом.")
+
+
+def build_help_category_keyboard(cat_key: str) -> InlineKeyboardMarkup:
+    """One category's commands (two per row) + back to categories."""
+    entry = _CAT_INDEX.get(cat_key)
+    if not entry:
+        return build_cmds_keyboard()
+    _title, keys = entry
+    rows = []
+    free_idx = [0]
+    for i in range(0, len(keys), 2):
+        row = []
+        for key in keys[i : i + 2]:
+            label = _HELP_INDEX.get(key, (key,))[0]
+            row.append(_help_button(key, label, free_idx))
+        rows.append(row)
+    rows.append([
+        InlineKeyboardButton("⬅️ Категории", callback_data="help:back",
+                             api_kwargs={"style": "success"}),
+        InlineKeyboardButton("🏛 В меню", callback_data="menu:main",
+                             api_kwargs={"style": "danger"}),
+    ])
     return InlineKeyboardMarkup(rows)
 
 

@@ -9524,12 +9524,16 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await query.answer()
         if key == "back":
             await _edit_msg(query, texts.build_help_menu_text(), texts.build_cmds_keyboard())
+        elif key.startswith("cat:"):
+            cat = key.split(":", 1)[1]
+            await _edit_msg(query, texts.build_help_category_text(cat),
+                            texts.build_help_category_keyboard(cat))
         elif key == "troll":
             await _show_troll_menu(query, context)
         else:
             desc = texts.build_help_detail_text(key)
             if desc:
-                await _edit_msg(query, desc, texts.build_help_detail_keyboard())
+                await _edit_msg(query, desc, texts.build_help_detail_keyboard(key))
     elif query.data.startswith("troll:") or query.data.startswith("trolldel:"):
         await _handle_troll_callback(query, context)
     elif query.data.startswith("menu:"):
@@ -9942,7 +9946,7 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await context.bot.send_message(
             chat_id=query.message.chat_id,
             text=texts.build_help_menu_text(), parse_mode="HTML",
-            reply_markup=texts.build_help_menu_keyboard(),
+            reply_markup=texts.build_cmds_keyboard(),
         )
     elif query.data == "tg_help":
         await query.answer()
