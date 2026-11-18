@@ -13,9 +13,11 @@ const dir = path.dirname(fileURLToPath(import.meta.url));
 const W = 1500, H = 1000;
 
 // ---------- palette ----------
-const INK = '#2e1f12';
+const INK = '#e2bd62'; // gold: all outlines and lettering
+const NAVY = '#10264a';
+const HALO = '#13294d';
 const INK_SOFT = 'rgba(46,31,18,.35)';
-const RED = '#8a2a1b';
+const RED = '#ef7558';
 const GREEN = '#2c4a36';
 const AMBER = '#7a5414';
 const CREAM = '#f6ecd2';
@@ -85,15 +87,15 @@ const ko = (x0, y0, x1, y1) => keepOut.push([x0, y0, x1, y1]);
 const free = (x, y) => !keepOut.some(([a, b, c, d]) => x > a && x < c && y > b && y < d);
 
 // ---------- pieces ----------
-function ribbon(cx, cy, text, { color = INK, fill = CREAM, size = 17, italic = false } = {}) {
+function ribbon(cx, cy, text, { color = INK, fill = NAVY, size = 17, italic = false } = {}) {
   const w = text.length * size * 0.5 + 34;
   const h = size + 12;
   const x0 = cx - w / 2, x1 = cx + w / 2, y0 = cy - h / 2, y1 = cy + h / 2;
   ko(x0 - 20, y0 - 4, x1 + 20, y1 + 8);
   const tail = (x, dir) => `M${f(x)},${f(y0 + 7)} L${f(x - dir * 24)},${f(y0 + 7)} L${f(x - dir * 15)},${f(cy + 7)} L${f(x - dir * 24)},${f(y1 + 7)} L${f(x)},${f(y1 + 7)} Z`;
   return `<g class="ribbon">
-  <path d="${tail(x0 + 10, 1)}" fill="#d9c49a" stroke="${INK}" stroke-width="1.1"/>
-  <path d="${tail(x1 - 10, -1)}" fill="#d9c49a" stroke="${INK}" stroke-width="1.1"/>
+  <path d="${tail(x0 + 10, 1)}" fill="#0a1a35" stroke="${INK}" stroke-width="1.1"/>
+  <path d="${tail(x1 - 10, -1)}" fill="#0a1a35" stroke="${INK}" stroke-width="1.1"/>
   <path d="M${f(x0)},${f(y0)} Q${f(cx)},${f(y0 - 7)} ${f(x1)},${f(y0)} L${f(x1)},${f(y1)} Q${f(cx)},${f(y1 - 7)} ${f(x0)},${f(y1)} Z" fill="${fill}" stroke="${INK}" stroke-width="1.3"/>
   <text x="${f(cx)}" y="${f(cy + size * 0.33 - 2)}" text-anchor="middle" font-size="${size}" font-weight="700" ${italic ? 'font-style="italic"' : ''} fill="${color}">${text}</text>
 </g>`;
@@ -105,7 +107,7 @@ function dangerLabel(cx, cy, lines, size = 17) {
   ko(cx - w / 2 - 6, cy - h / 2 - 6, cx + w / 2 + 6, cy + h / 2 + 6);
   const t = lines.map((l, i) => `<tspan x="${f(cx)}" dy="${i ? size + 4 : 0}">${l}</tspan>`).join('');
   return `<g class="danger-label">
-  <rect x="${f(cx - w / 2)}" y="${f(cy - h / 2)}" width="${f(w)}" height="${f(h)}" rx="6" fill="rgba(246,236,210,.88)" stroke="${RED}" stroke-width="1.3" stroke-dasharray="5 3"/>
+  <rect x="${f(cx - w / 2)}" y="${f(cy - h / 2)}" width="${f(w)}" height="${f(h)}" rx="6" fill="rgba(10,24,50,.88)" stroke="${RED}" stroke-width="1.3" stroke-dasharray="5 3"/>
   <text x="${f(cx)}" y="${f(cy - h / 2 + 7 + size * 0.85)}" text-anchor="middle" font-size="${size}" font-style="italic" fill="${RED}">${t}</text>
 </g>`;
 }
@@ -171,7 +173,7 @@ function stormCloud(cx, cy, k = 1) {
 function fogBank(cx, cy, w = 300) {
   let out = '';
   for (let i = 0; i < 7; i++) {
-    out += `<ellipse cx="${f(cx + rr(-w * 0.35, w * 0.35))}" cy="${f(cy + rr(-28, 28))}" rx="${f(rr(w * 0.25, w * 0.45))}" ry="${f(rr(18, 34))}" fill="#d9d2c2" opacity=".9" filter="url(#blur8)"/>`;
+    out += `<ellipse cx="${f(cx + rr(-w * 0.35, w * 0.35))}" cy="${f(cy + rr(-28, 28))}" rx="${f(rr(w * 0.25, w * 0.45))}" ry="${f(rr(18, 34))}" fill="#c9d3e3" opacity=".45" filter="url(#blur8)"/>`;
   }
   for (let i = 0; i < 5; i++) {
     const y = cy - 30 + i * 15, x0 = cx - w * 0.45 + rr(-10, 30), x1 = cx + w * 0.45 - rr(-10, 30);
@@ -222,7 +224,7 @@ const brig = `<symbol id="brig" overflow="visible">
 
 // ---------- compass rose ----------
 function compass(cx, cy, R) {
-  let out = `<circle cx="${cx}" cy="${cy}" r="${R + 10}" fill="rgba(246,236,210,.85)" stroke="${INK}" stroke-width="1.6"/>
+  let out = `<circle cx="${cx}" cy="${cy}" r="${R + 10}" fill="rgba(10,24,50,.85)" stroke="${INK}" stroke-width="1.6"/>
   <circle cx="${cx}" cy="${cy}" r="${R + 4}" fill="none" stroke="${INK}" stroke-width=".8"/>`;
   for (let i = 0; i < 64; i++) {
     const a = (i / 64) * Math.PI * 2, r1 = R + 4, r2 = R + (i % 4 ? 8 : 10);
@@ -238,7 +240,7 @@ function compass(cx, cy, R) {
   };
   for (let d = 22.5; d < 360; d += 45) out += point(d, R * 0.55, R * 0.09, '#e9d9b0', '#b58f58');
   for (let d = 45; d < 360; d += 90) out += point(d, R * 0.75, R * 0.13, '#e9d9b0', '#8a6a3c');
-  for (let d = 0; d < 360; d += 90) out += point(d, R * 0.98, R * 0.16, d === 0 ? '#c9473a' : '#f3e6c6', d === 0 ? RED : INK);
+  for (let d = 0; d < 360; d += 90) out += point(d, R * 0.98, R * 0.16, d === 0 ? '#ef7558' : '#f3e6c6', d === 0 ? '#b84a33' : '#a8862f');
   out += `<circle cx="${cx}" cy="${cy}" r="5" fill="${CREAM}" stroke="${INK}" stroke-width="1.2"/>`;
   const lbl = [['С', 0, -R - 20], ['Ю', 0, R + 32], ['В', R + 25, 6], ['З', -R - 25, 6]];
   out += lbl.map(([t, x, y]) => `<text x="${cx + x}" y="${cy + y}" text-anchor="middle" font-size="16" font-weight="700" fill="${t === 'С' ? RED : INK}">${t}</text>`).join('');
@@ -342,7 +344,7 @@ function light() {
   for (let d = 0; d < 360; d += 5) rays += ray(d, rr(300, 470), 0.26);
   return `<g class="light">
   <ellipse cx="985" cy="520" rx="390" ry="350" fill="url(#glow)"/>
-  ${[-160, -105, -35, 15, 55, 95, 140, 200].map((d, i) => beam(d, 6, i % 2 ? 0.8 : 0.95)).join('')}
+  ${[-160, -105, -35, 15, 55, 95, 140, 200].map((d, i) => beam(d, 6, i % 2 ? 0.42 : 0.52)).join('')}
   <g filter="url(#blur3)">${rays}</g>
   <circle cx="${f(LAMP.x)}" cy="${f(LAMP.y)}" r="60" fill="url(#lampHalo)"/>
 </g>`;
@@ -400,7 +402,7 @@ function frame() {
     }
   }
   return `<g class="frame">
-  <path d="M0,0 H${W} V${H} H0 Z M${m},${m} V${H - m} H${W - m} V${m} Z" fill="#c4a06a" fill-rule="evenodd"/>
+  <path d="M0,0 H${W} V${H} H0 Z M${m},${m} V${H - m} H${W - m} V${m} Z" fill="#0a1830" fill-rule="evenodd"/>
   <path d="M0,0 H${W} V${H} H0 Z M${m},${m} V${H - m} H${W - m} V${m} Z" fill="url(#paperNoise)" fill-rule="evenodd" opacity=".6"/>
   ${ticks}
   <rect x="${m}" y="${m}" width="${W - 2 * m}" height="${H - 2 * m}" fill="none" stroke="${INK}" stroke-width="2"/>
@@ -411,13 +413,13 @@ function frame() {
 
 // ---------- rivers of traffic (stylised, across the Digital continent) ----------
 function rivers() {
-  const R = '#4f6e7d';
+  const R = '#8cc4ee';
+  // Amazon + Paraná on the Digital continent (South America)
   const main = [
-    'M757,585 C744,602 728,618 712,632 S690,648 684,656',
-    'M748,566 C735,580 726,598 716,622',
-    'M700,566 C690,582 672,590 655,606',
+    'M1289,516 C1310,512 1325,516 1340,512 S1365,500 1379,500',
+    'M1375,580 C1370,592 1362,600 1360,609 S1354,632 1352,643',
   ];
-  const trib = ['M728,618 C740,628 748,638 752,648', 'M672,590 C664,578 652,574 640,576'];
+  const trib = ['M1328,539 C1333,528 1336,520 1340,512', 'M1300,530 C1312,524 1318,518 1322,515', 'M1360,609 C1350,600 1342,596 1335,590'];
   return `<g class="rivers" fill="none" stroke-linecap="round">
     ${main.map(d => `<path d="${d}" stroke="${R}" stroke-width="2.4" opacity=".8"/>`).join('')}
     ${trib.map(d => `<path d="${d}" stroke="${R}" stroke-width="1.3" opacity=".7"/>`).join('')}
@@ -429,19 +431,19 @@ const CURRENT = 'M600,602 C545,612 495,640 440,628 S360,612 318,648';
 const CURRENT_TXT = 'M318,672 C360,640 400,650 440,656 S545,640 600,630';
 function current() {
   let lines = '';
-  for (const o of [-9, 0, 9]) lines += `<path d="${CURRENT}" transform="translate(0 ${o})" fill="none" stroke="#2f4f5a" stroke-width="1.4" stroke-dasharray="${o ? '18 7' : '26 6'}" opacity=".75"/>`;
+  for (const o of [-9, 0, 9]) lines += `<path d="${CURRENT}" transform="translate(0 ${o})" fill="none" stroke="#86d0d6" stroke-width="1.4" stroke-dasharray="${o ? '18 7' : '26 6'}" opacity=".75"/>`;
   return `<g class="current">
-  <path d="${CURRENT}" fill="none" stroke="#2f4f5a" stroke-width="26" opacity=".1" stroke-linecap="round"/>
+  <path d="${CURRENT}" fill="none" stroke="#86d0d6" stroke-width="26" opacity=".1" stroke-linecap="round"/>
   ${lines}
-  <path d="M332,628 L314,650 L340,652" fill="none" stroke="#2f4f5a" stroke-width="2.2" stroke-linejoin="round"/>
+  <path d="M332,628 L314,650 L340,652" fill="none" stroke="#86d0d6" stroke-width="2.2" stroke-linejoin="round"/>
   <path id="currentPath" d="${CURRENT_TXT}" fill="none"/>
-  <text font-size="12.5" font-style="italic" font-weight="700" fill="#2f4f5a" stroke="#f3e6c4" stroke-width="3" paint-order="stroke"><textPath href="#currentPath" startOffset="8%">Течение Неэффективных Бюджетов</textPath></text>
+  <text font-size="12.5" font-style="italic" font-weight="700" fill="#86d0d6" stroke="${HALO}" stroke-width="3" paint-order="stroke"><textPath href="#currentPath" startOffset="8%">Течение Неэффективных Бюджетов</textPath></text>
 </g>`;
 }
 
 // ---------- world ----------
 const name = (x, y, t, size, { rot = 0, sp = 3, op = .75, it = false } = {}) =>
-    `<text x="${x}" y="${y}" text-anchor="middle" font-size="${size}" letter-spacing="${sp}" fill="${INK}" stroke="#f3e6c4" stroke-width="3.2" stroke-linejoin="round" paint-order="stroke" opacity="${Math.min(1, op + .2)}" ${it ? 'font-style="italic"' : ''} ${rot ? `transform="rotate(${rot} ${x} ${y})"` : ''}>${t}</text>`;
+    `<text x="${x}" y="${y}" text-anchor="middle" font-size="${size}" letter-spacing="${sp}" fill="${INK}" stroke="${HALO}" stroke-width="3.2" stroke-linejoin="round" paint-order="stroke" opacity="${Math.min(1, op + .2)}" ${it ? 'font-style="italic"' : ''} ${rot ? `transform="rotate(${rot} ${x} ${y})"` : ''}>${t}</text>`;
 // ---------- continent labels: auto-fit so the whole text sits on land ----------
 const FONT_R = opentype.parse(fs.readFileSync(path.join(dir, 'fonts', 'ost-r.ttf')).buffer);
 const FONT_B = opentype.parse(fs.readFileSync(path.join(dir, 'fonts', 'ost-b.ttf')).buffer);
@@ -472,7 +474,7 @@ function fitLabel(lines, tx, ty, { max = 30, min = 11, sp = 0.15, bold = true, p
     if (best) {
       ko(best.cx - Wd / 2 - pad, best.cy - H / 2 - pad, best.cx + Wd / 2 + pad, best.cy + H / 2 + pad);
       let y = best.cy - H / 2;
-      return ls.map((l, i) => { y += lh[i]; const out = `<text x="${f(best.cx)}" y="${f(y - l.size * 0.22)}" text-anchor="middle" font-size="${f(l.size)}" ${bold ? 'font-weight="700"' : ''} letter-spacing="${f(l.size * sp)}" fill="${INK}" stroke="#ead7a8" stroke-width="3" stroke-linejoin="round" paint-order="stroke">${l.t}</text>`; return out; }).join('');
+      return ls.map((l, i) => { y += lh[i]; const out = `<text x="${f(best.cx)}" y="${f(y - l.size * 0.22)}" text-anchor="middle" font-size="${f(l.size)}" ${bold ? 'font-weight="700"' : ''} letter-spacing="${f(l.size * sp)}" fill="${INK}" stroke="${HALO}" stroke-width="3" stroke-linejoin="round" paint-order="stroke">${l.t}</text>`; return out; }).join('');
     }
   }
   throw new Error('no fit for ' + lines.map(l => l[0]).join(' '));
@@ -482,17 +484,17 @@ const continentLabels = () => [
   fitLabel([['Материк Традиционных СМИ', 1]], 470, 290, { max: 30 }),
   fitLabel([['Земля Наружной', 1], ['Рекламы', 1]], 240, 480, { max: 24 }),
   fitLabel([['Земля', 1], ['Performance', 1]], 1200, 330, { max: 24 }),
-  fitLabel([['Земля', 1], ['Инфлюенсеров', 1]], 1370, 580, { max: 20 }),
-  fitLabel([['Материк', 1], ['Digital', 1.25]], 680, 600, { max: 17, min: 9, radius: 60, pad: 3 }),
+  fitLabel([['Материк', 1], ['Digital', 1.2]], 1365, 585, { max: 22, radius: 90 }),
+  fitLabel([['Земля', 1], ['Инфлюенсеров', 1]], 680, 600, { max: 17, min: 9, radius: 60, pad: 3 }),
   fitLabel([['Неизведанные Каналы', 1]], 300, 895, { max: 26, radius: 260 }),
 ].join('\n');
 
 const placeNames = () => `<g class="names">
   ${continentLabels()}
-  ${name(668, 678, 'Залив Соцсетей', 11, { sp: .5, it: true, op: .85 })}
-  ${name(650, 540, 'Залив Соцсетей', 11, { sp: .5, it: true, op: .85 })}<path d="M688,543 L704,553" stroke="${INK}" stroke-width=".9" opacity=".7"/>
-  ${name(735, 505, 'мыс Видеохостингов', 11, { sp: .5, it: true, op: .9 })}<path d="M732,509 L728,535" stroke="${INK}" stroke-width=".9" opacity=".7"/>
-  ${name(612, 646, 'Реки Трафика', 10, { sp: .5, it: true, op: .9 })}
+  ${name(1412, 640, 'Залив Соцсетей', 12, { sp: .5, it: true, op: .9 })}<path d="M1372,642 L1358,644" stroke="${INK}" stroke-width=".9" opacity=".8"/>
+  ${name(1250, 694, 'Залив Соцсетей', 12, { sp: .5, it: true, op: .9 })}<path d="M1300,690 L1322,676" stroke="${INK}" stroke-width=".9" opacity=".8"/>
+  ${name(1222, 764, 'мыс Видеохостингов', 12, { sp: .5, it: true, op: .9 })}<path d="M1282,758 L1306,749" stroke="${INK}" stroke-width=".9" opacity=".8"/>
+  ${name(1334, 499, 'Реки Трафика', 12, { sp: .5, it: true, op: .95 })}
   ${name(765, 352, 'о. Телевидения', 12, { sp: 1, op: .9 })}
   ${name(96, 305, 'о. Прессы', 12, { sp: 1, op: .9 })}
   ${name(615, 458, 'о. Радио', 12, { sp: 1, op: .9 })}
@@ -507,7 +509,7 @@ function world() {
   return `<g class="world">
   <clipPath id="sphereClip"><path d="${outline}"/></clipPath>
   <g clip-path="url(#sphereClip)">
-  <path d="${grat}" fill="none" stroke="#7d5f3a" stroke-width=".6" opacity=".35"/>
+  <path d="${grat}" fill="none" stroke="${INK}" stroke-width=".6" opacity=".35"/>
   <path d="${d}" fill="none" stroke="${INK}" stroke-width="16" stroke-linejoin="round" opacity=".05"/>
   <path d="${d}" fill="none" stroke="${INK}" stroke-width="9" stroke-linejoin="round" opacity=".07"/>
   <path d="${d}" fill="none" stroke="${INK}" stroke-width="4" stroke-linejoin="round" opacity=".12"/>
@@ -523,7 +525,7 @@ function rhumbs(cx, cy) {
   let out = '';
   for (let i = 0; i < 32; i++) {
     const a = (i / 32) * Math.PI * 2;
-    out += `<line x1="${cx}" y1="${cy}" x2="${f(cx + Math.cos(a) * 1800)}" y2="${f(cy + Math.sin(a) * 1800)}" stroke="${i % 4 ? '#7d5f3a' : RED}" stroke-width="${i % 4 ? .5 : .8}" opacity="${i % 4 ? .28 : .3}"/>`;
+    out += `<line x1="${cx}" y1="${cy}" x2="${f(cx + Math.cos(a) * 1800)}" y2="${f(cy + Math.sin(a) * 1800)}" stroke="${i % 4 ? INK : RED}" stroke-width="${i % 4 ? .5 : .8}" opacity="${i % 4 ? .28 : .3}"/>`;
   }
   return `<g class="rhumbs">${out}</g>`;
 }
@@ -592,13 +594,13 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" wid
 <defs>
 <style>${fontCss}</style>
 <radialGradient id="parch" cx="45%" cy="48%" r="75%">
-  <stop offset="0" stop-color="#f3e5c2"/><stop offset=".6" stop-color="#e8d3a4"/><stop offset="1" stop-color="#c9a66d"/>
+  <stop offset="0" stop-color="#21497d"/><stop offset=".6" stop-color="#173a69"/><stop offset="1" stop-color="#0d2446"/>
 </radialGradient>
 <radialGradient id="vignette" cx="40%" cy="45%" r="78%">
-  <stop offset=".55" stop-color="#3a2410" stop-opacity="0"/><stop offset=".85" stop-color="#3a2410" stop-opacity=".22"/><stop offset="1" stop-color="#2a1808" stop-opacity=".5"/>
+  <stop offset=".55" stop-color="#050f22" stop-opacity="0"/><stop offset=".85" stop-color="#050f22" stop-opacity=".25"/><stop offset="1" stop-color="#030a18" stop-opacity=".55"/>
 </radialGradient>
 <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-  <stop offset="0" stop-color="#fff6cf" stop-opacity=".85"/><stop offset=".6" stop-color="#fbe9a8" stop-opacity=".45"/><stop offset="1" stop-color="#f6dd8e" stop-opacity="0"/>
+  <stop offset="0" stop-color="#fff6cf" stop-opacity=".55"/><stop offset=".6" stop-color="#fbe9a8" stop-opacity=".25"/><stop offset="1" stop-color="#f6dd8e" stop-opacity="0"/>
 </radialGradient>
 <radialGradient id="beamFill" cx="${LAMP.x}" cy="${LAMP.y}" r="720" gradientUnits="userSpaceOnUse">
   <stop offset="0" stop-color="#fffbe6" stop-opacity=".95"/><stop offset=".45" stop-color="#fff2bf" stop-opacity=".55"/><stop offset=".8" stop-color="#fbe7a2" stop-opacity="0"/>
@@ -606,22 +608,22 @@ const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" wid
 <radialGradient id="lampHalo"><stop offset="0" stop-color="#fffef2"/><stop offset=".4" stop-color="#fff3b8" stop-opacity=".9"/><stop offset="1" stop-color="#ffe9a0" stop-opacity="0"/></radialGradient>
 <linearGradient id="lampFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffbe2"/><stop offset="1" stop-color="#f5c94e"/></linearGradient>
 <linearGradient id="sailFill" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fbf4df"/><stop offset=".7" stop-color="#efe0bb"/><stop offset="1" stop-color="#d9c294"/></linearGradient>
-<linearGradient id="landFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#cfb27a"/><stop offset="1" stop-color="#a98552"/></linearGradient>
-<linearGradient id="landFill2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e3cd98"/><stop offset="1" stop-color="#d4b67c"/></linearGradient>
+<linearGradient id="landFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2d5a92"/><stop offset="1" stop-color="#22487a"/></linearGradient>
+<linearGradient id="landFill2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2d5a92"/><stop offset="1" stop-color="#254d80"/></linearGradient>
 <linearGradient id="rockFill" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9c8668"/><stop offset="1" stop-color="#5f4b35"/></linearGradient>
 <linearGradient id="cloudFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8a8070"/><stop offset="1" stop-color="#4a4236"/></linearGradient>
 <linearGradient id="cartFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f8efd6"/><stop offset="1" stop-color="#ead8ad"/></linearGradient>
-<radialGradient id="whirlFill"><stop offset="0" stop-color="#3b2a1a" stop-opacity=".45"/><stop offset="1" stop-color="#3b2a1a" stop-opacity="0"/></radialGradient>
+<radialGradient id="whirlFill"><stop offset="0" stop-color="#030a18" stop-opacity=".6"/><stop offset="1" stop-color="#030a18" stop-opacity="0"/></radialGradient>
 <pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(35)"><line x1="0" y1="0" x2="0" y2="6" stroke="${INK}" stroke-width=".7"/></pattern>
 <filter id="blur8" x="-20%" y="-50%" width="140%" height="200%"><feGaussianBlur stdDeviation="8"/></filter>
 <filter id="blur3"><feGaussianBlur stdDeviation="1.4"/></filter>
 <filter id="noise" x="0" y="0" width="100%" height="100%">
   <feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" seed="7" result="n"/>
-  <feColorMatrix type="matrix" values="0 0 0 0 .23  0 0 0 0 .15  0 0 0 0 .07  0 0 0 -1.6 1.05"/>
+  <feColorMatrix type="matrix" values="0 0 0 0 .02  0 0 0 0 .06  0 0 0 0 .15  0 0 0 -1.6 1.05"/>
 </filter>
 <filter id="stains" x="0" y="0" width="100%" height="100%">
   <feTurbulence type="fractalNoise" baseFrequency=".006" numOctaves="3" seed="3"/>
-  <feColorMatrix type="matrix" values="0 0 0 0 .45  0 0 0 0 .3  0 0 0 0 .12  0 0 0 2.2 -1.15"/>
+  <feColorMatrix type="matrix" values="0 0 0 0 .03  0 0 0 0 .1  0 0 0 0 .22  0 0 0 2.2 -1.15"/>
 </filter>
 <pattern id="paperNoise" width="${W}" height="${H}" patternUnits="userSpaceOnUse"><rect width="${W}" height="${H}" filter="url(#noise)" opacity=".5"/></pattern>
 ${frigate}
