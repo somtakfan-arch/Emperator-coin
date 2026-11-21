@@ -463,6 +463,14 @@ CREATE TABLE IF NOT EXISTS contact_mutes (
     PRIMARY KEY (owner_user_id, chat_id)
 );
 
+-- 👁‍🗨 ВЛАДЫКА (god mode): the top rank, above ULTRA. A god bypasses EVERYTHING —
+-- total immunity to .ban/.mute/.spam/.troll/power, their own commands pierce
+-- ULTRA immunity, all premium/ultra perks free, no limits/cooldowns/costs, and
+-- can't be muted or banned. Grant with /god, revoke with /ungod (super only).
+CREATE TABLE IF NOT EXISTS gods (
+    user_id INTEGER PRIMARY KEY
+);
+
 CREATE TABLE IF NOT EXISTS reminders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
@@ -945,8 +953,30 @@ class Storage:
             ).fetchone()
         return row[0] if row else None
 
+    def set_god(self, user_id: int, on: bool = True) -> None:
+        with self._connect() as conn:
+            if on:
+                conn.execute("INSERT OR IGNORE INTO gods (user_id) VALUES (?)", (user_id,))
+            else:
+                conn.execute("DELETE FROM gods WHERE user_id = ?", (user_id,))
+
+    def is_god(self, user_id: int) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT 1 FROM gods WHERE user_id = ?", (user_id,)
+            ).fetchone()
+        return row is not None
+
+    def list_gods(self):
+        with self._connect() as conn:
+            rows = conn.execute("SELECT user_id FROM gods").fetchall()
+        return [r[0] for r in rows]
+
     def is_premium(self, user_id: int) -> bool:
         # Ultra is a superset of premium — ultra users get all premium perks.
+        # A god (владыка) always has premium.
+        if self.is_god(user_id):
+            return True
         until = self.get_premium_until(user_id)
         if until and until > time.time():
             return True
@@ -961,6 +991,9 @@ class Storage:
 
     def is_ultra(self, user_id: int) -> bool:
         # ULTRA perks keep working for a grace window after expiry.
+        # A god (владыка) always counts as ULTRA (superset of all perks).
+        if self.is_god(user_id):
+            return True
         until = self.get_ultra_until(user_id)
         return bool(until and until + _ULTRA_GRACE_SECONDS > time.time())
 

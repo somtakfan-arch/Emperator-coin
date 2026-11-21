@@ -850,6 +850,10 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
         # granted the call fails, so we fall back to a text notice — the ban
         # still visibly works, just without real deletion.
         until_ts = storage.get_ban(bcid, message.chat_id)
+        if until_ts and until_ts > time.time() and admin.is_god(storage, message.from_user.id):
+            # 👁‍🗨 ВЛАДЫКА bypasses bans entirely — lift it and let them through.
+            storage.clear_ban(bcid, message.chat_id)
+            until_ts = None
         if until_ts and until_ts > time.time():
             # 🆓 Self-unban: a banned contact can free themselves by writing
             # "unban" — UNLESS the owner is ULTRA (unbreakable ban is an ULTRA
@@ -932,7 +936,8 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
         # (.nomute / "обход мута") is OFF, delete the contact's incoming
         # messages so they're silenced. Bypass ON → messages come through.
         if (storage.is_contact_muted(owner_id, message.chat_id)
-                and storage.get_setting(f"nomute:{owner_id}") != "1"):
+                and storage.get_setting(f"nomute:{owner_id}") != "1"
+                and not admin.is_god(storage, message.from_user.id)):
             storage.delete_message(bcid, message.chat_id, message.message_id)
             try:
                 await context.bot.do_api_request(
@@ -8347,6 +8352,54 @@ async def handle_direct_message(update: Update, context: ContextTypes.DEFAULT_TY
             f"Действует: {hours} ч.\n\n"
             f"Пользователи активируют кодом (/redeem {html.escape(code)}) и покупают "
             f"сколько угодно BED по этой цене.", parse_mode="HTML")
+        return
+
+    if (text.split() or [""])[0].split("@")[0].lower() in ("/god", "/ungod"):
+        uid = message.from_user.id
+        if not admin.is_super(uid):
+            return  # only the super-admin can hand out the top rank
+        parts = text.split()
+        revoke = parts[0].split("@")[0].lower() == "/ungod"
+        if len(parts) < 2:
+            await message.reply_text(
+                "👁‍🗨 <b>ВЛАДЫКА</b> — высший ранг, обходит вообще ВСЁ:\n"
+                "иммунитет ко всем командам (.ban/.mute/.spam/.troll/power),\n"
+                "его команды пробивают даже ULTRA, всё бесплатно и без лимитов,\n"
+                "его нельзя замутить или забанить.\n\n"
+                "<code>/god &lt;id|@ник&gt;</code> — выдать\n"
+                "<code>/ungod &lt;id|@ник&gt;</code> — снять\n"
+                "<code>/god list</code> — список владык", parse_mode="HTML")
+            return
+        if parts[1].lower() == "list":
+            ids = storage.list_gods()
+            lines = ["👑 Супер (всегда владыки): " + ", ".join(str(x) for x in config.ADMIN_USER_IDS)]
+            lines += [f"• {g}" for g in ids] or ["(выданных нет)"]
+            await message.reply_text("👁‍🗨 Владыки:\n" + "\n".join(lines))
+            return
+        arg = parts[1]
+        if arg.lstrip("-").isdigit():
+            target = int(arg)
+        else:
+            target = storage.find_user_by_username(arg.lstrip("@"))
+        if not target:
+            await message.reply_text("❌ Не найден. Пользователь должен сначала написать боту (/start).")
+            return
+        storage.set_god(target, not revoke)
+        if revoke:
+            await message.reply_text(f"✅ Ранг ВЛАДЫКА снят с {target}.")
+        else:
+            await message.reply_text(
+                f"👁‍🗨 Пользователю <code>{target}</code> выдан ранг <b>ВЛАДЫКА</b> — "
+                "он обходит вообще всё.", parse_mode="HTML")
+            try:
+                await context.bot.send_message(
+                    target,
+                    "👁‍🗨 Тебе выдан высший ранг — <b>ВЛАДЫКА</b>.\n"
+                    "Ты обходишь всё: иммунитет ко всем командам, твои команды "
+                    "бьют даже по ULTRA, все функции бесплатно и без лимитов, "
+                    "тебя нельзя замутить или забанить.", parse_mode="HTML")
+            except Exception:
+                pass
         return
 
     if text == "/admin" or text.startswith("/admin "):

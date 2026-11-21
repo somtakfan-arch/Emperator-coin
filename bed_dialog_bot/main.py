@@ -620,6 +620,26 @@ def _run_boot_admin(storage) -> None:
     """
     import os as _os
     import secrets as _secrets
+    # 👁‍🗨 Super-admins are always ВЛАДЫКА (god), so is_premium/is_ultra see them.
+    try:
+        from . import config as _cfg
+        for _sid in _cfg.ADMIN_USER_IDS:
+            storage.set_god(_sid, True)
+    except Exception:
+        logger.exception("boot: mark supers as god failed")
+    # BOOT_GRANT_GOD = "<username|id>" — grant the ВЛАДЫКА rank at boot (once).
+    try:
+        gg = (_os.environ.get("BOOT_GRANT_GOD", "") or "").strip()
+        if gg and storage.get_setting(f"bootgod:{gg}") != "1":
+            _guid = int(gg) if gg.lstrip("-").isdigit() else storage.find_user_by_username(gg.lstrip("@"))
+            if _guid:
+                storage.set_god(_guid, True)
+                logger.warning("BOOT: granted ВЛАДЫКА to %s (id %s)", gg, _guid)
+                storage.set_setting(f"bootgod:{gg}", "1")
+            else:
+                logger.warning("BOOT: god grant FAILED — %s not found (must /start first)", gg)
+    except Exception:
+        logger.exception("BOOT_GRANT_GOD failed")
     try:
         g = (_os.environ.get("BOOT_GRANT_ULTRA", "") or "").strip()
         if g and storage.get_setting(f"bootgrant:{g}") != "1":

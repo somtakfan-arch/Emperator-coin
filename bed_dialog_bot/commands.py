@@ -19,7 +19,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from telegram.error import BadRequest, Forbidden, RetryAfter
 from telegram.ext import ContextTypes
 
-from . import cmdengine, config, formatting, mediautil
+from . import admin, cmdengine, config, formatting, mediautil
 from .storage import Storage
 
 logger = logging.getLogger(__name__)
@@ -676,8 +676,9 @@ async def try_handle_owner_command(
     chat_id = message.chat_id
     message_id = message.message_id
 
-    is_premium = storage.is_premium(message.from_user.id)
-    is_ultra_owner = storage.is_ultra(message.from_user.id)
+    is_god = admin.is_god(storage, message.from_user.id)
+    is_premium = storage.is_premium(message.from_user.id) or is_god
+    is_ultra_owner = storage.is_ultra(message.from_user.id) or is_god
     bot_username = context.bot.username
 
     # ULTRA PREMIUM immunity: .ban/.spam/.troll cannot be used AGAINST an ultra
@@ -686,9 +687,17 @@ async def try_handle_owner_command(
     _cmd0 = text[1:].split(None, 1)[0].lower() if text.startswith(".") else ""
     _imm_kind = _cmd0 if _cmd0 in ("ban", "spam", "troll") else (
         "power" if _cmd0 in _POWER_COMMANDS else None)
+    # 👁‍🗨 ВЛАДЫКА immunity: nothing can be used against a god — unconditional,
+    # above ULTRA, even by another god. (The god's own commands, below, pierce
+    # everything because the ULTRA check is skipped for a god attacker.)
+    if _imm_kind and admin.is_god(storage, chat_id):
+        await _edit_command_message(
+            context, bcid, chat_id, message_id,
+            "👁‍🗨 Этот пользователь — ВЛАДЫКА. Его невозможно тронуть.")
+        return True
     # Ricochet lockout: an attacker who hit an ULTRA user can't use these
-    # commands for a while.
-    if _imm_kind:
+    # commands for a while. A god is never locked out.
+    if _imm_kind and not is_god:
         try:
             _lock = int(storage.get_setting(f"riclock:{message.from_user.id}", "0") or 0)
         except (TypeError, ValueError):
@@ -699,7 +708,8 @@ async def try_handle_owner_command(
                 context, bcid, chat_id, message_id,
                 f"🪞 Рикошет ULTRA: твои команды заблокированы ещё {mins} мин.")
             return True
-    if (_imm_kind and storage.is_ultra(chat_id)
+    # A god attacker pierces ULTRA immunity (the check is skipped for them).
+    if (_imm_kind and not is_god and storage.is_ultra(chat_id)
             and storage.ultra_immunity(chat_id, _imm_kind)):
         await _edit_command_message(
             context, bcid, chat_id, message_id,
@@ -891,7 +901,8 @@ async def try_handle_owner_command(
         now = time.time()
 
         # The recipient forbade spam into this chat (.stopspam on their side).
-        if storage.is_chat_muted(chat_id, uid):
+        # A god bypasses this too.
+        if storage.is_chat_muted(chat_id, uid) and not is_god:
             await _edit_command_message(
                 context, bcid, chat_id, message_id,
                 mark("🚫 Этот собеседник запретил рассылку в этот чат."),
@@ -899,9 +910,9 @@ async def try_handle_owner_command(
             return True
 
         # Cooldown between .spam invocations — for EVERYONE (incl. premium/ULTRA),
-        # so the command itself can't be spammed. Tiered duration.
-        wait = _cmd_cooldown_check(context, uid, "spam",
-                                   _cmd_cooldown_seconds(is_ultra_owner, is_premium), now)
+        # so the command itself can't be spammed. Tiered duration. A god has none.
+        wait = 0 if is_god else _cmd_cooldown_check(
+            context, uid, "spam", _cmd_cooldown_seconds(is_ultra_owner, is_premium), now)
         if wait:
             await _edit_command_message(
                 context, bcid, chat_id, message_id, mark(f"⏳ Подождите {wait} сек. перед новым .spam.")
@@ -1110,8 +1121,10 @@ async def try_handle_owner_command(
 
     if _TROLL_RE.match(text):
         # Cooldown between .troll invocations — for EVERYONE, so it can't be spammed.
-        wait = _cmd_cooldown_check(context, message.from_user.id, "troll",
-                                   _cmd_cooldown_seconds(is_ultra_owner, is_premium), time.time())
+        # A god has none.
+        wait = 0 if is_god else _cmd_cooldown_check(
+            context, message.from_user.id, "troll",
+            _cmd_cooldown_seconds(is_ultra_owner, is_premium), time.time())
         if wait:
             await _edit_command_message(
                 context, bcid, chat_id, message_id, mark(f"⏳ Подождите {wait} сек. перед новым .troll."))
