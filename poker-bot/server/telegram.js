@@ -2,6 +2,7 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { config } from './config.js';
 import { db, tx, upsertUser, credit, getUser } from './db.js';
+import * as weblogin from './weblogin.js';
 
 export const bot = { username: '' };
 
@@ -163,6 +164,20 @@ async function onMessage(msg) {
       },
     });
   }
+  // вход из браузера: личная ссылка (Telegram-версия остаётся как была)
+  if (text.startsWith('/web_off')) {
+    const n = weblogin.revokeAll(msg.from.id);
+    return api('sendMessage', { chat_id: chat, text: n ? `Готово: все ссылки для входа из браузера отключены (${n}).` : 'Активных ссылок для входа из браузера нет.' });
+  }
+  if (text.startsWith('/web')) {
+    if (!config.webAppUrl) return api('sendMessage', { chat_id: chat, text: 'Адрес приложения не настроен.' });
+    const url = weblogin.linkFor(config.webAppUrl, weblogin.issue(msg.from.id));
+    return api('sendMessage', {
+      chat_id: chat, parse_mode: 'HTML',
+      text: `🌐 <b>Вход из браузера</b>\n\nОткрой ссылку в любом браузере — на телефоне или компьютере. Это твой аккаунт: баланс, прогресс, всё то же.\n\n<code>${escapeHtml(url)}</code>\n\n⚠️ Никому не пересылай: кто получит ссылку, зайдёт под тобой. Ссылка работает 90 дней. Отключить все ссылки — /web_off`,
+      reply_markup: { inline_keyboard: [[{ text: 'Открыть в браузере', url }]] },
+    });
+  }
   if (text.startsWith('/paysupport')) return api('sendMessage', { chat_id: chat, text: TEXT.paysupport });
   if (text.startsWith('/terms')) return api('sendMessage', { chat_id: chat, text: TEXT.terms });
   if (config.adminIds.includes(msg.from?.id)) return onAdmin(msg);
@@ -269,6 +284,8 @@ export async function startBot() {
   await api('setMyCommands', {
     commands: [
       { command: 'start', description: 'Открыть покер' },
+      { command: 'web', description: 'Ссылка для входа из браузера' },
+      { command: 'web_off', description: 'Отключить входы из браузера' },
       { command: 'paysupport', description: 'Помощь с оплатой' },
       { command: 'terms', description: 'Условия' },
     ],

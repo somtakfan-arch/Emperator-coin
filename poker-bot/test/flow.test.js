@@ -1521,3 +1521,27 @@ test('админ: всё на максимуме — престиж, урове�
   assert.ok(db.prepare('SELECT rating FROM users WHERE id = 7001').get().rating >= 3500);
   a.close();
 });
+
+test('вход из браузера: ссылка от бота пускает в свой аккаунт, «выйти везде» отключает', async () => {
+  const c = new Client(10201);
+  await c.ready;
+  const link = await c.req({ t: 'webLink' });
+  const token = new URL(link.url, 'http://x/').searchParams.get('login');
+  assert.ok(token && token.length >= 20);
+  const authWeb = (web) => new Promise((resolve) => {
+    const ws = new WebSocket(`ws://localhost:${process.env.PORT}/ws`);
+    ws.on('open', () => ws.send(JSON.stringify({ t: 'auth', web })));
+    ws.on('message', (raw) => { const m = JSON.parse(raw); if (m.t === 'hello' || m.t === 'error') { ws.close(); resolve(m); } });
+  });
+  const ok = await authWeb(token);
+  assert.equal(ok.t, 'hello');
+  assert.equal(ok.me.id, 10201);
+  const bad = await authWeb('x'.repeat(32));
+  assert.equal(bad.t, 'error'); assert.ok(bad.auth);
+  const off = await c.req({ t: 'webLogout' });
+  assert.ok(off.n >= 1);
+  const after = await authWeb(token);
+  assert.equal(after.t, 'error');
+  assert.match(after.text, /\/web/);
+  c.close();
+});

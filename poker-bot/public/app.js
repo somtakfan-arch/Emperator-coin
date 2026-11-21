@@ -78,6 +78,17 @@ function toast(text) {
 let ws, rid = 0, retry = 500;
 const waiting = new Map();
 
+// ключ входа из браузера: приходит в ссылке ?login=…, запоминаем и убираем из адресной строки
+function webLogin() { try { return localStorage.getItem('webLogin'); } catch { return null; } }
+(() => {
+  const p = new URLSearchParams(location.search);
+  const k = p.get('login');
+  if (!k) return;
+  try { localStorage.setItem('webLogin', k); } catch {}
+  p.delete('login');
+  history.replaceState(null, '', location.pathname + (p.toString() ? `?${p}` : '') + location.hash);
+})();
+
 function connect() {
   const url = location.origin.replace(/^http/, 'ws') + '/ws';
   ws = new WebSocket(url);
@@ -86,9 +97,10 @@ function connect() {
     S.connected = true;
     const dev = new URLSearchParams(location.search).get('dev');
     if (tg?.initData) send({ t: 'auth', initData: tg.initData });
+    else if (webLogin()) send({ t: 'auth', web: webLogin() }); // вход из браузера по ссылке от бота
     else if (dev) send({ t: 'auth', dev: { id: Number(dev), name: `Тест ${dev}` } });
     else {
-      S.error = 'Открой приложение через Telegram-бота';
+      S.error = 'Открой приложение через Telegram-бота. Или напиши боту /web — он пришлёт ссылку для входа прямо из браузера.';
       render();
     }
   };
@@ -126,6 +138,9 @@ function onMessage(m) {
     waiting.delete(m.rid);
     if (m.t === 'error') w.reject(new Error(m.text));
     else w.resolve(m);
+  } else if (m.t === 'error' && m.auth) { // вход не прошёл — показываем экран с подсказкой
+    if (!tg?.initData) try { localStorage.removeItem('webLogin'); } catch {}
+    S.error = m.text;
   } else if (m.t === 'error') toast(m.text);
 
   switch (m.t) {
@@ -235,6 +250,7 @@ function onMessage(m) {
       if (m.beatAll && loadUi().autoNext && S.lastSit) setTimeout(() => sitBots(), 1500);
       break;
     case 'invoice':
+      if (!tg?.openInvoice) { window.open(m.link, '_blank'); break; } // в браузере — оплата откроется в Telegram
       tg?.openInvoice(m.link, (status) => {
         if (status === 'paid') toast('Оплачено! Фишки зачислены');
         else if (status === 'failed') toast('Оплата не прошла');
@@ -3900,6 +3916,19 @@ function profileScreen() {
     h('button', { class: 'item', onclick: async () => { const t = prompt('Что улучшить или что сломалось? Отзыв увидит разработчик'); if (t) { const r = await run({ t: 'feedback', text: t }); if (r) toast(r.text); } } },
       h('div', { class: 'col' }, h('div', { class: 'b', style: 'font-size:14px' }, '💬 Написать отзыв'), h('div', { class: 'small muted' }, 'Идеи, баги, пожелания')), icon('chev')),
     h('button', { class: 'btn-ghost', onclick: () => shareLink(`${location.origin}${location.pathname}#p=${me.id}`, 'Мой профиль в покере:') }, '🔗 Поделиться своим профилем'),
+    h('div', { class: 'grid2' },
+      h('button', { class: 'btn-ghost', onclick: async () => {
+        const r = await run({ t: 'webLink' });
+        if (!r) return;
+        try { await navigator.clipboard.writeText(r.url); toast('Ссылка скопирована. Открой её в браузере — никому не пересылай'); } catch { prompt('Ссылка для входа из браузера (никому не пересылай):', r.url); }
+      } }, '🌐 Вход из браузера'),
+      h('button', { class: 'btn-ghost', onclick: async () => {
+        if (!confirm('Отключить все ссылки для входа из браузера?')) return;
+        const r = await run({ t: 'webLogout' });
+        if (!r) return;
+        toast(`Отключено ссылок: ${r.n}`);
+        if (!tg?.initData && webLogin()) { try { localStorage.removeItem('webLogin'); } catch {} location.reload(); }
+      } }, '🚪 Выйти из браузеров')),
     h('div', { class: 'glass card' },
       h('div', { class: 'grid3' }, stat('Место', fmt(me.ratingPlace)), stat('Турниров', me.games), stat('Побед', me.wins)),
       h('div', { class: 'grid3' }, stat('Раздач выиграно', fmt(me.handsWon || 0)), stat('Эло', me.rating), stat('Подсказок', me.hints || 0)),

@@ -26,6 +26,7 @@ import { addFeed } from './feed.js';
 import * as admin2 from './admin2.js';
 import * as learn2 from './learn2.js';
 import * as casino from './casino.js';
+import * as weblogin from './weblogin.js';
 import { MEMES } from './game/table.js';
 import { GameTable } from './game/table.js';
 import { ghostHour } from '../core/bots.js';
@@ -614,6 +615,9 @@ const handlers = {
   // ---------- удобство: поиск игроков, напоминания ----------
   findPlayers: (uid, m) => ({ t: 'players', players: admin.findPlayers(m.q, uid) }),
   setRemind(uid, m) { db.prepare('UPDATE users SET no_remind = ? WHERE id = ?').run(m.on ? 0 : 1, uid); return { t: 'ok' }; },
+  // ---------- вход из браузера ----------
+  webLink: (uid) => ({ t: 'ok', url: weblogin.linkFor(config.webAppUrl, weblogin.issue(uid)) }),
+  webLogout: (uid) => ({ t: 'ok', n: weblogin.revokeAll(uid) }),
   // ---------- казино ----------
   casino(uid, m) {
     if (admin2.maintenance() && !config.adminIds.includes(uid)) throw new Error(`Техработы: ${admin2.maintenance()}`);
@@ -1034,6 +1038,7 @@ const handlers = {
 
 function authenticate(m) {
   if (config.dev && m.dev?.id) return { user: { id: Number(m.dev.id), first_name: String(m.dev.name || 'Тест') } };
+  if (m.web) { const user = weblogin.check(m.web); return user ? { user, web: true } : null; } // вход из браузера по ссылке
   return verifyInitData(m.initData);
 }
 
@@ -1094,7 +1099,7 @@ wss.on('connection', (ws) => {
     try {
       if (m.t === 'auth') {
         const auth = authenticate(m);
-        if (!auth?.user?.id) return reply({ t: 'error', text: 'Открой приложение через Telegram' });
+        if (!auth?.user?.id) return reply({ t: 'error', auth: true, text: m.web ? 'Ссылка для входа устарела или отключена — напиши боту /web, он пришлёт новую' : 'Открой приложение через Telegram' });
         const prevSeen = db.prepare('SELECT last_seen FROM users WHERE id = ?').get(auth.user.id)?.last_seen || 0;
         const u = upsertUser(auth.user);
         if (admin.isBanned(u.id)) return reply({ t: 'error', text: 'Аккаунт заблокирован' });
