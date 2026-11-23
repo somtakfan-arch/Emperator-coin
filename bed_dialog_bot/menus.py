@@ -102,21 +102,32 @@ def cap_support(uid, storage, bot_username) -> str:
 
 
 def cap_sub(uid, storage, bot_username) -> str:
+    active = storage.is_premium(uid) and not storage.is_ultra(uid)
+    head = ("<i>✅ Премиум активен</i>\n\n" if active
+            else "<i>Больше возможностей и никаких ограничений.</i>\n\n")
     return (
-        "<b>💎 Подписка</b>\n"
-        "<i>Больше возможностей бота:</i>\n\n"
+        "<b>💎 ПРЕМИУМ</b>\n" + head +
         "<blockquote>"
-        "📜 <b>Полная история переписки</b> (у бесплатных — только 24 ч)\n"
-        "🔔 Безлимитные алерты по ключевым словам\n"
-        "🚫 Убирает водяные знаки\n"
-        f"⚡️ .spam лимит до {config.PREMIUM_SPAM_MAX}\n"
-        f"🎯 .troll до {config.TROLL_PREMIUM_MAX} заготовок\n"
-        "🎨 Свой стиль, эмодзи к сообщениям, заметки\n"
-        "🎁 ×2 ежедневная награда\n"
-        "🔎 Поиск по истории, аналитика, экспорт"
+        "📜 <b>Полная история</b> переписки (бесплатно — только 24 ч)\n"
+        "🚫 <b>Без водяных знаков</b> на уведомлениях\n"
+        f"⚡️ <b>.spam</b> — до {config.PREMIUM_SPAM_MAX} сообщений, без задержек\n"
+        f"🎯 <b>.troll</b> — до {config.TROLL_PREMIUM_MAX} заготовок\n"
+        "🔔 Безлимитные <b>алерты</b> по ключевым словам (/alert)\n"
+        "🎨 Свой <b>стиль</b> сообщений (/style) + эмодзи (.emoji)\n"
+        "📝 <b>Заметки</b> о собеседнике (.note)\n"
+        "💣 <b>Самоуничтожение</b> сообщений (.selfdestruct)\n"
+        "🚷 <b>Запрет чужого спама</b> в твой чат (.stopspam)\n"
+        "🧬 <b>Клон</b> профиля собеседника (.clone)\n"
+        "💬 Поддельные цитаты (.fake), ⌨️ «печатает…» (.type), 🌸 .kawai\n"
+        "🏷 Водяной знак (/watermark), 🎨 значок/тема (/badge /theme)\n"
+        "🔎 <b>Поиск</b> по истории (/find), 📊 статистика (/stats)\n"
+        "🗞 Дайджест (/digest), 🥷 топ «палевок» (/topdelete)\n"
+        "📤 Экспорт всех данных (/export)\n"
+        "🎁 <b>×2</b> ежедневная награда"
         "</blockquote>\n"
-        f"Оформить — <b>/premium</b> ({config.PREMIUM_STARS_PRICE}⭐), криптой или "
-        "монетами <b>BED</b> (в «Кошельке»). За <b>100 BED — навсегда</b> ♾"
+        f"Цена: <b>{config.PREMIUM_STARS_PRICE}⭐/мес</b>, криптой или монетами "
+        "<b>BED</b> (в «Кошельке»). За <b>100 BED — навсегда</b> ♾\n\n"
+        "🔱 Нужен ещё и <b>иммунитет ко всем командам</b>? Смотри <b>ULTRA</b> 👇"
     )
 
 
@@ -316,7 +327,8 @@ def kb_main(uid=None, storage=None) -> InlineKeyboardMarkup:
         [_btn("👤 Профиль", "menu:profile", "success")],
         [_btn("⚙️ Функции", "menu:funcs", "primary"), _btn("📊 Статистика", "menu:stats", "primary")],
         [_btn("👥 Рефералы", "menu:ref", "primary"), _btn("📟 Команды", "menu:cmds", "primary")],
-        [_btn("💎 Подписка", "menu:sub", "primary"), _btn("🪙 Кошелёк", "menu:wallet", "success")],
+        [_btn("💎 Премиум", "menu:sub", "primary"), _btn("🔱 ULTRA", "menu:ultra", "danger")],
+        [_btn("🪙 Кошелёк", "menu:wallet", "success")],
         [_btn("🗓 Ежедневная награда", "daily:claim", "success"),
          _btn("🎰 Казино", "menu:casino", "danger")],
         [_btn("🆔 Мои ID", "id:open", "primary"),
@@ -337,11 +349,7 @@ def kb_main(uid=None, storage=None) -> InlineKeyboardMarkup:
         rows.append([_btn("🎁 Бесплатный премиум", "reward:get", "danger")])
     # Admin panel is intentionally NOT shown in the interface — it opens only
     # via the /adm command. A stale menu:admin button just says «Недоступно».
-    # ULTRA panel pinned at the very bottom (highlighted for subscribers).
-    if storage is not None and uid is not None and storage.is_ultra(uid):
-        rows.append([_btn("🔱 ULTRA PREMIUM", "menu:ultra", "danger")])
-    else:
-        rows.append([_btn("🔱 Получить ULTRA PREMIUM", "menu:ultra", "primary")])
+    # (Premium & ULTRA have their own dedicated pair of buttons near the top.)
     return InlineKeyboardMarkup(rows)
 
 
@@ -400,6 +408,7 @@ def kb_support() -> InlineKeyboardMarkup:
 def kb_sub() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup([
         [_btn("👤 Себе", "menu:buyself", "success"), _btn("🎁 Подарить", "menu:gift", "success")],
+        [_btn("🔱 Перейти к ULTRA", "menu:ultra", "danger")],
         _BACK,
     ])
 
@@ -484,13 +493,26 @@ def cap_ultra(uid, storage, bot_username) -> str:
         )
     return (
         "<b>🔱 ULTRA PREMIUM</b>\n"
-        "<i>Высший тариф — тебя нельзя тронуть.</i>\n\n"
-        "<blockquote>"
-        "🛡 Никто не заюзает на тебя <b>.ban / .spam / .troll</b>\n"
-        "⚡️ Твои .spam / .troll — моментально\n"
-        "🔱 Префикс <b>ULTRA</b> перед всеми\n"
-        "🎧 Моментальная поддержка, тесная связь\n"
-        "⏳ Всегда видно, сколько осталось"
+        "<i>Высший тариф. Включает ВЕСЬ Премиум + тебя нельзя тронуть.</i>\n\n"
+        "<blockquote>✅ <b>Всё из Премиума</b>: полная история, без водяных "
+        "знаков, лимиты .spam/.troll, стиль, заметки, поиск, аналитика, "
+        "экспорт и т.д.</blockquote>\n"
+        "<blockquote>🔱 <b>Только в ULTRA:</b>\n"
+        "🛡 <b>Иммунитет</b> к .ban / .spam / .troll и всем power-командам (тумблеры)\n"
+        "🚨 <b>Сигнал</b>, кто пытался тебя тронуть\n"
+        "🪞 <b>Рикошет</b> — атака врага бьёт по нему самому\n"
+        "🥷 <b>Невидимка</b> (стелс-режим)\n"
+        "🎭 Тебя <b>нельзя клонировать</b> (.clone)\n"
+        "⚡️ Твой <b>.spam — моментально</b>, .troll — очень быстро\n"
+        "💥 Power-команды (.hack/.trace/.phantom…) — <b>бесплатно</b>\n"
+        f"💸 BED дешевле на <b>{int(config.ULTRA_BED_DISCOUNT*100)}%</b>\n"
+        f"💀 <b>Несокрушимый бан</b> ×{config.ULTRA_BAN_MULT}\n"
+        f"📜 Вечная история · ⏳ grace {config.ULTRA_GRACE_DAYS} дн после окончания\n"
+        "🔱 Префикс <b>ULTRA</b> перед всеми · 🎧 моментальная поддержка\n"
+        "🏆 Топ лидерборда · 🎁 <b>×2</b> промо и ежедневка\n"
+        "👑 Свой <b>титул</b> (/ultratitle)\n"
+        "💀 Враги (.enemy) и ⭐ VIP (.vip)\n"
+        "🧩 Регекс-алерты (/ralert) · 💾 личный бэкап (/mybackup)"
         "</blockquote>\n"
         f"Цена: <b>{config.ULTRA_STARS_PRICE}⭐</b> или <b>{config.ULTRA_BED_PRICE} BED</b> / месяц.\n"
         f"♾ Навсегда: <b>{config.ULTRA_FOREVER_STARS_PRICE}⭐</b> или "
@@ -528,6 +550,8 @@ def kb_ultra(uid, storage) -> InlineKeyboardMarkup:
     rows.append([_btn(f"🔱 {verb} · {config.ULTRA_BED_PRICE} BED", "ultra:buybed", "primary")])
     rows.append([_btn(f"♾ Навсегда · {config.ULTRA_FOREVER_STARS_PRICE}⭐", "ultra:buystars_forever", "success"),
                  _btn(f"♾ · {config.ULTRA_FOREVER_BED_PRICE} BED", "ultra:buybed_forever", "primary")])
+    if not active:
+        rows.append([_btn("💎 Обычный Премиум", "menu:sub", "primary")])
     rows.append(_BACK)
     return InlineKeyboardMarkup(rows)
 
