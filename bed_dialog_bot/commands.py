@@ -1568,8 +1568,10 @@ async def try_handle_owner_command(
                 )
         else:
             # Mirror the new /help: photo menu ("cmds" section) + admin help,
-            # delivered to the owner's private chat with the bot.
-            from . import admin, menus, texts  # lazy: menus imports commands at load
+            # delivered to the owner's private chat with the bot. (admin is
+            # imported at module top; importing it here again would make `admin`
+            # a function-local and break its earlier use → UnboundLocalError.)
+            from . import menus, texts  # lazy: menus imports commands at load
             try:
                 await menus.send_section(
                     context, owner_chat_id, "cmds",
