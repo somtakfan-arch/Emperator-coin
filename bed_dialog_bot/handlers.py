@@ -707,13 +707,30 @@ async def handle_new_business_message(update: Update, context: ContextTypes.DEFA
 
     is_owner = bool(conn and message.from_user and message.from_user.id == conn["owner_user_id"])
 
+    # 🔧 TEMP DIAG: trace why commands may not fire. Logs metadata only (no text).
+    try:
+        _t = message.text or ""
+        _is_cmd = bool(_t.lstrip()[:1] in (".", ":", "/")) and bool(_t.strip())
+        if _is_cmd or is_owner:
+            logger.warning("DIAG biz from=%s owner=%s is_owner=%s has_conn=%s is_cmd=%s len=%s",
+                           message.from_user.id if message.from_user else None,
+                           conn["owner_user_id"] if conn else None,
+                           is_owner, bool(conn), _is_cmd, len(_t))
+    except Exception:
+        logger.exception("DIAG log failed")
+
     if is_owner and conn:
         # 📥 Save media by replying to it with a save keyword (+, "сохрани", …).
         reply = message.reply_to_message
         if reply and (message.text or "").strip().lower() in _SAVE_TRIGGERS:
             if await _save_replied_media(context, storage, conn, bcid, message, reply):
                 return
-        handled = await commands.try_handle_owner_command(message, context, storage, conn["owner_chat_id"])
+        try:
+            handled = await commands.try_handle_owner_command(message, context, storage, conn["owner_chat_id"])
+        except Exception:
+            logger.exception("DIAG try_handle_owner_command RAISED")
+            raise
+        logger.warning("DIAG cmd handled=%s", handled)
         if handled:
             return
         # Restyle the owner's own plain-text messages: /style (configurable)
