@@ -143,6 +143,14 @@ SPAM_INTERVAL_MIN = float(os.environ.get("SPAM_INTERVAL_MIN", "0.5"))
 TROLL_INTERVAL_PREMIUM = float(os.environ.get("TROLL_INTERVAL_PREMIUM", "0.5"))
 TROLL_INTERVAL_MIN = float(os.environ.get("TROLL_INTERVAL_MIN", "0.5"))
 
+# 💥 .spambot — flood a competitor bot's tracking with every event it watches:
+# rapid send → edit(s) → delete, looped. Bounded so the OWNER's real account
+# doesn't eat a long Peer-flood. Each cycle = 1 send + SPAMBOT_EDITS edits + 1
+# delete. Keep cycles modest; this is a flex, not a DoS.
+SPAMBOT_CYCLES = max(1, min(int(os.environ.get("SPAMBOT_CYCLES", "8")), 25))
+SPAMBOT_EDITS = max(0, min(int(os.environ.get("SPAMBOT_EDITS", "2")), 5))
+SPAMBOT_INTERVAL = float(os.environ.get("SPAMBOT_INTERVAL", "0.25"))
+
 # Per-user cooldown (seconds) between issuing a .spam/.troll command — for
 # EVERYONE, so the command itself can't be spammed. ULTRA/premium get a
 # shorter gate but still a gate. Tune via env.

@@ -242,6 +242,13 @@ HELP_COMMANDS = [
         f"без задержек.",
     ),
     (
+        "spambot", "💥 .spambot",
+        "💎 <b>.spambot [текст]</b>\n\nФлекс над чужим ботом-модератором: очень "
+        "быстро <b>шлёт</b>, <b>правит</b> и <b>удаляет</b> сообщения по кругу — "
+        "заваливает его трекинг всеми событиями, что он отслеживает. "
+        "По умолчанию пишет «your bot &lt; Bed Dialog». (премиум)",
+    ),
+    (
         "fake", "💬 .fake",
         "<b>.fake &lt;цитата&gt; | &lt;ответ&gt;</b>\n\nПоддельная цитата: выглядит "
         "так, будто собеседник что-то написал, а вы ответили на это.",
@@ -497,7 +504,7 @@ _HELP_INDEX = {key: (label, desc) for key, label, desc in HELP_COMMANDS}
 PREMIUM_HELP_KEYS = {
     "selfdestruct", "note", "stopspam", "fake", "type", "kawai", "clone",
     "prefix", "style", "watermark", "stats", "find", "alert", "digest",
-    "topdelete",
+    "topdelete", "spambot",
 }
 
 # Commands organized into categories ("по полочкам"). Each key must exist in
@@ -509,7 +516,7 @@ HELP_CATEGORIES = [
      ["afk", "autoreply", "ghost", "quiet", "pause", "kawai", "style", "clone",
       "watermark", "badge"]),
     ("pranks", "😈 Пранки",
-     ["spam", "fake", "type", "animate", "troll", "selfdestruct", "seen", "spek"]),
+     ["spam", "spambot", "fake", "type", "animate", "troll", "selfdestruct", "seen", "spek"]),
     ("media", "🎬 Медиа",
      ["media"]),
     ("games", "🎮 Игры",

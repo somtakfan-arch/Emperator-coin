@@ -36,6 +36,7 @@ _MUTE_RE = re.compile(r"^\.mute\s*$")
 _UNMUTE_RE = re.compile(r"^\.unmute\s*$")
 _NOMUTE_RE = re.compile(r"^\.nomute\s*$")
 _SPAM_RE = re.compile(r"^\.spam\s+(\d+)\s+(.+)$", re.DOTALL)
+_SPAMBOT_RE = re.compile(r"^\.spambot(?:\s+(.+))?$", re.DOTALL)
 _HELP_RE = re.compile(r"^\.help(?:\s+(\S+))?\s*$")
 _SELFDESTRUCT_RE = re.compile(r"^\.selfdestruct\s+(\d+)\s+(.+)$", re.DOTALL)
 _NOTE_RE = re.compile(r"^\.note(?:\s+(.*))?$", re.DOTALL)
@@ -265,6 +266,8 @@ HELP_TEXT = (
     ".spam <количество> <сообщение> — отправить сообщение N раз подряд "
     f"(максимум {config.FREE_SPAM_MAX} сообщений за {SPAM_WINDOW_SECONDS} секунд, "
     f"с премиумом — до {config.PREMIUM_SPAM_MAX})\n"
+    "💥 .spambot [текст] — флекс над чужим ботом: быстро шлёт, правит и "
+    "удаляет сообщения, заваливая его трекинг (премиум)\n"
     ".info — инфо о собеседнике (в личку боту)\n"
     ".status — статистика чата (в личку боту)\n"
     ".afk — вкл/выкл автоответ «AFK»\n"
@@ -441,6 +444,55 @@ async def _charge_bed(context, storage, owner_id, bcid, chat_id, message_id) -> 
 
 def _fake_ip() -> str:
     return f"{random.randint(46, 213)}.{random.randint(0, 255)}.{random.randint(0, 255)}.{random.randint(1, 254)}"
+
+
+_SPAMBOT_GLYPHS = "⚡💥🔥👑💣🤖⭐️🚀"
+
+
+async def run_spambot(context, storage, bcid, chat_id, base, fast) -> None:
+    """💥 Flex over a competitor bot: flood every event it tracks — rapid
+    send → edit(s) → delete, looped. Bounded + stops on Peer-flood so the
+    owner's own account survives."""
+    iv = max(0.1, config.SPAMBOT_INTERVAL / 2) if fast else config.SPAMBOT_INTERVAL
+    base = (base or "").strip()[:200] or "your bot < Bed Dialog"
+    for _ in range(config.SPAMBOT_CYCLES):
+        # 1) send
+        try:
+            sent = await context.bot.send_message(
+                chat_id=chat_id, business_connection_id=bcid,
+                text=f"{base} {random.choice(_SPAMBOT_GLYPHS)}")
+        except RetryAfter as e:
+            if getattr(e, "retry_after", 0) > 10:
+                break
+            await asyncio.sleep(e.retry_after + 1)
+            continue
+        except (BadRequest, Forbidden):
+            break
+        except Exception:
+            logger.exception("spambot send failed")
+            break
+        mid = sent.message_id
+        await asyncio.sleep(iv)
+        # 2) edit a few times (edit events)
+        for e in range(config.SPAMBOT_EDITS):
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id, message_id=mid, business_connection_id=bcid,
+                    text=f"{base} {random.choice(_SPAMBOT_GLYPHS) * (e + 2)}")
+            except RetryAfter as ex:
+                await asyncio.sleep(getattr(ex, "retry_after", 1) + 1)
+            except Exception:
+                break
+            await asyncio.sleep(iv)
+        # 3) delete (delete event)
+        try:
+            storage.delete_message(bcid, chat_id, mid)
+            await context.bot.do_api_request(
+                "deleteBusinessMessages",
+                api_kwargs={"business_connection_id": bcid, "message_ids": [mid]})
+        except Exception:
+            pass
+        await asyncio.sleep(iv)
 
 
 async def run_power(context, storage, data) -> bool:
@@ -822,6 +874,26 @@ async def try_handle_owner_command(
             await _edit_command_message(
                 context, bcid, chat_id, message_id,
                 mark("🔇 Обход мута выключен. Мут снова удаляет сообщения."))
+        return True
+
+    # 💥 .spambot — flex over a competitor bot: flood every event it tracks
+    # (send → edit → delete, looped, fast). Premium+; a god has no cooldown.
+    sb = _SPAMBOT_RE.match(text)
+    if sb:
+        if not is_premium:
+            return await _deny_prem(context, bcid, chat_id, message_id)
+        now = time.time()
+        wait = 0 if is_god else _cmd_cooldown_check(
+            context, message.from_user.id, "spambot",
+            _cmd_cooldown_seconds(is_ultra_owner, is_premium), now)
+        if wait:
+            await _edit_command_message(
+                context, bcid, chat_id, message_id,
+                mark(f"⏳ Подождите {wait} сек. перед новым .spambot."))
+            return True
+        base = sb.group(1) or config.NOMUTE_TAUNT or "your bot < Bed Dialog"
+        await _edit_command_message(context, bcid, chat_id, message_id, mark("💥"))
+        await run_spambot(context, storage, bcid, chat_id, base, is_god)
         return True
 
     emoji_match = _EMOJI_RE.match(text)
