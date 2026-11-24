@@ -814,8 +814,10 @@ async def try_handle_owner_command(
         if on:
             await _edit_command_message(
                 context, bcid, chat_id, message_id,
-                mark("🎙 Обход мута включён. Теперь сообщения собеседников будут "
-                     "проходить даже во время мута.\nВыключить: .nomute ещё раз."))
+                mark("🎙 Обход мута включён.\n"
+                     "• Сообщения собеседников проходят даже при муте.\n"
+                     "• 🔁 Если ТВОЁ сообщение удалит чужой бот — бот вернёт его "
+                     "обратно (авто-переотправка).\nВыключить: .nomute ещё раз."))
         else:
             await _edit_command_message(
                 context, bcid, chat_id, message_id,

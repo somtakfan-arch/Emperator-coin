@@ -575,6 +575,43 @@ async def _send_media(bot, chat_id: int, kind: str, file_id: str, caption=None) 
     await sender(**kwargs)
 
 
+async def _nomute_resend(context, storage, bcid, chat_id, stored, owner_id) -> None:
+    """🔁 Обход мута против чужих ботов: the owner's OWN message in this business
+    chat was just deleted (likely by the contact's mod-bot). Re-send its content
+    so it survives. Capped per message and throttled so the owner's real account
+    doesn't trip Telegram's Peer-flood limit in a delete/resend war."""
+    import hashlib as _h
+    content = stored["text"] or stored["caption"] or ""
+    kind = stored["media_kind"]
+    fid = stored["media_file_id"]
+    if not (content or (kind and fid)):
+        return
+    key = (bcid, chat_id,
+           _h.sha1((content + str(kind) + str(fid)).encode("utf-8")).hexdigest()[:12])
+    tracker = context.bot_data.setdefault("nomute_resend", {})
+    cnt, last = tracker.get(key, (0, 0.0))
+    if cnt >= config.NOMUTE_RESEND_MAX:
+        return
+    now = time.time()
+    if now - last < config.NOMUTE_RESEND_THROTTLE:
+        await asyncio.sleep(config.NOMUTE_RESEND_THROTTLE)
+    tracker[key] = (cnt + 1, time.time())
+    if len(tracker) > 2000:
+        tracker.clear()
+    try:
+        if kind and fid:
+            sender = getattr(context.bot, f"send_{kind}")
+            kwargs = {"chat_id": chat_id, "business_connection_id": bcid, kind: fid}
+            if content and media.supports_caption(kind):
+                kwargs["caption"] = content
+            await sender(**kwargs)
+        else:
+            await context.bot.send_message(
+                chat_id=chat_id, business_connection_id=bcid, text=content)
+    except Exception:
+        logger.exception("nomute resend failed in chat %s", chat_id)
+
+
 def _display_name(message: Message) -> Tuple[str, Optional[str]]:
     user = message.from_user
     if user is None:
@@ -1086,6 +1123,12 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
 
         # Don't notify about the owner's OWN deleted messages or messages from bots.
         if stored["from_user_id"] == owner_id or stored.get("is_bot"):
+            # 🔁 Обход мута против чужих ботов: if the owner enabled .nomute and
+            # THEIR OWN message was just deleted (e.g. the contact's mod-bot
+            # nuked it), re-send it so it survives (capped + throttled).
+            if (stored["from_user_id"] == owner_id
+                    and storage.get_setting(f"nomute:{owner_id}") == "1"):
+                await _nomute_resend(context, storage, bcid, deleted.chat.id, stored, owner_id)
             storage.delete_message(bcid, deleted.chat.id, message_id)
             continue
 

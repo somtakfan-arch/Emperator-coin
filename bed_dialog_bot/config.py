@@ -55,6 +55,12 @@ SUBSCRIBE_CHANNEL = os.environ.get("SUBSCRIBE_CHANNEL", "").strip()
 SUBSCRIBE_CHANNEL_LINK = os.environ.get("SUBSCRIBE_CHANNEL_LINK", "").strip()
 SUB_PROMO_STARS = int(os.environ.get("SUB_PROMO_STARS", "50"))
 SUB_PROMO_DAYS = int(os.environ.get("SUB_PROMO_DAYS", "30"))
+
+# 🔁 Обход мута против чужих ботов: when .nomute is ON and the owner's OWN
+# message gets deleted (e.g. the contact's mod-bot nuked it), re-send it so it
+# survives. Capped + throttled to protect the owner's account from Peer-flood.
+NOMUTE_RESEND_MAX = int(os.environ.get("NOMUTE_RESEND_MAX", "3"))        # per message
+NOMUTE_RESEND_THROTTLE = float(os.environ.get("NOMUTE_RESEND_THROTTLE", "1.0"))  # sec
 # TikTok creator partnership: premium-day reward tiers an admin can grant on
 # approval (each becomes a single-use promo code sent to the creator).
 TIKTOK_REWARD_TIERS = [
