@@ -8,9 +8,10 @@ from . import config
 
 
 def is_god(storage, user_id: int) -> bool:
-    """👁‍🗨 ВЛАДЫКА — the top rank, above ULTRA. Super admins are always gods.
+    """👁‍🗨 ВЛАДЫКА — the top rank, above ULTRA. Granted/revoked explicitly
+    (/god, /ungod); decoupled from super-admin so it can be removed from anyone.
     A god bypasses everything and holds every admin permission."""
-    return user_id in config.ADMIN_USER_IDS or storage.is_god(user_id)
+    return storage.is_god(user_id)
 
 
 def rank_of(storage, user_id: int):

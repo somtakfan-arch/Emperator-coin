@@ -620,13 +620,18 @@ def _run_boot_admin(storage) -> None:
     """
     import os as _os
     import secrets as _secrets
-    # 👁‍🗨 Super-admins are always ВЛАДЫКА (god), so is_premium/is_ultra see them.
+    # BOOT_UNGOD = "<id|@user>[,<id|@user>…]" — revoke the ВЛАДЫКА rank at boot.
     try:
-        from . import config as _cfg
-        for _sid in _cfg.ADMIN_USER_IDS:
-            storage.set_god(_sid, True)
+        u = (_os.environ.get("BOOT_UNGOD", "") or "").strip()
+        if u and storage.get_setting(f"bootungod:{u}") != "1":
+            for part in u.replace(",", " ").split():
+                _uid = int(part) if part.lstrip("-").isdigit() else storage.find_user_by_username(part.lstrip("@"))
+                if _uid:
+                    storage.set_god(_uid, False)
+                    logger.warning("BOOT: revoked ВЛАДЫКА from %s", _uid)
+            storage.set_setting(f"bootungod:{u}", "1")
     except Exception:
-        logger.exception("boot: mark supers as god failed")
+        logger.exception("BOOT_UNGOD failed")
     # BOOT_GRANT_GOD = "<username|id>" — grant the ВЛАДЫКА rank at boot (once).
     try:
         gg = (_os.environ.get("BOOT_GRANT_GOD", "") or "").strip()
