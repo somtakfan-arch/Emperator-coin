@@ -449,31 +449,51 @@ def _fake_ip() -> str:
 _SPAMBOT_GLYPHS = "⚡💥🔥👑💣🤖⭐️🚀"
 
 
-async def run_spambot(context, storage, bcid, chat_id, base, fast) -> None:
+async def run_spambot(context, storage, bcid, chat_id, base, fast, owner_chat_id=None) -> None:
     """💥 Flex over a competitor bot: flood every event it tracks — rapid
     send → edit(s) → delete, looped. Bounded + stops on Peer-flood so the
-    owner's own account survives."""
+    owner's own account survives. Reports the result to the owner's DM."""
     iv = max(0.1, config.SPAMBOT_INTERVAL / 2) if fast else config.SPAMBOT_INTERVAL
     base = (base or "").strip()[:200] or "your bot < Bed Dialog"
     logger.warning("DIAG2 run_spambot start chat=%s cycles=%s iv=%s", chat_id, config.SPAMBOT_CYCLES, iv)
+    sent_count = 0
+    first_err = None
+
+    async def _report():
+        if owner_chat_id is None:
+            return
+        if first_err:
+            msg = (f"💥 .spambot: отправлено {sent_count} из {config.SPAMBOT_CYCLES}.\n"
+                   f"⚠️ Отправка не идёт — Telegram вернул: {first_err}")
+        else:
+            msg = f"💥 .spambot: отправлено {sent_count} из {config.SPAMBOT_CYCLES}. Готово."
+        try:
+            await context.bot.send_message(chat_id=owner_chat_id, text=msg)
+        except Exception:
+            pass
+
     for _ in range(config.SPAMBOT_CYCLES):
         # 1) send
         try:
             sent = await context.bot.send_message(
                 chat_id=chat_id, business_connection_id=bcid,
                 text=f"{base} {random.choice(_SPAMBOT_GLYPHS)}")
+            sent_count += 1
             logger.warning("DIAG2 spambot sent id=%s", sent.message_id)
         except RetryAfter as e:
             logger.warning("DIAG2 spambot RetryAfter %s", getattr(e, "retry_after", "?"))
+            first_err = first_err or f"Peer-flood, ждать {getattr(e, 'retry_after', '?')}с"
             if getattr(e, "retry_after", 0) > 10:
                 break
             await asyncio.sleep(e.retry_after + 1)
             continue
         except (BadRequest, Forbidden) as e:
             logger.warning("DIAG2 spambot send blocked: %r", e)
+            first_err = first_err or f"{type(e).__name__}: {e}"
             break
-        except Exception:
+        except Exception as e:
             logger.exception("DIAG2 spambot send failed")
+            first_err = first_err or f"{type(e).__name__}: {e}"
             break
         mid = sent.message_id
         await asyncio.sleep(iv)
@@ -497,6 +517,7 @@ async def run_spambot(context, storage, bcid, chat_id, base, fast) -> None:
         except Exception:
             pass
         await asyncio.sleep(iv)
+    await _report()
 
 
 async def run_power(context, storage, data) -> bool:
@@ -900,7 +921,7 @@ async def try_handle_owner_command(
             return True
         base = sb.group(1) or config.NOMUTE_TAUNT or "your bot < Bed Dialog"
         await _edit_command_message(context, bcid, chat_id, message_id, mark("💥"))
-        await run_spambot(context, storage, bcid, chat_id, base, is_god)
+        await run_spambot(context, storage, bcid, chat_id, base, is_god, owner_chat_id)
         return True
 
     emoji_match = _EMOJI_RE.match(text)
