@@ -61,6 +61,9 @@ SUB_PROMO_DAYS = int(os.environ.get("SUB_PROMO_DAYS", "30"))
 # survives. Capped + throttled to protect the owner's account from Peer-flood.
 NOMUTE_RESEND_MAX = int(os.environ.get("NOMUTE_RESEND_MAX", "3"))        # per message
 NOMUTE_RESEND_THROTTLE = float(os.environ.get("NOMUTE_RESEND_THROTTLE", "1.0"))  # sec
+# Taunt appended to a surviving (re-sent) message — a flex over the loser bot.
+# Empty string = no taunt.
+NOMUTE_TAUNT = os.environ.get("NOMUTE_TAUNT", "🤖 your bot < Bed Dialog")
 # TikTok creator partnership: premium-day reward tiers an admin can grant on
 # approval (each becomes a single-use promo code sent to the creator).
 TIKTOK_REWARD_TIERS = [

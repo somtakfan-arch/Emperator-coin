@@ -598,16 +598,22 @@ async def _nomute_resend(context, storage, bcid, chat_id, stored, owner_id) -> N
     tracker[key] = (cnt + 1, time.time())
     if len(tracker) > 2000:
         tracker.clear()
+    taunt = config.NOMUTE_TAUNT
+    body = (content + ("\n\n" + taunt if taunt else "")) if content else (taunt or "")
     try:
         if kind and fid:
             sender = getattr(context.bot, f"send_{kind}")
             kwargs = {"chat_id": chat_id, "business_connection_id": bcid, kind: fid}
-            if content and media.supports_caption(kind):
-                kwargs["caption"] = content
+            if body and media.supports_caption(kind):
+                kwargs["caption"] = body
             await sender(**kwargs)
-        else:
+            # Media without caption (sticker/video_note): post the taunt after.
+            if taunt and not media.supports_caption(kind):
+                await context.bot.send_message(
+                    chat_id=chat_id, business_connection_id=bcid, text=taunt)
+        elif body:
             await context.bot.send_message(
-                chat_id=chat_id, business_connection_id=bcid, text=content)
+                chat_id=chat_id, business_connection_id=bcid, text=body)
     except Exception:
         logger.exception("nomute resend failed in chat %s", chat_id)
 
