@@ -1096,12 +1096,9 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
     muted = _suppressed(storage, owner_id)
     text_items = []  # grouped together into as few messages as possible
 
-    logger.warning("DIAG2 deleted-update owner=%s chat=%s ids=%s",
-                   owner_id, deleted.chat.id, list(deleted.message_ids))
     for message_id in deleted.message_ids:
         stored = storage.get_message(bcid, deleted.chat.id, message_id)
         if not stored:
-            logger.warning("DIAG2 deleted id=%s NOT in storage", message_id)
             continue
 
         # ULTRA stealth: ULTRA deletions are invisible to free (non-subscriber)
@@ -1135,9 +1132,6 @@ async def handle_deleted_business_messages(update: Update, context: ContextTypes
             # 🔁 Обход мута против чужих ботов: if the owner enabled .nomute and
             # THEIR OWN message was just deleted (e.g. the contact's mod-bot
             # nuked it), re-send it so it survives (capped + throttled).
-            if stored["from_user_id"] == owner_id:
-                logger.warning("DIAG2 own-msg deleted owner=%s nomute=%s chat=%s",
-                               owner_id, storage.get_setting(f"nomute:{owner_id}"), deleted.chat.id)
             if (stored["from_user_id"] == owner_id
                     and storage.get_setting(f"nomute:{owner_id}") == "1"):
                 await _nomute_resend(context, storage, bcid, deleted.chat.id, stored, owner_id)

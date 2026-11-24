@@ -453,9 +453,8 @@ async def run_spambot(context, storage, bcid, chat_id, base, fast, owner_chat_id
     """💥 Flex over a competitor bot: flood every event it tracks — rapid
     send → edit(s) → delete, looped. Bounded + stops on Peer-flood so the
     owner's own account survives. Reports the result to the owner's DM."""
-    iv = max(0.1, config.SPAMBOT_INTERVAL / 2) if fast else config.SPAMBOT_INTERVAL
+    iv = max(0.08, config.SPAMBOT_INTERVAL / 2) if fast else config.SPAMBOT_INTERVAL
     base = (base or "").strip()[:200] or "your bot < Bed Dialog"
-    logger.warning("DIAG2 run_spambot start chat=%s cycles=%s iv=%s", chat_id, config.SPAMBOT_CYCLES, iv)
     sent_count = 0
     first_err = None
 
@@ -479,20 +478,17 @@ async def run_spambot(context, storage, bcid, chat_id, base, fast, owner_chat_id
                 chat_id=chat_id, business_connection_id=bcid,
                 text=f"{base} {random.choice(_SPAMBOT_GLYPHS)}")
             sent_count += 1
-            logger.warning("DIAG2 spambot sent id=%s", sent.message_id)
         except RetryAfter as e:
-            logger.warning("DIAG2 spambot RetryAfter %s", getattr(e, "retry_after", "?"))
             first_err = first_err or f"Peer-flood, ждать {getattr(e, 'retry_after', '?')}с"
             if getattr(e, "retry_after", 0) > 10:
                 break
             await asyncio.sleep(e.retry_after + 1)
             continue
         except (BadRequest, Forbidden) as e:
-            logger.warning("DIAG2 spambot send blocked: %r", e)
             first_err = first_err or f"{type(e).__name__}: {e}"
             break
         except Exception as e:
-            logger.exception("DIAG2 spambot send failed")
+            logger.exception("spambot send failed")
             first_err = first_err or f"{type(e).__name__}: {e}"
             break
         mid = sent.message_id
@@ -888,7 +884,6 @@ async def try_handle_owner_command(
         uid = message.from_user.id
         on = storage.get_setting(f"nomute:{uid}") != "1"
         storage.set_setting(f"nomute:{uid}", "1" if on else "0")
-        logger.warning("DIAG2 .nomute matched uid=%s now=%s", uid, "ON" if on else "OFF")
         if on:
             await _edit_command_message(
                 context, bcid, chat_id, message_id,
@@ -906,8 +901,6 @@ async def try_handle_owner_command(
     # (send → edit → delete, looped, fast). Premium+; a god has no cooldown.
     sb = _SPAMBOT_RE.match(text)
     if sb:
-        logger.warning("DIAG2 .spambot matched uid=%s premium=%s god=%s chat=%s",
-                       message.from_user.id, is_premium, is_god, chat_id)
         if not is_premium:
             return await _deny_prem(context, bcid, chat_id, message_id)
         now = time.time()
