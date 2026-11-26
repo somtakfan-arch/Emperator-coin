@@ -133,6 +133,17 @@ def _sale_keyboard():
     return InlineKeyboardMarkup(rows)
 
 
+def _bug_discount_keyboard():
+    """Buttons for the bug-apology discount broadcast: one opens the discounted
+    ULTRA section, one opens the full functionality laid out by category."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔱 Забрать ULTRA со скидкой", callback_data="menu:ultra",
+                              api_kwargs={"style": "danger"})],
+        [InlineKeyboardButton("📋 Все функции по полочкам", callback_data="menu:cmds",
+                              api_kwargs={"style": "success"})],
+    ])
+
+
 async def _submit_ticket(message, context, storage: Storage, ticket_message: str,
                          *, kind: str = "support", photo_file_id=None) -> int:
     """Create a ticket (optionally with a photo) and notify the ticket admins."""
@@ -9985,11 +9996,16 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
             await query.answer()
     elif query.data == "ultra:buystars":
         await query.answer()
-        _price = _apply_discount(context.bot_data["storage"], query.from_user.id, config.ULTRA_STARS_PRICE)
+        _price = _apply_discount(context.bot_data["storage"], query.from_user.id, config.ultra_month_price())
+        _desc = "Топ-тариф: иммунитет к .ban/.spam/.troll, моментальные команды, приоритет."
+        if config.bug_discount_active():
+            _desc = (f"🐞 Скидка за баги: ULTRA на месяц по цене обычного Премиума "
+                     f"— {config.ultra_month_price()}⭐ вместо {config.ULTRA_STARS_PRICE}⭐. "
+                     "Иммунитет ко всем командам, бесплатные power, приоритет.")
         await context.bot.send_invoice(
             chat_id=query.message.chat_id,
             title="🔱 ULTRA PREMIUM (1 месяц)",
-            description="Топ-тариф: иммунитет к .ban/.spam/.troll, моментальные команды, приоритет.",
+            description=_desc,
             payload=f"ultra:{query.from_user.id}:{config.ULTRA_DURATION_DAYS}",
             currency="XTR",
             prices=[LabeledPrice("ULTRA PREMIUM", _price)],
@@ -10018,11 +10034,15 @@ async def handle_callback_query(update: Update, context: ContextTypes.DEFAULT_TY
         await menus.edit_section(context, query, "ultra", uid, storage, context.bot.username)
     elif query.data == "ultra:buystars_forever":
         await query.answer()
-        _price = _apply_discount(context.bot_data["storage"], query.from_user.id, config.ULTRA_FOREVER_STARS_PRICE)
+        _price = _apply_discount(context.bot_data["storage"], query.from_user.id, config.ultra_forever_price())
+        _descf = "Пожизненный топ-тариф: все ULTRA-функции без ограничения по времени."
+        if config.bug_discount_active():
+            _descf = (f"🐞 Скидка за баги −50%: ULTRA навсегда за {config.ultra_forever_price()}⭐ "
+                      f"вместо {config.ULTRA_FOREVER_STARS_PRICE}⭐. Все ULTRA-функции навсегда.")
         await context.bot.send_invoice(
             chat_id=query.message.chat_id,
             title="🔱♾ ULTRA PREMIUM НАВСЕГДА",
-            description="Пожизненный топ-тариф: все ULTRA-функции без ограничения по времени.",
+            description=_descf,
             payload=f"ultra:{query.from_user.id}:forever",
             currency="XTR",
             prices=[LabeledPrice("ULTRA навсегда", _price)],

@@ -76,6 +76,27 @@ ULTRA_DURATION_DAYS = int(os.environ.get("ULTRA_DURATION_DAYS", "30"))
 # ULTRA PREMIUM «навсегда» (one-time, lifetime).
 ULTRA_FOREVER_STARS_PRICE = int(os.environ.get("ULTRA_FOREVER_STARS_PRICE", "3000"))
 ULTRA_FOREVER_BED_PRICE = int(os.environ.get("ULTRA_FOREVER_BED_PRICE", "290"))
+
+# 🐞 Bug-apology discount (Stars): while active, ULTRA/month costs the same as
+# regular Premium, and ULTRA-forever is 50% off. Active while now < the epoch.
+# Default: 23:59 MSK on 27.11.2026. Set BUG_DISCOUNT_UNTIL=0 to disable.
+BUG_DISCOUNT_UNTIL = int(os.environ.get("BUG_DISCOUNT_UNTIL", "1795813140"))
+
+
+def bug_discount_active() -> bool:
+    import time as _t
+    return BUG_DISCOUNT_UNTIL > 0 and _t.time() < BUG_DISCOUNT_UNTIL
+
+
+def ultra_month_price() -> int:
+    """Discounted ULTRA/month Stars price (= Premium price while the bug
+    discount is active, otherwise the normal ULTRA price)."""
+    return PREMIUM_STARS_PRICE if bug_discount_active() else ULTRA_STARS_PRICE
+
+
+def ultra_forever_price() -> int:
+    """ULTRA-forever Stars price, 50% off while the bug discount is active."""
+    return (ULTRA_FOREVER_STARS_PRICE // 2) if bug_discount_active() else ULTRA_FOREVER_STARS_PRICE
 # Grace period (days) — ULTRA perks keep working this long after expiry.
 ULTRA_GRACE_DAYS = int(os.environ.get("ULTRA_GRACE_DAYS", "3"))
 # Discount on buying BED with Stars for ULTRA users (0.15 = -15%).

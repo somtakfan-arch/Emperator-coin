@@ -703,11 +703,19 @@ async def _run_boot_broadcast(application: Application) -> None:
     try:
         from . import config, handlers
         kb = None
-        if config.SUBSCRIBE_CHANNEL and _os.environ.get("BOOT_BROADCAST_SALE", "1") == "1":
-            try:
+        # Choose the broadcast's buttons. BOOT_BROADCAST_KB forces a choice:
+        # "discount" = ULTRA bug-discount buttons, "sale" = channel-sub promo,
+        # "none" = no buttons. Default: discount while it's active, else sale.
+        _kbsel = (_os.environ.get("BOOT_BROADCAST_KB", "") or "").strip().lower()
+        if not _kbsel:
+            _kbsel = "discount" if config.bug_discount_active() else "sale"
+        try:
+            if _kbsel == "discount":
+                kb = handlers._bug_discount_keyboard()
+            elif _kbsel == "sale" and config.SUBSCRIBE_CHANNEL:
                 kb = handlers._sale_keyboard()
-            except Exception:
-                kb = None
+        except Exception:
+            kb = None
         recipients = storage.all_user_ids()
         logger.warning("BOOT_BROADCAST: sending to %d users (sig %s)…", len(recipients), sig)
         sent = failed = 0

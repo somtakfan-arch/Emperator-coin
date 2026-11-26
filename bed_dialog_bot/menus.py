@@ -514,9 +514,18 @@ def cap_ultra(uid, storage, bot_username) -> str:
         "💀 Враги (.enemy) и ⭐ VIP (.vip)\n"
         "🧩 Регекс-алерты (/ralert) · 💾 личный бэкап (/mybackup)"
         "</blockquote>\n"
-        f"Цена: <b>{config.ULTRA_STARS_PRICE}⭐</b> или <b>{config.ULTRA_BED_PRICE} BED</b> / месяц.\n"
-        f"♾ Навсегда: <b>{config.ULTRA_FOREVER_STARS_PRICE}⭐</b> или "
-        f"<b>{config.ULTRA_FOREVER_BED_PRICE} BED</b> (разово)."
+        + (
+            (f"🐞 <b>СКИДКА ЗА БАГИ — до 23:59 27 ноября!</b>\n"
+             f"🔱 ULTRA на месяц по цене Премиума: "
+             f"<s>{config.ULTRA_STARS_PRICE}⭐</s> → <b>{config.ultra_month_price()}⭐</b>\n"
+             f"♾ ULTRA навсегда −50%: "
+             f"<s>{config.ULTRA_FOREVER_STARS_PRICE}⭐</s> → <b>{config.ultra_forever_price()}⭐</b>\n"
+             f"<i>(или за BED: {config.ULTRA_BED_PRICE} / {config.ULTRA_FOREVER_BED_PRICE} BED)</i>")
+            if config.bug_discount_active() else
+            (f"Цена: <b>{config.ULTRA_STARS_PRICE}⭐</b> или <b>{config.ULTRA_BED_PRICE} BED</b> / месяц.\n"
+             f"♾ Навсегда: <b>{config.ULTRA_FOREVER_STARS_PRICE}⭐</b> или "
+             f"<b>{config.ULTRA_FOREVER_BED_PRICE} BED</b> (разово).")
+        )
     )
 
 
@@ -546,9 +555,12 @@ def kb_ultra(uid, storage) -> InlineKeyboardMarkup:
         rows.append(_BACK)
         return InlineKeyboardMarkup(rows)
     verb = "Продлить" if active else "Купить"
-    rows.append([_btn(f"⭐ {verb} · {config.ULTRA_STARS_PRICE}", "ultra:buystars", "success")])
+    _disc = config.bug_discount_active()
+    _m = f"⭐ {verb} · {config.ultra_month_price()}" + (" 🐞" if _disc else "")
+    _f = f"♾ Навсегда · {config.ultra_forever_price()}⭐" + (" 🐞−50%" if _disc else "")
+    rows.append([_btn(_m, "ultra:buystars", "success")])
     rows.append([_btn(f"🔱 {verb} · {config.ULTRA_BED_PRICE} BED", "ultra:buybed", "primary")])
-    rows.append([_btn(f"♾ Навсегда · {config.ULTRA_FOREVER_STARS_PRICE}⭐", "ultra:buystars_forever", "success"),
+    rows.append([_btn(_f, "ultra:buystars_forever", "success"),
                  _btn(f"♾ · {config.ULTRA_FOREVER_BED_PRICE} BED", "ultra:buybed_forever", "primary")])
     if not active:
         rows.append([_btn("💎 Обычный Премиум", "menu:sub", "primary")])
